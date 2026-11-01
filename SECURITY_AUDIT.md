@@ -2,6 +2,20 @@
 
 ## Controls implemented
 
+### Phase 4 — storage, audit log, soft delete, Firebase flag (P0-6)
+- Append-only audit log records every sensitive action (login, role switch,
+  void, payout, payment recording, document verification, soft-delete/restore)
+  with actor/role/target/detail/timestamp; persisted to localStorage and
+  best-effort mirrored to IndexedDB; records are never mutated or deleted.
+- Soft delete replaces hard delete for sellers/buyers/dealers/properties: records
+  are marked `deletedAt`/`deletedBy`, hidden from normal lists, and restorable
+  only by staff holding the relevant permission; referenced records still cannot
+  be deleted.
+- Firebase is a flag, not a dependency: when `VITE_FIREBASE_*` env vars are
+  absent (default) the app runs on localStorage and the firebase SDK is never
+  imported (bundle stays lean); when present, `getFirebaseApp/Auth/Db` lazily
+  initialise the backend. No secrets are committed (`.env.example` only).
+
 ### Phase 3 — transaction lifecycle + ledgers (P1-1…P1-5)
 - Void replaces hard delete: `voidTransaction` is gated on `void_transactions`
   (Super Admin only), requires a non-empty reason, preserves the record with

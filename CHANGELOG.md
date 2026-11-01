@@ -1,5 +1,30 @@
 ﻿# Changelog
 
+## 2.0.4 — Phase 4: storage (IndexedDB) + audit log + soft delete + Firebase flag (P0-6)
+
+### Added
+- `src/storage/indexedDb.ts`: dependency-free IndexedDB wrapper (audit_log + kv
+  stores) with graceful null fallback when IndexedDB is unavailable.
+- `src/domain/auditLog.ts`: append-only audit log (login, role switch, void,
+  payout, payment, verify, soft-delete/restore) persisted to localStorage and
+  best-effort mirrored to IndexedDB; records are never mutated or deleted.
+- Soft delete: Seller/Buyer/Dealer/Property/Transaction gain `deletedAt`/`deletedBy`;
+  `delete*` now marks records instead of destroying them; `restore*` reverses;
+  list views filter deleted records; referenced-record guards preserved.
+- `AdminAudit` component + 'Audit & Recycle Bin' tab (super-admin): append-only
+  log table + recycle bin with per-record Restore buttons.
+- Firebase flag (Phase 8): `src/config/firebase.ts` (`readFirebaseConfig`,
+  `isFirebaseConfigured`, lazy `getFirebaseApp`/`getFirebaseAuth`/`getFirebaseDb`
+  that dynamically import the firebase SDK so the public bundle stays lean when
+  unset); `.env.example` documents `VITE_FIREBASE_*` vars.
+- `ToastContainer` wired on the unauthenticated admin view so toasts surface.
+
+### Changed
+- AdminSellers/AdminBuyers/AdminDealers/AdminProperties/AdminTransactions filter
+  soft-deleted records.
+- Context type + provider expose `restoreProperty`/`restoreSeller`/`restoreBuyer`/
+  `restoreDealer`.
+
 ## 2.0.3 — Phase 3: transaction lifecycle + payment/commission ledgers (P1-1…P1-5)
 
 ### Added
