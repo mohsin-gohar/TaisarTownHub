@@ -1,0 +1,6 @@
+{
+  "name": "TaisarTownHub",
+  "description": "Premium real estate agency demo platform, dynamic project showcase, and client CMS presentation for Taiser Town Scheme 45, Karachi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,233 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-navy: #101C2C;
+    --color-midnight: #0B1220;
+    --color-gold: #C5A46D;
+    --color-gold-light: #E0C79A;
+    --color-ivory: #F8F7F3;
+    --color-slate-muted: #64748B;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #F8F7F3;
+    background-color: #0B1220;
+    overflow-x: hidden;
+  }
+
+  .font-serif-luxury {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+
+  .font-brand {
+    font-family: 'Cinzel', serif;
+  }
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+  background: rgba(16, 28, 44, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(197, 164, 109, 0.18);
+}
+
+.glass-card {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gold-gradient-text {
+  background: linear-gradient(135deg, #F9E7BA 0%, #C5A46D 50%, #9B783E 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-gradient-bg {
+  background: linear-gradient(135deg, #D4AF37 0%, #C5A46D 50%, #9B783E 100%);
+}
+
+.gold-border {
+  border-color: rgba(197, 164, 109, 0.35);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0B1220;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E293B;
+  border-radius: 4px;
+  border: 1px solid rgba(197, 164, 109, 0.2);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C5A46D;
+}
+
+/* ---------------------------------------------
+   Premium Motion System
+   All animations are disabled for users with
+   prefers-reduced-motion: reduce (accessibility).
+---------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes tth-fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes tth-fadeInUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes tth-slideIn {
+    from { opacity: 0; transform: translateX(24px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes tth-dropIn {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes tth-subtleZoom {
+    from { transform: scale(1.05); }
+    to { transform: scale(1.13); }
+  }
+  @keyframes tth-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
+  }
+  @keyframes tth-scrollHint {
+    0%, 100% { transform: translateY(0); opacity: 0.65; }
+    50% { transform: translateY(7px); opacity: 1; }
+  }
+  @keyframes tth-shimmer {
+    from { background-position: -200% 0; }
+    to { background-position: 200% 0; }
+  }
+  @keyframes tth-progress {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+  @keyframes tth-goldPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(197, 164, 109, 0.45); }
+    50% { box-shadow: 0 0 0 9px rgba(197, 164, 109, 0); }
+  }
+
+  .animate-fadeIn {
+    animation: tth-fadeIn 0.5s ease both;
+  }
+  .animate-fadeInUp {
+    animation: tth-fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .animate-slideIn {
+    animation: tth-slideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .animate-dropIn {
+    animation: tth-dropIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .animate-subtleZoom {
+    animation: tth-subtleZoom 28s ease-in-out infinite alternate;
+  }
+  .animate-float {
+    animation: tth-float 5.5s ease-in-out infinite;
+  }
+  .animate-scrollHint {
+    animation: tth-scrollHint 1.8s ease-in-out infinite;
+  }
+  .animate-progressBar {
+    transform-origin: right;
+    animation: tth-progress 4.5s linear both;
+  }
+  .animate-goldPulse {
+    animation: tth-goldPulse 2.4s ease-in-out infinite;
+  }
+  .skeleton-shimmer {
+    background: linear-gradient(
+      100deg,
+      #101C2C 0%,
+      #1A2638 45%,
+      #101C2C 70%
+    );
+    background-size: 200% 100%;
+    animation: tth-shimmer 1.6s linear infinite;
+  }
+
+  @keyframes tth-pageIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-pageEnter {
+    animation: tth-pageIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Staggered word-by-word headline reveal (CSS-only, no runtime) */
+  @keyframes tth-wordUp {
+    from { transform: translateY(115%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .word-reveal-outer {
+    display: inline-block;
+    overflow: hidden;
+    vertical-align: bottom;
+    padding-bottom: 0.08em;
+    margin-bottom: -0.08em;
+  }
+  .word-reveal {
+    display: inline-block;
+    animation: tth-wordUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--word-delay, 0ms);
+  }
+
+  /* IntersectionObserver reveal (Reveal.tsx) */
+  .reveal-hidden {
+    opacity: 0;
+    transform: translateY(var(--reveal-y, 18px));
+  }
+  .reveal-in {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeIn,
+  .animate-fadeInUp,
+  .animate-slideIn,
+  .animate-dropIn,
+  .animate-subtleZoom,
+  .animate-scrollHint,
+  .animate-progressBar,
+  .animate-goldPulse,
+  .skeleton-shimmer,
+  .animate-pageEnter,
+  .word-reveal-outer > .word-reveal {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+  .skeleton-shimmer {
+    background: #1A2638 !important;
+  }
+  .reveal-hidden {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Accessible focus ring (keyboard users) */
+:focus-visible {
+  outline: 2px solid #C5A46D;
+  outline-offset: 2px;
+}
+
+/* Page transition wrapper (used with motion in App) */
+.page-surface {
+  will-change: opacity, transform;
+}

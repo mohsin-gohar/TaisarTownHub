@@ -1,0 +1,184 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  formatPKRCurrency,
+  calculateInstallmentPlan,
+  generateWhatsAppLink,
+  filterProperties,
+  validateInquiryForm,
+  maskCNIC,
+  checkDuplicateProperty,
+  calculateCommission,
+  calculateERPFinancials,
+  calculateMediaUsageCount,
+  hasPermission
+} from './logic';
+import { Property, Transaction } from '../types';
+
+test('formatPKRCurrency formats Lacs and Crores correctly', () => {
+  assert.equal(formatPKRCurrency(3500000), 'PKR 35 Lacs');
+  assert.equal(formatPKRCurrency(12500000), 'PKR 1.25 Crore');
+  assert.equal(formatPKRCurrency(20000000), 'PKR 2 Crore');
+  assert.equal(formatPKRCurrency(85000), 'PKR 85,000');
+  assert.equal(formatPKRCurrency(0), 'PKR 0');
+});
+
+test('calculateInstallmentPlan computes down payment and monthly correctly', () => {
+  const result = calculateInstallmentPlan(4000000, 25, 2);
+  assert.equal(result.downPayment, 1000000);
+  assert.equal(result.remainingAmount, 3000000);
+  assert.equal(result.totalMonths, 24);
+  assert.equal(result.monthlyInstallment, 125000);
+});
+
+test('generateWhatsAppLink produces valid encoded wa.me URL', () => {
+  const link = generateWhatsAppLink('+92 300 1234567', 'Salam, I want info on Sector 70-D');
+  assert.ok(link.startsWith('https://wa.me/923001234567?text='));
+});
+
+test('validateInquiryForm checks required fields strictly', () => {
+  assert.equal(validateInquiryForm({ fullName: '', phone: '12345678', message: 'Hello world' }).isValid, false);
+  assert.equal(validateInquiryForm({ fullName: 'Ali Khan', phone: '03001234567', message: 'Interested in plot' }).isValid, true);
+});
+
+test('maskCNIC masks national ID numbers for privacy', () => {
+  assert.equal(maskCNIC('42101-1234567-1'), '42101-*******-1');
+  assert.equal(maskCNIC('4210112345671'), '42101-*******-1');
+  assert.equal(maskCNIC(''), 'N/A');
+});
+
+test('checkDuplicateProperty flags matching plot and sector', () => {
+  const mockProps: Property[] = [
+    {
+      id: 'p-1',
+      title: 'Plot R-66 Sector 63',
+      description: '120 Sq Yd on 100ft road',
+      pricePKR: 3500000,
+      formattedPrice: 'PKR 35 Lacs',
+      location: 'Sector 63, Karachi',
+      sector: 'Sector 63',
+      block: 'Block A',
+      plotNumber: 'R-66',
+      sizeSqYards: 120,
+      type: 'Residential Plot',
+      status: 'Available',
+      isFeatured: true,
+      images: ['https://example.com/r66.jpg'],
+      features: ['100ft Road Facing', '24ft Front'],
+      possessionReady: true,
+      mdaApproved: true,
+      createdDate: '2026-01-01',
+      contactPerson: 'Saleem Siddiqui',
+      contactPhone: '03001234567',
+      contactWhatsApp: '03001234567'
+    }
+  ];
+
+  // Exact duplicate: R-66 in Sector 63 Block A
+  const dupCheck = checkDuplicateProperty(mockProps, 'R-66', 'Sector 63', 'Block A');
+  assert.equal(dupCheck.isDuplicate, true);
+
+  // Different plot number: R-67 in Sector 63
+  const newPlotCheck = checkDuplicateProperty(mockProps, 'R-67', 'Sector 63', 'Block A');
+  assert.equal(newPlotCheck.isDuplicate, false);
+
+  // Exclude current ID during edit: editing p-1 itself
+  const editSelfCheck = checkDuplicateProperty(mockProps, 'R-66', 'Sector 63', 'Block A', 'p-1');
+  assert.equal(editSelfCheck.isDuplicate, false);
+});
+
+test('calculateCommission calculates fixed, percentage, and custom rates', () => {
+  // Handwritten requirement example: 20,000 fixed
+  assert.equal(calculateCommission(3500000, 'Fixed', 20000), 20000);
+  // 1% on 5,000,000
+  assert.equal(calculateCommission(5000000, 'Percentage', 1), 50000);
+  // Custom
+  assert.equal(calculateCommission(3000000, 'Custom', 35000), 35000);
+});
+
+test('calculateERPFinancials computes totals accurately', () => {
+  const transactions: Transaction[] = [
+    {
+      id: 'tx-1',
+      propertyId: 'p-1',
+      propertyTitle: 'Plot R-66 Sector 63',
+      plotNumber: 'R-66',
+      sector: 'Sector 63',
+      sellerId: 's-1',
+      sellerName: 'Haji Rasheed',
+      buyerId: 'b-1',
+      buyerName: 'Dr. Farooq',
+      dealerId: 'd-1',
+      dealerName: 'Saleem Siddiqui',
+      transactionType: 'Sale',
+      agreementAmountPKR: 3500000,
+      purchaseAmountPKR: 3200000,
+      finalSellingAmountPKR: 3500000,
+      advancePaymentPKR: 1000000,
+      remainingBalancePKR: 2500000,
+      commissionAmountPKR: 20000,
+      commissionStatus: 'Pending',
+      transactionDate: '2026-02-01',
+      paymentMethod: 'Pay Order',
+      paymentStatus: 'Partially Paid',
+      status: 'Agreement Signed',
+      internalRemarks: 'Token paid',
+      documents: []
+    },
+    {
+      id: 'tx-2',
+      propertyId: 'p-2',
+      propertyTitle: 'Commercial Plot Sector 50',
+      plotNumber: 'C-10',
+      sector: 'Sector 50',
+      sellerId: 's-2',
+      sellerName: 'Malik Builders',
+      buyerId: 'b-2',
+      buyerName: 'Sheikh Nasir',
+      transactionType: 'Sale',
+      agreementAmountPKR: 15000000,
+      purchaseAmountPKR: 14000000,
+      finalSellingAmountPKR: 15000000,
+      advancePaymentPKR: 15000000,
+      remainingBalancePKR: 0,
+      commissionAmountPKR: 100000,
+      commissionStatus: 'Paid',
+      transactionDate: '2026-02-15',
+      paymentMethod: 'Bank Transfer',
+      paymentStatus: 'Fully Paid',
+      status: 'Completed',
+      internalRemarks: 'Full transfer done',
+      documents: []
+    }
+  ];
+
+  const fin = calculateERPFinancials(transactions);
+  assert.equal(fin.totalSalesVolume, 18500000);
+  assert.equal(fin.totalAdvancesCollected, 16000000);
+  assert.equal(fin.totalPendingReceivables, 2500000);
+  assert.equal(fin.totalCommissionsPayable, 20000); // only pending one
+  assert.equal(fin.completedDealsCount, 1);
+});
+
+test('calculateMediaUsageCount detects real asset references', () => {
+  const url = 'https://example.com/active-photo.jpg';
+  const properties: any[] = [
+    { id: '1', title: 'Plot 1', images: [url] },
+    { id: '2', title: 'Plot 2', images: ['https://example.com/other.jpg'] }
+  ];
+  const projects: any[] = [
+    { id: 'pr-1', title: 'Project 1', coverImage: url, galleryImages: [] }
+  ];
+
+  const usage = calculateMediaUsageCount(url, properties, projects, []);
+  assert.equal(usage.count, 2);
+  assert.ok(usage.referencingTitles.includes('Plot 1'));
+  assert.ok(usage.referencingTitles.includes('Project 1'));
+});
+
+test('hasPermission enforces role boundaries', () => {
+  assert.equal(hasPermission('Super Admin', 'view_sensitive_cnic'), true);
+  assert.equal(hasPermission('Super Admin', 'manage_dealers'), true);
+  assert.equal(hasPermission('Property Dealer', 'manage_users'), false);
+  assert.equal(hasPermission('Data Entry Operator', 'approve_transactions'), false);
+});

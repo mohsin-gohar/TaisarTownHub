@@ -1,0 +1,728 @@
+import React, { useState } from 'react';
+import { useApp } from '../../context/AppContext';
+import {
+  FileText,
+  Plus,
+  Search,
+  Filter,
+  CheckCircle2,
+  Clock,
+  Printer,
+  ChevronRight,
+  TrendingUp,
+  AlertCircle,
+  Building,
+  User,
+  DollarSign,
+  X,
+  FileCheck
+} from 'lucide-react';
+import { Transaction, TransactionStatus, CommissionStatus } from '../../types';
+import { formatPKRCurrency, calculateERPFinancials, calculateCommission } from '../../utils/logic';
+import { EmptyState } from '../common/EmptyState';
+
+export const AdminTransactions: React.FC = () => {
+  const {
+    transactions,
+    addTransaction,
+    updateTransaction,
+    properties,
+    sellers,
+    buyers,
+    dealers,
+    showToast,
+    currentTheme,
+    setAdminTab
+  } = useApp();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTxnForReceipt, setSelectedTxnForReceipt] = useState<Transaction | null>(null);
+
+  const [formData, setFormData] = useState({
+    propertyId: properties[0]?.id || '',
+    sellerId: sellers[0]?.id || '',
+    buyerId: buyers[0]?.id || '',
+    dealerId: dealers[0]?.id || '',
+    dealAmountPKR: 3800000,
+    advancePKR: 800000,
+    dealDate: new Date().toISOString().split('T')[0],
+    expectedPossessionDate: '2026-04-15',
+    status: 'Advance Received' as TransactionStatus,
+    paymentMode: 'Pay Order & Cash Advance',
+    notes: 'Plot R-66, Sector 63, 100ft road facing, deal closed through agent.'
+  });
+
+  const financials = calculateERPFinancials(transactions, properties);
+
+  const filteredTxns = transactions.filter((t) => {
+    const dNum = t.dealNumber || t.id;
+    const pNum = t.plotNumber || '';
+    const sName = t.sellerName || '';
+    const bName = t.buyerName || '';
+    const sec = t.sector || '';
+
+    const matchesSearch =
+      dNum.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      pNum.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      sName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      bName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      sec.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleOpenAdd = () => {
+    const firstProp = properties[0];
+    const firstSeller = sellers[0];
+    const firstBuyer = buyers[0];
+    const firstDealer = dealers[0];
+
+    setFormData({
+      propertyId: firstProp?.id || '',
+      sellerId: firstSeller?.id || '',
+      buyerId: firstBuyer?.id || '',
+      dealerId: firstDealer?.id || '',
+      dealAmountPKR: firstProp?.pricePKR || 3800000,
+      advancePKR: 800000,
+      dealDate: new Date().toISOString().split('T')[0],
+      expectedPossessionDate: '2026-04-15',
+      status: 'Advance Received',
+      paymentMode: 'Bank Pay Order',
+      notes: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handlePropertyChange = (propId: string) => {
+    const prop = properties.find((p) => p.id === propId);
+    if (prop) {
+      setFormData((prev) => ({
+        ...prev,
+        propertyId: propId,
+        dealAmountPKR: prop.pricePKR,
+        sellerId: prop.sellerId || prev.sellerId
+      }));
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const prop = properties.find((p) => p.id === formData.propertyId);
+    const seller = sellers.find((s) => s.id === formData.sellerId);
+    const buyer = buyers.find((b) => b.id === formData.buyerId);
+    const dealer = dealers.find((d) => d.id === formData.dealerId);
+
+    if (!seller || !buyer) {
+      showToast('error', 'Please select both valid seller and buyer.');
+      return;
+    }
+
+    const calculatedComm = dealer
+      ? calculateCommission(formData.dealAmountPKR, dealer.commissionType, dealer.commissionValue ?? dealer.commissionRate ?? 20000)
+      : 20000;
+
+    const balance = Math.max(0, formData.dealAmountPKR - formData.advancePKR);
+
+    addTransaction({
+      dealNumber: `TXN-2026-00${transactions.length + 1}`,
+      propertyId: formData.propertyId,
+      propertyTitle: prop?.title || 'Taiser Town Plot',
+      plotNumber: prop?.plotNumber || 'Plot-Unnumbered',
+      fileNumber: prop?.fileNumber || 'TT-FILE',
+      sector: prop?.sector || 'Sector 63',
+      sellerId: seller.id,
+      sellerName: seller.fullName,
+      sellerCnic: seller.cnic || seller.cnicMasked,
+      buyerId: buyer.id,
+      buyerName: buyer.fullName,
+      buyerCnic: buyer.cnic || buyer.cnicMasked,
+      dealerId: dealer?.id,
+      dealerName: dealer?.fullName,
+      agreementAmountPKR: Number(formData.dealAmountPKR),
+      purchaseAmountPKR: Number(formData.dealAmountPKR),
+      finalSellingAmountPKR: Number(formData.dealAmountPKR),
+      dealAmountPKR: Number(formData.dealAmountPKR),
+      advancePaymentPKR: Number(formData.advancePKR),
+      advancePKR: Number(formData.advancePKR),
+      remainingBalancePKR: balance,
+      balancePKR: balance,
+      commissionAmountPKR: calculatedComm,
+      commissionPKR: calculatedComm,
+      commissionStatus: 'Unpaid',
+      status: formData.status,
+      transactionDate: formData.dealDate,
+      dealDate: formData.dealDate,
+      expectedPossessionDate: formData.expectedPossessionDate,
+      paymentMethod: 'Pay Order',
+      paymentMode: formData.paymentMode,
+      internalRemarks: formData.notes,
+      notes: formData.notes,
+      documents: []
+    });
+
+    showToast('success', 'New property deal transaction registered.');
+    setIsModalOpen(false);
+  };
+
+  return (
+    <div className="space-y-6 animate-fadeIn">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#101C2C] to-[#1A2638] border border-[#C5A46D]/30 shadow-xl">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="font-serif-luxury text-2xl font-bold text-white">
+              Deals & Transaction Management
+            </h2>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/20 text-[#C5A46D] border border-[#C5A46D]/40">
+              Audit-Ready Ledger
+            </span>
+          </div>
+          <p className="text-xs text-slate-300 mt-1">
+            Official contract booking, token advances, buyer/seller settlement, and MDA transfer order tracking.
+          </p>
+        </div>
+
+        <button
+          onClick={handleOpenAdd}
+          className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Execute New Deal</span>
+        </button>
+      </div>
+
+      {/* Financial Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+          <span className="text-xs text-slate-400 font-semibold uppercase block">Gross Sales Value</span>
+          <div className="text-2xl font-bold font-serif-luxury text-white mt-1">
+            {formatPKRCurrency(financials.totalSalesVolume)}
+          </div>
+          <div className="text-[11px] text-emerald-400 mt-1">{financials.totalDealsCount} Total Deals</div>
+        </div>
+
+        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+          <span className="text-xs text-slate-400 font-semibold uppercase block">Advances Received</span>
+          <div className="text-2xl font-bold font-serif-luxury text-[#C5A46D] mt-1">
+            {formatPKRCurrency(financials.totalAdvancesCollected)}
+          </div>
+          <div className="text-[11px] text-[#E0C79A] mt-1">Escrow & token cash/orders</div>
+        </div>
+
+        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+          <span className="text-xs text-slate-400 font-semibold uppercase block">Pending Receivables</span>
+          <div className="text-2xl font-bold font-serif-luxury text-amber-400 mt-1">
+            {formatPKRCurrency(financials.pendingReceivables)}
+          </div>
+          <div className="text-[11px] text-amber-300 mt-1">Due at MDA transfer office</div>
+        </div>
+
+        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+          <span className="text-xs text-slate-400 font-semibold uppercase block">Total Agent Commissions</span>
+          <div className="text-2xl font-bold font-serif-luxury text-[#C5A46D] mt-1">
+            {formatPKRCurrency(financials.totalCommissionPayable)}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">Facilitation fees booked</div>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-[#101C2C] p-4 rounded-xl border border-slate-800">
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search by Deal #, Plot #, Buyer, Seller..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#0B1220] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
+          {['all', 'Advance Received', 'Under Transfer', 'Completed', 'Draft'].map((status) => (
+            <button
+              key={status}
+              onClick={() => setFilterStatus(status)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer transition ${
+                filterStatus === status
+                  ? 'bg-[#C5A46D] text-[#101C2C]'
+                  : 'bg-[#0B1220] text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              {status === 'all' ? 'All Transactions' : status}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Transactions Table */}
+      <div className="bg-[#101C2C] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+              <tr>
+                <th className="py-3.5 px-4">Deal ID & Date</th>
+                <th className="py-3.5 px-4">Plot / Property</th>
+                <th className="py-3.5 px-4">Seller & Buyer</th>
+                <th className="py-3.5 px-4">Deal Amount</th>
+                <th className="py-3.5 px-4">Advance / Balance</th>
+                <th className="py-3.5 px-4">Agent Commission</th>
+                <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4 text-right">Receipt</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/80">
+              {filteredTxns.map((txn) => {
+                const isHandwrittenDeal = (txn.plotNumber || '').includes('R-66') || (txn.dealNumber?.includes('001') ?? false);
+
+                return (
+                  <tr
+                    key={txn.id}
+                    className={`hover:bg-slate-800/40 transition-colors ${
+                      isHandwrittenDeal ? 'bg-[#C5A46D]/5' : ''
+                    }`}
+                  >
+                    <td className="py-4 px-4">
+                      <div className="font-bold text-white font-mono flex items-center gap-1.5">
+                        <span>{txn.dealNumber || txn.id}</span>
+                        {isHandwrittenDeal && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#C5A46D] text-[#101C2C]">
+                            Handwritten Note
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400">{txn.dealDate}</span>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <div className="font-bold text-[#C5A46D]">
+                        Plot {txn.plotNumber}
+                      </div>
+                      <span className="text-[10px] text-slate-300 block">{txn.sector}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">File: {txn.fileNumber}</span>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <div className="text-slate-200">
+                        <span className="text-slate-400 text-[10px]">Seller:</span> <strong>{txn.sellerName}</strong>
+                      </div>
+                      <div className="text-slate-200">
+                        <span className="text-slate-400 text-[10px]">Buyer:</span> <strong>{txn.buyerName}</strong>
+                      </div>
+                      {txn.dealerName && (
+                        <span className="text-[10px] text-[#C5A46D] block mt-0.5">
+                          Agent: {txn.dealerName}
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="py-4 px-4 font-bold text-white font-mono text-sm">
+                      {formatPKRCurrency(txn.dealAmountPKR ?? txn.finalSellingAmountPKR ?? txn.agreementAmountPKR ?? 0)}
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <div className="text-emerald-400 font-mono font-semibold">
+                        Adv: {formatPKRCurrency(txn.advancePKR ?? txn.advancePaymentPKR ?? 0)}
+                      </div>
+                      <div className="text-slate-400 font-mono text-[11px]">
+                        Bal: {formatPKRCurrency(txn.balancePKR ?? txn.remainingBalancePKR ?? 0)}
+                      </div>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <div className="font-bold text-amber-300 font-mono">
+                        {formatPKRCurrency(txn.commissionPKR ?? txn.commissionAmountPKR ?? 0)}
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                        txn.commissionStatus === 'Paid' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {txn.commissionStatus}
+                      </span>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <select
+                        value={txn.status}
+                        onChange={(e) => updateTransaction(txn.id, { status: e.target.value as TransactionStatus })}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border cursor-pointer focus:outline-none ${
+                          txn.status === 'Completed'
+                            ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                            : txn.status === 'Under Transfer'
+                            ? 'bg-[#101C2C] text-[#E0C79A] border-[#C5A46D]/40'
+                            : txn.status === 'Advance Received'
+                            ? 'bg-amber-950/60 text-amber-300 border-amber-500/40'
+                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                        }`}
+                      >
+                        <option value="Draft">Draft</option>
+                        <option value="Token Paid">Token Paid</option>
+                        <option value="Advance Received">Advance Received</option>
+                        <option value="Under Transfer">Under Transfer</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </td>
+
+                    <td className="py-4 px-4 text-right">
+                      <button
+                        onClick={() => setSelectedTxnForReceipt(txn)}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#C5A46D] hover:text-[#101C2C] text-[#C5A46D] text-xs font-semibold transition flex items-center gap-1 ml-auto cursor-pointer"
+                        title="View Official Sale Memorandum"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Print</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filteredTxns.length === 0 && (
+                <tr>
+                  <td colSpan={8}>
+                    <EmptyState
+                      icon={<FileText className="w-9 h-9" />}
+                      chip="CRM Ready"
+                      title="No Transactions Yet"
+                      description="Draft your first deal from a verified property file — lifecycle tracking, escrow milestones and dealer commissions stay synchronized automatically."
+                      actionLabel="Open Property Listings"
+                      onAction={() => setAdminTab('properties')}
+                    />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Sale Memorandum / Official Deal Receipt Modal */}
+      {selectedTxnForReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-2xl bg-[#101C2C] text-slate-100 border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setSelectedTxnForReceipt(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Receipt Header */}
+            <div className="border-b border-[#C5A46D]/30 pb-6 mb-6 flex items-start justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-widest text-[#C5A46D] block">
+                  OFFICIAL REAL ESTATE TRANSACTION MEMORANDUM
+                </span>
+                <h2 className="text-2xl font-bold font-serif-luxury text-white">
+                  {currentTheme.agencyName}
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Taiser Town Scheme 45 Back-Office Operations Desk
+                </p>
+              </div>
+
+              <div className="text-right">
+                <span className="text-xs font-mono text-slate-400 block">Deal Reference #</span>
+                <span className="text-base font-bold font-mono text-[#F9E7BA]">
+                  {selectedTxnForReceipt.dealNumber}
+                </span>
+                <span className="text-xs text-slate-400 block mt-1">
+                  Date: {selectedTxnForReceipt.dealDate}
+                </span>
+              </div>
+            </div>
+
+            {/* Property Summary */}
+            <div className="bg-[#0B1220] p-4 rounded-xl border border-slate-800 mb-6 space-y-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#C5A46D]">
+                Property Specifications
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs pt-1">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Plot Number:</span>
+                  <strong className="text-sm font-bold text-white">
+                    Plot {selectedTxnForReceipt.plotNumber}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Sector:</span>
+                  <strong className="text-sm font-bold text-white">
+                    {selectedTxnForReceipt.sector}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">File Number:</span>
+                  <strong className="text-xs font-mono font-bold text-slate-300">
+                    {selectedTxnForReceipt.fileNumber}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Deal Status:</span>
+                  <strong className="text-xs font-bold text-[#C5A46D]">
+                    {selectedTxnForReceipt.status}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Parties */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 text-xs">
+              <div className="p-4 rounded-xl bg-[#0B1220] border border-slate-800 space-y-1">
+                <span className="text-[10px] font-bold uppercase text-[#C5A46D] block">Party 1 (Seller / Allottee)</span>
+                <div className="font-bold text-sm text-white">{selectedTxnForReceipt.sellerName}</div>
+                <div className="text-slate-400 font-mono">CNIC: {selectedTxnForReceipt.sellerCnic}</div>
+              </div>
+              <div className="p-4 rounded-xl bg-[#0B1220] border border-slate-800 space-y-1">
+                <span className="text-[10px] font-bold uppercase text-[#C5A46D] block">Party 2 (Buyer / Transferee)</span>
+                <div className="font-bold text-sm text-white">{selectedTxnForReceipt.buyerName}</div>
+                <div className="text-slate-400 font-mono">CNIC: {selectedTxnForReceipt.buyerCnic}</div>
+              </div>
+            </div>
+
+            {/* Financial Ledger */}
+            <div className="border border-slate-800 rounded-xl overflow-hidden mb-6 text-xs">
+              <table className="w-full text-left">
+                <thead className="bg-[#0B1220] text-slate-400 font-bold border-b border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-4">Description</th>
+                    <th className="py-2.5 px-4 text-right">Amount (PKR)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 font-mono">
+                  <tr>
+                    <td className="py-2.5 px-4 text-slate-300 font-sans">Total Agreed Deal Consideration</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-white">
+                      {formatPKRCurrency(selectedTxnForReceipt.dealAmountPKR ?? selectedTxnForReceipt.finalSellingAmountPKR ?? selectedTxnForReceipt.agreementAmountPKR ?? 0)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-4 text-slate-300 font-sans">Advance / Bayana Deposit Received</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-emerald-400">
+                      (-) {formatPKRCurrency(selectedTxnForReceipt.advancePKR ?? selectedTxnForReceipt.advancePaymentPKR ?? 0)}
+                    </td>
+                  </tr>
+                  <tr className="bg-[#C5A46D]/10 font-bold">
+                    <td className="py-3 px-4 text-[#F9E7BA] font-sans">Outstanding Balance Payable at Transfer</td>
+                    <td className="py-3 px-4 text-right text-base text-[#F9E7BA]">
+                      {formatPKRCurrency(selectedTxnForReceipt.balancePKR ?? selectedTxnForReceipt.remainingBalancePKR ?? 0)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-4 text-slate-400 font-sans">
+                      Agent Commission ({selectedTxnForReceipt.dealerName || 'Direct'})
+                    </td>
+                    <td className="py-2.5 px-4 text-right text-slate-300">
+                      {formatPKRCurrency(selectedTxnForReceipt.commissionPKR ?? selectedTxnForReceipt.commissionAmountPKR ?? 0)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {(selectedTxnForReceipt.notes || selectedTxnForReceipt.internalRemarks) && (
+              <p className="text-xs text-slate-300 italic mb-6 bg-[#0B1220] p-3 rounded-lg border border-slate-800">
+                <strong className="text-[#C5A46D]">Conditions: </strong> {selectedTxnForReceipt.notes || selectedTxnForReceipt.internalRemarks}
+              </p>
+            )}
+
+            {/* Signatures */}
+            <div className="grid grid-cols-3 gap-6 pt-6 border-t border-slate-800 text-center text-xs">
+              <div>
+                <div className="border-b border-slate-700 pb-8 mb-1" />
+                <span className="font-semibold text-slate-300">Seller Signature</span>
+              </div>
+              <div>
+                <div className="border-b border-slate-700 pb-8 mb-1" />
+                <span className="font-semibold text-slate-300">Buyer Signature</span>
+              </div>
+              <div>
+                <div className="border-b border-slate-700 pb-8 mb-1" />
+                <span className="font-semibold text-slate-300">Authorized Officer</span>
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end gap-3 print:hidden">
+              <button
+                onClick={() => setSelectedTxnForReceipt(null)}
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-5 py-2 rounded-lg bg-[#C5A46D] text-[#101C2C] hover:bg-[#D4AF37] font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Deal Memorandum</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Transaction Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-xl bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">
+              Record Real Estate Transaction
+            </h3>
+            <p className="text-xs text-slate-400 mb-6">
+              Create a legally-structured deal between verified seller and buyer.
+            </p>
+
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Select Property / Plot *</label>
+                <select
+                  value={formData.propertyId}
+                  onChange={(e) => handlePropertyChange(e.target.value)}
+                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                >
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.plotNumber ? `Plot ${p.plotNumber}` : p.title} ({p.sector}) - {formatPKRCurrency(p.pricePKR)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Seller (Property Owner) *</label>
+                  <select
+                    value={formData.sellerId}
+                    onChange={(e) => setFormData({ ...formData, sellerId: e.target.value })}
+                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  >
+                    {sellers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.fullName} ({s.cnic})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Buyer (Purchaser) *</label>
+                  <select
+                    value={formData.buyerId}
+                    onChange={(e) => setFormData({ ...formData, buyerId: e.target.value })}
+                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  >
+                    {buyers.map((b) => (
+                      <option key={b.id} value={b.id}>{b.fullName} ({b.cnic})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Agreed Deal Amount (PKR) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={formData.dealAmountPKR}
+                    onChange={(e) => setFormData({ ...formData, dealAmountPKR: Number(e.target.value) })}
+                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Advance / Bayana Deposit (PKR) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={formData.advancePKR}
+                    onChange={(e) => setFormData({ ...formData, advancePKR: Number(e.target.value) })}
+                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Facilitating Agent / Dealer</label>
+                  <select
+                    value={formData.dealerId}
+                    onChange={(e) => setFormData({ ...formData, dealerId: e.target.value })}
+                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  >
+                    {dealers.map((d) => (
+                      <option key={d.id} value={d.id}>{d.fullName} ({d.agencyOrBranch})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Deal Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
+                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  >
+                    <option value="Draft">Draft Agreement</option>
+                    <option value="Token Paid">Token Paid</option>
+                    <option value="Advance Received">Advance Received</option>
+                    <option value="Under Transfer">Under Transfer at MDA</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Contract Booking Date</label>
+                  <input
+                    type="date"
+                    value={formData.dealDate}
+                    onChange={(e) => setFormData({ ...formData, dealDate: e.target.value })}
+                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Expected Possession Date</label>
+                  <input
+                    type="date"
+                    value={formData.expectedPossessionDate}
+                    onChange={(e) => setFormData({ ...formData, expectedPossessionDate: e.target.value })}
+                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Terms & Handwritten Clauses</label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Plot R-66, 100ft road facing, 24x45 dimension, 20,000 commission agreed..."
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold cursor-pointer shadow"
+                >
+                  Execute Deal Entry
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

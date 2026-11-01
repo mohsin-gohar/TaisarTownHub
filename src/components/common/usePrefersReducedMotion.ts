@@ -1,0 +1,23 @@
+import { useEffect, useState } from 'react';
+
+/**
+ * Reactive prefers-reduced-motion detection.
+ * Defaults to false (animations on), updates when the user changes
+ * the OS/browser setting while the page is open.
+ */
+export const usePrefersReducedMotion = (): boolean => {
+  const [reduced, setReduced] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
+
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return reduced;
+};
