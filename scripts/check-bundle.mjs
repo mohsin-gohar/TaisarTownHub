@@ -24,7 +24,26 @@ if (!existsSync(indexHtml)) {
 }
 
 const banned = JSON.parse(readFileSync(path.join(root, 'scripts', 'sensitive-strings.json'), 'utf8'));
-const forbidden = [...banned.fieldNames, ...banned.passwords];
+/**
+ * fieldNames: matched as standalone JS tokens (word-boundary, case-SENSITIVE).
+ *   - lowercase property names like .cnic / cnic: are caught
+ *   - uppercase UI copy ("CNIC Copy") and permission names (view_sensitive_cnic)
+ *     are NOT false positives
+ * passwords: matched case-insensitively as plain substrings (they are distinctive).
+ */
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+const forbidden = [
+  ...banned.fieldNames.map((s) => ({
+    re: new RegExp(`(?<![A-Za-z0-9_$])${escapeRe(s)}(?![A-Za-z0-9_$])`),
+    label: s,
+  })),
+  ...banned.passwords.map((s) => ({
+    re: new RegExp(escapeRe(s), 'i'),
+    label: s,
+  })),
+];
 
 // Asset name from href/src like /assets/index-XYZ.js
 function assetPath(url) {
@@ -63,10 +82,10 @@ while (queue.length) {
 let failed = [];
 for (const file of publicFiles) {
   if (!file.endsWith('.js')) continue;
-  const code = readFileSync(file, 'utf8').toLowerCase();
-  for (const needle of forbidden) {
-    if (code.includes(needle.toLowerCase())) {
-      failed.push(`${path.relative(dist, file)} contains "${needle}"`);
+  const code = readFileSync(file, 'utf8');
+  for (const { re, label } of forbidden) {
+    if (re.test(code)) {
+      failed.push(`${path.relative(dist, file)} contains "${label}"`);
     }
   }
 }

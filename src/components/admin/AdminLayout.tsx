@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useApp } from '../../context/AppContext';
 import { hasPermission } from '../../utils/logic';
+import { IS_DEMO } from '../../config/appMode';
 import {
   Building2,
   Home,
@@ -252,7 +253,7 @@ export const AdminLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {(isPresentationMode || import.meta.env.VITE_DEMO_MODE === 'true') && (
+            {(isPresentationMode || IS_DEMO) && (
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider flex items-center gap-1 shadow-sm">
                 <Sparkles className="w-3 h-3 text-amber-400" />
                 DEMO MODE

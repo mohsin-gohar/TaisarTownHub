@@ -18,8 +18,10 @@ import {
 import { UserRole } from '../../types';
 
 export const AdminSecurityRoles: React.FC = () => {
-  const { activeRole, switchAuthUser, currentUser, showToast } = useApp();
+  const { activeRole, switchAuthUser, currentUser, verifyPresenterPin, showToast } = useApp();
   const [copiedRules, setCopiedRules] = useState(false);
+  const [presenterPin, setPresenterPin] = useState('');
+  const [switching, setSwitching] = useState(false);
 
   const roles: { role: UserRole; title: string; desc: string; color: string }[] = [
     {
@@ -155,6 +157,28 @@ service cloud.firestore {
           </p>
         </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-3 items-center">
+          {/* Presenter PIN gate — role switching is demo-only and PIN-gated */}
+          <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-2">
+            <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Key className="w-3 h-3" />
+              Presenter PIN
+            </span>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={presenterPin}
+              onChange={(e) => setPresenterPin(e.target.value)}
+              placeholder="PIN"
+              aria-label="Presenter PIN for role switching"
+              className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none font-mono tracking-widest"
+            />
+            <p className="text-[9px] text-slate-500 leading-snug">
+              Demo build only. A client-side PIN is a speed bump, not real security.
+            </p>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2">
           {roles.map((item) => {
             const isActive = activeRole === item.role;
@@ -162,11 +186,17 @@ service cloud.firestore {
             return (
               <button
                 key={item.role}
-                onClick={() => {
-                  switchAuthUser(item.role);
-                  showToast('info', `Switched active role to: ${item.title}`);
+                onClick={async () => {
+                  if (switching) return;
+                  setSwitching(true);
+                  try {
+                    await switchAuthUser(item.role, presenterPin);
+                  } finally {
+                    setSwitching(false);
+                  }
                 }}
-                className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                disabled={switching}
+                className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between disabled:opacity-60 ${
                   isActive
                     ? 'border-[#C5A46D] bg-[#C5A46D]/20 ring-2 ring-[#C5A46D] shadow-lg'
                     : 'border-slate-800 bg-[#0B1220] hover:border-slate-700'

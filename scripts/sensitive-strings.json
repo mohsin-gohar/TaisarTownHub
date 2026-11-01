@@ -1,14 +1,17 @@
 {
-  "_comment": "Strings that must NEVER appear in publicly-served JS chunks. Sync with src/data/erpSeed.ts demo accounts (covered by a unit test).",
+  "_comment": "Strings that must NEVER appear in publicly-served JS chunks. fieldNames are matched as standalone lowercase tokens (word-boundary, case-sensitive); passwords as case-insensitive substrings. Sync with src/data/erpSeed.ts demo accounts (covered by a unit test) and the allowlist serializers in src/utils/logic.ts.",
   "fieldNames": [
     "purchasePricePKR",
     "privatePurchasePricePKR",
     "sellingPricePKR",
-    "internalNotes",
     "cnic",
     "cnicMasked",
     "sellerCnic",
     "buyerCnic",
+    "sellerName",
+    "assignedDealerId",
+    "assignedDealerName",
+    "internalNotes",
     "accountNumber",
     "DEMO_PASSWORDS"
   ],

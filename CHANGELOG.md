@@ -1,4 +1,66 @@
-# Changelog
+﻿# Changelog
+
+## 2.0.1 — Phase 1: APP_MODE, public/ERP data split, PIN-gated demo (P0-2, P0-3)
+
+### Added
+- `src/config/appMode.ts`: single build-time source of truth `APP_MODE`
+  (`public` | `demo` | `production`, from `VITE_APP_MODE`, legacy fallback
+  `VITE_DEMO_MODE`), `DEMO_PIN` (`VITE_DEMO_PIN`, default `4545`), `IS_DEMO`.
+- `src/data/publicSeed.ts` (statically imported, public-safe): CMS config,
+  client themes, projects, **public-safe properties**, media, testimonials,
+  plot markers (fictional map labels renamed `PlotMarker.sellerName` →
+  `markerLabel` to avoid any confusion with ERP seller data).
+- `src/data/erpSeed.ts` (admin-only chunk, dynamically imported at auth time):
+  inquiries, sellers, buyers, dealers, transactions, property files, ERP
+  private property fields for `prop-r66`, `initialAuthUsers`, and
+  `DEMO_ACCOUNTS` (fictional demo credentials that never ship publicly).
+- `scripts/check-bundle.mjs` + `scripts/sensitive-strings.json`: fails the
+  build if any chunk statically reachable from `index.html` contains private
+  ERP field tokens (word-boundary, case-sensitive) or demo passwords.
+
+### Changed
+- AppContext: ERP collections hydrate via the dynamic `ensureErpLoaded()`
+  engine; localStorage writes for ERP collections are gated on `erpReady` so
+  an initial empty render cannot wipe stored data. Inquiries keep read/write
+  (public form submissions survive reload).
+- Auth: `loginWithCredentials`/`loginAdmin` are async and validate against
+  `DEMO_ACCOUNTS` from the ERP chunk. `loginAsDemo(role, pin)` and
+  `switchAuthUser(role, pin)` require `APP_MODE === 'demo'` plus
+  `verifyPresenterPin`. Presentation mode and the current user are
+  **in-memory only** (never restored from localStorage; legacy keys are
+  scrubbed on boot). Anonymous placeholder user until a session starts.
+- `resetToDefaultData` is now async and demo-only (hydrates ERP seeds).
+- `AdminLoginModal` rewritten: presenter-PIN form gates the instant role grid
+  (only rendered when `APP_MODE === 'demo'`); credential form uses the async
+  login with busy state.
+- `AdminSecurityRoles`: role switcher requires the presenter PIN inline.
+- `AdminLayout` demo banner checks `IS_DEMO` instead of the raw env var.
+- `Footer` "Launch Client Presentation Mode" renders only in demo builds.
+- `App.tsx` mounts `<PresentationBar />` (demo builds only) on the admin
+  dashboard and the public router, making the three client themes, device
+  preview and reset action reachable.
+- `toPublicProperty`/`toPublicProject` in `src/utils/logic.ts` rewritten from
+  a delete-list (destructure-rest, whose literal keys leaked into the public
+  bundle) to explicit **allowlist** builders — this alone is what removed
+  `purchasePricePKR`, `internalNotes`, `cnic`, etc. from the public chunk.
+- `AdminOverview` hard-coded "v2.0 Production ERP" badge relabelled to
+  "v2.0 ERP" to avoid conflicting with build-mode semantics.
+- `vite.config.ts` drops the `__dirname` fallback (Vite config-loader warning).
+- `.env` migrated to `VITE_APP_MODE` / `VITE_DEMO_PIN`.
+
+### Fixed
+- P0-2: private ERP data + demo passwords no longer ship in the public
+  bundle. Public closure is now: `index-*.js` (87.7 KB gzip), icon chunk
+  (11.1 KB), `publicSeed-*.js` (8.6 KB). The ERP seed (4.3 KB gzip) loads
+  only inside an admin session.
+- P0-3 (part 1): instant demo sign-in grid requires the presenter PIN and
+  exists only in demo builds; presentation mode cannot be flipped from
+  localStorage (verified by tamper test in-browser); role switcher PIN-gated.
+
+### Known issue (accepted for Phase 1)
+- `ToastContainer` is not rendered on the unauthenticated admin view, so the
+  "Invalid presenter PIN" toast is invisible on that screen (the PIN still
+  correctly blocks the grid). Will wire the container there with Phase 2.
 
 ## Unreleased
 ### Security

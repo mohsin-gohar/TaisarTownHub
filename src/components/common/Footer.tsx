@@ -19,6 +19,7 @@ import {
   Youtube
 } from 'lucide-react';
 import { generateWhatsAppLink } from '../../utils/logic';
+import { APP_MODE } from '../../config/appMode';
 
 export const Footer: React.FC = () => {
   const { cmsConfig, currentTheme, setCurrentView, togglePresentationMode } = useApp();
@@ -127,16 +128,18 @@ export const Footer: React.FC = () => {
                 </a>
               ))}
             </div>
-            {/* Quick Demo Controls */}
-            <div className="pt-2">
-              <button
-                onClick={togglePresentationMode}
-                className="text-xs text-[#C5A46D] hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <span>Launch Client Presentation Mode</span>
-                <ExternalLink className="w-3 h-3" />
-              </button>
-            </div>
+            {/* Quick Demo Controls — demo build only (public/production visitors never see it) */}
+            {APP_MODE === 'demo' && (
+              <div className="pt-2">
+                <button
+                  onClick={togglePresentationMode}
+                  className="text-xs text-[#C5A46D] hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Launch Client Presentation Mode</span>
+                  <ExternalLink className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Popular Sectors */}

@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ShieldCheck, Lock, ArrowRight, X, KeyRound, Building2, UserCheck, Shield } from 'lucide-react';
+import { ArrowRight, X, KeyRound, Shield } from 'lucide-react';
 import { UserRole } from '../../types';
+import { APP_MODE } from '../../config/appMode';
 
 export const AdminLoginModal: React.FC = () => {
-  const { loginWithCredentials, loginAsDemo, setCurrentView, currentTheme, isPresentationMode, showToast } = useApp();
+  const { loginWithCredentials, loginAsDemo, verifyPresenterPin, setCurrentView, currentTheme, showToast } = useApp();
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('admin');
+  const [busy, setBusy] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinVerified, setPinVerified] = useState(false);
 
+  // The instant grid exists ONLY in the demo build. Roles mirror erpSeed accounts.
   const demoAccounts: { role: UserRole; name: string; title: string; email: string }[] = [
     { role: 'super_admin', name: 'Syed Moazzam Ali', title: 'Super Admin', email: 'superadmin@taisartownhub.com' },
     { role: 'admin', name: 'Saleem Siddiqui', title: 'Agency Admin', email: 'admin@taisartownhub.com' },
@@ -16,30 +21,49 @@ export const AdminLoginModal: React.FC = () => {
     { role: 'operator', name: 'Zainab Fatima', title: 'Data Operator', email: 'operator@taisartownhub.com' }
   ];
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const emailMap: Record<UserRole, string> = {
+    if (busy) return;
+    const emailMap: Record<string, string> = {
       'super_admin': 'superadmin@taisartownhub.com',
       'admin': 'admin@taisartownhub.com',
       'manager': 'manager@taisartownhub.com',
       'dealer': 'dealer@taisartownhub.com',
       'operator': 'operator@taisartownhub.com',
-      'Super Admin': 'superadmin@taisartownhub.com',
-      'Admin': 'admin@taisartownhub.com',
-      'Manager': 'manager@taisartownhub.com',
-      'Property Dealer': 'dealer@taisartownhub.com',
-      'Data Entry Operator': 'operator@taisartownhub.com',
     };
-    const result = loginWithCredentials(emailMap[selectedRole] || 'admin@taisartownhub.com', password);
-    if (result.success) {
-      setCurrentView('admin');
+    setBusy(true);
+    try {
+      const result = await loginWithCredentials(emailMap[selectedRole as string] || 'admin@taisartownhub.com', password);
+      if (result.success) {
+        setCurrentView('admin');
+      }
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleInstantRoleLogin = (role: UserRole) => {
-    loginAsDemo(role);
-    setCurrentView('admin');
+  const handlePinVerify = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Speed-bump presenter PIN (see config/appMode.ts). Demo build only.
+    if (verifyPresenterPin(pinInput)) {
+      setPinVerified(true);
+    } else {
+      showToast('error', 'Invalid presenter PIN.');
+    }
   };
+
+  const handleInstantRoleLogin = async (role: UserRole) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const ok = await loginAsDemo(role, pinInput);
+      if (ok) setCurrentView('admin');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const showDemoGrid = APP_MODE === 'demo';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
@@ -63,33 +87,62 @@ export const AdminLoginModal: React.FC = () => {
           </p>
         </div>
 
-        {/* 1-Click Fast Role Sign-In Grid (DEMO MODE only) */}
-        {(isPresentationMode || import.meta.env.VITE_DEMO_MODE === 'true') && (
-        <div className="space-y-2">
-          <span className="text-[11px] font-bold text-[#C5A46D] uppercase tracking-wider block">
-            Instant Demo Sign-In (Select Role Profile):
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {demoAccounts.map((acc) => (
+        {/* 1-Click Fast Role Sign-In Grid (demo build + unverified presenter PIN) */}
+        {showDemoGrid && !pinVerified && (
+          <form onSubmit={handlePinVerify} className="space-y-2 border border-amber-500/30 bg-amber-500/5 rounded-xl p-3">
+            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+              <KeyRound className="w-3.5 h-3.5" />
+              Presenter PIN required for instant demo sign-in
+            </span>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                inputMode="numeric"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                className="flex-1 bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none font-mono tracking-widest"
+                placeholder="Presenter PIN"
+              />
               <button
-                key={acc.role}
-                type="button"
-                onClick={() => handleInstantRoleLogin(acc.role)}
-                className="p-2.5 rounded-xl bg-[#0B1220] hover:bg-[#C5A46D]/15 border border-slate-800 hover:border-[#C5A46D]/60 text-left transition-all cursor-pointer group flex items-center justify-between"
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-[#101C2C] font-bold text-xs cursor-pointer"
               >
-                <div>
-                  <span className="text-xs font-bold text-white group-hover:text-[#C5A46D] block">
-                    {acc.title}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block truncate">
-                    {acc.name}
-                  </span>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-[#C5A46D] group-hover:translate-x-0.5 transition-transform" />
+                Unlock
               </button>
-            ))}
+            </div>
+            <p className="text-[10px] text-slate-500 leading-snug">
+              Speed bump only — demo deployments must also use platform password protection and fictional data.
+            </p>
+          </form>
+        )}
+
+        {showDemoGrid && pinVerified && (
+          <div className="space-y-2">
+            <span className="text-[11px] font-bold text-[#C5A46D] uppercase tracking-wider block">
+              Instant Demo Sign-In (Select Role Profile):
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {demoAccounts.map((acc) => (
+                <button
+                  key={acc.role}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => handleInstantRoleLogin(acc.role)}
+                  className="p-2.5 rounded-xl bg-[#0B1220] hover:bg-[#C5A46D]/15 border border-slate-800 hover:border-[#C5A46D]/60 text-left transition-all cursor-pointer group flex items-center justify-between disabled:opacity-50"
+                >
+                  <div>
+                    <span className="text-xs font-bold text-white group-hover:text-[#C5A46D] block">
+                      {acc.title}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block truncate">
+                      {acc.name}
+                    </span>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-[#C5A46D] group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
         )}
 
         {/* Manual Password Form */}
@@ -128,9 +181,10 @@ export const AdminLoginModal: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full py-2.5 px-4 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+            disabled={busy}
+            className="w-full py-2.5 px-4 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20 disabled:opacity-60"
           >
-            <span>Sign In to Dashboard</span>
+            <span>{busy ? 'Signing In…' : 'Sign In to Dashboard'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>

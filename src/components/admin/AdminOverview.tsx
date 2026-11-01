@@ -50,7 +50,7 @@ export const AdminOverview: React.FC = () => {
               Agency Control Center & Real Estate ERP
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D] text-[#101C2C]">
-              v2.0 Production ERP
+              v2.0 ERP
             </span>
           </div>
           <p className="text-xs text-slate-300">

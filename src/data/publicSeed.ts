@@ -1,18 +1,18 @@
+/**
+ * PUBLIC seed data — safe to ship inside the public bundle.
+ * Only marketing content and public-safe property records.
+ * NEVER add ERP-private fields here (purchasePricePKR, internalNotes, CNIC,
+ * bank data, seller/buyer/dealer/inquiry records): scripts/check-bundle.mjs
+ * fails the build if these strings reach public chunks.
+ */
 import {
   Project,
   Property,
   MediaItem,
-  Inquiry,
   CMSConfig,
   ClientTheme,
   Testimonial,
-  Seller,
-  Buyer,
-  Dealer,
-  Transaction,
-  PropertyFileItem,
-  PlotMarker,
-  AuthUser
+  PlotMarker
 } from '../types';
 
 export const initialCMSConfig: CMSConfig = {
@@ -219,8 +219,6 @@ export const initialProperties: Property[] = [
     description: 'Prime 120 square yard residential plot based on verified handwritten record specifications. Features 24-foot street frontage by 45-foot depth, directly facing the prestigious 100ft arterial boulevard in Sector 63. Clean MDA allotment file with biometric verification readiness. Ideal for immediate modern villa construction or high-yield commercial-residential hybrid development.',
     pricePKR: 3500000,
     formattedPrice: 'PKR 35 Lacs',
-    purchasePricePKR: 3200000,
-    sellingPricePKR: 3500000,
     location: 'Plot R-66, 100ft Road, Sector 63, Block A, Taiser Town Scheme 45, Karachi',
     phase: 'Phase 2',
     sector: 'Sector 63',
@@ -236,11 +234,6 @@ export const initialProperties: Property[] = [
     type: 'Residential Plot',
     status: 'Available',
     isFeatured: true,
-    sellerId: 'sel-1',
-    sellerName: 'Haji Abdul Rasheed',
-    assignedDealerId: 'deal-1',
-    assignedDealerName: 'Saleem Siddiqui',
-    internalNotes: 'Client handwritten note record: 24x45 dimension, 100ft road facing. Fixed dealer commission: PKR 20,000 agreed on closing.',
     images: [
       'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80',
@@ -272,8 +265,6 @@ export const initialProperties: Property[] = [
     type: 'Residential Plot',
     status: 'Hot Deal',
     isFeatured: true,
-    assignedDealerId: 'deal-1',
-    assignedDealerName: 'Saleem Siddiqui',
     images: [
       'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80',
@@ -306,8 +297,6 @@ export const initialProperties: Property[] = [
     type: 'Residential Plot',
     status: 'Available',
     isFeatured: true,
-    assignedDealerId: 'deal-1',
-    assignedDealerName: 'Saleem Siddiqui',
     images: [
       'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1000&q=80'
@@ -339,8 +328,6 @@ export const initialProperties: Property[] = [
     type: 'Commercial Plot',
     status: 'Available',
     isFeatured: true,
-    assignedDealerId: 'deal-2',
-    assignedDealerName: 'Kamran Haider',
     images: [
       'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1000&q=80'
@@ -372,8 +359,6 @@ export const initialProperties: Property[] = [
     type: 'Residential Plot',
     status: 'Available',
     isFeatured: false,
-    assignedDealerId: 'deal-3',
-    assignedDealerName: 'Bilal Farooqui',
     images: [
       'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1524813686514-a57563d77d66?auto=format&fit=crop&w=1000&q=80'
@@ -405,8 +390,6 @@ export const initialProperties: Property[] = [
     type: 'House / Villa',
     status: 'Available',
     isFeatured: true,
-    assignedDealerId: 'deal-1',
-    assignedDealerName: 'Saleem Siddiqui',
     images: [
       'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1000&q=80',
@@ -441,8 +424,6 @@ export const initialProperties: Property[] = [
     type: 'Residential Plot',
     status: 'Under Offer',
     isFeatured: false,
-    assignedDealerId: 'deal-2',
-    assignedDealerName: 'Kamran Haider',
     images: [
       'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80'
@@ -474,8 +455,6 @@ export const initialProperties: Property[] = [
     type: 'Commercial Shop',
     status: 'Hot Deal',
     isFeatured: true,
-    assignedDealerId: 'deal-2',
-    assignedDealerName: 'Kamran Haider',
     images: [
       'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1000&q=80'
@@ -507,8 +486,6 @@ export const initialProperties: Property[] = [
     type: 'Apartment',
     status: 'Available',
     isFeatured: false,
-    assignedDealerId: 'deal-2',
-    assignedDealerName: 'Kamran Haider',
     images: [
       'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1000&q=80'
@@ -542,8 +519,6 @@ export const initialProperties: Property[] = [
     type: 'Farmhouse',
     status: 'Available',
     isFeatured: true,
-    assignedDealerId: 'deal-3',
-    assignedDealerName: 'Bilal Farooqui',
     images: [
       'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1000&q=80'
@@ -575,8 +550,6 @@ export const initialProperties: Property[] = [
     type: 'Residential Plot',
     status: 'Available',
     isFeatured: false,
-    assignedDealerId: 'deal-4',
-    assignedDealerName: 'Zubair Ahmed Khan',
     images: [
       'https://images.unsplash.com/photo-1524813686514-a57563d77d66?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80'
@@ -682,65 +655,6 @@ export const initialMedia: MediaItem[] = [
   }
 ];
 
-export const initialInquiries: Inquiry[] = [
-  {
-    id: 'inq-1',
-    fullName: 'Muhammad Tariq Chaudhry',
-    email: 'tariq.chaudhry@gmail.com',
-    phone: '+92 300 2489102',
-    subject: 'Inquiry regarding 120 Sq. Yd. Plot in Sector 70-D',
-    message: 'Salam, I am an overseas Pakistani currently residing in Dubai. I am keen to invest in 2 residential plots of 120 sq. yds in Sector 70-D. Can your team verify if physical possession is ready and share the transfer fee breakdown?',
-    preferredPropertyOrProject: '120 Sq. Yd. Prime West-Open Residential Plot',
-    budgetRange: 'PKR 70 - 80 Lacs',
-    status: 'Pending',
-    submittedAt: '2026-02-28 14:32',
-    adminNotes: 'Overseas buyer from UAE. Very interested. Send WhatsApp video tour of Sector 70-D and fee schedule.',
-    source: 'Property Page'
-  },
-  {
-    id: 'inq-2',
-    fullName: 'Dr. Ayesha Farooq',
-    email: 'ayesha.farooq.dr@yahoo.com',
-    phone: '+92 333 9182374',
-    subject: 'MDA Homes Ready Villa Details',
-    message: 'Please send detailed photos of the interior kitchen, bathrooms, and roof terrace for the 3-bed duplex villa in Sector 30-A. Does it have Sui Gas or LPG cylinder provision?',
-    preferredPropertyOrProject: 'Brand New 120 Sq. Yd. Modern Duplex Villa',
-    budgetRange: 'PKR 1.2 Crore',
-    status: 'Contacted',
-    submittedAt: '2026-02-27 10:15',
-    adminNotes: 'Spoke over phone on 28th Feb. Scheduled on-site inspection for coming Sunday afternoon.',
-    source: 'Hero Search'
-  },
-  {
-    id: 'inq-3',
-    fullName: 'Sheikh Nasir Mehmood',
-    email: 'nasir.textiles@hotmail.com',
-    phone: '+92 321 4458901',
-    subject: 'Commercial Plot 200 Sq Yd on 150ft Boulevard',
-    message: 'We are looking to develop a commercial showroom and corporate offices. Is the 200 sq yd plot in Sector 50 completely clear from MDA litigation? Let us know the final price and payment terms.',
-    preferredPropertyOrProject: '200 Sq. Yd. Main Boulevard Commercial Plot',
-    budgetRange: 'PKR 2 Crore',
-    status: 'In Progress',
-    submittedAt: '2026-02-26 16:40',
-    adminNotes: 'High-value client. Sent official MDA demarcation map and verified NOC copy.',
-    source: 'Contact Form'
-  },
-  {
-    id: 'inq-4',
-    fullName: 'Raza Ali Baig',
-    email: 'raza.baig88@gmail.com',
-    phone: '+92 345 8891023',
-    subject: 'Al-Samnan Arcade Shop Booking',
-    message: 'Interested in booking a ground-floor retail shop in Al-Samnan Arcade. Please share the monthly installment schedule.',
-    preferredPropertyOrProject: 'Ground Floor Commercial Retail Shop',
-    budgetRange: 'PKR 50 Lacs',
-    status: 'Resolved',
-    submittedAt: '2026-02-25 11:20',
-    adminNotes: 'Booking deposit confirmed. Token receipt issued.',
-    source: 'Project Page'
-  }
-];
-
 export const initialTestimonials: Testimonial[] = [
   {
     id: 'test-1',
@@ -764,318 +678,6 @@ export const initialTestimonials: Testimonial[] = [
   }
 ];
 
-export const initialSellers: Seller[] = [
-  {
-    id: 'sel-1',
-    fullName: 'Haji Abdul Rasheed',
-    cnicMasked: '42101-*******-3',
-    phone: '+92 300 9281721',
-    whatsApp: '+92 300 9281721',
-    email: 'rasheed.haji@gmail.com',
-    address: 'House 42, Block 5, Gulshan-e-Iqbal, Karachi',
-    ownedPropertyIds: ['prop-r66'],
-    fileNumbers: ['MDA-63-R66-45'],
-    documentCount: 3,
-    notes: 'Primary owner of Plot R-66, Sector 63. All original MDA allotment and transfer files handed over for physical verification.',
-    createdAt: '2026-01-10'
-  },
-  {
-    id: 'sel-2',
-    fullName: 'Muhammad Akram Qureshi',
-    cnicMasked: '42201-*******-7',
-    phone: '+92 321 4481920',
-    whatsApp: '+92 321 4481920',
-    email: 'akram.qureshi@yahoo.com',
-    address: 'Flat 302, Al-Rauf Classic, North Nazimabad, Karachi',
-    ownedPropertyIds: ['prop-1'],
-    fileNumbers: ['MDA-70D-112'],
-    documentCount: 2,
-    notes: 'Possession letter available. Urgent sale requirement.',
-    createdAt: '2026-01-20'
-  },
-  {
-    id: 'sel-3',
-    fullName: 'Chaudhry Riaz Ahmed',
-    cnicMasked: '35202-*******-5',
-    phone: '+92 333 8819201',
-    whatsApp: '+92 333 8819201',
-    address: 'Sector 50 Commercial Avenue, Karachi',
-    ownedPropertyIds: ['prop-3'],
-    fileNumbers: ['MDA-50-COM-200'],
-    documentCount: 4,
-    notes: 'Commercial 150ft road plot owner. Ground + 4 approval certified.',
-    createdAt: '2026-02-01'
-  }
-];
-
-export const initialBuyers: Buyer[] = [
-  {
-    id: 'buy-1',
-    fullName: 'Muhammad Usman',
-    cnicMasked: '42101-*******-9',
-    phone: '+971 50 1234567',
-    whatsApp: '+971 50 1234567',
-    email: 'usman.dubai@emirates.net',
-    address: 'Deira Creek Tower, Dubai, UAE (Overseas Investor)',
-    interestedSector: 'Sector 63 / Sector 70-D',
-    budgetRange: 'PKR 35 - 40 Lacs',
-    interestedPropertyIds: ['prop-r66'],
-    paymentStatus: 'Advance Paid',
-    notes: 'Agreement executed for Plot R-66 Sector 63. Paid PKR 1,000,000 advance through Pay Order.',
-    createdAt: '2026-02-16'
-  },
-  {
-    id: 'buy-2',
-    fullName: 'Dr. Ayesha Farooq',
-    cnicMasked: '42301-*******-2',
-    phone: '+92 333 9182374',
-    whatsApp: '+92 333 9182374',
-    email: 'ayesha.farooq.dr@yahoo.com',
-    address: 'Civil Hospital Colony, Karachi',
-    interestedSector: 'Sector 30-A (MDA Homes)',
-    budgetRange: 'PKR 1.2 Crore',
-    interestedPropertyIds: ['prop-5'],
-    paymentStatus: 'Searching',
-    notes: 'Looking for ready duplex villa for family residence.',
-    createdAt: '2026-02-18'
-  },
-  {
-    id: 'buy-3',
-    fullName: 'Sheikh Nasir Mehmood',
-    cnicMasked: '42201-*******-1',
-    phone: '+92 321 4458901',
-    whatsApp: '+92 321 4458901',
-    email: 'nasir.textiles@hotmail.com',
-    address: 'SITE Industrial Area, Karachi',
-    interestedSector: 'Sector 50 Commercial',
-    budgetRange: 'PKR 2 Crore',
-    interestedPropertyIds: ['prop-3'],
-    paymentStatus: 'Full Payment Ready',
-    notes: 'Commercial showroom planning. Immediate funds available via banking transfer.',
-    createdAt: '2026-02-20'
-  }
-];
-
-export const initialDealers: Dealer[] = [
-  {
-    id: 'deal-1',
-    fullName: 'Saleem Siddiqui',
-    cnicMasked: '42101-*******-1',
-    phone: '+92 321 8292831',
-    whatsApp: '+92 321 8292831',
-    email: 'saleem@taisartownhub.com',
-    agencyAffiliation: 'TaisarTownHub Senior Advisory',
-    role: 'Senior Land Specialist & Scheme 45 Lead',
-    commissionType: 'Fixed',
-    commissionRate: 20000,
-    totalEarnedPKR: 160000,
-    pendingCommissionPKR: 20000,
-    assignedPropertiesCount: 4,
-    completedDealsCount: 8,
-    status: 'Active',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-    createdAt: '2025-06-01'
-  },
-  {
-    id: 'deal-2',
-    fullName: 'Kamran Haider',
-    cnicMasked: '42201-*******-5',
-    phone: '+92 321 8292832',
-    whatsApp: '+92 321 8292832',
-    email: 'kamran@taisartownhub.com',
-    agencyAffiliation: 'TaisarTownHub Commercial Desk',
-    role: 'Commercial Projects & Boulevard Lead',
-    commissionType: 'Percentage',
-    commissionRate: 1,
-    totalEarnedPKR: 350000,
-    pendingCommissionPKR: 0,
-    assignedPropertiesCount: 3,
-    completedDealsCount: 5,
-    status: 'Active',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
-    createdAt: '2025-08-15'
-  },
-  {
-    id: 'deal-3',
-    fullName: 'Bilal Farooqui',
-    cnicMasked: '42301-*******-9',
-    phone: '+92 300 7719283',
-    whatsApp: '+92 300 7719283',
-    email: 'bilal@taisartownhub.com',
-    agencyAffiliation: 'Associate Partner Network',
-    role: 'Phase 2 & Affordable Allotments Consultant',
-    commissionType: 'Fixed',
-    commissionRate: 15000,
-    totalEarnedPKR: 75000,
-    pendingCommissionPKR: 15000,
-    assignedPropertiesCount: 2,
-    completedDealsCount: 5,
-    status: 'Active',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=200&q=80',
-    createdAt: '2025-11-01'
-  },
-  {
-    id: 'deal-4',
-    fullName: 'Zubair Ahmed Khan',
-    cnicMasked: '42401-*******-3',
-    phone: '+92 315 2891901',
-    whatsApp: '+92 315 2891901',
-    email: 'zubair@taisartownhub.com',
-    agencyAffiliation: 'Karachi Modern Realty & Biometric Desk',
-    agencyOrBranch: 'Karachi Modern Realty Group',
-    role: 'Biometric Documentation & Transfer Specialist',
-    commissionType: 'Fixed',
-    commissionRate: 25000,
-    commissionValue: 25000,
-    totalEarnedPKR: 125000,
-    pendingCommissionPKR: 25000,
-    assignedPropertiesCount: 3,
-    dealsClosed: 6,
-    completedDealsCount: 6,
-    status: 'Active',
-    avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=200&q=80',
-    createdAt: '2025-12-10'
-  }
-];
-
-export const initialTransactions: Transaction[] = [
-  {
-    id: 'tx-6301',
-    propertyId: 'prop-r66',
-    propertyTitle: 'Plot R-66 (120 Sq. Yds) — 100ft Road Facing, Sector 63',
-    plotNumber: 'R-66',
-    sector: 'Sector 63',
-    sellerId: 'sel-1',
-    sellerName: 'Haji Abdul Rasheed',
-    buyerId: 'buy-1',
-    buyerName: 'Muhammad Usman (Overseas UAE)',
-    dealerId: 'deal-1',
-    dealerName: 'Saleem Siddiqui',
-    transactionType: 'Sale',
-    agreementAmountPKR: 3500000,
-    purchaseAmountPKR: 3200000,
-    finalSellingAmountPKR: 3500000,
-    advancePaymentPKR: 1000000,
-    remainingBalancePKR: 2500000,
-    commissionAmountPKR: 20000, // Handwritten note example: 20,000 PKR commission
-    commissionStatus: 'Pending',
-    transactionDate: '2026-02-16',
-    paymentMethod: 'Pay Order',
-    paymentStatus: 'Partially Paid',
-    status: 'Agreement Signed',
-    internalRemarks: 'Handwritten deal record: 24x45 plot on 100ft road. Advance token received in agency account. Full transfer scheduled at MDA for 15th March.',
-    documents: ['doc-r66-token', 'doc-r66-allotment']
-  },
-  {
-    id: 'tx-7102',
-    propertyId: 'prop-2',
-    propertyTitle: '240 Sq. Yd. Corner Park-Facing Executive Plot',
-    plotNumber: 'CP-44',
-    sector: 'Sector 71',
-    sellerId: 'sel-2',
-    sellerName: 'Muhammad Akram Qureshi',
-    buyerId: 'buy-2',
-    buyerName: 'Dr. Ayesha Farooq',
-    dealerId: 'deal-1',
-    dealerName: 'Saleem Siddiqui',
-    transactionType: 'Sale',
-    agreementAmountPKR: 7800000,
-    purchaseAmountPKR: 7400000,
-    finalSellingAmountPKR: 7800000,
-    advancePaymentPKR: 7800000,
-    remainingBalancePKR: 0,
-    commissionAmountPKR: 50000,
-    commissionStatus: 'Paid',
-    transactionDate: '2026-01-25',
-    paymentMethod: 'Bank Transfer',
-    paymentStatus: 'Fully Paid',
-    status: 'Completed',
-    internalRemarks: 'Biometric transfer completed at MDA Head Office. Physical possession handover completed.',
-    documents: ['doc-71-transfer']
-  }
-];
-
-export const initialPropertyFiles: PropertyFileItem[] = [
-  {
-    id: 'doc-r66-allotment',
-    propertyId: 'prop-r66',
-    propertyTitle: 'Plot R-66, Sector 63',
-    plotNumber: 'R-66',
-    title: 'MDA Original Allotment Order — Plot R-66 Sector 63',
-    fileType: 'pdf',
-    category: 'Original Allotment File',
-    fileSize: '3.4 MB',
-    url: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80',
-    verificationStatus: 'Verified',
-    verifiedBy: 'Super Admin',
-    verifiedAt: '2026-02-14',
-    uploadedAt: '2026-02-12',
-    notes: 'Record checked against MDA computerized database. Dimensions 24x45 confirmed.'
-  },
-  {
-    id: 'doc-r66-token',
-    propertyId: 'prop-r66',
-    propertyTitle: 'Plot R-66, Sector 63',
-    plotNumber: 'R-66',
-    title: 'Token Advance Deposit Receipt (PKR 10 Lacs)',
-    fileType: 'image',
-    category: 'Payment Receipt',
-    fileSize: '1.2 MB',
-    url: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
-    verificationStatus: 'Verified',
-    verifiedBy: 'Manager',
-    verifiedAt: '2026-02-16',
-    uploadedAt: '2026-02-16',
-    notes: 'Bank Pay Order #PO-9812401 deposited into client escrow.'
-  },
-  {
-    id: 'doc-r66-demarcation',
-    propertyId: 'prop-r66',
-    propertyTitle: 'Plot R-66, Sector 63',
-    plotNumber: 'R-66',
-    title: 'On-Ground Demarcation & GPS Pegging Certificate',
-    fileType: 'pdf',
-    category: 'Site Demarcation Map',
-    fileSize: '4.8 MB',
-    url: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1200&q=80',
-    verificationStatus: 'Verified',
-    verifiedBy: 'Super Admin',
-    verifiedAt: '2026-02-15',
-    uploadedAt: '2026-02-15',
-    notes: 'Surveyor physically confirmed 100ft road frontage.'
-  },
-  {
-    id: 'doc-sel1-cnic',
-    propertyId: 'prop-r66',
-    propertyTitle: 'Plot R-66, Sector 63',
-    plotNumber: 'R-66',
-    title: 'Seller CNIC Electronic Verification Slip (Masked)',
-    fileType: 'pdf',
-    category: 'CNIC Copy',
-    fileSize: '890 KB',
-    url: '#',
-    verificationStatus: 'Verified',
-    verifiedBy: 'Admin',
-    verifiedAt: '2026-02-10',
-    uploadedAt: '2026-02-10',
-    notes: 'Nadra biometric record authenticated.'
-  },
-  {
-    id: 'doc-70d-pending',
-    propertyId: 'prop-1',
-    propertyTitle: 'Plot P-112 Sector 70-D',
-    plotNumber: 'P-112',
-    title: 'Utility Surcharge Clearance Affidavit',
-    fileType: 'pdf',
-    category: 'Legal Undertaking',
-    fileSize: '2.1 MB',
-    url: '#',
-    verificationStatus: 'Pending Verification',
-    uploadedAt: '2026-02-24',
-    notes: 'Awaiting K-Electric NOC stamp.'
-  }
-];
-
 export const initialPlotMarkers: PlotMarker[] = [
   // Sector 63 - Block A (Highlighted around R-66 from handwritten requirements)
   {
@@ -1094,7 +696,7 @@ export const initialPlotMarkers: PlotMarker[] = [
     westOpen: false,
     gridCol: 1,
     gridRow: 1,
-    sellerName: 'Zahid Hussain'
+    markerLabel: 'Zahid Hussain'
   },
   {
     id: 'pl-63-r65',
@@ -1112,7 +714,7 @@ export const initialPlotMarkers: PlotMarker[] = [
     westOpen: true,
     gridCol: 2,
     gridRow: 1,
-    sellerName: 'Tariq Javed'
+    markerLabel: 'Tariq Javed'
   },
   {
     id: 'pl-63-r66',
@@ -1131,7 +733,7 @@ export const initialPlotMarkers: PlotMarker[] = [
     gridCol: 3,
     gridRow: 1,
     propertyId: 'prop-r66',
-    sellerName: 'Haji Abdul Rasheed'
+    markerLabel: 'Haji Abdul Rasheed'
   },
   {
     id: 'pl-63-r67',
@@ -1149,7 +751,7 @@ export const initialPlotMarkers: PlotMarker[] = [
     westOpen: true,
     gridCol: 4,
     gridRow: 1,
-    sellerName: 'Chaudhry Riaz'
+    markerLabel: 'Chaudhry Riaz'
   },
   {
     id: 'pl-63-r68',
@@ -1167,7 +769,7 @@ export const initialPlotMarkers: PlotMarker[] = [
     westOpen: false,
     gridCol: 1,
     gridRow: 2,
-    sellerName: 'Haji Rasheed'
+    markerLabel: 'Haji Rasheed'
   },
   {
     id: 'pl-63-r69',
@@ -1185,7 +787,7 @@ export const initialPlotMarkers: PlotMarker[] = [
     westOpen: true,
     gridCol: 2,
     gridRow: 2,
-    sellerName: 'Imran Bashir'
+    markerLabel: 'Imran Bashir'
   },
   {
     id: 'pl-63-r70',
@@ -1203,7 +805,7 @@ export const initialPlotMarkers: PlotMarker[] = [
     westOpen: false,
     gridCol: 3,
     gridRow: 2,
-    sellerName: 'Waqas Ali'
+    markerLabel: 'Waqas Ali'
   },
   {
     id: 'pl-63-r71',
@@ -1221,45 +823,6 @@ export const initialPlotMarkers: PlotMarker[] = [
     westOpen: true,
     gridCol: 4,
     gridRow: 2,
-    sellerName: 'Saleem Siddiqui'
+    markerLabel: 'Saleem Siddiqui'
   }
 ];
-
-export const initialAuthUsers: AuthUser[] = [
-  {
-    id: 'usr-1',
-    name: 'Syed Moazzam Ali',
-    email: 'superadmin@taisartownhub.com',
-    role: 'Super Admin',
-    permissions: ['all']
-  },
-  {
-    id: 'usr-2',
-    name: 'Saleem Siddiqui',
-    email: 'admin@taisartownhub.com',
-    role: 'Admin',
-    permissions: ['manage_properties', 'manage_projects', 'manage_sellers', 'manage_buyers', 'manage_transactions', 'verify_documents', 'edit_cms']
-  },
-  {
-    id: 'usr-3',
-    name: 'Kamran Haider',
-    email: 'manager@taisartownhub.com',
-    role: 'Manager',
-    permissions: ['manage_properties', 'manage_projects', 'manage_sellers', 'manage_buyers', 'create_transactions', 'verify_documents']
-  },
-  {
-    id: 'usr-4',
-    name: 'Bilal Farooqui',
-    email: 'dealer@taisartownhub.com',
-    role: 'Property Dealer',
-    permissions: ['view_properties', 'submit_buyer', 'view_my_deals', 'view_my_commission']
-  },
-  {
-    id: 'usr-5',
-    name: 'Zainab Fatima',
-    email: 'operator@taisartownhub.com',
-    role: 'Data Entry Operator',
-    permissions: ['manage_properties', 'upload_media', 'upload_documents']
-  }
-];
-

@@ -456,22 +456,46 @@ export function userHasPermission(user: { role: UserRole; permissions?: string[]
   return hasPermission(user.role, permission);
 }
 /**
- * Public serializer: strips private ERP fields from a Property so they can never
- * reach public components/responses.
+ * Public serializers — ALLOWLIST builders.
+ *
+ * Only explicitly-listed public fields are copied into the public view model.
+ * This is stronger than a denylist (delete-list): future private fields added
+ * to `Property` can never leak to the public site by accident, and removing
+ * fields from this list is enough to revoke public visibility.
+ *
+ * Keep in sync with the `PublicProperty` / `Project` types and with
+ * scripts/sensitive-strings.json + scripts/check-bundle.mjs.
  */
+const PUBLIC_PROPERTY_KEYS = [
+  'id', 'title', 'description', 'pricePKR', 'formattedPrice', 'location',
+  'phase', 'sector', 'block', 'streetNumber', 'plotNumber', 'fileNumber',
+  'sizeSqYards', 'sizeUnit', 'frontFeet', 'frontMeasurementFt', 'depthFeet',
+  'depthMeasurementFt', 'roadWidthFeet', 'roadWidthFt', 'isRoadFacing',
+  'is100ftRoadFacing', 'type', 'status', 'isFeatured', 'images', 'videoUrl',
+  'features', 'bedrooms', 'bathrooms', 'possessionReady', 'mdaApproved',
+  'cornerPlot', 'westOpen', 'parkFacing', 'mainBoulevard', 'createdDate',
+  'contactPerson', 'contactPhone', 'contactWhatsApp',
+] as const;
+
+const PUBLIC_PROJECT_KEYS = [
+  'id', 'title', 'tagline', 'category', 'location', 'sector', 'description',
+  'status', 'isFeatured', 'coverImage', 'galleryImages', 'videoUrl',
+  'facilities', 'documents', 'startingPricePKR', 'plotSizes',
+  'masterPlanImage', 'completionYear', 'developerName', 'createdDate',
+] as const;
+
+function pick<T extends object, K extends readonly (keyof T)[]>(obj: T | undefined | null, keys: K): Pick<T, K[number]> | undefined {
+  if (!obj) return undefined;
+  const out = {} as Pick<T, K[number]>;
+  for (const k of keys) {
+    if (k in obj) out[k] = obj[k];
+  }
+  return out;
+}
+
 export function toPublicProperty(p: Property): PublicProperty {
-  const {
-    purchasePricePKR,
-    privatePurchasePricePKR,
-    sellingPricePKR,
-    sellerId,
-    sellerName,
-    buyerId,
-    buyerName,
-    internalNotes,
-    ...publicFields
-  } = p as any;
-  return publicFields as PublicProperty;
+  const out = pick(p, PUBLIC_PROPERTY_KEYS) as PublicProperty;
+  return out;
 }
 
 export function toPublicProperties(list: Property[]): PublicProperty[] {
@@ -479,7 +503,9 @@ export function toPublicProperties(list: Property[]): PublicProperty[] {
 }
 
 export function toPublicProject(p: Project): Project {
-  return p ? { ...p } : p;
+  // Projects currently carry no ERP-private fields, but the allowlist guards
+  // against future additions leaking (e.g. internal margin notes).
+  return (pick(p, PUBLIC_PROJECT_KEYS) ?? p) as Project;
 }
 
 export function toPublicProjects(list: Project[]): Project[] {

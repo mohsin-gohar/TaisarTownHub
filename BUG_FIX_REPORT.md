@@ -1,5 +1,28 @@
 # Bug Fix Report — TaisarTownHub
 
+## Phase 1 (2.0.1) — APP_MODE, data split, PIN-gated demo (2026-11-01)
+1. P0-2 private ERP data/demo passwords shipped in the public bundle (shared
+   `createLucideIcon` chunk) — fixed by splitting seeds: `publicSeed.ts`
+   static-safe, `erpSeed.ts` dynamically imported only on admin auth; private
+   property fields re-attached only in the ERP chunk. Proven by
+   `npm run check:bundle` (word-boundary token scan) + bundle sizes in
+   CHANGELOG.
+2. `toPublicProperty` was a denylist (its destructured private keys were the
+   leak source) — rewritten as an allowlist builder; `toPublicProject` likewise.
+3. P0-3 instant Super-Admin login on any build — presenter PIN gate
+   (`VITE_DEMO_PIN`, default `4545`), grid only exists when
+   `APP_MODE === 'demo'`; presentation mode and demo user no longer read from
+   localStorage (tamper verified in-browser; legacy keys scrubbed on boot).
+4. Role switcher (Security & Roles) now requires the presenter PIN; both
+   `loginAsDemo`/`switchAuthUser` share one `verifyPresenterPin`.
+5. Footer public "Launch Client Presentation Mode" gated to demo builds.
+6. PresentationBar mounted (was unreachable): three client themes, device
+   preview and Reset Demo Data now reachable in the demo build.
+7. AdminLayout demo banner switched from raw `VITE_DEMO_MODE` env read to
+   `IS_DEMO` (single source of truth).
+8. ERP collection writes gated on `erpReady` so an empty initial render could
+   not wipe previously stored admin data.
+
 ## Fixed
 1. Authentication bypass (empty/global passwords) — loginWithCredentials now requires per-account password; empty passwords rejected.
 2. localStorage auth flags no longer trusted; isAdminAuthenticated starts false.

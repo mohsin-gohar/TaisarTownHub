@@ -7,6 +7,8 @@ import { ToastContainer } from './components/common/ToastContainer';
 // WhatsApp floating button hidden for now per client request.
 
 import { DeviceFrame } from './components/presentation/DeviceFrame';
+import { PresentationBar } from './components/presentation/PresentationBar';
+import { APP_MODE } from './config/appMode';
 
 // Public views
 import { HeroSection } from './components/public/HeroSection';
@@ -98,6 +100,7 @@ const MainAppContent: React.FC = () => {
           <AdminLayout />
         </Suspense>
         <ToastContainer />
+        {APP_MODE === 'demo' && <PresentationBar />}
       </>
     );
   }
@@ -105,7 +108,8 @@ const MainAppContent: React.FC = () => {
   // Public Site Router
   return (
     <div className="min-h-screen bg-[#0B1220] text-slate-100 flex flex-col justify-between selection:bg-[#C5A46D] selection:text-[#101C2C]">
-      {/* Presentation controls hidden for production-style deployment */}
+      {/* Presentation control bar — demo build only (in-memory toggle, never localStorage) */}
+      {APP_MODE === 'demo' && <PresentationBar />}
 
       {/* Device frame preview wrapper when tablet or mobile is activated in presentation mode */}
       <DeviceFrame>

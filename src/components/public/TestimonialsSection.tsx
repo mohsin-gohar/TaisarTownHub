@@ -1,5 +1,5 @@
 import React from 'react';
-import { initialTestimonials } from '../../data/initialData';
+import { initialTestimonials } from '../../data/publicSeed';
 import { Star, Quote, Sparkles, CheckCircle2, BadgeCheck } from 'lucide-react';
 import { Reveal } from '../common/Reveal';
 

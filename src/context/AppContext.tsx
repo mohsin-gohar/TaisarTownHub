@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Project,
   Property,
@@ -25,17 +25,25 @@ import {
   initialProjects,
   initialProperties,
   initialMedia,
-  initialInquiries,
   initialTestimonials,
-  initialSellers,
-  initialBuyers,
-  initialDealers,
-  initialTransactions,
-  initialPropertyFiles,
-  initialPlotMarkers,
-  initialAuthUsers
-} from '../data/initialData';
-import { calculateMediaUsageCount, checkDuplicateProperty, hasPermission } from '../utils/logic';
+  initialPlotMarkers
+} from '../data/publicSeed';
+import { APP_MODE, DEMO_PIN, IS_DEMO } from '../config/appMode';
+import { calculateMediaUsageCount, checkDuplicateProperty, hasPermission, userHasPermission } from '../utils/logic';
+
+/** Read a collection from localStorage, returning fallback on failure. */
+function readStored<T>(key: string, fallback: T[]): T[] {
+  const saved = localStorage.getItem(`taisartownhub_v2_${key}`);
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+  return fallback;
+}
 
 export interface ToastMessage {
   id: string;
@@ -59,10 +67,11 @@ interface AppContextType {
   currentUser: AuthUser;
   authUsers: AuthUser[];
   activeRole: UserRole;
-  switchAuthUser: (role: UserRole) => void;
-  loginAsDemo: (role: UserRole) => void;
-  loginAdmin: (password: string) => boolean;
-  loginWithCredentials: (email: string, password: string) => { success: boolean; error?: string };
+  switchAuthUser: (role: UserRole, pin?: string) => Promise<boolean>;
+  loginAsDemo: (role: UserRole, pin?: string) => Promise<boolean>;
+  verifyPresenterPin: (pin: string) => boolean;
+  loginAdmin: (password: string) => Promise<boolean>;
+  loginWithCredentials: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logoutAdmin: () => void;
   
   // Theme & Presentation Mode
@@ -133,10 +142,22 @@ interface AppContextType {
   toasts: ToastMessage[];
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
   removeToast: (id: string) => void;
-  resetToDefaultData: () => void;
+  resetToDefaultData: () => Promise<void>;
 }
 
 const STORAGE_KEY_PREFIX = 'taisartownhub_v2_';
+
+// Legacy keys from the pre-v2.0.1 build that used to control auth/demo state.
+// They are no longer read anywhere; scrub them once per boot so tampered or
+// stale flags cannot linger in the visitor's storage.
+const LEGACY_KEYS_TO_SCRUB = [
+  'taisartownhub_v2_presentation_mode',
+  'taisartownhub_v2_demo_user',
+  'taisartownhub_v2_is_admin_authenticated',
+];
+try {
+  for (const k of LEGACY_KEYS_TO_SCRUB) localStorage.removeItem(k);
+} catch { /* storage unavailable */ }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -152,30 +173,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}theme_id`);
     return (saved as ClientThemeId) || 'taisartown-navy';
   });
-  const [isPresentationMode, setIsPresentationMode] = useState<boolean>(() => {
-    return localStorage.getItem(`${STORAGE_KEY_PREFIX}presentation_mode`) === 'true';
-  });
+  // Presentation mode NEVER comes from localStorage — it is an in-memory,
+  // demo-only surface so visitors cannot flip it on themselves.
+  const [isPresentationMode, setIsPresentationMode] = useState<boolean>(false);
   const [deviceViewport, setDeviceViewport] = useState<DeviceViewport>('desktop');
 
   // Auth & RBAC State
-  // NOTE: Authentication flags are NEVER trusted from localStorage in production.
-  // Demo session is held in memory; re-login is required after a full page reload
-  // unless an explicit demo-mode session is restored (see DEMO MODE handling).
+  // NOTE: Authentication state is NEVER restored from localStorage.
+  // A full page reload always requires a fresh (PIN-gated demo, or credential) login.
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
 
-  const [currentUser, setCurrentUser] = useState<AuthUser>(() => {
-    // Demo-only restore of a previously selected demo user (no password stored).
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}demo_user`);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as AuthUser;
-        // Only restore if it matches a known demo account.
-        const known = initialAuthUsers.find((u) => u.id === parsed.id && u.email === parsed.email);
-        if (known) return known;
-      } catch (e) { /* ignore */ }
+  // Placeholder until an admin session begins; real profile arrives with login.
+  const [currentUser, setCurrentUser] = useState<AuthUser>(() => ({
+    id: 'anonymous',
+    name: 'Anonymous Visitor',
+    email: 'visitor@taisartownhub.com',
+    role: 'admin' as UserRole, // display role irrelevant until an admin session begins
+    permissions: [],
+  }));
+
+  // ---- ERP seed hydration (admin-only, dynamically imported chunk) ----
+  // The ERP chunk (sellers/buyers/dealers/transactions/files/inquiries/auth users/
+  // demo credentials) is fetched ONLY when an admin session starts. Public builds
+  // never trigger it, so its bytes never reach public visitors.
+  const erpReadyRef = useRef(false);
+  const [erpReady, setErpReady] = useState(false);
+  const ensureErpLoaded = React.useCallback(async (): Promise<boolean> => {
+    if (erpReadyRef.current) return true;
+    try {
+      const erp = await import('../data/erpSeed');
+      const byId = new Map(erp.initialProperties.map((p) => [p.id, p]));
+      // Upgrade locally-stored public-safe property copies with ERP private fields.
+      setProperties((prev) =>
+        prev.map((p) => {
+          const erpVersion = byId.get(p.id);
+          return erpVersion ? { ...erpVersion, ...p } : p;
+        })
+      );
+      // Fill any empty collection with pristine seed data (stored edits survive).
+      setSellers((prev) => (prev.length ? prev : erp.initialSellers));
+      setBuyers((prev) => (prev.length ? prev : erp.initialBuyers));
+      setDealers((prev) => (prev.length ? prev : erp.initialDealers));
+      setTransactions((prev) => (prev.length ? prev : erp.initialTransactions));
+      setPropertyFiles((prev) => (prev.length ? prev : erp.initialPropertyFiles));
+      setInquiries((prev) => (prev.length ? prev : erp.initialInquiries));
+      erpReadyRef.current = true;
+      setErpReady(true);
+      return true;
+    } catch (e) {
+      showToast('error', 'Could not load ERP records module.');
+      return false;
     }
-    return initialAuthUsers[0];
-  });
+  }, []);
+
+  // Known staff accounts arrive with the ERP chunk (demo/erp mode only).
+  const [authUsers, setAuthUsers] = useState<AuthUser[]>([]);
 
   // Data Collections with LocalStorage caching
   const [projects, setProjects] = useState<Project[]>(() => {
@@ -194,45 +246,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return initialProperties;
   });
 
-  const [sellers, setSellers] = useState<Seller[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}sellers`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialSellers;
-  });
+  const [sellers, setSellers] = useState<Seller[]>(() => readStored<Seller>('sellers', []));
 
-  const [buyers, setBuyers] = useState<Buyer[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}buyers`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialBuyers;
-  });
+  const [buyers, setBuyers] = useState<Buyer[]>(() => readStored<Buyer>('buyers', []));
 
-  const [dealers, setDealers] = useState<Dealer[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}dealers`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialDealers;
-  });
+  const [dealers, setDealers] = useState<Dealer[]>(() => readStored<Dealer>('dealers', []));
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}transactions`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialTransactions;
-  });
+  const [transactions, setTransactions] = useState<Transaction[]>(() => readStored<Transaction>('transactions', []));
 
-  const [propertyFiles, setPropertyFiles] = useState<PropertyFileItem[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}files`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialPropertyFiles;
-  });
+  const [propertyFiles, setPropertyFiles] = useState<PropertyFileItem[]>(() => readStored<PropertyFileItem>('files', []));
 
   const [plotMarkers, setPlotMarkers] = useState<PlotMarker[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}plots`);
@@ -250,13 +272,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return initialMedia;
   });
 
-  const [inquiries, setInquiries] = useState<Inquiry[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}inquiries`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialInquiries;
-  });
+  const [inquiries, setInquiries] = useState<Inquiry[]>(() => readStored<Inquiry>('inquiries', []));
 
   const [cmsConfig, setCmsConfig] = useState<CMSConfig>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}cms`);
@@ -270,17 +286,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Local storage synchronization
+  // NOTE: no presentation-mode / demo-user keys — auth & presentation state is
+  // in-memory only, so a page reload always requires a fresh login.
   useEffect(() => {
     localStorage.setItem(`${STORAGE_KEY_PREFIX}theme_id`, currentThemeId);
   }, [currentThemeId]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}presentation_mode`, String(isPresentationMode));
-  }, [isPresentationMode]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}demo_user`, JSON.stringify({ id: currentUser.id, email: currentUser.email }));
-  }, [currentUser]);
 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_KEY_PREFIX}projects`, JSON.stringify(projects));
@@ -291,28 +301,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [properties]);
 
   useEffect(() => {
+    // ERP collections only persist once their seed has been loaded, otherwise an
+    // initial empty render would allow wiping previously stored admin data.
+    if (!erpReady) return;
     localStorage.setItem(`${STORAGE_KEY_PREFIX}sellers`, JSON.stringify(sellers));
-  }, [sellers]);
+  }, [sellers, erpReady]);
 
   useEffect(() => {
+    if (!erpReady) return;
     localStorage.setItem(`${STORAGE_KEY_PREFIX}buyers`, JSON.stringify(buyers));
-  }, [buyers]);
+  }, [buyers, erpReady]);
 
   useEffect(() => {
+    if (!erpReady) return;
     localStorage.setItem(`${STORAGE_KEY_PREFIX}dealers`, JSON.stringify(dealers));
-  }, [dealers]);
+  }, [dealers, erpReady]);
 
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}transactions`, JSON.stringify(transactions));
-  }, [transactions]);
-
-  useEffect(() => {
+    if (!erpReady) return;
     localStorage.setItem(`${STORAGE_KEY_PREFIX}files`, JSON.stringify(propertyFiles));
-  }, [propertyFiles]);
+  }, [propertyFiles, erpReady]);
 
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}plots`, JSON.stringify(plotMarkers));
-  }, [plotMarkers]);
+    if (!erpReady) return;
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}transactions`, JSON.stringify(transactions));
+  }, [transactions, erpReady]);
 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_KEY_PREFIX}media`, JSON.stringify(mediaItems));
@@ -340,7 +353,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Auth & RBAC Handlers
-  // DEMO MODE: role simulation is only allowed in presentation/demo mode.
   const normalizeRole = (r: UserRole | string) => {
     const base = String(r).toLowerCase().replace(/[\s-]+/g, '_');
     const aliases: Record<string, string> = {
@@ -355,79 +367,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return aliases[base] || base;
   };
 
-  const switchAuthUser = (role: UserRole) => {
-    // Demo mode is ON by default for this frontend-only presentation build.
-    // Set VITE_DEMO_MODE=false to lock down role switching in a real deployment.
-    const isDemo = isPresentationMode || import.meta.env.VITE_DEMO_MODE !== 'false';
-    if (!isDemo) {
+  // Presenter PIN gate (demo builds only). Honest limitation: a client-side PIN
+  // is a speed bump against casual snooping, not real access control. Demo
+  // deployments must also use Vercel password protection and fictional data only.
+  const verifyPresenterPin = (pin: string): boolean => IS_DEMO && String(pin) === DEMO_PIN;
+
+  const switchAuthUser = async (role: UserRole, pin?: string): Promise<boolean> => {
+    if (APP_MODE !== 'demo') {
       showToast('error', 'Role switching is disabled outside of DEMO MODE.');
-      return;
+      return false;
     }
+    if (!verifyPresenterPin(pin ?? '')) {
+      showToast('error', 'Invalid presenter PIN.');
+      return false;
+    }
+    const loaded = await ensureErpLoaded();
+    if (!loaded) return false;
+    const erp = await import('../data/erpSeed');
     const user =
-      initialAuthUsers.find((u) => normalizeRole(u.role) === normalizeRole(role)) ||
-      initialAuthUsers[0];
+      erp.initialAuthUsers.find((u) => normalizeRole(u.role) === normalizeRole(role)) ||
+      erp.initialAuthUsers[0];
     setCurrentUser(user);
     showToast('info', `DEMO MODE: switched active session to ${user.name} (${user.role}).`);
+    return true;
   };
 
-  const loginAsDemo = (role: UserRole) => {
-    const isDemo = isPresentationMode || import.meta.env.VITE_DEMO_MODE === 'true';
-    if (!isDemo) {
+  const loginAsDemo = async (role: UserRole, pin?: string): Promise<boolean> => {
+    if (APP_MODE !== 'demo') {
       showToast('error', 'Demo login is disabled outside of DEMO MODE.');
-      return;
+      return false;
     }
+    if (!verifyPresenterPin(pin ?? '')) {
+      showToast('error', 'Invalid presenter PIN.');
+      return false;
+    }
+    const loaded = await ensureErpLoaded();
+    if (!loaded) return false;
+    const erp = await import('../data/erpSeed');
     const user =
-      initialAuthUsers.find((u) => normalizeRole(u.role) === normalizeRole(role)) ||
-      initialAuthUsers[0];
+      erp.initialAuthUsers.find((u) => normalizeRole(u.role) === normalizeRole(role)) ||
+      erp.initialAuthUsers[0];
     setCurrentUser(user);
     setIsAdminAuthenticated(true);
     showToast('success', `Demo login: ${user.name} (${user.role}).`);
+    return true;
   };
 
-  // Demo-only credential map (fictional sample accounts). Never used as production auth.
-  const DEMO_PASSWORDS: Record<string, string> = {
-    'superadmin@taisartownhub.com': 'Super@Admin2026!',
-    'admin@taisartownhub.com': 'Admin@Taisar2026',
-    'manager@taisartownhub.com': 'Manager@2026',
-    'dealer@taisartownhub.com': 'Dealer@2026',
-    'operator@taisartownhub.com': 'Operator@2026',
-  };
-
-  const loginWithCredentials = (email: string, pass: string): { success: boolean; error?: string } => {
-    const cleanEmail = email.trim().toLowerCase();
-    const foundUser = initialAuthUsers.find((u) => u.email.toLowerCase() === cleanEmail);
-
-    // No empty passwords. No global fallback passwords.
+  // Credential login validates against DEMO_ACCOUNTS (fictional) that live only
+  // inside the dynamically-imported ERP chunk. In the 'public' build there is no
+  // login code at all — the ERP chunk never loads.
+  const loginWithCredentials = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+    if (APP_MODE === 'public' || APP_MODE === 'production') {
+      return { success: false, error: 'Admin accounts are not configured in this build.' };
+    }
+    const loaded = await ensureErpLoaded();
+    if (!loaded) return { success: false, error: 'Records module unavailable.' };
     if (!pass || pass.trim() === '') {
       showToast('error', 'Password is required.');
       return { success: false, error: 'Password is required.' };
     }
-
-    const expected = DEMO_PASSWORDS[cleanEmail];
-    if (foundUser && expected && pass === expected) {
-      setCurrentUser(foundUser);
-      setIsAdminAuthenticated(true);
-      showToast('success', `Welcome back, ${foundUser.name}! Signed in as ${foundUser.role}. (DEMO MODE)`);
-      return { success: true };
+    const erp = await import('../data/erpSeed');
+    const cleanEmail = email.trim().toLowerCase();
+    const account = erp.DEMO_ACCOUNTS.find((a) => a.email.toLowerCase() === cleanEmail);
+    if (!account || pass !== account.password) {
+      showToast('error', 'Invalid email or password. Use demo account credentials.');
+      return { success: false, error: 'Invalid email or password.' };
     }
-
-    showToast('error', 'Invalid email or password. Use demo account credentials.');
-    return { success: false, error: 'Invalid email or password.' };
+    const foundUser =
+      erp.initialAuthUsers.find((u) => u.email.toLowerCase() === cleanEmail) ||
+      erp.initialAuthUsers[0];
+    setCurrentUser(foundUser);
+    setIsAdminAuthenticated(true);
+    showToast('success', `Welcome back, ${foundUser.name}! Signed in as ${foundUser.role}. (DEMO MODE)`);
+    return { success: true };
   };
 
-  const loginAdmin = (password: string): boolean => {
-    return loginWithCredentials('admin@taisartownhub.com', password).success;
+  const loginAdmin = async (password: string): Promise<boolean> => {
+    return (await loginWithCredentials('admin@taisartownhub.com', password)).success;
   };
 
   const logoutAdmin = () => {
     setIsAdminAuthenticated(false);
-    localStorage.removeItem(`${STORAGE_KEY_PREFIX}demo_user`);
     showToast('info', 'Logged out of admin dashboard.');
     setCurrentView('home');
   };
 
-  // Presentation Mode Toggle
+  // Presentation Mode Toggle (demo builds only; in-memory, not localStorage)
   const togglePresentationMode = () => {
+    if (APP_MODE !== 'demo') {
+      showToast('info', 'Presentation mode is a demo-build feature.');
+      return;
+    }
     setIsPresentationMode((prev) => {
       const next = !prev;
       showToast('info', next ? 'Client Presentation Mode activated! Clean layout and theme switcher enabled.' : 'Client Presentation Mode closed.');
@@ -908,21 +938,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('success', 'Website CMS settings updated and live!');
   };
 
-  // Reset to default demo data
-  const resetToDefaultData = () => {
+  // Reset to default demo data (demo builds only)
+  const resetToDefaultData = async () => {
+    if (APP_MODE !== 'demo') {
+      showToast('error', 'Data reset is a demo-build action.');
+      return;
+    }
+    setCurrentThemeId('taisartown-navy');
+    setIsPresentationMode(true);
+    const ok = await ensureErpLoaded();
+    if (!ok) return;
+    const erp = await import('../data/erpSeed');
+    // Fresh presentation state: seeds overwrite local copies completely.
     setProjects(initialProjects);
-    setProperties(initialProperties);
-    setSellers(initialSellers);
-    setBuyers(initialBuyers);
-    setDealers(initialDealers);
-    setTransactions(initialTransactions);
-    setPropertyFiles(initialPropertyFiles);
+    setProperties(erp.initialProperties);
+    setSellers(erp.initialSellers);
+    setBuyers(erp.initialBuyers);
+    setDealers(erp.initialDealers);
+    setTransactions(erp.initialTransactions);
+    setPropertyFiles(erp.initialPropertyFiles);
+    setInquiries(erp.initialInquiries);
     setPlotMarkers(initialPlotMarkers);
     setMediaItems(initialMedia);
-    setInquiries(initialInquiries);
     setCmsConfig(initialCMSConfig);
-    setCurrentThemeId('taisartown-navy');
-    setCurrentUser(initialAuthUsers[0]);
+    setCurrentUser(erp.initialAuthUsers[0]);
+    setIsAdminAuthenticated(true);
+    setErpReady(true);
+    erpReadyRef.current = true;
+    setAuthUsers(erp.initialAuthUsers);
     showToast('success', 'All ERP records, plots, transactions, and CMS settings restored to default state.');
   };
 
@@ -939,8 +982,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAdminTab,
         isAdminAuthenticated,
         currentUser,
-        authUsers: initialAuthUsers,
+        authUsers,
         activeRole: currentUser.role,
+        verifyPresenterPin,
         switchAuthUser,
         loginAdmin,
         loginWithCredentials,

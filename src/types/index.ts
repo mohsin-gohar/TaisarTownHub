@@ -293,7 +293,8 @@ export interface PlotMarker {
   gridCol?: number;
   gridRow?: number;
   propertyId?: string;
-  sellerName?: string;
+  /** Fictional presentation label shown on the public plot map (NOT seller data). */
+  markerLabel?: string;
 }
 
 export type UserRole = 

@@ -12,7 +12,7 @@ import {
   Sparkles,
   Check
 } from 'lucide-react';
-import { clientThemes } from '../../data/initialData';
+import { clientThemes } from '../../data/publicSeed';
 import { ClientThemeId, DeviceViewport } from '../../types';
 
 export const PresentationBar: React.FC = () => {
