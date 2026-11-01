@@ -48,11 +48,11 @@ export const AdminDealers: React.FC = () => {
     status: 'Active' as 'Active' | 'Inactive'
   });
 
-  const filteredDealers = dealers.filter((d) =>
+  const filteredDealers = dealers.filter((d) => !d.deletedAt && (
     d.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     d.phone.includes(searchQuery) ||
     (d.agencyOrBranch || d.agencyAffiliation || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ));
 
   const handleOpenAdd = () => {
     setEditingDealerId(null);

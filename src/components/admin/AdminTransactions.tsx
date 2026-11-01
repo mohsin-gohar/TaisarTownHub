@@ -52,9 +52,10 @@ export const AdminTransactions: React.FC = () => {
   // ---- Role scoping (P0-4): dealers see ONLY deals booked under their dealer profile ----
   const isDealer = normalizeRole(currentUser.role) === 'dealer';
   const scopedDealerId = isDealer ? currentUser.dealerId : undefined;
-  const visibleTransactions = isDealer
+  const visibleTransactions = (isDealer
     ? transactions.filter((t) => t.dealerId && t.dealerId === scopedDealerId)
-    : transactions;
+    : transactions
+  ).filter((t) => !t.deletedAt);
 
   const canCreateDeals = hasPermission(currentUser.role, 'create_transactions');
   const canUpdateDeals = hasPermission(currentUser.role, 'update_transactions');

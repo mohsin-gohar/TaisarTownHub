@@ -79,6 +79,9 @@ export interface Property {
   assignedDealerId?: string;
   assignedDealerName?: string;
   internalNotes?: string;
+  /** Soft-delete (audit): record is hidden, not destroyed. */
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export type PublicProperty = Omit<
@@ -91,6 +94,8 @@ export type PublicProperty = Omit<
   | 'buyerId'
   | 'buyerName'
   | 'internalNotes'
+  | 'deletedAt'
+  | 'deletedBy'
 >;
 
 export interface Seller {
@@ -112,6 +117,9 @@ export interface Seller {
   accountNumber?: string;
   notes?: string;
   createdAt?: string;
+  /** Soft-delete (audit): record is hidden, not destroyed. */
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export type BuyerPaymentStatus =
@@ -142,6 +150,9 @@ export interface Buyer {
   paymentStatus: BuyerPaymentStatus;
   notes?: string;
   createdAt?: string;
+  /** Soft-delete (audit): record is hidden, not destroyed. */
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export type CommissionType = 'Fixed' | 'Percentage' | 'Custom' | 'fixed' | 'percentage' | 'custom';
@@ -170,6 +181,9 @@ export interface Dealer {
   status: 'Active' | 'Inactive';
   avatar?: string;
   createdAt?: string;
+  /** Soft-delete (audit): record is hidden, not destroyed. */
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export type TransactionStatus = 
@@ -230,6 +244,9 @@ export interface Transaction {
   voidReason?: string;
   voidedBy?: string;
   voidedAt?: string;
+  /** Soft-delete (audit). */
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 /** Payment ledger row (P1-2): one entry per money movement on a deal. */

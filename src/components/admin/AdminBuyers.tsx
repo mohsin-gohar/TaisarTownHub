@@ -47,6 +47,7 @@ export const AdminBuyers: React.FC = () => {
   };
 
   const filteredBuyers = buyers.filter((b) => {
+    if (b.deletedAt) return false;
     const matchesSearch =
       b.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (b.cnic || b.cnicMasked || '').includes(searchQuery) ||

@@ -88,6 +88,7 @@ const MainAppContent: React.FC = () => {
       return (
         <>
           <AdminLoginModal />
+          <ToastContainer />
           <div className="min-h-screen bg-[#0B1220] flex items-center justify-center text-slate-400">
             Redirecting to authentication...
           </div>

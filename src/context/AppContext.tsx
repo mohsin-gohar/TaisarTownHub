@@ -32,6 +32,7 @@ import {
 } from '../data/publicSeed';
 import { APP_MODE, DEMO_PIN, IS_DEMO } from '../config/appMode';
 import { calculateMediaUsageCount, checkDuplicateProperty, hasPermission, userHasPermission } from '../utils/logic';
+import { logAudit } from '../domain/auditLog';
 import { normalizeRole, authorize, ROLE_LABELS, toLegacyRoleLabel, type Permission } from '../domain/permissions';
 import {
   TRANSACTION_STAGES,
@@ -106,22 +107,26 @@ interface AppContextType {
   addProperty: (property: Omit<Property, 'id' | 'createdDate'>) => { success: boolean; error?: string };
   updateProperty: (id: string, updates: Partial<Property>) => { success: boolean; error?: string };
   deleteProperty: (id: string) => void;
+  restoreProperty: (id: string) => void;
   
   // Real Estate ERP Collections
   sellers: Seller[];
   addSeller: (seller: Omit<Seller, 'id' | 'createdAt'>) => void;
   updateSeller: (id: string, updates: Partial<Seller>) => void;
   deleteSeller: (id: string) => void;
+  restoreSeller: (id: string) => void;
 
   buyers: Buyer[];
   addBuyer: (buyer: Omit<Buyer, 'id' | 'createdAt'>) => void;
   updateBuyer: (id: string, updates: Partial<Buyer>) => void;
   deleteBuyer: (id: string) => void;
+  restoreBuyer: (id: string) => void;
 
   dealers: Dealer[];
   addDealer: (dealer: Omit<Dealer, 'id' | 'createdAt' | 'totalEarnedPKR' | 'pendingCommissionPKR'>) => void;
   updateDealer: (id: string, updates: Partial<Dealer>) => void;
   deleteDealer: (id: string) => void;
+  restoreDealer: (id: string) => void;
   payDealerCommission: (dealerId: string, amount: number, transactionId?: string) => void;
 
   transactions: Transaction[];
@@ -444,6 +449,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       erp.initialAuthUsers[0];
     setCurrentUser(user);
     showToast('info', `DEMO MODE: switched active session to ${user.name} (${user.role}).`);
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'switch_role', target: user.id, detail: `Switched to ${user.name} (${user.role})` });
     return true;
   };
 
@@ -464,6 +470,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       erp.initialAuthUsers[0];
     setCurrentUser(user);
     setIsAdminAuthenticated(true);
+    logAudit({ actor: user.name, role: user.role, action: 'demo_login', target: user.id, detail: `Demo login as ${user.role}` });
     showToast('success', `Demo login: ${user.name} (${user.role}).`);
     return true;
   };
@@ -493,6 +500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       erp.initialAuthUsers[0];
     setCurrentUser(foundUser);
     setIsAdminAuthenticated(true);
+    logAudit({ actor: foundUser.name, role: foundUser.role, action: 'login', target: foundUser.id, detail: `Signed in as ${foundUser.role}` });
     showToast('success', `Welcome back, ${foundUser.name}! Signed in as ${foundUser.role}. (DEMO MODE)`);
     return { success: true };
   };
@@ -604,8 +612,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteProperty = (id: string) => {
     if (!requirePermission('delete_properties')) return;
-    setProperties((prev) => prev.filter((p) => p.id !== id));
-    showToast('info', 'Property listing removed.');
+    const today = new Date().toISOString().split('T')[0];
+    setProperties((prev) => prev.map((p) => (p.id === id ? { ...p, deletedAt: today, deletedBy: currentUser.name } : p)));
+    showToast('info', 'Property moved to trash (soft-deleted, restorable).');
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'soft_delete_property', target: id });
+  };
+
+  const restoreProperty = (id: string) => {
+    if (!requirePermission('delete_properties')) return;
+    setProperties((prev) => prev.map((p) => (p.id === id ? { ...p, deletedAt: undefined, deletedBy: undefined } : p)));
+    showToast('success', 'Property restored from trash.');
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'restore_property', target: id });
   };
 
   // Sellers Management
@@ -628,13 +645,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteSeller = (id: string) => {
     if (!requirePermission('manage_sellers')) return;
-    const referenced = transactions.some((t) => t.sellerId === id);
+    const referenced = transactions.some((t) => t.sellerId === id && !t.voided);
     if (referenced) {
       showToast('error', 'Cannot delete: seller is referenced by existing transactions. Archive instead.');
       return;
     }
-    setSellers((prev) => prev.filter((s) => s.id !== id));
-    showToast('info', 'Seller removed.');
+    const today = new Date().toISOString().split('T')[0];
+    setSellers((prev) => prev.map((s) => (s.id === id ? { ...s, deletedAt: today, deletedBy: currentUser.name } : s)));
+    showToast('info', 'Seller moved to trash (soft-deleted, restorable).');
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'soft_delete_seller', target: id });
+  };
+
+  const restoreSeller = (id: string) => {
+    if (!requirePermission('manage_sellers')) return;
+    setSellers((prev) => prev.map((s) => (s.id === id ? { ...s, deletedAt: undefined, deletedBy: undefined } : s)));
+    showToast('success', 'Seller restored from trash.');
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'restore_seller', target: id });
   };
 
   // Buyers Management
@@ -657,13 +683,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteBuyer = (id: string) => {
     if (!requirePermission('manage_buyers')) return;
-    const referenced = transactions.some((t) => t.buyerId === id);
+    const referenced = transactions.some((t) => t.buyerId === id && !t.voided);
     if (referenced) {
       showToast('error', 'Cannot delete: buyer is referenced by existing transactions. Archive instead.');
       return;
     }
-    setBuyers((prev) => prev.filter((b) => b.id !== id));
-    showToast('info', 'Buyer removed.');
+    const today = new Date().toISOString().split('T')[0];
+    setBuyers((prev) => prev.map((b) => (b.id === id ? { ...b, deletedAt: today, deletedBy: currentUser.name } : b)));
+    showToast('info', 'Buyer moved to trash (soft-deleted, restorable).');
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'soft_delete_buyer', target: id });
+  };
+
+  const restoreBuyer = (id: string) => {
+    if (!requirePermission('manage_buyers')) return;
+    setBuyers((prev) => prev.map((b) => (b.id === id ? { ...b, deletedAt: undefined, deletedBy: undefined } : b)));
+    showToast('success', 'Buyer restored from trash.');
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'restore_buyer', target: id });
   };
 
   // Dealers Management
@@ -688,13 +723,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteDealer = (id: string) => {
     if (!requirePermission('manage_dealers')) return;
-    const referenced = transactions.some((t) => t.dealerId === id);
+    const referenced = transactions.some((t) => t.dealerId === id && !t.voided);
     if (referenced) {
       showToast('error', 'Cannot delete: dealer is referenced by existing transactions.');
       return;
     }
-    setDealers((prev) => prev.filter((d) => d.id !== id));
-    showToast('info', 'Dealer removed.');
+    const today = new Date().toISOString().split('T')[0];
+    setDealers((prev) => prev.map((d) => (d.id === id ? { ...d, deletedAt: today, deletedBy: currentUser.name } : d)));
+    showToast('info', 'Dealer moved to trash (soft-deleted, restorable).');
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'soft_delete_dealer', target: id });
+  };
+
+  const restoreDealer = (id: string) => {
+    if (!requirePermission('manage_dealers')) return;
+    setDealers((prev) => prev.map((d) => (d.id === id ? { ...d, deletedAt: undefined, deletedBy: undefined } : d)));
+    showToast('success', 'Dealer restored from trash.');
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'restore_dealer', target: id });
   };
 
   const payDealerCommission = (dealerId: string, amount: number, transactionId?: string) => {
@@ -790,6 +834,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     } else {
       showToast('success', `Commission payout of PKR ${applied.toLocaleString()} recorded for ${dealer.fullName}.`);
+      logAudit({ actor: currentUser.name, role: currentUser.role, action: 'pay_commission', target: dealerId, detail: `PKR ${applied.toLocaleString()} to ${dealer.fullName}` });
     }
   };
 
@@ -1056,9 +1101,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'success',
       `Payment of PKR ${amount.toLocaleString()} recorded${updatedTx.status !== txn.status ? ` — deal moved to "${updatedTx.status}".` : '.'}`
     );
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'record_payment', target: transactionId, detail: 'PKR ' + amount.toLocaleString() + ' via ' + method });
   };
 
-  /** P1-1: voiding replaces hard delete — the record stays with an audit trail;
+  /** P1-1: voiding replaces hard delete - the record stays with an audit trail;
    *  totals exclude it, frozen payments surface in the void message. */
   const voidTransaction = (id: string, reason: string) => {
     if (!requirePermission('void_transactions')) return;
@@ -1104,6 +1150,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'info',
       `Deal voided (record kept for audit).${money.collected > 0 ? ` Payments of PKR ${money.collected.toLocaleString()} were recorded — refund handling is manual.` : ''}`
     );
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'void_transaction', target: id, detail: reason });
   };
 
   // Compatibility shim: old hard-deletes are replaced by the audited void flow.
@@ -1144,6 +1191,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       )
     );
     showToast('info', `Document status updated to "${status}".`);
+    logAudit({ actor: currentUser.name, role: currentUser.role, action: 'verify_document', target: id, detail: `Status → ${status}` });
   };
 
   const deletePropertyFile = (id: string) => {
@@ -1302,18 +1350,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addProperty,
         updateProperty,
         deleteProperty,
+        restoreProperty,
         sellers,
         addSeller,
         updateSeller,
         deleteSeller,
+        restoreSeller,
         buyers,
         addBuyer,
         updateBuyer,
         deleteBuyer,
+        restoreBuyer,
         dealers,
         addDealer,
         updateDealer,
         deleteDealer,
+        restoreDealer,
         payDealerCommission,
         transactions,
         paymentEntries,

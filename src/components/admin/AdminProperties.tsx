@@ -262,7 +262,7 @@ export const AdminProperties: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {properties.map((prop) => (
+              {properties.filter((p) => !p.deletedAt).map((prop) => (
                 <tr key={prop.id} className="hover:bg-slate-800/40 transition-colors">
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-3">

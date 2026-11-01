@@ -40,6 +40,7 @@ const AdminTransactions = lazy(() => import('./AdminTransactions').then((m) => (
 const AdminFileManagement = lazy(() => import('./AdminFileManagement').then((m) => ({ default: m.AdminFileManagement })));
 const AdminPlotLocator = lazy(() => import('./AdminPlotLocator').then((m) => ({ default: m.AdminPlotLocator })));
 const AdminSecurityRoles = lazy(() => import('./AdminSecurityRoles').then((m) => ({ default: m.AdminSecurityRoles })));
+const AdminAudit = lazy(() => import('./AdminAudit').then((m) => ({ default: m.AdminAudit })));
 
 export const AdminLayout: React.FC = () => {
   const {
@@ -99,6 +100,7 @@ export const AdminLayout: React.FC = () => {
     { id: 'inquiries', label: 'Inquiries CRM', icon: Inbox, alertBadge: pendingInquiriesCount > 0 ? pendingInquiriesCount : undefined, permission: 'view_inquiries' },
     { id: 'cms', label: 'Website CMS & Builder', icon: Settings, permission: 'edit_cms' },
     { id: 'security', label: 'Security & Roles', icon: Shield, permission: 'manage_users' },
+    { id: 'audit', label: 'Audit & Recycle Bin', icon: Shield, permission: 'manage_users' },
   ];
 
   // Sidebar visibility is enforced here AND in context actions (requirePermission) —
@@ -308,6 +310,7 @@ export const AdminLayout: React.FC = () => {
             {adminTab === 'inquiries' && <AdminInquiries />}
             {adminTab === 'cms' && <AdminCMS />}
             {adminTab === 'security' && <AdminSecurityRoles />}
+            {adminTab === 'audit' && <AdminAudit />}
           </Suspense>
         </div>
       </main>
