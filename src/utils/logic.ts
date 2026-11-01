@@ -12,6 +12,7 @@ import {
   roleHasPermission,
   type Permission,
 } from '../domain/permissions';
+import { computeFinancials as calculateFinancialsDomain } from '../domain/transactions';
 
 /**
  * Format currency into standard Pakistani Rupees notation (Lacs / Crores / Thousands)
@@ -294,73 +295,34 @@ export function calculateCommission(
 }
 
 /**
- * Calculate aggregated ERP metrics from transactions and properties
+ * Calculate aggregated ERP metrics from the transaction + ledger state (P1-5).
+ * Delegates to the domain module (ledger-backed money math) and keeps the
+ * legacy alias field names older UI still reads.
  */
-export function calculateERPFinancials(transactions: Transaction[], properties?: Property[]) {
-  let totalSalesVolume = 0; // agreement/deal volume (not collected revenue)
-  let totalAdvancesCollected = 0; // actual payments received
-  let totalPendingReceivables = 0; // outstanding balances
-  let totalCommissionEarned = 0;
-  let totalCommissionPaid = 0;
-  let totalCommissionPending = 0; // payable
-  let completedDealsCount = 0;
-  let pendingDealsCount = 0;
-  let cancelledDealsCount = 0;
-
-  for (const t of transactions) {
-    if (t.status === 'Cancelled') {
-      cancelledDealsCount += 1;
-      continue;
-    }
-    const saleVal = t.dealAmountPKR ?? t.finalSellingAmountPKR ?? t.agreementAmountPKR ?? 0;
-    const advVal = t.advancePKR ?? t.advancePaymentPKR ?? 0;
-    const balVal = t.balancePKR ?? t.remainingBalancePKR ?? Math.max(0, saleVal - advVal);
-    const commVal = t.commissionPKR ?? t.commissionAmountPKR ?? 0;
-
-    const safeSale = Number.isFinite(saleVal) ? Math.max(0, saleVal) : 0;
-    const safeAdv = Number.isFinite(advVal) ? Math.max(0, advVal) : 0;
-    const safeBal = Number.isFinite(balVal) ? Math.max(0, balVal) : 0;
-    const safeComm = Number.isFinite(commVal) ? Math.max(0, commVal) : 0;
-
-    totalSalesVolume += safeSale;
-    totalAdvancesCollected += safeAdv;
-    totalPendingReceivables += safeBal;
-    totalCommissionEarned += safeComm;
-
-    const cStatus = (t.commissionStatus || '').toLowerCase();
-    if (cStatus === 'paid') {
-      totalCommissionPaid += safeComm;
-    } else {
-      totalCommissionPending += safeComm;
-    }
-
-    if (t.status === 'Completed') {
-      completedDealsCount += 1;
-    } else {
-      pendingDealsCount += 1;
-    }
-  }
-
+export function calculateERPFinancials(
+  transactions: Transaction[],
+  payments: import('../types').PaymentEntry[] = [],
+  commissions: import('../types').CommissionEntry[] = []
+) {
+  const f = calculateFinancialsDomain(transactions, payments, commissions);
   return {
-    totalSalesVolume,
-    totalDealVolume: totalSalesVolume,
-    totalAdvancesCollected,
-    totalCollected: totalAdvancesCollected,
-    totalPendingReceivables,
-    pendingReceivables: totalPendingReceivables,
-    outstandingReceivables: totalPendingReceivables,
-    totalCommissionEarned,
-    commissionEarned: totalCommissionEarned,
-    totalCommissionPaid,
-    commissionPaid: totalCommissionPaid,
-    totalCommissionsPayable: totalCommissionPending,
-    totalCommissionPayable: totalCommissionPending,
-    commissionPayable: totalCommissionPending,
-    commissionOutstanding: totalCommissionPending,
-    completedDealsCount,
-    pendingDealsCount,
-    cancelledDealsCount,
-    totalDealsCount: transactions.length,
+    ...f,
+    totalDealVolume: f.totalSalesVolume,
+    totalCollected: f.totalCollected,
+    totalAdvancesCollected: f.totalCollected,
+    totalPendingReceivables: f.totalPendingReceivables,
+    pendingReceivables: f.totalPendingReceivables,
+    outstandingReceivables: f.totalPendingReceivables,
+    totalCommissionEarned: f.totalCommissionAccrued,
+    commissionEarned: f.totalCommissionAccrued,
+    totalCommissionPaid: f.totalCommissionPaid,
+    commissionPaid: f.totalCommissionPaid,
+    totalCommissionsPayable: f.totalCommissionPayable,
+    totalCommissionPayable: f.totalCommissionPayable,
+    commissionPayable: f.totalCommissionPayable,
+    commissionOutstanding: f.totalCommissionPayable,
+    pendingDealsCount: f.activeDealsCount,
+    totalDealsCount: f.activeDealsCount,
     totalTransactionsCount: transactions.length,
   };
 }

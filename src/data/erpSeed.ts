@@ -11,7 +11,9 @@ import {
   PropertyFileItem,
   Inquiry,
   AuthUser,
-  Property
+  Property,
+  PaymentEntry,
+  CommissionEntry
 } from '../types';
 import { initialProperties as publicProperties } from './publicSeed';
 
@@ -302,6 +304,7 @@ export const initialDealers: Dealer[] = [
 export const initialTransactions: Transaction[] = [
   {
     id: 'tx-6301',
+    dealNumber: 'TXN-2026-0001',
     propertyId: 'prop-r66',
     propertyTitle: 'Plot R-66 (120 Sq. Yds) — 100ft Road Facing, Sector 63',
     plotNumber: 'R-66',
@@ -329,6 +332,7 @@ export const initialTransactions: Transaction[] = [
   },
   {
     id: 'tx-7102',
+    dealNumber: 'TXN-2026-0002',
     propertyId: 'prop-2',
     propertyTitle: '240 Sq. Yd. Corner Park-Facing Executive Plot',
     plotNumber: 'CP-44',
@@ -382,6 +386,100 @@ export const initialTransactions: Transaction[] = [
     status: 'Negotiation',
     internalRemarks: 'Buyer showroom plan under negotiation for the main boulevard commercial plot. Token schedule pending agreement signing.',
     documents: []
+  }
+];
+
+/**
+ * Payment ledger seed (P1-2) — one row per historical money movement.
+ * tx-6301: token/advance Rs 10 Lacs pay order; tx-7102: fully settled Rs 78 Lacs
+ * (two tranches); tx-6303: Rs 20 Lacs advance bank transfer.
+ */
+export const initialPaymentEntries: PaymentEntry[] = [
+  {
+    id: 'pay-6301-1',
+    transactionId: 'tx-6301',
+    amountPKR: 1000000,
+    method: 'Pay Order',
+    paidAt: '2026-02-16',
+    recordedBy: 'Saleem Siddiqui',
+    note: 'Token advance pay order PO-9812401 deposited in agency escrow account.'
+  },
+  {
+    id: 'pay-7102-1',
+    transactionId: 'tx-7102',
+    amountPKR: 4000000,
+    method: 'Bank Transfer',
+    paidAt: '2026-01-20',
+    recordedBy: 'Kamran Haider',
+    note: 'First settlement tranche.'
+  },
+  {
+    id: 'pay-7102-2',
+    transactionId: 'tx-7102',
+    amountPKR: 3800000,
+    method: 'Bank Transfer',
+    paidAt: '2026-01-25',
+    recordedBy: 'Kamran Haider',
+    note: 'Final tranche at MDA transfer completion.'
+  },
+  {
+    id: 'pay-6303-1',
+    transactionId: 'tx-6303',
+    amountPKR: 2000000,
+    method: 'Online Transfer',
+    paidAt: '2026-02-22',
+    recordedBy: 'Bilal Farooqui',
+    note: 'Deal advance under negotiation schedule.'
+  }
+];
+
+/**
+ * Commission ledger seed (P1-3):
+ *  - tx-6301 (deal not fully paid) → commission still Pending Accrual.
+ *  - tx-7102 (Completed) → Accrued and fully Paid (payout recorded).
+ *  - tx-6303 (Negotiation) → Pending Accrual.
+ */
+export const initialCommissionEntries: CommissionEntry[] = [
+  {
+    id: 'cm-6301',
+    transactionId: 'tx-6301',
+    dealerId: 'deal-1',
+    dealerName: 'Saleem Siddiqui',
+    amountPKR: 20000,
+    paidPKR: 0,
+    payouts: [],
+    status: 'Pending Accrual',
+    note: 'Fixed per handwritten deal record; accrues when buyer completes payment.'
+  },
+  {
+    id: 'cm-7102',
+    transactionId: 'tx-7102',
+    dealerId: 'deal-1',
+    dealerName: 'Saleem Siddiqui',
+    amountPKR: 50000,
+    paidPKR: 50000,
+    payouts: [
+      {
+        id: 'pay-7102-comm',
+        amountPKR: 50000,
+        paidAt: '2026-01-28',
+        recordedBy: 'Syed Moazzam Ali',
+        note: 'Commission settled on deal completion.'
+      }
+    ],
+    status: 'Paid',
+    accruedOn: '2026-01-25'
+  },
+  {
+    id: 'cm-6303',
+    transactionId: 'tx-6303',
+    dealerId: 'deal-3',
+    dealerName: 'Bilal Farooqui',
+    amountPKR: 45000,
+    paidPKR: 0,
+    payouts: [],
+    status: 'Pending Accrual',
+    note: 'Fixed facilitation fee; accrues at Fully Paid milestone.'
   }
 ];
 

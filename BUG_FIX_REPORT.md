@@ -1,5 +1,46 @@
 # Bug Fix Report — TaisarTownHub
 
+## Phase 3 — transaction lifecycle + payment/commission ledgers (P1-1…P1-5) (2026-11-01)
+1. Hard delete of transactions destroyed audit history and orphaned commission
+   payouts — replaced with `voidTransaction` (super-admin, mandatory reason,
+   record preserved with who/when/why; recorded payments freeze with a refund note).
+2. Commission was "payable" the moment a deal was booked, inflating payouts —
+   accrual milestone now requires the buyer to fully pay (ledger) or the deal to
+   complete; Pending Accrual entries are never counted as payable.
+3. Money truth lived in `advancePaymentPKR`/`remainingBalancePKR` typed by hand
+   (could drift from actual cash) — now derived from the `PaymentEntry` ledger;
+   legacy seed rows fall back to their recorded advance; overflow payments clip.
+4. Status was a free-text dropdown with no transition rules — domain state machine
+   (Draft→…→Completed, Completed only via Under Transfer, Cancelled requires a
+   reason) now gates every change; supervisors can correct.
+5. Stage never advanced with payments — `recordPayment` auto-advances
+   Partially Paid/Fully Paid only forward, never past Under Transfer/Completed/
+   Cancelled; legacy manual flags can no longer desync.
+6. New deals generated ids via `Date.now()` (collision risk) and had no human
+   reference — now `genId` (crypto.randomUUID + safe fallback) and sequential
+   `TXN-YYYY-NNNN`.
+7. New deals did not create ledger rows, so totals drifted from cash — advance
+   becomes a PaymentEntry and agreed commission a Pending Accrual CommissionEntry
+   at creation.
+8. `payDealerCommission` mutated dealer balances without touching the ledger and
+   allowed overpaying accrued-only promises — now pays ACCRUED entries
+   newest-first, appends payout[] history, re-derives dealer aggregates from the
+   ledger, and explains the accrual rule when nothing is payable.
+9. Cancelled deals left commission marked Pending (payable) — cancellation now
+   cancels unpaid unaccrued entries; money already paid stands.
+10. `calculateERPFinancials` counted every commission (incl. promises) as payable
+    and used typed balances — now delegates to `computeFinancials` (ledger money,
+    payable only Accrued/Partially Paid, voided/cancelled excluded).
+11. AdminTransactions financial cards showed typed advances — now ledger-backed
+    (ADVANCES RECEIVED, PENDING RECEIVABLES, TOTAL AGENT COMMISSIONS).
+12. AdminDealers showed stale seed aggregates (160k earned vs 70k ledger) — now
+    derived from the commission ledger via an AppContext sync effect; payout modal
+    shows Total Earned / Already Paid / Payable (accrued).
+13. Status select was missing valid stages (Negotiation, Agreement Signed, Payment
+    Pending, Partially/Fully Paid rendered as Draft) — full canonical list now.
+14. Cancel via status select silently failed the domain reason rule — intercepted
+    by a cancel-reason modal.
+
 ## Phase 2 — canonical RBAC + CNIC privacy (P0-4, P0-5) (2026-11-01)
 1. Two competing role spellings ('Admin'/'admin', 'Property Dealer'/'dealer', etc.)
    each had their own permission list that had drifted apart — replaced by ONE

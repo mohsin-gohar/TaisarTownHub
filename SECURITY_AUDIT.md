@@ -2,6 +2,29 @@
 
 ## Controls implemented
 
+### Phase 3 — transaction lifecycle + ledgers (P1-1…P1-5)
+- Void replaces hard delete: `voidTransaction` is gated on `void_transactions`
+  (Super Admin only), requires a non-empty reason, preserves the record with
+  `voidedBy`/`voidedAt`/`voidReason`, freezes payments, and excludes the deal
+  from all totals. The legacy `deleteTransaction` is a compatibility shim over
+  it.
+- Payment recording is gated on `manage_payments` (Admin/Super Admin); amounts
+  are validated against the outstanding balance (`validatePayment`), with an
+  `approve_transactions` supervisor bypass for genuine overpayments; cancelled
+  and voided deals reject payments.
+- Commission payouts are gated on `pay_commissions` (Super Admin only) and now
+  pay only ACCRUED entries, append a payout[] audit trail, and re-derive dealer
+  aggregates from the ledger — no manual balance inflation.
+- Cancel requires a reason (enforced in the domain action layer, not just UI)
+  and cancels unpaid unaccrued commission entries.
+- Lifecycle transitions validated by the domain state machine (Completed only via
+  Under Transfer); supervisors holding `approve_transactions` may correct.
+- Financial totals are derived from the payment/commission ledgers, not typed
+  fields — no drift between booked and banked money; voided/cancelled deals
+  excluded from every total.
+- Voided deals surface a `VOIDED` badge and freeze the payment ledger (refund
+  handling is manual and noted in the void message).
+
 ### Phase 1 — build modes & data split
 - Single build-mode source of truth: `APP_MODE` (`public | demo | production`) via
   `VITE_APP_MODE` (legacy `VITE_DEMO_MODE` fallback); `DEMO_PIN` defaults to `4545`.

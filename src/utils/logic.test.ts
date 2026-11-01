@@ -13,7 +13,7 @@ import {
   calculateMediaUsageCount,
   hasPermission
 } from './logic';
-import { Property, Transaction } from '../types';
+import { Property, Transaction, PaymentEntry, CommissionEntry } from '../types';
 
 test('formatPKRCurrency formats Lacs and Crores correctly', () => {
   assert.equal(formatPKRCurrency(3500000), 'PKR 35 Lacs');
@@ -96,7 +96,7 @@ test('calculateCommission calculates fixed, percentage, and custom rates', () =>
   assert.equal(calculateCommission(3000000, 'Custom', 35000), 35000);
 });
 
-test('calculateERPFinancials computes totals accurately', () => {
+test('calculateERPFinancials computes totals from the ledgers (P1-5 semantics)', () => {
   const transactions: Transaction[] = [
     {
       id: 'tx-1',
@@ -149,15 +149,52 @@ test('calculateERPFinancials computes totals accurately', () => {
       status: 'Completed',
       internalRemarks: 'Full transfer done',
       documents: []
+    },
+    {
+      id: 'tx-3',
+      propertyId: 'p-3',
+      plotNumber: 'R-70',
+      sector: 'Sector 64',
+      sellerId: 's-3',
+      sellerName: 'Farmhouse Seller',
+      buyerId: 'b-3',
+      buyerName: 'Overseas Buyer',
+      dealAmountPKR: 4000000,
+      commissionAmountPKR: 25000,
+      commissionStatus: 'Pending',
+      commissionPaidPKR: 0,
+      paymentMethod: 'Bank Transfer',
+      paymentStatus: 'Fully Paid',
+      status: 'Fully Paid',
+      documents: []
     }
   ];
 
-  const fin = calculateERPFinancials(transactions);
-  assert.equal(fin.totalSalesVolume, 18500000);
-  assert.equal(fin.totalAdvancesCollected, 16000000);
-  assert.equal(fin.totalPendingReceivables, 2500000);
-  assert.equal(fin.totalCommissionsPayable, 20000); // only pending one
+  // Ledger truth: money and commission come from the payment/commission
+  // ledgers; tx-1 has no ledger rows, so its recorded advance still counts.
+  const payments: PaymentEntry[] = [
+    { id: 'pay-1', transactionId: 'tx-2', amountPKR: 15000000, method: 'Bank Transfer', paidAt: '2026-02-15', recordedBy: 'Tester' },
+    { id: 'pay-2', transactionId: 'tx-3', amountPKR: 4000000, method: 'Bank Transfer', paidAt: '2026-03-01', recordedBy: 'Tester' }
+  ];
+  const commissions: CommissionEntry[] = [
+    { id: 'cm-1', transactionId: 'tx-1', dealerId: 'd-1', amountPKR: 20000, paidPKR: 0, payouts: [], status: 'Pending Accrual' },
+    { id: 'cm-2', transactionId: 'tx-2', dealerId: 'd-1', amountPKR: 100000, paidPKR: 100000, payouts: [], status: 'Paid', accruedOn: '2026-02-15' },
+    { id: 'cm-3', transactionId: 'tx-3', dealerId: 'd-2', amountPKR: 25000, paidPKR: 0, payouts: [], status: 'Accrued', accruedOn: '2026-03-01' }
+  ];
+
+  const fin = calculateERPFinancials(transactions, payments, commissions);
+  assert.equal(fin.totalSalesVolume, 22500000); // 3.5M + 15M + 4M (voided/cancelled never enter)
+  assert.equal(fin.totalCollected, 20000000);   // 1M advance fallback + 15M + 4M ledger
+  assert.equal(fin.totalAdvancesCollected, 20000000); // legacy alias kept
+  assert.equal(fin.totalPendingReceivables, 2500000); // only the unfinished deal
+  assert.equal(fin.pendingReceivables, 2500000);      // legacy alias kept
+  // Payable = ACCRUED balances only: 25k accrued (tx-3); the 20k promise
+  // (Pending Accrual) is NOT payable yet; 100k Paid contributes zero.
+  assert.equal(fin.totalCommissionPayable, 25000);
+  assert.equal(fin.totalCommissionPaid, 100000);
   assert.equal(fin.completedDealsCount, 1);
+  assert.equal(fin.activeDealsCount, 2);
+  assert.equal(fin.totalDealsCount, 2); // alias of activeDealsCount
 });
 
 test('calculateMediaUsageCount detects real asset references', () => {

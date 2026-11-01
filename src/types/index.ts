@@ -199,10 +199,8 @@ export interface Transaction {
   sector: string;
   sellerId: string;
   sellerName: string;
-  sellerCnic?: string;
   buyerId: string;
   buyerName: string;
-  buyerCnic?: string;
   dealerId?: string;
   dealerName?: string;
   transactionType?: 'Sale' | 'Purchase';
@@ -227,6 +225,37 @@ export interface Transaction {
   internalRemarks?: string;
   notes?: string;
   documents?: string[];
+  /** Void (audit) trail — void replaces hard delete (P1-1). */
+  voided?: boolean;
+  voidReason?: string;
+  voidedBy?: string;
+  voidedAt?: string;
+}
+
+/** Payment ledger row (P1-2): one entry per money movement on a deal. */
+export interface PaymentEntry {
+  id: string;
+  transactionId: string;
+  amountPKR: number;
+  method: 'Pay Order' | 'Bank Transfer' | 'Cash / Cheque' | 'Online Transfer';
+  paidAt: string;
+  recordedBy: string;
+  note?: string;
+}
+
+/** Commission ledger row (P1-3): accrual milestone + payout history per deal. */
+export interface CommissionEntry {
+  id: string;
+  transactionId: string;
+  dealerId?: string;
+  dealerName?: string;
+  amountPKR: number;
+  status: 'Pending Accrual' | 'Accrued' | 'Partially Paid' | 'Paid' | 'Cancelled';
+  accruedOn?: string;
+  paidPKR: number;
+  payouts: Array<{ id: string; amountPKR: number; paidAt: string; recordedBy: string; note?: string }>;
+  /** Bookkeeping note: agreed rule / reason (not private financial data). */
+  note?: string;
 }
 
 export type DocumentCategory = 

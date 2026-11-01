@@ -17,7 +17,9 @@ import {
   PlotMarker,
   AuthUser,
   UserRole,
-  DocumentVerificationStatus
+  DocumentVerificationStatus,
+  PaymentEntry,
+  CommissionEntry
 } from '../types';
 import {
   initialCMSConfig,
@@ -31,6 +33,17 @@ import {
 import { APP_MODE, DEMO_PIN, IS_DEMO } from '../config/appMode';
 import { calculateMediaUsageCount, checkDuplicateProperty, hasPermission, userHasPermission } from '../utils/logic';
 import { normalizeRole, authorize, ROLE_LABELS, toLegacyRoleLabel, type Permission } from '../domain/permissions';
+import {
+  TRANSACTION_STAGES,
+  validateTransition,
+  validateDealPayload,
+  validatePayment,
+  dealMoney as dealMoneyOf,
+  impliedStatusByPayment,
+  nextDealNumber,
+  genId,
+  accrueCommission,
+} from '../domain/transactions';
 
 /** Read a collection from localStorage, returning fallback on failure. */
 function readStored<T>(key: string, fallback: T[]): T[] {
@@ -112,9 +125,19 @@ interface AppContextType {
   payDealerCommission: (dealerId: string, amount: number, transactionId?: string) => void;
 
   transactions: Transaction[];
+  /** Payment ledger (P1-2): one row per money movement. */
+  paymentEntries: PaymentEntry[];
+  /** Commission ledger (P1-3): accrual + payout history per deal. */
+  commissionEntries: CommissionEntry[];
   addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
   updateTransaction: (id: string, updates: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
+  /** Record a payment on a deal (manage_payments gate); updates the ledger,
+   *  derived payment status and the accrual milestone. */
+  recordPayment: (transactionId: string, amount: number, method: PaymentEntry['method'], note?: string) => void;
+  /** Void a deal with a mandatory reason (void_transactions gate); preserves
+   *  the record with an audit trail instead of hard-deleting it. */
+  voidTransaction: (id: string, reason: string) => void;
 
   propertyFiles: PropertyFileItem[];
   addPropertyFile: (file: Omit<PropertyFileItem, 'id' | 'uploadedAt'>) => void;
@@ -216,6 +239,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setBuyers((prev) => (prev.length ? prev : erp.initialBuyers));
       setDealers((prev) => (prev.length ? prev : erp.initialDealers));
       setTransactions((prev) => (prev.length ? prev : erp.initialTransactions));
+      setPaymentEntries((prev) => (prev.length ? prev : erp.initialPaymentEntries));
+      setCommissionEntries((prev) => (prev.length ? prev : erp.initialCommissionEntries));
       setPropertyFiles((prev) => (prev.length ? prev : erp.initialPropertyFiles));
       setInquiries((prev) => (prev.length ? prev : erp.initialInquiries));
       erpReadyRef.current = true;
@@ -254,6 +279,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [dealers, setDealers] = useState<Dealer[]>(() => readStored<Dealer>('dealers', []));
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => readStored<Transaction>('transactions', []));
+
+  // Ledgers (P1-2/P1-3): payment movements + commission accrual/payout history.
+  const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>(() => readStored<PaymentEntry>('payments', []));
+  const [commissionEntries, setCommissionEntries] = useState<CommissionEntry[]>(() => readStored<CommissionEntry>('commissions', []));
 
   const [propertyFiles, setPropertyFiles] = useState<PropertyFileItem[]>(() => readStored<PropertyFileItem>('files', []));
 
@@ -327,6 +356,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!erpReady) return;
     localStorage.setItem(`${STORAGE_KEY_PREFIX}transactions`, JSON.stringify(transactions));
   }, [transactions, erpReady]);
+
+  useEffect(() => {
+    if (!erpReady) return;
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}payments`, JSON.stringify(paymentEntries));
+  }, [paymentEntries, erpReady]);
+
+  useEffect(() => {
+    if (!erpReady) return;
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}commissions`, JSON.stringify(commissionEntries));
+  }, [commissionEntries, erpReady]);
+
+  // Keep dealer commission aggregates in sync with the ledger (P1-3 single source of truth).
+  useEffect(() => {
+    if (!erpReady) return;
+    setDealers((prev) =>
+      prev.map((d) => {
+        const entries = commissionEntries.filter((c) => c.dealerId === d.id && !String(c.status).startsWith('Cancel'));
+        const earned = entries.reduce((s, c) => s + (c.amountPKR || 0), 0);
+        const paid = entries.reduce((s, c) => s + (c.paidPKR || 0), 0);
+        return { ...d, totalEarnedPKR: earned, totalCommissionPaidPKR: paid, pendingCommissionPKR: Math.max(0, earned - paid) };
+      })
+    );
+  }, [commissionEntries, erpReady]);
 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_KEY_PREFIX}media`, JSON.stringify(mediaItems));
@@ -658,67 +710,115 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('error', 'Dealer not found.');
       return;
     }
-    const pending = dealer.pendingCommissionPKR ?? 0;
-    if (amount > pending + 1e-9) {
-      showToast('error', `Cannot overpay: pending commission is PKR ${pending.toLocaleString()}, requested PKR ${amount.toLocaleString()}.`);
+
+    // P1-3 commission-ledger payouts: pay ACCRUED entries only, newest first,
+    // optionally scoped to one deal. Pending-accrual promises stay unpayable.
+    const payableEntries = commissionEntries
+      .filter((c) =>
+        c.dealerId === dealerId &&
+        (c.status === 'Accrued' || c.status === 'Partially Paid') &&
+        (!transactionId || c.transactionId === transactionId))
+      .sort((a, b) => (b.accruedOn || '').localeCompare(a.accruedOn || ''));
+
+    const today = new Date().toISOString().split('T')[0];
+    let remaining = amount;
+    const entryUpdates: CommissionEntry[] = [];
+
+    for (const entry of payableEntries) {
+      if (remaining <= 0) break;
+      const due = entry.amountPKR - entry.paidPKR;
+      if (due <= 0) continue;
+      const payNow = Math.min(due, remaining);
+      const newPaid = entry.paidPKR + payNow;
+      entryUpdates.push({
+        ...entry,
+        paidPKR: newPaid,
+        status: newPaid >= entry.amountPKR ? 'Paid' : 'Partially Paid',
+        payouts: [
+          ...entry.payouts,
+          { id: genId('payout'), amountPKR: payNow, paidAt: today, recordedBy: currentUser.name, note: transactionId ? 'Payout against specific deal.' : undefined },
+        ],
+      });
+      remaining -= payNow;
+    }
+
+    const applied = amount - remaining;
+    if (applied <= 0) {
+      showToast(
+        'info',
+        'No ACCRUED commission is pending for this dealer. Commission becomes payable only after the buyer completes payment (or the deal completes).'
+      );
       return;
     }
 
-    // Authorization: only Super Admin / Admin can pay commissions (checked by caller in UI; here we trust context user)
-    if (!hasPermission(currentUser.role, 'pay_commissions') && !hasPermission(currentUser.role, 'manage_payments')) {
-      showToast('error', 'You are not authorized to pay commissions.');
-      return;
-    }
-
-    // Duplicate payout guard: if transaction already fully Paid, block.
-    if (transactionId) {
-      const tx = transactions.find((t) => t.id === transactionId);
-      if (tx && tx.commissionStatus === 'Paid') {
-        showToast('error', 'Commission for this transaction has already been paid.');
-        return;
-      }
-    }
-
-    setDealers((prev) =>
-      prev.map((d) => {
-        if (d.id === dealerId) {
-          const currentPending = d.pendingCommissionPKR ?? 0;
-          const currentPaid = d.totalCommissionPaidPKR ?? 0;
-          const newPending = Math.max(0, currentPending - amount);
-          const newPaid = currentPaid + amount;
-          return { ...d, pendingCommissionPKR: newPending, totalCommissionPaidPKR: newPaid };
-        }
-        return d;
+    // Commit ledger + keep the transaction row's commission status in sync.
+    const updatedEntries = commissionEntries.map((e) => entryUpdates.find((u) => u.id === e.id) ?? e);
+    setCommissionEntries(updatedEntries);
+    setTransactions((prev) =>
+      prev.map((t) => {
+        const upd = entryUpdates.find((u) => u.transactionId === t.id);
+        if (!upd) return t;
+        return {
+          ...t,
+          commissionStatus: upd.status === 'Paid' ? 'Paid' : upd.status === 'Partially Paid' ? 'Partially Paid' : t.commissionStatus,
+          commissionPaidPKR: upd.paidPKR,
+        };
       })
     );
 
-    if (transactionId) {
-      setTransactions((prev) =>
-        prev.map((t) => {
-          if (t.id !== transactionId) return t;
-          const comm = t.commissionAmountPKR ?? t.commissionPKR ?? 0;
-          const alreadyPaid = t.commissionPaidPKR ?? 0;
-          const newPaid = alreadyPaid + amount;
-          const fullyPaid = comm > 0 ? newPaid >= comm - 1e-9 : true;
-          return {
-            ...t,
-            commissionStatus: fullyPaid ? 'Paid' : 'Partially Paid',
-            commissionPaidPKR: newPaid,
-          };
-        })
-      );
-    }
+    // Dealer aggregates are re-derived from the ledger (single source of truth).
+    const affected = updatedEntries.filter((e) => e.dealerId === dealerId && e.status !== 'Cancelled');
+    const accrued = affected.reduce((sum, e) => sum + e.amountPKR, 0);
+    const paid = affected.reduce((sum, e) => sum + e.paidPKR, 0);
+    setDealers((prev) =>
+      prev.map((d) =>
+        d.id === dealerId
+          ? {
+              ...d,
+              totalEarnedPKR: accrued,
+              totalCommissionPaidPKR: paid,
+              pendingCommissionPKR: Math.max(0, accrued - paid),
+            }
+          : d
+      )
+    );
 
-    showToast('success', `Commission payout of PKR ${amount.toLocaleString()} processed successfully.`);
+    if (remaining > 0) {
+      showToast(
+        'info',
+        `Only PKR ${applied.toLocaleString()} of accrued commission was outstanding — recorded that amount for ${dealer.fullName}.`
+      );
+    } else {
+      showToast('success', `Commission payout of PKR ${applied.toLocaleString()} recorded for ${dealer.fullName}.`);
+    }
   };
 
   // Transactions Management
   const addTransaction = (txData: Omit<Transaction, 'id'>) => {
     if (!requirePermission('create_transactions')) return;
-    // Prevent duplicate active sale transactions per propertyId unless authorized
+
+    // P1-4: shared domain validation (form ports to the domain rule set).
+    const check = validateDealPayload(
+      {
+        propertyId: txData.propertyId,
+        sellerId: txData.sellerId,
+        buyerId: txData.buyerId,
+        dealAmountPKR: txData.dealAmountPKR,
+        advancePKR: txData.advancePKR,
+      },
+      { propertyId: txData.propertyId, sellerId: txData.sellerId, buyerId: txData.buyerId },
+      { properties, sellers, buyers }
+    );
+    if (!check.ok) {
+      showToast('error', check.error);
+      return;
+    }
+
+    // Prevent duplicate active sale deals per property unless supervisor-approved.
     const hasActiveTransaction = transactions.some(
       (t) =>
         t.propertyId === txData.propertyId &&
+        !t.voided &&
         t.status !== 'Cancelled' &&
         t.status !== 'Draft'
     );
@@ -727,25 +827,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    const today = new Date().toISOString().split('T')[0];
+    const year = today.slice(0, 4);
+    const dealNumber = txData.dealNumber || nextDealNumber(year, transactions.map((t) => t.dealNumber || '').filter(Boolean));
+
     const newTx: Transaction = {
       ...txData,
-      id: `tx-${Date.now().toString().slice(-4)}`,
+      id: genId('tx'),
+      dealNumber,
     };
-    setTransactions((prev) => [newTx, ...prev]);
 
-    // If commission pending and dealer assigned, update dealer pending commission
-    const commAmount = newTx.commissionAmountPKR ?? newTx.commissionPKR ?? 0;
-    if (newTx.dealerId && commAmount > 0 && newTx.commissionStatus === 'Pending') {
-      setDealers((prev) =>
-        prev.map((d) =>
-          d.id === newTx.dealerId
-            ? { ...d, pendingCommissionPKR: (d.pendingCommissionPKR ?? 0) + commAmount }
-            : d
-        )
-      );
+    // Ledger rows are created with the deal (P1-2/P1-3 integrity): the advance
+    // optimism of the form becomes a real payment movement, and the agreed
+    // dealer commission becomes a tracked accrual entry (not money yet).
+    const advance = Number(txData.advancePKR ?? txData.advancePaymentPKR ?? 0);
+    const newPayments = [...paymentEntries];
+    if (advance > 0) {
+      newPayments.push({
+        id: genId('pay'),
+        transactionId: newTx.id,
+        amountPKR: advance,
+        method: (newTx.paymentMethod as PaymentEntry['method']) || 'Bank Transfer',
+        paidAt: newTx.transactionDate || today,
+        recordedBy: currentUser.name,
+        note: 'Advance recorded at deal creation.',
+      });
+    }
+    setPaymentEntries(newPayments);
+
+    const commission = Number(newTx.commissionAmountPKR ?? newTx.commissionPKR ?? 0);
+    if (newTx.dealerId && commission > 0) {
+      const entry: CommissionEntry = {
+        id: genId('cm'),
+        transactionId: newTx.id,
+        dealerId: newTx.dealerId,
+        dealerName: newTx.dealerName,
+        amountPKR: commission,
+        paidPKR: 0,
+        payouts: [],
+        status: 'Pending Accrual',
+        note: 'Agreed at deal creation; accrues at the Fully Paid/Completed milestone.',
+      };
+      setCommissionEntries((prev) => [entry, ...prev]);
     }
 
-    // If transaction completed, update property status to 'Sold' or 'Transferred'
+    setTransactions((prev) => [newTx, ...prev]);
+
+    // Property status mirroring
     if (newTx.status === 'Completed') {
       setProperties((prev) =>
         prev.map((p) => (p.id === newTx.propertyId ? { ...p, status: 'Sold' } : p))
@@ -756,11 +884,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
-    showToast('success', `Transaction #${newTx.id} recorded.`);
+    showToast('success', `Deal ${dealNumber} recorded.`);
   };
 
   const updateTransaction = (id: string, updates: Partial<Transaction>) => {
-    // Cancelling is a distinct, more sensitive action than general updates (P1-1 lands with the Phase 3 state machine).
+    // Cancelling is a distinct, more sensitive action than general updates.
     if (updates.status === 'Cancelled') {
       if (!requirePermission('cancel_transactions')) return;
     } else if (!requirePermission('update_transactions')) {
@@ -771,14 +899,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('error', 'Transaction not found.');
       return;
     }
+    if (existingTx.voided) {
+      showToast('error', 'This deal is voided and read-only.');
+      return;
+    }
 
-    // Prevent duplicate active sale transactions per propertyId unless authorized.
+    // Prevent duplicate active sale deals per property unless supervisor-approved.
     const targetPropertyId = updates.propertyId || existingTx.propertyId;
     if (targetPropertyId && targetPropertyId !== existingTx.propertyId) {
       const hasActive = transactions.some(
         (t) =>
           t.id !== id &&
           t.propertyId === targetPropertyId &&
+          !t.voided &&
           t.status !== 'Cancelled' &&
           t.status !== 'Draft'
       );
@@ -788,77 +921,193 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // 1. Lifecycle transition validation:
-    // Draft -> Negotiation -> Agreement Signed -> Payment Pending -> Partially Paid -> Fully Paid -> Completed
-    // Cancelled from any
-    // Under Transfer from Completed
+    let updatedTx: Transaction = { ...existingTx, ...updates };
+
+    // P1-1: lifecycle transitions validated by the domain state machine
+    // (supervisors holding approve_transactions may make corrective moves).
     if (updates.status && updates.status !== existingTx.status) {
-      const from = existingTx.status;
-      const to = updates.status;
-
-      const VALID_LIFECYCLE_TRANSITIONS: Record<string, string[]> = {
-        'Draft': ['Negotiation', 'Agreement Signed', 'Cancelled'],
-        'Negotiation': ['Agreement Signed', 'Draft', 'Cancelled'],
-        'Token Paid': ['Agreement Signed', 'Negotiation', 'Cancelled'],
-        'Agreement Signed': ['Payment Pending', 'Partially Paid', 'Fully Paid', 'Cancelled'],
-        'Payment Pending': ['Partially Paid', 'Fully Paid', 'Completed', 'Cancelled'],
-        'Advance Received': ['Partially Paid', 'Fully Paid', 'Completed', 'Cancelled'],
-        'Partially Paid': ['Fully Paid', 'Completed', 'Cancelled'],
-        'Fully Paid': ['Completed', 'Under Transfer', 'Cancelled'],
-        'Completed': ['Under Transfer', 'Cancelled'],
-        'Under Transfer': ['Completed', 'Cancelled'],
-        'Cancelled': [],
-      };
-
-      const allowedNextStates = VALID_LIFECYCLE_TRANSITIONS[from] || [];
-      const isAllowed = to === 'Cancelled' || allowedNextStates.includes(to);
+      const gate = validateTransition(existingTx.status, updates.status);
       const isPrivileged = hasPermission(currentUser.role, 'approve_transactions');
-
-      if (!isAllowed && !isPrivileged) {
-        showToast('error', `Invalid transition from "${from}" to "${to}". Allowed: ${allowedNextStates.join(', ') || 'None (Terminal)'}.`);
+      if (!gate.ok && !isPrivileged) {
+        showToast('error', gate.error);
         return;
       }
 
-      // On transition to Cancelled:
-      // Subtract that transaction's commission from assigned dealer's pendingCommissionPKR (if pending)
-      // and set commissionStatus to 'Unpaid'
-      if (to === 'Cancelled') {
-        const commAmount = existingTx.commissionAmountPKR ?? existingTx.commissionPKR ?? 0;
-        if (existingTx.dealerId && commAmount > 0 && existingTx.commissionStatus === 'Pending') {
-          setDealers((prev) =>
-            prev.map((d) =>
-              d.id === existingTx.dealerId
-                ? { ...d, pendingCommissionPKR: Math.max(0, (d.pendingCommissionPKR ?? 0) - commAmount) }
-                : d
-            )
-          );
-        }
-        updates.commissionStatus = 'Cancelled';
+      updatedTx = { ...updatedTx, status: updates.status };
 
-        // Revert property status back to Available
+      // On Cancel: confirm a reason (updates note), cancel unpaid accruals and
+      // release the property back to inventory.
+      if (updates.status === 'Cancelled') {
+        if (!(existingTx.internalRemarks || existingTx.notes || updates.internalRemarks || updates.notes)) {
+          showToast('error', 'A cancellation reason is required. Add it to the deal notes.');
+          return;
+        }
+        const cancelledTx = { ...updatedTx, commissionStatus: 'Cancelled' as const };
+        setCommissionEntries((prev) =>
+          prev.map((e) => {
+            if (e.transactionId !== id) return e;
+            const r = accrueCommission(e, cancelledTx, paymentEntries);
+            return r.changed ? r.entry : e;
+          })
+        );
+        updatedTx = cancelledTx;
         setProperties((props) =>
           props.map((p) => (p.id === existingTx.propertyId ? { ...p, status: 'Available' } : p))
         );
-      } else if (to === 'Completed' || to === 'Under Transfer') {
+      } else if (updates.status === 'Completed' || updates.status === 'Under Transfer') {
         setProperties((props) =>
           props.map((p) => (p.id === existingTx.propertyId ? { ...p, status: 'Sold' } : p))
+        );
+      } else if (existingTx.status === 'Completed' || existingTx.status === 'Under Transfer') {
+        // Privileged corrective move away from a sale-state: release listing.
+        setProperties((props) =>
+          props.map((p) => (p.id === existingTx.propertyId ? { ...p, status: 'Reserved' } : p))
         );
       }
     }
 
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
-    );
-    showToast('success', 'Transaction updated.');
+    setTransactions((prev) => prev.map((t) => (t.id === id ? updatedTx : t)));
+
+    // P1-3: re-check the accrual milestone after any meaningful change.
+    if (commissionEntries.some((e) => e.transactionId === id)) {
+      setCommissionEntries((prev) =>
+        prev.map((e) => {
+          if (e.transactionId !== id) return e;
+          const r = accrueCommission(e, updatedTx, paymentEntries);
+          if (r.changed) {
+            showToast('success', r.note);
+            return r.entry;
+          }
+          return e;
+        })
+      );
+    }
+
+    showToast('success', updates.status && updates.status !== existingTx.status
+      ? `Deal moved to "${updates.status}".`
+      : 'Transaction updated.');
   };
 
-  const deleteTransaction = (id: string) => {
-    // Hard delete is super-admin-only and audited (a proper VOto workflow with
-    // reversal handling replaces this in Phase 3).
-    if (!requirePermission('void_transactions')) return;
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
-    showToast('info', 'Transaction record deleted.');
+  /** P1-2 payment ledger. Admin/Super Admin record money movements; the deal's
+   *  payment status and stage are derived, never hand-typed past the balance. */
+  const recordPayment = (transactionId: string, amount: number, method: PaymentEntry['method'], note?: string) => {
+    if (!requirePermission('manage_payments')) return;
+    const txn = transactions.find((t) => t.id === transactionId);
+    if (!txn) {
+      showToast('error', 'Transaction not found.');
+      return;
+    }
+    const gate = validatePayment(txn, paymentEntries, amount, {
+      allowOverpay: hasPermission(currentUser.role, 'approve_transactions'),
+    });
+    if (!gate.ok) {
+      showToast('error', gate.error);
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const entry: PaymentEntry = {
+      id: genId('pay'),
+      transactionId,
+      amountPKR: Number(amount),
+      method,
+      paidAt: today,
+      recordedBy: currentUser.name,
+      note: (note || '').trim() || undefined,
+    };
+    const updatedPayments = [...paymentEntries, entry];
+    setPaymentEntries(updatedPayments);
+
+    const money = dealMoneyOf(txn, updatedPayments);
+    const nextStatus = impliedStatusByPayment(txn, updatedPayments);
+    let updatedTx: Transaction = {
+      ...txn,
+      paymentStatus: money.isFullyPaid ? 'Fully Paid' : money.collected > 0 ? 'Partially Paid' : txn.paymentStatus,
+      remainingBalancePKR: money.balance,
+      balancePKR: money.balance,
+    };
+    // Auto-advance the stage only forward, never past a terminal/sale state.
+    const stageOf = (s: Transaction['status']) => TRANSACTION_STAGES.indexOf(s);
+    if (
+      !['Completed', 'Cancelled', 'Under Transfer'].includes(txn.status) &&
+      stageOf(nextStatus) > stageOf(txn.status)
+    ) {
+      updatedTx = { ...updatedTx, status: nextStatus };
+    }
+
+    setTransactions((prev) => prev.map((t) => (t.id === transactionId ? updatedTx : t)));
+
+    // Milestone check: crossing Fully Paid accrues the dealer commission.
+    if (commissionEntries.some((e) => e.transactionId === transactionId)) {
+      setCommissionEntries((prev) =>
+        prev.map((e) => {
+          if (e.transactionId !== transactionId) return e;
+          const r = accrueCommission(e, updatedTx, updatedPayments);
+          if (r.changed) {
+            showToast('success', r.note);
+            return r.entry;
+          }
+          return e;
+        })
+      );
+    }
+
+    showToast(
+      'success',
+      `Payment of PKR ${amount.toLocaleString()} recorded${updatedTx.status !== txn.status ? ` — deal moved to "${updatedTx.status}".` : '.'}`
+    );
   };
+
+  /** P1-1: voiding replaces hard delete — the record stays with an audit trail;
+   *  totals exclude it, frozen payments surface in the void message. */
+  const voidTransaction = (id: string, reason: string) => {
+    if (!requirePermission('void_transactions')) return;
+    const txn = transactions.find((t) => t.id === id);
+    if (!txn) {
+      showToast('error', 'Transaction not found.');
+      return;
+    }
+    if (txn.voided) {
+      showToast('info', 'This transaction is already voided.');
+      return;
+    }
+    const cleanReason = (reason || '').trim();
+    if (!cleanReason) {
+      showToast('error', 'A reason is required to void a transaction (audit trail).');
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const voidedTx: Transaction = {
+      ...txn,
+      status: 'Cancelled',
+      voided: true,
+      voidReason: cleanReason,
+      voidedBy: currentUser.name,
+      voidedAt: today,
+    };
+
+    setCommissionEntries((prev) =>
+      prev.map((e) => {
+        if (e.transactionId !== id) return e;
+        const r = accrueCommission(e, voidedTx, paymentEntries);
+        return r.changed ? r.entry : e;
+      })
+    );
+    setTransactions((prev) => prev.map((t) => (t.id === id ? voidedTx : t)));
+    setProperties((props) =>
+      props.map((p) => (p.id === txn.propertyId ? { ...p, status: 'Available' } : p))
+    );
+
+    const money = dealMoneyOf(txn, paymentEntries);
+    showToast(
+      'info',
+      `Deal voided (record kept for audit).${money.collected > 0 ? ` Payments of PKR ${money.collected.toLocaleString()} were recorded — refund handling is manual.` : ''}`
+    );
+  };
+
+  // Compatibility shim: old hard-deletes are replaced by the audited void flow.
+  const deleteTransaction = (id: string) => voidTransaction(id, 'Removed via delete control (legacy).');
 
   // Property Files Management
   const addPropertyFile = (fileData: Omit<PropertyFileItem, 'id' | 'uploadedAt'>) => {
@@ -1067,9 +1316,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteDealer,
         payDealerCommission,
         transactions,
+        paymentEntries,
+        commissionEntries,
         addTransaction,
         updateTransaction,
         deleteTransaction,
+        recordPayment,
+        voidTransaction,
         propertyFiles,
         addPropertyFile,
         verifyPropertyFile,

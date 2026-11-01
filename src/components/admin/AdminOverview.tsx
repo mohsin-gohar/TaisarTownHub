@@ -28,6 +28,8 @@ export const AdminOverview: React.FC = () => {
     mediaItems,
     inquiries,
     transactions,
+    paymentEntries,
+    commissionEntries,
     sellers,
     buyers,
     dealers,
@@ -38,7 +40,7 @@ export const AdminOverview: React.FC = () => {
 
   const pendingInquiries = inquiries.filter((i) => i.status === 'Pending').length;
   const verifiedFiles = propertyFiles.filter((f) => f.verificationStatus === 'Verified').length;
-  const financials = calculateERPFinancials(transactions, properties);
+  const financials = calculateERPFinancials(transactions, paymentEntries, commissionEntries);
 
   return (
     <div className="space-y-8 animate-fadeIn">

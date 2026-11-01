@@ -21,7 +21,7 @@ import { maskCNIC, formatPKRCurrency, hasPermission } from '../../utils/logic';
 import { AgencyDetailsModal } from '../common/AgencyDetailsModal';
 
 export const AdminDealers: React.FC = () => {
-  const { dealers, properties, addDealer, updateDealer, deleteDealer, payDealerCommission, transactions, showToast, currentUser } = useApp();
+  const { dealers, properties, addDealer, updateDealer, deleteDealer, payDealerCommission, transactions, commissionEntries, showToast, currentUser } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,6 +34,9 @@ export const AdminDealers: React.FC = () => {
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [selectedDealerForPayout, setSelectedDealerForPayout] = useState<Dealer | null>(null);
   const [payoutAmount, setPayoutAmount] = useState<number>(20000);
+  const [ledgerEarned, setLedgerEarned] = useState<number>(0);
+  const [ledgerPaid, setLedgerPaid] = useState<number>(0);
+  const [ledgerPayable, setLedgerPayable] = useState<number>(0);
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -130,12 +133,20 @@ export const AdminDealers: React.FC = () => {
   };
 
   const handleOpenPayout = (dealer: Dealer) => {
-    const earned = dealer.totalCommissionEarnedPKR ?? dealer.totalEarnedPKR ?? 0;
-    const paid = dealer.totalCommissionPaidPKR ?? 0;
-    const pendingBalance = dealer.pendingCommissionPKR ?? (earned - paid);
-    const commVal = dealer.commissionValue ?? dealer.commissionRate ?? 20000;
+    // Ledger-derived aggregates (single source of truth — P1-3).
+    const entries = commissionEntries.filter((c) => c.dealerId === dealer.id && !c.status.startsWith('Cancel'));
+    const earned = entries.reduce((sum, c) => sum + c.amountPKR, 0);
+    const paid = entries.reduce((sum, c) => sum + c.paidPKR, 0);
+    const payable = entries
+      .filter((c) => c.status === 'Accrued' || c.status === 'Partially Paid')
+      .reduce((sum, c) => sum + Math.max(0, c.amountPKR - c.paidPKR), 0);
     setSelectedDealerForPayout(dealer);
-    setPayoutAmount(pendingBalance > 0 ? pendingBalance : commVal);
+    setPayoutAmount(payable > 0 ? payable : 0);
+    // store ledger-derived values on the modal via dealer override (modal reads dealer.*)
+    // We'll pass them through a ref-like state instead — set a temp field.
+    setLedgerEarned(earned);
+    setLedgerPaid(paid);
+    setLedgerPayable(payable);
     setIsPayoutModalOpen(true);
   };
 
@@ -414,16 +425,16 @@ export const AdminDealers: React.FC = () => {
             <form onSubmit={handleExecutePayout} className="space-y-4 text-xs">
               <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-800 space-y-1">
                 <div className="flex justify-between text-slate-400">
-                  <span>Total Earned:</span>
-                  <span className="text-white font-mono">{formatPKRCurrency(selectedDealerForPayout.totalCommissionEarnedPKR ?? selectedDealerForPayout.totalEarnedPKR ?? 0)}</span>
+                  <span>Total Earned (ledger):</span>
+                  <span className="text-white font-mono">{formatPKRCurrency(ledgerEarned)}</span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Already Paid:</span>
-                  <span className="text-emerald-400 font-mono">{formatPKRCurrency(selectedDealerForPayout.totalCommissionPaidPKR ?? 0)}</span>
+                  <span className="text-emerald-400 font-mono">{formatPKRCurrency(ledgerPaid)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-amber-400 pt-1 border-t border-slate-800">
-                  <span>Balance Outstanding:</span>
-                  <span>{formatPKRCurrency(selectedDealerForPayout.pendingCommissionPKR ?? ((selectedDealerForPayout.totalCommissionEarnedPKR ?? selectedDealerForPayout.totalEarnedPKR ?? 0) - (selectedDealerForPayout.totalCommissionPaidPKR ?? 0)))}</span>
+                  <span>Payable (accrued):</span>
+                  <span>{formatPKRCurrency(ledgerPayable)}</span>
                 </div>
               </div>
 

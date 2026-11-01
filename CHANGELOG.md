@@ -1,5 +1,61 @@
 ﻿# Changelog
 
+## 2.0.3 — Phase 3: transaction lifecycle + payment/commission ledgers (P1-1…P1-5)
+
+### Added
+- `src/domain/transactions.ts`: canonical state machine (10 ordered stages, terminal
+  Completed/Cancelled, Completed only via Under Transfer, Cancelled requires a
+  reason), ledger-backed money math (`collectedForTx`/`dealMoney` with overflow
+  clipping), `impliedStatusByPayment`, commission accrual milestone
+  (`shouldAccrueCommission`/`accrueCommission`), deal-form validation
+  (`validateDealPayload`), payment validation (`validatePayment` with supervisor
+  overpay bypass), sequential `nextDealNumber` (TXN-YYYY-NNNN), `genId`
+  (crypto.randomUUID + safe fallback), `computeFinancials`.
+- `src/domain/transactions.test.ts`: 21 unit tests (state machine, payment ledger,
+  commission accrual, validation & ids, ledger-backed financials).
+- `PaymentEntry` + `CommissionEntry` types (`src/types/index.ts`) incl. void audit
+  fields on Transaction (`voided`, `voidReason`, `voidedBy`, `voidedAt`).
+- `src/data/erpSeed.ts`: `initialPaymentEntries` (4 money movements) and
+  `initialCommissionEntries` (Pending Accrual / Paid / Pending Accrual) plus
+  `dealNumber` on every seed deal.
+- AppContext: `paymentEntries`, `commissionEntries`, `recordPayment`, `voidTransaction`
+  state + hydration + localStorage persistence; `addTransaction` now creates ledger
+  rows (advance → PaymentEntry, dealer commission → CommissionEntry Pending Accrual)
+  and uses domain validation + `nextDealNumber`/`genId`; `updateTransaction` runs
+  the domain state machine, cancels unpaid accruals on Cancel and re-checks the
+  accrual milestone; `payDealerCommission` now pays ACCRUED entries newest-first
+  (payout[] appended), re-derives dealer aggregates from the ledger, and explains
+  the accrual rule when nothing is payable; `deleteTransaction` is now a
+  compatibility shim over the audited `voidTransaction`.
+- AdminTransactions UI: record-payment modal (gated `manage_payments`) with live
+  balance + recorded-movement history, VOID modal (super-admin, mandatory reason)
+  with `VOIDED` badge + frozen payments, cancel-reason modal (intercepted status
+  select), commission accrual badge column (Pending Accrual/Accrued/Partially
+  Paid/Paid/Cancelled), ledger-backed Paid/Balance column, Payments button
+  (view-only ledger for non-payers).
+- AdminDealers: ledger-derived payout modal (Total Earned / Already Paid / Payable
+  accrued), aggregates synced from the commission ledger via AppContext effect.
+- AdminOverview: financials now fed from payment + commission ledgers.
+
+### Changed
+- `calculateERPFinancials` delegates to `computeFinancials` (ledger-backed money);
+  legacy alias fields preserved (`totalAdvancesCollected`, `pendingReceivables`,
+  `totalCommissionPayable`, `pendingDealsCount`, `totalDealsCount`).
+- AdminTransactions financial cards now reflect ledger truth (ADVANCES RECEIVED etc.).
+- `src/utils/logic.test.ts`: legacy ERP-financials test rewritten to ledger-backed
+  semantics (47 tests total: 10 logic + 16 permissions + 21 transactions).
+
+### Fixed
+- Void replaces hard delete — the record stays with who/when/why; totals exclude
+  voided deals; recorded payments freeze with a refund note.
+- Cancelled deals cancel unpaid unaccrued commission entries (paid money stands).
+- Commission becomes payable only at the Fully Paid/Completed milestone; Pending
+  Accrual promises are never counted as payable.
+- Payment overflow clipped so balances never go negative; auto-advance of stage
+  only moves forward and never past Under Transfer/Completed/Cancelled.
+- Seed deal numbers now sequential (`TXN-2026-0001/0002/0003`); dealer aggregates
+  re-derived from the ledger instead of stale seed constants.
+
 ## 2.0.2 — Phase 2: canonical RBAC + CNIC privacy (P0-4, P0-5)
 
 ### Added

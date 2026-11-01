@@ -14,12 +14,15 @@ import {
   Building,
   User,
   DollarSign,
+  Wallet,
+  Ban,
   X,
   FileCheck
 } from 'lucide-react';
-import { Transaction, TransactionStatus, CommissionStatus } from '../../types';
+import { Transaction, TransactionStatus, CommissionStatus, PaymentEntry, CommissionEntry } from '../../types';
 import { formatPKRCurrency, calculateERPFinancials, calculateCommission, maskCNIC, hasPermission } from '../../utils/logic';
 import { normalizeRole } from '../../domain/permissions';
+import { dealMoney } from '../../domain/transactions';
 import { EmptyState } from '../common/EmptyState';
 
 export const AdminTransactions: React.FC = () => {
@@ -31,6 +34,10 @@ export const AdminTransactions: React.FC = () => {
     sellers,
     buyers,
     dealers,
+    paymentEntries,
+    commissionEntries,
+    recordPayment,
+    voidTransaction,
     showToast,
     currentTheme,
     currentUser,
@@ -66,7 +73,93 @@ export const AdminTransactions: React.FC = () => {
     notes: ''
   });
 
-  const financials = calculateERPFinancials(visibleTransactions, properties);
+  // Ledger subset visible to the current viewer (dealer => only own deals' money).
+  const visibleTxnIds = new Set(visibleTransactions.map((t) => t.id));
+  const visiblePayments = paymentEntries.filter((p) => visibleTxnIds.has(p.transactionId));
+  const visibleCommissions = commissionEntries.filter((c) => visibleTxnIds.has(c.transactionId));
+
+  const financials = calculateERPFinancials(visibleTransactions, visiblePayments, visibleCommissions);
+
+  // Fast lookup by deal for the table (payments history + commission accrual badge).
+  const paymentsByTxId = new Map<string, PaymentEntry[]>();
+  for (const p of visiblePayments) {
+    const list = paymentsByTxId.get(p.transactionId) || [];
+    list.push(p);
+    paymentsByTxId.set(p.transactionId, list);
+  }
+  const commissionByTxId = new Map<string, CommissionEntry>();
+  for (const c of visibleCommissions) commissionByTxId.set(c.transactionId, c);
+
+  // P1-2/P1-1 UI gates: recording money and voiding records are privileged ops;
+  // the context actions re-check these on every call (UI hiding is cosmetic).
+  const canRecordPayments = hasPermission(currentUser.role, 'manage_payments');
+  const canVoid = hasPermission(currentUser.role, 'void_transactions');
+
+  // Record-payment modal state
+  const [paymentModalTxn, setPaymentModalTxn] = useState<Transaction | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentEntry['method']>('Bank Transfer');
+  const [paymentNote, setPaymentNote] = useState('');
+
+  const openPaymentModal = (txn: Transaction) => {
+    const money = dealMoney(txn, paymentsByTxId.get(txn.id) || []);
+    setPaymentModalTxn(txn);
+    setPaymentAmount(money.balance > 0 ? money.balance : 0);
+    setPaymentMethod('Bank Transfer');
+    setPaymentNote('');
+  };
+
+  const handleConfirmPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentModalTxn) return;
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+      showToast('error', 'Payment amount must be a positive number.');
+      return;
+    }
+    recordPayment(paymentModalTxn.id, paymentAmount, paymentMethod, paymentNote.trim() || undefined);
+    setPaymentModalTxn(null);
+  };
+
+  // Void (super-admin, audited) modal state
+  const [voidModalTxn, setVoidModalTxn] = useState<Transaction | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+
+  const handleConfirmVoid = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!voidModalTxn) return;
+    if (!voidReason.trim()) {
+      showToast('error', 'A reason is required to void a deal (audit trail).');
+      return;
+    }
+    voidTransaction(voidModalTxn.id, voidReason.trim());
+    setVoidModalTxn(null);
+    setVoidReason('');
+  };
+
+  // Cancelling via the status select needs a reason (domain rule) — intercept it.
+  const [cancelModalTxnId, setCancelModalTxnId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+
+  const handleStatusSelect = (txn: Transaction, next: TransactionStatus) => {
+    if (next === 'Cancelled') {
+      setCancelModalTxnId(txn.id);
+      setCancelReason('');
+      return;
+    }
+    updateTransaction(txn.id, { status: next });
+  };
+
+  const handleConfirmCancel = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancelModalTxnId) return;
+    if (!cancelReason.trim()) {
+      showToast('error', 'A cancellation reason is required.');
+      return;
+    }
+    updateTransaction(cancelModalTxnId, { status: 'Cancelled', notes: cancelReason.trim() });
+    setCancelModalTxnId(null);
+    setCancelReason('');
+  };
 
   const filteredTxns = visibleTransactions.filter((t) => {
     const dNum = t.dealNumber || t.id;
@@ -308,10 +401,10 @@ export const AdminTransactions: React.FC = () => {
                 <th className="py-3.5 px-4">Plot / Property</th>
                 <th className="py-3.5 px-4">Seller & Buyer</th>
                 <th className="py-3.5 px-4">Deal Amount</th>
-                <th className="py-3.5 px-4">Advance / Balance</th>
+                <th className="py-3.5 px-4">Paid / Balance</th>
                 <th className="py-3.5 px-4">Agent Commission</th>
                 <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-right">Receipt</th>
+                <th className="py-3.5 px-4 text-right">Ledger & Receipt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
@@ -319,13 +412,16 @@ export const AdminTransactions: React.FC = () => {
                 // Honest lineage flag: only the actual handwritten-record demo
                 // deal (Plot R-66), NOT any deal whose number merely contains "001".
                 const isHandwrittenDeal = txn.propertyId === 'prop-r66';
+                const payRows = paymentsByTxId.get(txn.id) || [];
+                const commEntry = commissionByTxId.get(txn.id);
+                const money = dealMoney(txn, payRows);
 
                 return (
                   <tr
                     key={txn.id}
                     className={`hover:bg-slate-800/40 transition-colors ${
                       isHandwrittenDeal ? 'bg-[#C5A46D]/5' : ''
-                    }`}
+                    } ${txn.voided ? 'opacity-55' : ''}`}
                   >
                     <td className="py-4 px-4">
                       <div className="font-bold text-white font-mono flex items-center gap-1.5">
@@ -333,6 +429,14 @@ export const AdminTransactions: React.FC = () => {
                         {isHandwrittenDeal && (
                           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#C5A46D] text-[#101C2C]">
                             Handwritten Note
+                          </span>
+                        )}
+                        {txn.voided && (
+                          <span
+                            className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-600/90 text-white"
+                            title={txn.voidReason ? `Voided by ${txn.voidedBy}: ${txn.voidReason}` : undefined}
+                          >
+                            VOIDED
                           </span>
                         )}
                       </div>
@@ -367,21 +471,32 @@ export const AdminTransactions: React.FC = () => {
 
                     <td className="py-4 px-4">
                       <div className="text-emerald-400 font-mono font-semibold">
-                        Adv: {formatPKRCurrency(txn.advancePKR ?? txn.advancePaymentPKR ?? 0)}
+                        Paid: {formatPKRCurrency(money.collected)}
                       </div>
                       <div className="text-slate-400 font-mono text-[11px]">
-                        Bal: {formatPKRCurrency(txn.balancePKR ?? txn.remainingBalancePKR ?? 0)}
+                        Bal: {formatPKRCurrency(money.balance)}
+                        {payRows.length > 0 && (
+                          <span className="text-slate-500"> · {payRows.length} entr{payRows.length === 1 ? 'y' : 'ies'}</span>
+                        )}
                       </div>
                     </td>
 
                     <td className="py-4 px-4">
                       <div className="font-bold text-amber-300 font-mono">
-                        {formatPKRCurrency(txn.commissionPKR ?? txn.commissionAmountPKR ?? 0)}
+                        {formatPKRCurrency(commEntry?.amountPKR ?? txn.commissionPKR ?? txn.commissionAmountPKR ?? 0)}
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                        txn.commissionStatus === 'Paid' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'
+                        (commEntry?.status ?? txn.commissionStatus) === 'Paid'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : (commEntry?.status ?? txn.commissionStatus) === 'Accrued'
+                          ? 'bg-amber-500/20 text-amber-300'
+                          : (commEntry?.status ?? txn.commissionStatus) === 'Partially Paid'
+                          ? 'bg-blue-500/20 text-blue-300'
+                          : (commEntry?.status ?? txn.commissionStatus) === 'Cancelled'
+                          ? 'bg-rose-500/20 text-rose-300'
+                          : 'bg-slate-800 text-slate-400'
                       }`}>
-                        {txn.commissionStatus}
+                        {commEntry?.status ?? txn.commissionStatus}
                       </span>
                     </td>
 
@@ -390,7 +505,7 @@ export const AdminTransactions: React.FC = () => {
                         value={txn.status}
                         disabled={!canUpdateDeals}
                         title={canUpdateDeals ? 'Update deal status' : 'Your role cannot modify deal status'}
-                        onChange={(e) => updateTransaction(txn.id, { status: e.target.value as TransactionStatus })}
+                        onChange={(e) => handleStatusSelect(txn, e.target.value as TransactionStatus)}
                         className={`text-[10px] font-bold px-2 py-1 rounded-lg border focus:outline-none ${
                           txn.status === 'Completed'
                             ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
@@ -416,14 +531,37 @@ export const AdminTransactions: React.FC = () => {
                     </td>
 
                     <td className="py-4 px-4 text-right">
-                      <button
-                        onClick={() => setSelectedTxnForReceipt(txn)}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#C5A46D] hover:text-[#101C2C] text-[#C5A46D] text-xs font-semibold transition flex items-center gap-1 ml-auto cursor-pointer"
-                        title="View Official Sale Memorandum"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span>Print</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {paymentModalTxn === null && (payRows.length > 0 || canRecordPayments) && (
+                          <button
+                            onClick={() => openPaymentModal(txn)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#C5A46D] hover:text-[#101C2C] text-[#C5A46D] text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
+                            title={canRecordPayments ? 'View ledger & record payment' : 'View payment ledger'}
+                          >
+                            <Wallet className="w-3.5 h-3.5" />
+                            <span>{payRows.length > 0 ? `Payments (${payRows.length})` : 'Payments'}</span>
+                          </button>
+                        )}
+
+                        {canVoid && !txn.voided && (
+                          <button
+                            onClick={() => setVoidModalTxn(txn)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 text-xs font-semibold transition cursor-pointer"
+                            title="Void this deal with a mandatory reason (audit-preserved)"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => setSelectedTxnForReceipt(txn)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#C5A46D] hover:text-[#101C2C] text-[#C5A46D] text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
+                          title="View Official Sale Memorandum"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -622,6 +760,228 @@ export const AdminTransactions: React.FC = () => {
                 <span>Print Deal Memorandum</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Ledger Modal (P1-2): history + record payment (permission-gated) */}
+      {paymentModalTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-lg bg-[#101C2C] text-slate-100 border border-emerald-500/40 rounded-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setPaymentModalTxn(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">Payment Ledger</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              {paymentModalTxn.dealNumber || paymentModalTxn.id} · Plot {paymentModalTxn.plotNumber} {paymentModalTxn.sector}
+            </p>
+
+            {(() => {
+              const rows = paymentsByTxId.get(paymentModalTxn.id) || [];
+              const money = dealMoney(paymentModalTxn, rows);
+              const frozen = paymentModalTxn.voided || paymentModalTxn.status === 'Cancelled';
+              return (
+                <>
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/20">
+                      <span className="text-[10px] text-emerald-400 block">Paid</span>
+                      <strong className="text-sm font-mono text-emerald-300">{formatPKRCurrency(money.collected)}</strong>
+                    </div>
+                    <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/20">
+                      <span className="text-[10px] text-amber-400 block">Balance</span>
+                      <strong className="text-sm font-mono text-amber-300">{formatPKRCurrency(money.balance)}</strong>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-700">
+                      <span className="text-[10px] text-slate-400 block">Deal</span>
+                      <strong className="text-sm font-mono text-white">{formatPKRCurrency(money.dealAmount)}</strong>
+                    </div>
+                  </div>
+
+                  {/* History */}
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#C5A46D] block mb-2">
+                    Recorded movements ({rows.length})
+                  </span>
+                  <div className="space-y-2 mb-5 max-h-40 overflow-y-auto pr-1">
+                    {rows.map((row) => (
+                      <div key={row.id} className="p-2.5 rounded-lg bg-[#0B1220] border border-slate-800 text-xs flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-mono font-bold text-emerald-300">+ {formatPKRCurrency(row.amountPKR)}</div>
+                          <div className="text-[10px] text-slate-400">
+                            {row.paidAt} · {row.method} · by {row.recordedBy}
+                          </div>
+                          {row.note && <div className="text-[10px] text-slate-500 italic mt-0.5">{row.note}</div>}
+                        </div>
+                      </div>
+                    ))}
+                    {rows.length === 0 && (
+                      <div className="text-[11px] text-slate-500 italic p-2">
+                        No ledger movements yet — the recorded advance of this legacy deal appears in totals until the first entry is acknowledged.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Record new payment — hidden without manage_payments or when frozen */}
+                  {canRecordPayments && !frozen && money.balance > 0 && (
+                    <form onSubmit={handleConfirmPayment} className="pt-4 border-t border-slate-800 space-y-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">
+                        Record payment
+                      </span>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block">
+                          <span className="text-[10px] text-slate-400 block mb-1">Amount (PKR)</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={money.balance}
+                            value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                            className="w-full bg-[#0B1220] text-white p-2 rounded-lg border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs font-mono"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-[10px] text-slate-400 block mb-1">Method</span>
+                          <select
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value as PaymentEntry['method'])}
+                            className="w-full bg-[#0B1220] text-white p-2 rounded-lg border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs cursor-pointer"
+                          >
+                            <option>Bank Transfer</option>
+                            <option>Pay Order</option>
+                            <option>Cash / Cheque</option>
+                            <option>Online Transfer</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="block">
+                        <span className="text-[10px] text-slate-400 block mb-1">Reference note (optional)</span>
+                        <input
+                          type="text"
+                          value={paymentNote}
+                          onChange={(e) => setPaymentNote(e.target.value)}
+                          placeholder="e.g. Pay order #PO-10231 deposited"
+                          className="w-full bg-[#0B1220] text-white p-2 rounded-lg border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs"
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentModalTxn(null)}
+                          className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                        >
+                          Close
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+                        >
+                          Record Payment
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                  {canRecordPayments && frozen && (
+                    <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-500/30 text-[11px] text-rose-300">
+                      This deal is {paymentModalTxn.voided ? 'voided' : 'cancelled'} — payments are frozen.
+                    </div>
+                  )}
+                  {canRecordPayments && !frozen && money.balance <= 0 && (
+                    <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-[11px] text-emerald-300">
+                      Deal money fully banked — no outstanding balance.
+                    </div>
+                  )}
+                  {!canRecordPayments && (
+                    <div className="text-[11px] text-slate-500 italic">
+                      View-only: recording payments requires manager/admin payment authority (your role has ledger visibility only).
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Void Modal (P1-1): super-admin only, mandatory reason, audit-preserved */}
+      {voidModalTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-[#101C2C] text-slate-100 border border-rose-500/40 rounded-2xl p-6 shadow-2xl">
+            <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">
+              Void Deal {voidModalTxn.dealNumber || voidModalTxn.id}
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Voiding keeps the record with a full audit trail (who/when/why) instead of deleting it — totals exclude it
+              immediately. Recorded payments freeze and any refund is handled manually outside this ledger.
+            </p>
+            <form onSubmit={handleConfirmVoid} className="space-y-3">
+              <label className="block">
+                <span className="text-[10px] text-slate-400 block mb-1">Void reason (required)</span>
+                <textarea
+                  rows={3}
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  placeholder="e.g. Duplicate booking recorded in error; buyer withdrew before execution…"
+                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-rose-500 focus:outline-none text-xs"
+                />
+              </label>
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setVoidModalTxn(null)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
+                >
+                  Void Deal
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel-reason Modal: cancelling a deal needs a reason (domain rule) */}
+      {cancelModalTxnId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-[#101C2C] text-slate-100 border border-amber-500/40 rounded-2xl p-6 shadow-2xl">
+            <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">Cancel Deal</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              A cancellation reason is mandatory — it is stored on the deal record and cancels any unaccrued commission payable.
+            </p>
+            <form onSubmit={handleConfirmCancel} className="space-y-3">
+              <label className="block">
+                <span className="text-[10px] text-slate-400 block mb-1">Reason (required)</span>
+                <textarea
+                  rows={3}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="e.g. Buyer's financing fell through after token stage…"
+                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-amber-500 focus:outline-none text-xs"
+                />
+              </label>
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setCancelModalTxnId(null)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold cursor-pointer"
+                >
+                  Confirm Cancellation
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
