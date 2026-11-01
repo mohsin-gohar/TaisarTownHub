@@ -231,3 +231,12 @@
 .page-surface {
   will-change: opacity, transform;
 }
+
+/* Print: receipt/memo only */
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  header, nav, aside, footer, .print\:hidden, button { display: none !important; }
+  .fixed.inset-0 { position: static !important; background: none !important; }
+  main { padding: 0 !important; }
+  table { font-size: 10pt; }
+}
