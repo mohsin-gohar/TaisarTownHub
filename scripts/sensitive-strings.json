@@ -1,0 +1,22 @@
+{
+  "_comment": "Strings that must NEVER appear in publicly-served JS chunks. Sync with src/data/erpSeed.ts demo accounts (covered by a unit test).",
+  "fieldNames": [
+    "purchasePricePKR",
+    "privatePurchasePricePKR",
+    "sellingPricePKR",
+    "internalNotes",
+    "cnic",
+    "cnicMasked",
+    "sellerCnic",
+    "buyerCnic",
+    "accountNumber",
+    "DEMO_PASSWORDS"
+  ],
+  "passwords": [
+    "Super@Admin2026!",
+    "Admin@Taisar2026",
+    "Manager@2026",
+    "Dealer@2026",
+    "Operator@2026"
+  ]
+}
