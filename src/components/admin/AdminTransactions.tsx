@@ -18,7 +18,8 @@ import {
   FileCheck
 } from 'lucide-react';
 import { Transaction, TransactionStatus, CommissionStatus } from '../../types';
-import { formatPKRCurrency, calculateERPFinancials, calculateCommission } from '../../utils/logic';
+import { formatPKRCurrency, calculateERPFinancials, calculateCommission, maskCNIC, hasPermission } from '../../utils/logic';
+import { normalizeRole } from '../../domain/permissions';
 import { EmptyState } from '../common/EmptyState';
 
 export const AdminTransactions: React.FC = () => {
@@ -32,6 +33,7 @@ export const AdminTransactions: React.FC = () => {
     dealers,
     showToast,
     currentTheme,
+    currentUser,
     setAdminTab
   } = useApp();
 
@@ -40,23 +42,33 @@ export const AdminTransactions: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTxnForReceipt, setSelectedTxnForReceipt] = useState<Transaction | null>(null);
 
+  // ---- Role scoping (P0-4): dealers see ONLY deals booked under their dealer profile ----
+  const isDealer = normalizeRole(currentUser.role) === 'dealer';
+  const scopedDealerId = isDealer ? currentUser.dealerId : undefined;
+  const visibleTransactions = isDealer
+    ? transactions.filter((t) => t.dealerId && t.dealerId === scopedDealerId)
+    : transactions;
+
+  const canCreateDeals = hasPermission(currentUser.role, 'create_transactions');
+  const canUpdateDeals = hasPermission(currentUser.role, 'update_transactions');
+
   const [formData, setFormData] = useState({
     propertyId: properties[0]?.id || '',
     sellerId: sellers[0]?.id || '',
     buyerId: buyers[0]?.id || '',
-    dealerId: dealers[0]?.id || '',
-    dealAmountPKR: 3800000,
-    advancePKR: 800000,
+    dealerId: '',
+    dealAmountPKR: properties[0]?.pricePKR || 0,
+    advancePKR: 0,
     dealDate: new Date().toISOString().split('T')[0],
     expectedPossessionDate: '2026-04-15',
     status: 'Advance Received' as TransactionStatus,
-    paymentMode: 'Pay Order & Cash Advance',
-    notes: 'Plot R-66, Sector 63, 100ft road facing, deal closed through agent.'
+    paymentMode: 'Bank Pay Order',
+    notes: ''
   });
 
-  const financials = calculateERPFinancials(transactions, properties);
+  const financials = calculateERPFinancials(visibleTransactions, properties);
 
-  const filteredTxns = transactions.filter((t) => {
+  const filteredTxns = visibleTransactions.filter((t) => {
     const dNum = t.dealNumber || t.id;
     const pNum = t.plotNumber || '';
     const sName = t.sellerName || '';
@@ -76,17 +88,14 @@ export const AdminTransactions: React.FC = () => {
 
   const handleOpenAdd = () => {
     const firstProp = properties[0];
-    const firstSeller = sellers[0];
-    const firstBuyer = buyers[0];
-    const firstDealer = dealers[0];
 
     setFormData({
       propertyId: firstProp?.id || '',
-      sellerId: firstSeller?.id || '',
-      buyerId: firstBuyer?.id || '',
-      dealerId: firstDealer?.id || '',
-      dealAmountPKR: firstProp?.pricePKR || 3800000,
-      advancePKR: 800000,
+      sellerId: '',
+      buyerId: '',
+      dealerId: '',
+      dealAmountPKR: firstProp?.pricePKR || 0,
+      advancePKR: 0,
       dealDate: new Date().toISOString().split('T')[0],
       expectedPossessionDate: '2026-04-15',
       status: 'Advance Received',
@@ -115,34 +124,57 @@ export const AdminTransactions: React.FC = () => {
     const buyer = buyers.find((b) => b.id === formData.buyerId);
     const dealer = dealers.find((d) => d.id === formData.dealerId);
 
+    // ---- Deal form validation (P1 partial: full state machine comes in Phase 3) ----
+    if (!prop) {
+      showToast('error', 'Please select a valid property for the deal.');
+      return;
+    }
     if (!seller || !buyer) {
       showToast('error', 'Please select both valid seller and buyer.');
       return;
     }
+    if (seller.id === buyer.id) {
+      showToast('error', 'Seller and buyer cannot be the same record.');
+      return;
+    }
+    if (!(formData.dealAmountPKR > 0)) {
+      showToast('error', 'Agreed deal amount must be a positive number.');
+      return;
+    }
+    if (formData.advancePKR < 0) {
+      showToast('error', 'Advance cannot be negative.');
+      return;
+    }
+    if (formData.advancePKR > formData.dealAmountPKR) {
+      showToast('error', 'Advance deposit cannot exceed the agreed deal amount.');
+      return;
+    }
 
+    // No dealer selected => zero commission. Never book a phantom amount.
     const calculatedComm = dealer
-      ? calculateCommission(formData.dealAmountPKR, dealer.commissionType, dealer.commissionValue ?? dealer.commissionRate ?? 20000)
-      : 20000;
+      ? calculateCommission(formData.dealAmountPKR, dealer.commissionType, dealer.commissionValue ?? dealer.commissionRate ?? 0)
+      : 0;
 
     const balance = Math.max(0, formData.dealAmountPKR - formData.advancePKR);
 
+    // NOTE (P0-5): we deliberately do NOT copy seller/buyer CNICs into the
+    // transaction. Parties are referenced by id; masked values are joined at
+    // render time and unmasked values require `view_sensitive_cnic`.
     addTransaction({
       dealNumber: `TXN-2026-00${transactions.length + 1}`,
       propertyId: formData.propertyId,
-      propertyTitle: prop?.title || 'Taiser Town Plot',
-      plotNumber: prop?.plotNumber || 'Plot-Unnumbered',
-      fileNumber: prop?.fileNumber || 'TT-FILE',
-      sector: prop?.sector || 'Sector 63',
+      propertyTitle: prop.title,
+      plotNumber: prop.plotNumber || 'Plot-Unnumbered',
+      fileNumber: prop.fileNumber || 'TT-FILE',
+      sector: prop.sector,
       sellerId: seller.id,
       sellerName: seller.fullName,
-      sellerCnic: seller.cnic || seller.cnicMasked,
       buyerId: buyer.id,
       buyerName: buyer.fullName,
-      buyerCnic: buyer.cnic || buyer.cnicMasked,
       dealerId: dealer?.id,
       dealerName: dealer?.fullName,
       agreementAmountPKR: Number(formData.dealAmountPKR),
-      purchaseAmountPKR: Number(formData.dealAmountPKR),
+      purchaseAmountPKR: prop.purchasePricePKR ?? 0,
       finalSellingAmountPKR: Number(formData.dealAmountPKR),
       dealAmountPKR: Number(formData.dealAmountPKR),
       advancePaymentPKR: Number(formData.advancePKR),
@@ -185,13 +217,20 @@ export const AdminTransactions: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Execute New Deal</span>
-        </button>
+        {canCreateDeals && (
+          <button
+            onClick={handleOpenAdd}
+            className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Execute New Deal</span>
+          </button>
+        )}
+        {isDealer && (
+          <span className="px-3 py-1.5 rounded-xl text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
+            Scoped view: your deals only ({visibleTransactions.length})
+          </span>
+        )}
       </div>
 
       {/* Financial Overview Cards */}
@@ -277,7 +316,9 @@ export const AdminTransactions: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-800/80">
               {filteredTxns.map((txn) => {
-                const isHandwrittenDeal = (txn.plotNumber || '').includes('R-66') || (txn.dealNumber?.includes('001') ?? false);
+                // Honest lineage flag: only the actual handwritten-record demo
+                // deal (Plot R-66), NOT any deal whose number merely contains "001".
+                const isHandwrittenDeal = txn.propertyId === 'prop-r66';
 
                 return (
                   <tr
@@ -347,8 +388,10 @@ export const AdminTransactions: React.FC = () => {
                     <td className="py-4 px-4">
                       <select
                         value={txn.status}
+                        disabled={!canUpdateDeals}
+                        title={canUpdateDeals ? 'Update deal status' : 'Your role cannot modify deal status'}
                         onChange={(e) => updateTransaction(txn.id, { status: e.target.value as TransactionStatus })}
-                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border cursor-pointer focus:outline-none ${
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border focus:outline-none ${
                           txn.status === 'Completed'
                             ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
                             : txn.status === 'Under Transfer'
@@ -356,11 +399,16 @@ export const AdminTransactions: React.FC = () => {
                             : txn.status === 'Advance Received'
                             ? 'bg-amber-950/60 text-amber-300 border-amber-500/40'
                             : 'bg-slate-800 text-slate-300 border-slate-700'
-                        }`}
+                        } ${canUpdateDeals ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
                       >
                         <option value="Draft">Draft</option>
+                        <option value="Negotiation">Negotiation</option>
+                        <option value="Agreement Signed">Agreement Signed</option>
                         <option value="Token Paid">Token Paid</option>
                         <option value="Advance Received">Advance Received</option>
+                        <option value="Payment Pending">Payment Pending</option>
+                        <option value="Partially Paid">Partially Paid</option>
+                        <option value="Fully Paid">Fully Paid</option>
                         <option value="Under Transfer">Under Transfer</option>
                         <option value="Completed">Completed</option>
                         <option value="Cancelled">Cancelled</option>
@@ -468,19 +516,34 @@ export const AdminTransactions: React.FC = () => {
               </div>
             </div>
 
-            {/* Parties */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 text-xs">
-              <div className="p-4 rounded-xl bg-[#0B1220] border border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold uppercase text-[#C5A46D] block">Party 1 (Seller / Allottee)</span>
-                <div className="font-bold text-sm text-white">{selectedTxnForReceipt.sellerName}</div>
-                <div className="text-slate-400 font-mono">CNIC: {selectedTxnForReceipt.sellerCnic}</div>
-              </div>
-              <div className="p-4 rounded-xl bg-[#0B1220] border border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold uppercase text-[#C5A46D] block">Party 2 (Buyer / Transferee)</span>
-                <div className="font-bold text-sm text-white">{selectedTxnForReceipt.buyerName}</div>
-                <div className="text-slate-400 font-mono">CNIC: {selectedTxnForReceipt.buyerCnic}</div>
-              </div>
-            </div>
+            {/* Parties — CNIC always rendered MASKED unless the current user
+                holds view_sensitive_cnic (P0-5). Transactions reference parties
+                by id; values are joined and masked at render time. */}
+            {(() => {
+              const canReveal = hasPermission(currentUser.role, 'view_sensitive_cnic');
+              const seller = sellers.find((s) => s.id === selectedTxnForReceipt.sellerId);
+              const buyer = buyers.find((b) => b.id === selectedTxnForReceipt.buyerId);
+              const sellerLine = canReveal && seller?.cnic
+                ? seller.cnic
+                : seller?.cnicMasked || maskCNIC(seller?.cnic ?? '');
+              const buyerLine = canReveal && buyer?.cnic
+                ? buyer.cnic
+                : buyer?.cnicMasked || maskCNIC(buyer?.cnic ?? '');
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 text-xs">
+                  <div className="p-4 rounded-xl bg-[#0B1220] border border-slate-800 space-y-1">
+                    <span className="text-[10px] font-bold uppercase text-[#C5A46D] block">Party 1 (Seller / Allottee)</span>
+                    <div className="font-bold text-sm text-white">{selectedTxnForReceipt.sellerName}</div>
+                    <div className="text-slate-400 font-mono">CNIC: {sellerLine}</div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-[#0B1220] border border-slate-800 space-y-1">
+                    <span className="text-[10px] font-bold uppercase text-[#C5A46D] block">Party 2 (Buyer / Transferee)</span>
+                    <div className="font-bold text-sm text-white">{selectedTxnForReceipt.buyerName}</div>
+                    <div className="text-slate-400 font-mono">CNIC: {buyerLine}</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Financial Ledger */}
             <div className="border border-slate-800 rounded-xl overflow-hidden mb-6 text-xs">
@@ -599,7 +662,7 @@ export const AdminTransactions: React.FC = () => {
                     className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
                   >
                     {sellers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.fullName} ({s.cnic})</option>
+                      <option key={s.id} value={s.id}>{s.fullName}</option>
                     ))}
                   </select>
                 </div>
@@ -612,7 +675,7 @@ export const AdminTransactions: React.FC = () => {
                     className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
                   >
                     {buyers.map((b) => (
-                      <option key={b.id} value={b.id}>{b.fullName} ({b.cnic})</option>
+                      <option key={b.id} value={b.id}>{b.fullName}</option>
                     ))}
                   </select>
                 </div>
@@ -653,6 +716,7 @@ export const AdminTransactions: React.FC = () => {
                     {dealers.map((d) => (
                       <option key={d.id} value={d.id}>{d.fullName} ({d.agencyOrBranch})</option>
                     ))}
+                    <option value="">— Direct deal (no dealer) —</option>
                   </select>
                 </div>
 

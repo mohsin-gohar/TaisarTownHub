@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useApp } from '../../context/AppContext';
-import { hasPermission } from '../../utils/logic';
+import { hasAnyPermission } from '../../utils/logic';
+import { normalizeRole } from '../../domain/permissions';
 import { IS_DEMO } from '../../config/appMode';
 import {
   Building2,
@@ -56,10 +57,18 @@ export const AdminLayout: React.FC = () => {
     transactions,
     propertyFiles,
     activeRole,
+    currentUser,
     isPresentationMode
   } = useApp();
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // Dealer accounts only ever see deals booked under their own dealer profile,
+  // so their badge must count the scoped set — never the full ledger size.
+  const isDealerViewer = normalizeRole(currentUser.role) === 'dealer';
+  const scopedTransactions = isDealerViewer
+    ? transactions.filter((t) => t.dealerId && t.dealerId === currentUser.dealerId)
+    : transactions;
 
   const pendingInquiriesCount = inquiries.filter((i) => i.status === 'Pending').length;
   const pendingFilesCount = propertyFiles.filter((f) => f.verificationStatus === 'Pending Verification').length;
@@ -71,25 +80,34 @@ export const AdminLayout: React.FC = () => {
     badge?: number;
     alertBadge?: number;
     permission?: string;
+    /** Alternate grant: tab is visible when EITHER permission OR altPermission is held. */
+    altPermission?: string;
   }[] = [
     { id: 'overview', label: 'Dashboard Overview', icon: LayoutDashboard, permission: 'view_reports' },
     { id: 'properties', label: 'Property Listings', icon: Home, badge: properties.length, permission: 'view_properties' },
     { id: 'plot_locator', label: 'Plot Map & Locator', icon: MapPin, permission: 'view_properties' },
-    { id: 'transactions', label: 'Deals & Transactions', icon: FileText, badge: transactions.length, permission: 'view_properties' },
+    // Dealers hold view_my_deals (scoped-equivalent of view_transactions): they see the tab,
+    // but AdminTransactions only renders deals booked under their dealer profile.
+    { id: 'transactions', label: 'Deals & Transactions', icon: FileText, badge: scopedTransactions.length, permission: 'view_transactions', altPermission: 'view_my_deals' },
     { id: 'sellers', label: 'Sellers & Owners', icon: Users, badge: sellers.length, permission: 'manage_sellers' },
     { id: 'buyers', label: 'Buyers CRM', icon: UserCheck, badge: buyers.length, permission: 'manage_buyers' },
     { id: 'dealers', label: 'Dealers & Commission', icon: Briefcase, badge: dealers.length, permission: 'manage_dealers' },
-    { id: 'file_management', label: 'File Verification', icon: FileCheck, alertBadge: pendingFilesCount > 0 ? pendingFilesCount : undefined, permission: 'verify_documents' },
+    // File desk: verifiers see the full desk; uploaders (operator) still need access to the pending-queue upload path.
+    { id: 'file_management', label: 'File Verification', icon: FileCheck, alertBadge: pendingFilesCount > 0 ? pendingFilesCount : undefined, permission: 'upload_documents', altPermission: 'verify_documents' },
     { id: 'projects', label: 'Projects Management', icon: Building2, badge: projects.length, permission: 'manage_projects' },
     { id: 'media', label: 'Media Library', icon: Image, permission: 'manage_media' },
-    { id: 'inquiries', label: 'Inquiries CRM', icon: Inbox, alertBadge: pendingInquiriesCount > 0 ? pendingInquiriesCount : undefined, permission: 'view_properties' },
+    { id: 'inquiries', label: 'Inquiries CRM', icon: Inbox, alertBadge: pendingInquiriesCount > 0 ? pendingInquiriesCount : undefined, permission: 'view_inquiries' },
     { id: 'cms', label: 'Website CMS & Builder', icon: Settings, permission: 'edit_cms' },
     { id: 'security', label: 'Security & Roles', icon: Shield, permission: 'manage_users' },
   ];
 
-  const accessibleSidebarLinks = sidebarLinks.filter(
-    (l) => !l.permission || hasPermission(activeRole, l.permission)
-  );
+  // Sidebar visibility is enforced here AND in context actions (requirePermission) —
+  // this filter is cosmetic; the domain gate is the real enforcement.
+  const accessibleSidebarLinks = sidebarLinks.filter((l) => {
+    if (!l.permission) return true;
+    const wanted = l.altPermission ? [l.permission, l.altPermission] : [l.permission];
+    return hasAnyPermission(activeRole, wanted);
+  });
 
   useEffect(() => {
     const isCurrentTabAccessible = accessibleSidebarLinks.some((l) => l.id === adminTab);

@@ -119,6 +119,7 @@ export const initialSellers: Seller[] = [
   {
     id: 'sel-1',
     fullName: 'Haji Abdul Rasheed',
+    cnic: '42101-8815027-3',
     cnicMasked: '42101-*******-3',
     phone: '+92 300 9281721',
     whatsApp: '+92 300 9281721',
@@ -133,6 +134,7 @@ export const initialSellers: Seller[] = [
   {
     id: 'sel-2',
     fullName: 'Muhammad Akram Qureshi',
+    cnic: '42201-4429816-7',
     cnicMasked: '42201-*******-7',
     phone: '+92 321 4481920',
     whatsApp: '+92 321 4481920',
@@ -147,12 +149,13 @@ export const initialSellers: Seller[] = [
   {
     id: 'sel-3',
     fullName: 'Chaudhry Riaz Ahmed',
+    cnic: '35202-3306745-5',
     cnicMasked: '35202-*******-5',
     phone: '+92 333 8819201',
     whatsApp: '+92 333 8819201',
     address: 'Sector 50 Commercial Avenue, Karachi',
-    ownedPropertyIds: ['prop-3'],
-    fileNumbers: ['MDA-50-COM-200'],
+    ownedPropertyIds: ['prop-3', 'prop-4'],
+    fileNumbers: ['MDA-50-COM-200', 'MDA-63-4-9201'],
     documentCount: 4,
     notes: 'Commercial 150ft road plot owner. Ground + 4 approval certified.',
     createdAt: '2026-02-01'
@@ -163,6 +166,7 @@ export const initialBuyers: Buyer[] = [
   {
     id: 'buy-1',
     fullName: 'Muhammad Usman',
+    cnic: '42101-5538291-9',
     cnicMasked: '42101-*******-9',
     phone: '+971 50 1234567',
     whatsApp: '+971 50 1234567',
@@ -178,6 +182,7 @@ export const initialBuyers: Buyer[] = [
   {
     id: 'buy-2',
     fullName: 'Dr. Ayesha Farooq',
+    cnic: '42301-6640172-2',
     cnicMasked: '42301-*******-2',
     phone: '+92 333 9182374',
     whatsApp: '+92 333 9182374',
@@ -193,6 +198,7 @@ export const initialBuyers: Buyer[] = [
   {
     id: 'buy-3',
     fullName: 'Sheikh Nasir Mehmood',
+    cnic: '42201-7746028-1',
     cnicMasked: '42201-*******-1',
     phone: '+92 321 4458901',
     whatsApp: '+92 321 4458901',
@@ -211,6 +217,7 @@ export const initialDealers: Dealer[] = [
   {
     id: 'deal-1',
     fullName: 'Saleem Siddiqui',
+    cnic: '42101-9235180-1',
     cnicMasked: '42101-*******-1',
     phone: '+92 321 8292831',
     whatsApp: '+92 321 8292831',
@@ -230,6 +237,7 @@ export const initialDealers: Dealer[] = [
   {
     id: 'deal-2',
     fullName: 'Kamran Haider',
+    cnic: '42301-1836295-4',
     cnicMasked: '42201-*******-5',
     phone: '+92 321 8292832',
     whatsApp: '+92 321 8292832',
@@ -249,6 +257,7 @@ export const initialDealers: Dealer[] = [
   {
     id: 'deal-3',
     fullName: 'Bilal Farooqui',
+    cnic: '42301-2947163-9',
     cnicMasked: '42301-*******-9',
     phone: '+92 300 7719283',
     whatsApp: '+92 300 7719283',
@@ -268,6 +277,7 @@ export const initialDealers: Dealer[] = [
   {
     id: 'deal-4',
     fullName: 'Zubair Ahmed Khan',
+    cnic: '42401-5048391-3',
     cnicMasked: '42401-*******-3',
     phone: '+92 315 2891901',
     whatsApp: '+92 315 2891901',
@@ -343,6 +353,35 @@ export const initialTransactions: Transaction[] = [
     status: 'Completed',
     internalRemarks: 'Biometric transfer completed at MDA Head Office. Physical possession handover completed.',
     documents: ['doc-71-transfer']
+  },
+  {
+    id: 'tx-6303',
+    dealNumber: 'TXN-2026-0003',
+    propertyId: 'prop-3',
+    propertyTitle: '200 Sq. Yd. Main Boulevard Commercial Plot',
+    plotNumber: 'S-12',
+    fileNumber: 'MDA-50-COM-200',
+    sector: 'Sector 50',
+    sellerId: 'sel-3',
+    sellerName: 'Chaudhry Riaz Ahmed',
+    buyerId: 'buy-3',
+    buyerName: 'Sheikh Nasir Mehmood',
+    dealerId: 'deal-3',
+    dealerName: 'Bilal Farooqui',
+    transactionType: 'Sale',
+    agreementAmountPKR: 19000000,
+    purchaseAmountPKR: 18200000,
+    finalSellingAmountPKR: 19000000,
+    advancePaymentPKR: 2000000,
+    remainingBalancePKR: 17000000,
+    commissionAmountPKR: 45000,
+    commissionStatus: 'Unpaid',
+    transactionDate: '2026-02-22',
+    paymentMethod: 'Bank Transfer',
+    paymentStatus: 'Partially Paid',
+    status: 'Negotiation',
+    internalRemarks: 'Buyer showroom plan under negotiation for the main boulevard commercial plot. Token schedule pending agreement signing.',
+    documents: []
   }
 ];
 
@@ -433,35 +472,36 @@ export const initialAuthUsers: AuthUser[] = [
     id: 'usr-1',
     name: 'Syed Moazzam Ali',
     email: 'superadmin@taisartownhub.com',
-    role: 'Super Admin',
-    permissions: ['all']
+    role: 'super_admin',
+    permissions: []
   },
   {
     id: 'usr-2',
     name: 'Saleem Siddiqui',
     email: 'admin@taisartownhub.com',
-    role: 'Admin',
-    permissions: ['manage_properties', 'manage_projects', 'manage_sellers', 'manage_buyers', 'manage_transactions', 'verify_documents', 'edit_cms']
+    role: 'admin',
+    permissions: []
   },
   {
     id: 'usr-3',
     name: 'Kamran Haider',
     email: 'manager@taisartownhub.com',
-    role: 'Manager',
-    permissions: ['manage_properties', 'manage_projects', 'manage_sellers', 'manage_buyers', 'create_transactions', 'verify_documents']
+    role: 'manager',
+    permissions: []
   },
   {
     id: 'usr-4',
     name: 'Bilal Farooqui',
     email: 'dealer@taisartownhub.com',
-    role: 'Property Dealer',
-    permissions: ['view_properties', 'submit_buyer', 'view_my_deals', 'view_my_commission']
+    role: 'dealer',
+    permissions: [],
+    dealerId: 'deal-3'
   },
   {
     id: 'usr-5',
     name: 'Zainab Fatima',
     email: 'operator@taisartownhub.com',
-    role: 'Data Entry Operator',
-    permissions: ['manage_properties', 'upload_media', 'upload_documents']
+    role: 'operator',
+    permissions: []
   }
 ];

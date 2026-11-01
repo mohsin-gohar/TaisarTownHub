@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true})\"",
     "lint": "tsc --noEmit",
-    "test": "tsx --test src/utils/logic.test.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "check:bundle": "node scripts/check-bundle.mjs",
     "verify": "npm run lint && npm run test && npm run build && npm run check:bundle"
   },

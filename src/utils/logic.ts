@@ -7,6 +7,11 @@ import {
   Project,
   UserRole
 } from '../types';
+import {
+  ROLE_PERMISSIONS as DOMAIN_ROLE_PERMISSIONS,
+  roleHasPermission,
+  type Permission,
+} from '../domain/permissions';
 
 /**
  * Format currency into standard Pakistani Rupees notation (Lacs / Crores / Thousands)
@@ -192,6 +197,18 @@ export function maskCNIC(rawCnic: string): string {
     return `${clean.substring(0, 4)}****${clean.substring(clean.length - 2)}`;
   }
   return '*****';
+}
+
+/**
+ * Mask bank account / IBAN numbers for privacy views: only the trailing 4
+ * digits stay visible ("•••• •••• 1234"). Full reveal requires the
+ * `view_sensitive_cnic` permission (same gate as CNIC).
+ */
+export function maskAccountNumber(raw: string | undefined | null): string {
+  if (!raw) return 'N/A';
+  const clean = String(raw).replace(/\s+/g, '');
+  if (clean.length <= 4) return '••••';
+  return `•••• •••• ${clean.slice(-4)}`;
 }
 
 /**
@@ -381,75 +398,27 @@ export function calculateMediaUsageCount(
 }
 
 /**
- * Role-Based Permissions Checker
- */
-/**
  * Role-Based Permissions Checker (centralised).
- * Every role maps to an explicit permission list. 'all' grants everything.
+ * Delegates to the canonical domain matrix (src/domain/permissions.ts) and
+ * accepts both the canonical role ids and the legacy display spellings, so
+ * older callsites keep working until they are migrated.
  */
-export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  'Super Admin': [
-    'all', 'view_properties', 'create_properties', 'edit_properties', 'delete_properties',
-    'view_sensitive_cnic', 'manage_sellers', 'manage_buyers', 'manage_dealers',
-    'create_transactions', 'approve_transactions', 'manage_payments', 'pay_commissions',
-    'verify_documents', 'manage_media', 'edit_cms', 'manage_users', 'view_reports',
-    'manage_projects', 'manage_transactions', 'upload_media', 'upload_documents',
-  ],
-  'Admin': [
-    'view_properties', 'create_properties', 'edit_properties', 'delete_properties',
-    'view_sensitive_cnic', 'manage_sellers', 'manage_buyers', 'manage_transactions',
-    'verify_documents', 'edit_cms', 'manage_media', 'view_reports', 'manage_projects',
-    'upload_media', 'upload_documents', 'manage_payments', 'approve_transactions',
-  ],
-  'Manager': [
-    'view_properties', 'create_properties', 'edit_properties', 'manage_sellers',
-    'manage_buyers', 'create_transactions', 'verify_documents', 'manage_projects',
-    'upload_media', 'upload_documents', 'view_reports',
-  ],
-  'Property Dealer': [
-    'view_properties', 'submit_buyer', 'view_my_deals', 'view_my_commission',
-  ],
-  'Data Entry Operator': [
-    'view_properties', 'create_properties', 'edit_properties', 'upload_media',
-    'upload_documents', 'manage_properties',
-  ],
-  'super_admin': [
-    'all', 'view_properties', 'create_properties', 'edit_properties', 'delete_properties',
-    'view_sensitive_cnic', 'manage_sellers', 'manage_buyers', 'manage_dealers',
-    'create_transactions', 'approve_transactions', 'manage_payments', 'pay_commissions',
-    'verify_documents', 'manage_media', 'edit_cms', 'manage_users', 'view_reports',
-    'manage_projects', 'manage_transactions', 'upload_media', 'upload_documents',
-  ],
-  'admin': [
-    'view_properties', 'create_properties', 'edit_properties', 'delete_properties',
-    'view_sensitive_cnic', 'manage_sellers', 'manage_buyers', 'manage_transactions',
-    'verify_documents', 'edit_cms', 'manage_media', 'view_reports', 'manage_projects',
-    'upload_media', 'upload_documents', 'manage_payments', 'approve_transactions',
-  ],
-  'manager': [
-    'view_properties', 'create_properties', 'edit_properties', 'manage_sellers',
-    'manage_buyers', 'create_transactions', 'verify_documents', 'manage_projects',
-    'upload_media', 'upload_documents', 'view_reports',
-  ],
-  'dealer': [
-    'view_properties', 'submit_buyer', 'view_my_deals', 'view_my_commission',
-  ],
-  'operator': [
-    'view_properties', 'create_properties', 'edit_properties', 'upload_media',
-    'upload_documents', 'manage_properties',
-  ],
-};
+export const ROLE_PERMISSIONS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(DOMAIN_ROLE_PERMISSIONS).map(([role, perms]) => [role, [...perms]]),
+);
 
-export function hasPermission(role: UserRole, permission: string): boolean {
-  const perms = ROLE_PERMISSIONS[role] || [];
-  if (perms.includes('all')) return true;
-  return perms.includes(permission);
+export function hasPermission(role: UserRole | string, permission: string): boolean {
+  return roleHasPermission(role, [permission as Permission]);
+}
+
+export function hasAnyPermission(role: UserRole | string, permissions: string[]): boolean {
+  return permissions.some((p) => roleHasPermission(role, [p as Permission]));
 }
 
 /**
  * Central permission check that also accepts an AuthUser with explicit permissions.
  */
-export function userHasPermission(user: { role: UserRole; permissions?: string[] } | null | undefined, permission: string): boolean {
+export function userHasPermission(user: { role: UserRole | string; permissions?: string[] } | null | undefined, permission: string): boolean {
   if (!user) return false;
   if (user.permissions && user.permissions.includes('all')) return true;
   if (user.permissions && user.permissions.includes(permission)) return true;

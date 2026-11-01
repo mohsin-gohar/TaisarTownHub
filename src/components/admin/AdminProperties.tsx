@@ -302,7 +302,7 @@ export const AdminProperties: React.FC = () => {
                   </td>
                   <td className="py-3.5 px-4 font-serif-luxury font-bold text-[#F9E7BA]">
                     <div>{prop.formattedPrice}</div>
-                    {(activeRole === 'super_admin' || activeRole === 'admin') && prop.privatePurchasePricePKR && (
+                    {hasPermission(activeRole, 'view_sensitive_cnic') && prop.privatePurchasePricePKR && (
                       <div className="text-[10px] text-amber-400/80 font-mono font-normal">
                         Cost: {formatPKRCurrency(prop.privatePurchasePricePKR)}
                       </div>

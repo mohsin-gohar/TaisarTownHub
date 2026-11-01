@@ -1,5 +1,60 @@
 ﻿# Changelog
 
+## 2.0.2 — Phase 2: canonical RBAC + CNIC privacy (P0-4, P0-5)
+
+### Added
+- `src/domain/permissions.ts`: canonical role ids (`super_admin | admin | manager |
+  dealer | operator`), ONE granular permission matrix (30 permissions),
+  `normalizeRole` (legacy spellings + unknown → least-privilege `operator`),
+  `authorize()` typed gate with dealer record-scoping via
+  `scope.dealerId`, and scoped-equivalents (`view_my_deals`/`view_my_commission`
+  authorize dealer rows of the ledger).
+- `src/domain/permissions.test.ts`: 16 unit tests — matrix boundaries (Admin
+  without pay_commissions/manage_dealers/manage_users/void_transactions; manager
+  without sensitive CNIC; operator uploads but never verifies; scoping rules
+  incl. dealer-without-profile denial).
+- `requirePermission(permission|any-of[], scope?)` in AppContext: ~20 mutating
+  actions now domain-gated (properties, sellers, buyers, dealers, transactions,
+  payouts, files, media, inquiries, CMS, plot markers). Dealers scope to
+  `currentUser.dealerId`.
+- `maskAccountNumber` + masked bank-account rendering behind
+  `view_sensitive_cnic`; seller edit form prefills masked and preserves originals
+  for staff without the permission.
+- Verify-document modal mandating a genuine reviewer note (auto "Verified by
+  Legal Officer" text removed); Verify/Reject buttons hidden for upload-only
+  roles ("Awaiting verification" hint instead).
+- Sidebar tabs: `altPermission` field + `hasAnyPermission`; dealers get
+  Transactions (scoped), operators get File Verification (upload path).
+
+### Changed
+- Sidebar permissions corrected to canonical: Transactions → `view_transactions`,
+  Inquiries → `view_inquiries`; dealer ledger scoped (badge counts own deals);
+  Admin loses manage_dealers/manage_users/pay_commissions/void_transactions;
+  operator role lacks deal visibility entirely.
+- AdminTransactions: dealer scoping + scoped financial cards + "Scoped view" badge,
+  form validation (property/seller/buyer/same-record/positive-amount/advance ≤
+  amount), CNIC-free payloads, masked receipt with permission-gated reveal,
+  dealer-less deals book zero commission ("— Direct deal (no dealer) —" option),
+  party dropdowns show names only, handwritten badge only for the real R-66
+  record, full canonical status list in the row select (Negotiation,
+  Agreement Signed, Payment Pending, Partially/Fully Paid were missing and made
+  seeded deals render as Draft).
+- AdminProperties: private cost gated on `view_sensitive_cnic` (was role-name
+  strings).
+- `erpSeed.ts`: canonical auth users (empty `permissions: []` — matrix derives
+  everything; usr-4 dealer has `dealerId: 'deal-3'`), fictional full CNICs for
+  seed sellers/buyers/dealers (pairs with `cnicMasked` last digit), third seed
+  transaction `tx-6303` (deal-3 dealer scope demo, Negotiation, PKR 1.9 Cr).
+- `package.json`: `npm run test` now runs every `src/**/*.test.ts` (26 tests).
+
+### Fixed
+- CNIC "N/A" bug where only `cnicMasked` existed; masked values now come from the
+  curated field; full (fictional) reveal requires `view_sensitive_cnic`.
+- Manager could see full CNICs in seller edit forms; sellers' bank account
+  numbers visible to all staff — both now masked/permission-gated (P0-5).
+- Payout button rendered for Admin (matrix says super-admin-only) — disabled +
+  context gate `pay_commissions`.
+
 ## 2.0.1 — Phase 1: APP_MODE, public/ERP data split, PIN-gated demo (P0-2, P0-3)
 
 ### Added

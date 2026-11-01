@@ -315,6 +315,8 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   permissions: string[];
+  /** Dealer accounts: the dealer profile this user acts as (scoped data). */
+  dealerId?: string;
 }
 
 export interface ProjectFacility {

@@ -18,9 +18,15 @@ import {
   Eye
 } from 'lucide-react';
 import { PropertyFileItem, DocumentCategory, DocumentVerificationStatus } from '../../types';
+import { hasPermission } from '../../utils/logic';
 
 export const AdminFileManagement: React.FC = () => {
-  const { propertyFiles, verifyPropertyFile, addPropertyFile, properties, showToast } = useApp();
+  const { propertyFiles, verifyPropertyFile, addPropertyFile, properties, showToast, currentUser } = useApp();
+
+  // P0-4: verify/reject are verifier actions. Operators (upload-only role) get
+  // the upload path but never the decision buttons — and the context action
+  // gates enforce this regardless of what the UI renders.
+  const canVerify = hasPermission(currentUser.role, 'verify_documents');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -31,6 +37,10 @@ export const AdminFileManagement: React.FC = () => {
 
   const [rejectModalDocId, setRejectModalDocId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+
+  // Verify now requires a genuine reviewer note (was a hard-coded fake line).
+  const [verifyModalDocId, setVerifyModalDocId] = useState<string | null>(null);
+  const [verifyNote, setVerifyNote] = useState('');
 
   const [formData, setFormData] = useState({
     title: '',
@@ -54,9 +64,19 @@ export const AdminFileManagement: React.FC = () => {
     return matchesSearch && matchesStatus && matchesCategory;
   });
 
-  const handleVerify = (docId: string) => {
-    verifyPropertyFile(docId, 'Verified', 'Verified by Legal Officer against MDA Scheme 45 records.');
-    showToast('success', 'Document verified successfully.');
+  const handleOpenVerify = (docId: string) => {
+    setVerifyModalDocId(docId);
+    setVerifyNote('');
+  };
+
+  const handleConfirmVerify = () => {
+    if (!verifyModalDocId) return;
+    if (!verifyNote.trim()) {
+      showToast('error', 'A reviewer note is required to verify a document.');
+      return;
+    }
+    verifyPropertyFile(verifyModalDocId, 'Verified', verifyNote.trim());
+    setVerifyModalDocId(null);
   };
 
   const handleOpenReject = (docId: string) => {
@@ -283,9 +303,9 @@ export const AdminFileManagement: React.FC = () => {
                 </button>
 
                 <div className="flex items-center gap-1.5">
-                  {doc.verificationStatus !== 'Verified' && (
+                  {canVerify && doc.verificationStatus !== 'Verified' && (
                     <button
-                      onClick={() => handleVerify(doc.id)}
+                      onClick={() => handleOpenVerify(doc.id)}
                       className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
@@ -293,13 +313,19 @@ export const AdminFileManagement: React.FC = () => {
                     </button>
                   )}
 
-                  {doc.verificationStatus !== 'Rejected' && (
+                  {canVerify && doc.verificationStatus !== 'Rejected' && (
                     <button
                       onClick={() => handleOpenReject(doc.id)}
                       className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/50 text-slate-300 hover:text-rose-300 text-xs font-semibold transition cursor-pointer"
                     >
                       Reject
                     </button>
+                  )}
+
+                  {!canVerify && (
+                    <span className="text-[10px] text-slate-500 italic">
+                      Awaiting verification
+                    </span>
                   )}
                 </div>
               </div>
@@ -339,6 +365,43 @@ export const AdminFileManagement: React.FC = () => {
                 className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
               >
                 Confirm Rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Verify Note Modal — mandatory reviewer note, no auto-generated text */}
+      {verifyModalDocId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-[#101C2C] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl">
+            <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">
+              Verify Document
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Add a short review note — what was checked against the MDA record. This note is stored with the audit trail and shown to the uploading team.
+            </p>
+
+            <textarea
+              rows={3}
+              value={verifyNote}
+              onChange={(e) => setVerifyNote(e.target.value)}
+              className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs"
+              placeholder="e.g. Allotment order matches MDA ledger; signature and thumb impression confirmed on-site..."
+            />
+
+            <div className="flex items-center justify-end gap-3 pt-4">
+              <button
+                onClick={() => setVerifyModalDocId(null)}
+                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmVerify}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+              >
+                Confirm Verification
               </button>
             </div>
           </div>

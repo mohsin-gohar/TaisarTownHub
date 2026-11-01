@@ -17,7 +17,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Seller } from '../../types';
-import { maskCNIC, formatPKRCurrency, hasPermission } from '../../utils/logic';
+import { maskCNIC, maskAccountNumber, formatPKRCurrency, hasPermission } from '../../utils/logic';
 
 export const AdminSellers: React.FC = () => {
   const { sellers, addSeller, updateSeller, deleteSeller, properties, showToast, activeRole, currentUser } = useApp();
@@ -26,6 +26,9 @@ export const AdminSellers: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSellerId, setEditingSellerId] = useState<string | null>(null);
   const [unmaskedCnicIds, setUnmaskedCnicIds] = useState<Record<string, boolean>>({});
+
+  // P0-5: full CNIC / account numbers are only for staff holding view_sensitive_cnic.
+  const canViewSensitive = hasPermission(currentUser.role, 'view_sensitive_cnic');
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -65,15 +68,16 @@ export const AdminSellers: React.FC = () => {
 
   const handleOpenEdit = (seller: Seller) => {
     setEditingSellerId(seller.id);
+    // Privacy prefill: without view_sensitive_cnic the form shows masked values only.
     setFormData({
       fullName: seller.fullName,
-      cnic: seller.cnic || seller.cnicMasked,
+      cnic: canViewSensitive ? (seller.cnic || seller.cnicMasked || '') : (seller.cnicMasked || ''),
       phone: seller.phone,
       address: seller.address || '',
       notes: seller.notes || '',
       bankAccountTitle: seller.bankAccountTitle || '',
       bankName: seller.bankName || '',
-      accountNumber: seller.accountNumber || ''
+      accountNumber: canViewSensitive ? (seller.accountNumber || '') : (seller.accountNumber ? maskAccountNumber(seller.accountNumber) : '')
     });
     setIsModalOpen(true);
   };
@@ -86,17 +90,20 @@ export const AdminSellers: React.FC = () => {
     }
 
     if (editingSellerId) {
+      const original = sellers.find((s) => s.id === editingSellerId);
       updateSeller(editingSellerId, {
         fullName: formData.fullName,
-        cnic: formData.cnic,
-        cnicMasked: maskCNIC(formData.cnic),
+        // P0-5: staff without view_sensitive_cnic see masked values in the form and
+        // can never overwrite the originals with masked garbage.
+        cnic: canViewSensitive ? formData.cnic : (original?.cnic ?? ''),
+        cnicMasked: canViewSensitive ? maskCNIC(formData.cnic) : (original?.cnicMasked || maskCNIC(original?.cnic ?? '')),
         phone: formData.phone,
         whatsApp: formData.phone,
         address: formData.address,
         notes: formData.notes,
         bankAccountTitle: formData.bankAccountTitle,
         bankName: formData.bankName,
-        accountNumber: formData.accountNumber
+        accountNumber: canViewSensitive ? formData.accountNumber : (original?.accountNumber || '')
       });
       showToast('success', 'Seller details updated successfully.');
     } else {
@@ -232,8 +239,8 @@ export const AdminSellers: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-white font-medium">
                         {hasPermission(currentUser.role, 'view_sensitive_cnic')
-                          ? (isUnmasked ? (seller.cnic ?? '') : maskCNIC(seller.cnic ?? ''))
-                          : maskCNIC(seller.cnic ?? '')}
+                          ? (isUnmasked ? (seller.cnic ?? seller.cnicMasked ?? 'N/A') : (seller.cnicMasked || maskCNIC(seller.cnic ?? '')))
+                          : (seller.cnicMasked || maskCNIC(seller.cnic ?? ''))}
                       </span>
                       {hasPermission(currentUser.role, 'view_sensitive_cnic') && (
                         <button
@@ -275,7 +282,9 @@ export const AdminSellers: React.FC = () => {
                         Bank Settlement Record
                       </div>
                       <div>{seller.bankName} - {seller.bankAccountTitle}</div>
-                      <div className="font-mono text-[10px] text-emerald-200/80">{seller.accountNumber}</div>
+                      <div className="font-mono text-[10px] text-emerald-200/80">
+                        {canViewSensitive ? seller.accountNumber : maskAccountNumber(seller.accountNumber)}
+                      </div>
                     </div>
                   )}
                 </div>

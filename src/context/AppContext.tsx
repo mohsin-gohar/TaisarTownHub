@@ -30,6 +30,7 @@ import {
 } from '../data/publicSeed';
 import { APP_MODE, DEMO_PIN, IS_DEMO } from '../config/appMode';
 import { calculateMediaUsageCount, checkDuplicateProperty, hasPermission, userHasPermission } from '../utils/logic';
+import { normalizeRole, authorize, ROLE_LABELS, toLegacyRoleLabel, type Permission } from '../domain/permissions';
 
 /** Read a collection from localStorage, returning fallback on failure. */
 function readStored<T>(key: string, fallback: T[]): T[] {
@@ -352,20 +353,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Auth & RBAC Handlers
-  const normalizeRole = (r: UserRole | string) => {
-    const base = String(r).toLowerCase().replace(/[\s-]+/g, '_');
-    const aliases: Record<string, string> = {
-      dealer: 'property_dealer',
-      property_dealer: 'property_dealer',
-      operator: 'data_entry_operator',
-      data_entry_operator: 'data_entry_operator',
-      super_admin: 'super_admin',
-      admin: 'admin',
-      manager: 'manager',
-    };
-    return aliases[base] || base;
+  /**
+   * Domain-layer authorization gate (P0-4). Every mutating action must start
+   * with `if (!requirePermission('x')) return;`. UI hiding (disabled buttons)
+   * is cosmetic only — this is the enforcement point.
+   */
+  const requirePermission = (permission: Permission | Permission[], scope?: { dealerId?: string }): boolean => {
+    const gate = authorize(currentUser, permission, scope);
+    if (!gate.ok) {
+      showToast('error', gate.error);
+      return false;
+    }
+    return true;
   };
+
+  // Auth & RBAC Handlers
+  // Canonical role normalization lives in src/domain/permissions.ts (P0-4).
 
   // Presenter PIN gate (demo builds only). Honest limitation: a client-side PIN
   // is a speed bump against casual snooping, not real access control. Demo
@@ -477,6 +480,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Projects CRUD
   const addProject = (projectData: Omit<Project, 'id' | 'createdDate'>) => {
+    if (!requirePermission('manage_projects')) return;
     const newProject: Project = {
       ...projectData,
       id: `proj-${Date.now()}`,
@@ -487,6 +491,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateProject = (id: string, updates: Partial<Project>) => {
+    if (!requirePermission('manage_projects')) return;
     setProjects((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
     );
@@ -494,12 +499,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteProject = (id: string) => {
+    if (!requirePermission('manage_projects')) return;
+    // NOTE: full referential guards + soft-delete arrive with the Phase 4
+    // repository layer; today's model has no property→project id link.
     setProjects((prev) => prev.filter((p) => p.id !== id));
     showToast('info', 'Project removed from system.');
   };
 
   // Properties CRUD with Duplicate Detection
   const addProperty = (propData: Omit<Property, 'id' | 'createdDate'>): { success: boolean; error?: string } => {
+    if (!requirePermission(['create_properties', 'edit_properties'])) return { success: false, error: 'Permission denied.' };
     // Uniqueness validation on plot number + sector + block
     const dupCheck = checkDuplicateProperty(properties, propData.plotNumber, propData.sector, propData.block);
     if (dupCheck.isDuplicate) {
@@ -519,6 +528,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateProperty = (id: string, updates: Partial<Property>): { success: boolean; error?: string } => {
+    if (!requirePermission('edit_properties')) return { success: false, error: 'Permission denied.' };
     const target = properties.find((p) => p.id === id);
     if (target) {
       const plotNum = updates.plotNumber !== undefined ? updates.plotNumber : target.plotNumber;
@@ -541,12 +551,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteProperty = (id: string) => {
+    if (!requirePermission('delete_properties')) return;
     setProperties((prev) => prev.filter((p) => p.id !== id));
     showToast('info', 'Property listing removed.');
   };
 
   // Sellers Management
   const addSeller = (sellerData: Omit<Seller, 'id' | 'createdAt'>) => {
+    if (!requirePermission('manage_sellers')) return;
     const newSeller: Seller = {
       ...sellerData,
       id: `sel-${Date.now()}`,
@@ -557,11 +569,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateSeller = (id: string, updates: Partial<Seller>) => {
+    if (!requirePermission('manage_sellers')) return;
     setSellers((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
     showToast('success', 'Seller profile updated.');
   };
 
   const deleteSeller = (id: string) => {
+    if (!requirePermission('manage_sellers')) return;
     const referenced = transactions.some((t) => t.sellerId === id);
     if (referenced) {
       showToast('error', 'Cannot delete: seller is referenced by existing transactions. Archive instead.');
@@ -573,6 +587,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Buyers Management
   const addBuyer = (buyerData: Omit<Buyer, 'id' | 'createdAt'>) => {
+    if (!requirePermission(['manage_buyers', 'submit_buyer'])) return;
     const newBuyer: Buyer = {
       ...buyerData,
       id: `buy-${Date.now()}`,
@@ -583,11 +598,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateBuyer = (id: string, updates: Partial<Buyer>) => {
+    if (!requirePermission(['manage_buyers', 'submit_buyer'])) return;
     setBuyers((prev) => prev.map((b) => (b.id === id ? { ...b, ...updates } : b)));
     showToast('success', 'Buyer profile updated.');
   };
 
   const deleteBuyer = (id: string) => {
+    if (!requirePermission('manage_buyers')) return;
     const referenced = transactions.some((t) => t.buyerId === id);
     if (referenced) {
       showToast('error', 'Cannot delete: buyer is referenced by existing transactions. Archive instead.');
@@ -599,6 +616,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Dealers Management
   const addDealer = (dealerData: Omit<Dealer, 'id' | 'createdAt' | 'totalEarnedPKR' | 'pendingCommissionPKR'>) => {
+    if (!requirePermission('manage_dealers')) return;
     const newDealer: Dealer = {
       ...dealerData,
       id: `deal-${Date.now()}`,
@@ -611,11 +629,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateDealer = (id: string, updates: Partial<Dealer>) => {
+    if (!requirePermission('manage_dealers')) return;
     setDealers((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)));
     showToast('success', 'Dealer details updated.');
   };
 
   const deleteDealer = (id: string) => {
+    if (!requirePermission('manage_dealers')) return;
     const referenced = transactions.some((t) => t.dealerId === id);
     if (referenced) {
       showToast('error', 'Cannot delete: dealer is referenced by existing transactions.');
@@ -626,6 +646,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const payDealerCommission = (dealerId: string, amount: number, transactionId?: string) => {
+    // Only Super Admin executes payouts (P0-4: Admin has visibility, not payment authority).
+    if (!requirePermission('pay_commissions')) return;
     // Validation
     if (!Number.isFinite(amount) || amount <= 0) {
       showToast('error', 'Payout amount must be a positive number.');
@@ -692,6 +714,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Transactions Management
   const addTransaction = (txData: Omit<Transaction, 'id'>) => {
+    if (!requirePermission('create_transactions')) return;
     // Prevent duplicate active sale transactions per propertyId unless authorized
     const hasActiveTransaction = transactions.some(
       (t) =>
@@ -737,6 +760,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateTransaction = (id: string, updates: Partial<Transaction>) => {
+    // Cancelling is a distinct, more sensitive action than general updates (P1-1 lands with the Phase 3 state machine).
+    if (updates.status === 'Cancelled') {
+      if (!requirePermission('cancel_transactions')) return;
+    } else if (!requirePermission('update_transactions')) {
+      return;
+    }
     const existingTx = transactions.find((t) => t.id === id);
     if (!existingTx) {
       showToast('error', 'Transaction not found.');
@@ -824,12 +853,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteTransaction = (id: string) => {
+    // Hard delete is super-admin-only and audited (a proper VOto workflow with
+    // reversal handling replaces this in Phase 3).
+    if (!requirePermission('void_transactions')) return;
     setTransactions((prev) => prev.filter((t) => t.id !== id));
     showToast('info', 'Transaction record deleted.');
   };
 
   // Property Files Management
   const addPropertyFile = (fileData: Omit<PropertyFileItem, 'id' | 'uploadedAt'>) => {
+    if (!requirePermission('upload_documents')) return;
     const newFile: PropertyFileItem = {
       ...fileData,
       id: `doc-${Date.now()}`,
@@ -840,6 +873,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const verifyPropertyFile = (id: string, status: DocumentVerificationStatus, notes?: string) => {
+    if (!requirePermission('verify_documents')) return;
+    // Verifying requires a genuine reviewer note (hard-coded "Legal Officer"
+    // auto-note was earlier; P2-2 finalizes private document categories).
+    const trimmed = (notes ?? '').trim();
+    if (status === 'Verified' && trimmed === '') {
+      showToast('error', 'A reviewer note is required when verifying a document.');
+      return;
+    }
     setPropertyFiles((prev) =>
       prev.map((f) =>
         f.id === id
@@ -848,7 +889,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               verificationStatus: status,
               verifiedBy: currentUser.name,
               verifiedAt: new Date().toISOString().split('T')[0],
-              notes: notes || f.notes,
+              notes: trimmed || f.notes,
             }
           : f
       )
@@ -857,18 +898,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deletePropertyFile = (id: string) => {
+    if (!requirePermission(['verify_documents', 'upload_documents'])) return;
     setPropertyFiles((prev) => prev.filter((f) => f.id !== id));
     showToast('info', 'Document removed.');
   };
 
   // Plot Locator
   const updatePlotMarker = (id: string, updates: Partial<PlotMarker>) => {
+    if (!requirePermission('edit_properties')) return;
     setPlotMarkers((prev) => prev.map((pl) => (pl.id === id ? { ...pl, ...updates } : pl)));
     showToast('success', 'Plot marker details updated.');
   };
 
   // Media Management with Real Reference Detection
   const addMediaItem = (itemData: Omit<MediaItem, 'id' | 'uploadedAt' | 'usageCount'>) => {
+    if (!requirePermission(['manage_media', 'upload_media'])) return;
     const newItem: MediaItem = {
       ...itemData,
       id: `med-${Date.now()}`,
@@ -881,6 +925,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteMediaItem = (id: string): { success: boolean; message?: string } => {
+    if (!requirePermission('manage_media')) return { success: false, message: 'Permission denied.' };
     const item = mediaItems.find((m) => m.id === id);
     if (!item) return { success: false, message: 'Item not found.' };
 
@@ -914,6 +959,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateInquiryStatus = (id: string, status: InquiryStatus) => {
+    if (!requirePermission('view_inquiries')) return;
     setInquiries((prev) =>
       prev.map((i) => (i.id === id ? { ...i, status } : i))
     );
@@ -921,6 +967,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateInquiryNotes = (id: string, notes: string) => {
+    if (!requirePermission('view_inquiries')) return;
     setInquiries((prev) =>
       prev.map((i) => (i.id === id ? { ...i, adminNotes: notes } : i))
     );
@@ -928,12 +975,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteInquiry = (id: string) => {
+    if (!requirePermission('view_inquiries')) return;
     setInquiries((prev) => prev.filter((i) => i.id !== id));
     showToast('info', 'Inquiry deleted.');
   };
 
   // CMS Updates
   const updateCMSConfig = (updates: Partial<CMSConfig>) => {
+    if (!requirePermission('edit_cms')) return;
     setCmsConfig((prev) => ({ ...prev, ...updates }));
     showToast('success', 'Website CMS settings updated and live!');
   };

@@ -284,8 +284,8 @@ export const AdminBuyers: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-white font-medium">
                         {hasPermission(currentUser.role, 'view_sensitive_cnic')
-                          ? (isUnmasked ? (buyer.cnic ?? '') : maskCNIC(buyer.cnic ?? ''))
-                          : maskCNIC(buyer.cnic ?? '')}
+                          ? (isUnmasked ? (buyer.cnic ?? buyer.cnicMasked ?? 'N/A') : (buyer.cnicMasked || maskCNIC(buyer.cnic ?? '')))
+                          : (buyer.cnicMasked || maskCNIC(buyer.cnic ?? ''))}
                       </span>
                       {hasPermission(currentUser.role, 'view_sensitive_cnic') && (
                         <button

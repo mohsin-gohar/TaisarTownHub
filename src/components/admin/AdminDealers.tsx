@@ -321,8 +321,8 @@ export const AdminDealers: React.FC = () => {
                     <span className="text-slate-400">CNIC:</span>
                     <span className="font-mono text-slate-300">
                       {hasPermission(currentUser.role, 'view_sensitive_cnic')
-                        ? (dealer.cnic ?? dealer.cnicMasked ?? '')
-                        : maskCNIC(dealer.cnic ?? dealer.cnicMasked ?? '')}
+                        ? (dealer.cnic ?? dealer.cnicMasked ?? 'N/A')
+                        : (dealer.cnicMasked || maskCNIC(dealer.cnic ?? ''))}
                     </span>
                   </div>
                 </div>
@@ -384,6 +384,12 @@ export const AdminDealers: React.FC = () => {
                   type="button"
                   onClick={() => handleOpenPayout(dealer)}
                   className="px-3 py-1.5 rounded-lg bg-[#C5A46D]/20 hover:bg-[#C5A46D] text-[#C5A46D] hover:text-[#101C2C] text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-[#C5A46D]/40"
+                  disabled={!hasPermission(currentUser.role, 'pay_commissions')}
+                  title={
+                    hasPermission(currentUser.role, 'pay_commissions')
+                      ? 'Settle pending commission'
+                      : 'Only Super Admin can execute commission payouts'
+                  }
                 >
                   <Wallet className="w-3.5 h-3.5" />
                   <span>Settle Commission</span>

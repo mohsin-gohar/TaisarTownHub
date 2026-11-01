@@ -1,5 +1,42 @@
 # Bug Fix Report — TaisarTownHub
 
+## Phase 2 — canonical RBAC + CNIC privacy (P0-4, P0-5) (2026-11-01)
+1. Two competing role spellings ('Admin'/'admin', 'Property Dealer'/'dealer', etc.)
+   each had their own permission list that had drifted apart — replaced by ONE
+   canonical matrix in `src/domain/permissions.ts` (16 passing unit tests cover
+   least-privilege boundaries, dealer scoping, unknown-role fallback).
+2. Sidebar used wrong permissions (transactions needed view_properties; inquiries
+   needed view_properties) and never honored alternate grants — tabs were either
+   wrongly hidden or wrongly exposed; fixed with canonical permissions plus the
+   new `altPermission` field + `hasAnyPermission`.
+3. Dealers could not see their own deals AND could have seen everybody's dollars —
+   now: scoped ledger (own deals only), scoped badge counts, scoped financial
+   cards, disabled status select with explanatory title. No "Execute New Deal"
+   button for dealers.
+4. Transactions copied seller/buyer CNIC into every deal row (bundle/DB leak
+   vector) — removed; receipts join parties by id and print masked unless the
+   viewer holds `view_sensitive_cnic`.
+5. Sellers' full bank account number displayed in cards and edit forms to any
+   staff member — now masked (`•••• •••• 1234`) unless `view_sensitive_cnic`.
+6. CNIC column showed "N/A" for records that only have `cnicMasked` — masked
+   render now prefers the curated `cnicMasked` value.
+7. Edit forms prefilled FULL CNIC for roles like Manager (who manage sellers but
+   lack sensitive-view) — prefill is masked now and save preserves originals so
+   masked text can never overwrite real (fictional-demo) data.
+8. Admin could open "Settle Commission" (payouts are super-admin-only) — button
+   disabled with an explanatory title; the domain gate throws a typed denial.
+9. AdminProperties checked `activeRole === 'super_admin' || 'admin'` by role-name
+   strings — replaced with the `view_sensitive_cnic` permission check.
+10. "Verified by Legal Officer against MDA Scheme 45 records." was a hard-coded
+    fake review note — verification now requires a genuine per-document reviewer
+    note via a modal.
+11. Deal-form defaults carried R-66/handwritten artifacts and a phantom PKR
+    20,000 commission for dealer-less deals — form opens clean, dealer-less deals
+    book zero commission, and handwritten flag only matches the real R-66 record.
+12. Transaction status select was missing valid statuses (Negotiation, Agreement
+    Signed, Payment Pending, Partially/Fully Paid) so seeded deals rendered as
+    "Draft" — full canonical list now rendered.
+
 ## Phase 1 (2.0.1) — APP_MODE, data split, PIN-gated demo (2026-11-01)
 1. P0-2 private ERP data/demo passwords shipped in the public bundle (shared
    `createLucideIcon` chunk) — fixed by splitting seeds: `publicSeed.ts`
