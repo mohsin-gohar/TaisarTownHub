@@ -2,6 +2,13 @@
 
 ## Controls implemented
 
+### Phase 5 — Strict Typing, App Mode Hardening & Auth Portal (2026-11-02)
+- TypeScript strict mode (`"strict": true`) enabled with zero errors; discriminated-union return types (`AuthzResult`, `TransitionResult`, `DealValidationResult`, `ValidatePaymentResult`) explicitly narrowed with `error?: never` on `{ ok: true }` variants to prevent unsafe property access.
+- Application mode resolution (`src/config/appMode.ts`) hardened against silent demo mode activation. Missing or invalid environment variables strictly default to `'public'`. Tested across 6 scenarios in `src/config/appMode.test.ts`.
+- Full-page luxury authentication portal (`AuthPage.tsx`) provides dedicated `/login` and `/register` views with password masking, client-side input validation, and secure dealer registration (`registerDealerAccount`).
+- Append-only audit trail automatically records dealer registration events alongside login, void, payout, and verification actions.
+- Bundle leak guard verified (`scripts/check-bundle.mjs`): zero private ERP field names or demo credentials present in public entry chunks.
+
 ### Phase 4 — storage, audit log, soft delete, Firebase flag (P0-6)
 - Append-only audit log records every sensitive action (login, role switch,
   void, payout, payment recording, document verification, soft-delete/restore)

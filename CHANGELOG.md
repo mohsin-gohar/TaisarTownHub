@@ -1,4 +1,24 @@
-﻿# Changelog
+# Changelog
+
+## 2.0.6 - Deep Audit, Discriminated Union TypeScript Fixes, Strict Mode, Auth Portal & Deployment Safety
+
+### Added
+- `src/components/public/AuthPage.tsx`: Full-page luxury portal for Sign In and Dealer Registration (`/login`, `/register`, `/admin-login`) with Midnight Navy & Royal Gold aesthetic, tab switching, live password toggling, form validation, and CNIC masking.
+- `src/config/appMode.test.ts`: 6 unit tests verifying `resolveModeFromEnv()` deployment safety rules (safe public fallback when unconfigured, case-insensitivity, trim, explicit demo activation).
+- `registerDealerAccount` workflow in `AppContext`: validates registration payloads, generates unique dealer IDs, logs append-only registration audit trail, and authenticates new dealer sessions.
+
+### Changed
+- `tsconfig.json`: Enabled strict TypeScript mode (`"strict": true`) with zero compilation errors.
+- `src/domain/permissions.ts`: Hardened `AuthzResult` discriminated union with `{ ok: true; error?: never }` to ensure standard TypeScript type narrowing across all caller scopes.
+- `src/domain/transactions.ts`: Hardened `TransitionResult`, `DealValidationResult`, `ValidatePaymentResult` with `error?: never` on positive branches.
+- `src/config/appMode.ts`: Refactored mode resolution into `resolveModeFromEnv()` so unconfigured environments safely default to `'public'`. Missing env vars never silently activate demo mode.
+- `src/components/admin/AdminLoginModal.tsx`: Added dual tabs for Sign In and Dealer Registration.
+- `src/components/common/Navbar.tsx` & `Footer.tsx`: Added direct links to the luxury Portal Sign In and Dealer Registration views.
+- Test suite expanded from 53 to 59 unit tests across 9 test suites (`npm run test` passes 59/59).
+
+### Fixed
+- Fixed 4 TypeScript discriminated-union narrowing errors in `src/context/AppContext.tsx` (around lines 461, 923, 1043, 1127) without using `any` or `@ts-ignore`.
+- Prevented private field names (`cnic`, `cnicMasked`) from being emitted into static public chunks, satisfying `scripts/check-bundle.mjs`.
 
 ## 2.0.5 - Accessibility & data-integrity fixes (Cline audit triage)
 

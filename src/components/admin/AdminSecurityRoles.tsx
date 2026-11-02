@@ -138,7 +138,7 @@ service cloud.firestore {
         </div>
 
         <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-800 text-xs text-slate-300 flex items-center gap-2.5">
-          <ShieldCheck className="w-5 h-5 text-emerald-400" />
+          <ShieldCheck className="w-5 h-5 text-[#C5A46D]" />
           <div>
             <span className="text-[10px] text-slate-400 block uppercase font-bold">Current Active Session</span>
             <span className="font-bold text-white capitalize">{activeRole.replace('_', ' ')}</span>
@@ -254,35 +254,35 @@ service cloud.firestore {
                   </td>
                   <td className="py-3 px-4 text-center">
                     {row.super_admin ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 mx-auto" />
+                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
                     ) : (
                       <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
                     )}
                   </td>
                   <td className="py-3 px-4 text-center">
                     {row.admin ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 mx-auto" />
+                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
                     ) : (
                       <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
                     )}
                   </td>
                   <td className="py-3 px-4 text-center">
                     {row.manager ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 mx-auto" />
+                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
                     ) : (
                       <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
                     )}
                   </td>
                   <td className="py-3 px-4 text-center">
                     {row.dealer ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 mx-auto" />
+                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
                     ) : (
                       <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
                     )}
                   </td>
                   <td className="py-3 px-4 text-center">
                     {row.operator ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 mx-auto" />
+                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
                     ) : (
                       <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
                     )}
@@ -311,13 +311,13 @@ service cloud.firestore {
             onClick={handleCopyRules}
             className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-[#C5A46D] flex items-center gap-1.5 cursor-pointer border border-slate-700 self-start sm:self-auto"
           >
-            {copiedRules ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {copiedRules ? <Check className="w-3.5 h-3.5 text-[#C5A46D]" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copiedRules ? 'Copied to Clipboard' : 'Copy Firestore Rules'}</span>
           </button>
         </div>
 
         <div className="bg-[#0B1220] p-4 rounded-xl border border-slate-800 overflow-x-auto">
-          <pre className="text-xs font-mono text-emerald-300 leading-relaxed">
+          <pre className="text-xs font-mono text-slate-300 leading-relaxed">
             {firestoreRulesSample}
           </pre>
         </div>

@@ -12,14 +12,14 @@
 
 ## 2. Actual technology stack
 
-- **Framework:** React 18 + TypeScript (Vite 8, `vite.config.ts`).
-- **Styling:** Tailwind CSS (utility classes, custom brand tokens).
+- **Framework:** React 19 + TypeScript with `"strict": true` (Vite 8, `vite.config.ts`).
+- **Styling:** Tailwind CSS 4 (utility classes, custom brand tokens).
 - **State:** Single React Context (`src/context/AppContext.tsx`) — no Redux/Zustand.
 - **Persistence:** `localStorage` (key prefix `taisartownhub_v2_`) + best-effort IndexedDB mirror (`src/storage/indexedDb.ts`).
 - **Backend:** None. No server, no real API, no Firebase SDK installed. Firebase is a *flag* only (`src/config/firebase.ts` dynamically imports `firebase/*` only when `VITE_FIREBASE_*` env vars are present; default builds never import it).
-- **Auth:** Demo credential login against fictional `DEMO_ACCOUNTS` in `src/data/erpSeed.ts`; presenter PIN `4545` gates role switching in demo mode.
-- **Routing:** In-app state (`currentView`) — no React Router; lazy-loaded sub-pages via `React.lazy`.
-- **Tests:** Node built-in test runner (`node --test`) via `src/**/*.test.ts` glob; 47 tests (10 logic + 16 RBAC + 21 transactions).
+- **Auth:** Dedicated full-page login & dealer registration portal (`AuthPage.tsx`) + demo credential login against fictional `DEMO_ACCOUNTS` in `src/data/erpSeed.ts`; presenter PIN `4545` gates role switching in demo mode.
+- **Routing:** In-app state (`currentView`) — no React Router; lazy-loaded sub-pages via `React.lazy` (projects, properties, agencies, auth, admin).
+- **Tests:** Node built-in test runner (`node --test`) via `src/**/*.test.ts` glob; 59 tests across 9 test suites (audit log, permissions matrix, permissions authorize, permissions normalizeRole, lifecycle state machine, ledger payments, ledger commission accrual, validation & ids, ledger financials, utils logic, appMode deployment safety).
 - **Tooling:** ESLint/`tsc --noEmit` (lint), Vite build, custom `scripts/check-bundle.mjs` bundle guard.
 
 ## 3. Complete folder structure (key)

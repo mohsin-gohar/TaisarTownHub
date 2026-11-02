@@ -244,7 +244,7 @@ export const AdminLayout: React.FC = () => {
           {/* Logout */}
           <button
             onClick={logoutAdmin}
-            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 transition-colors cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>
@@ -274,8 +274,8 @@ export const AdminLayout: React.FC = () => {
 
           <div className="flex items-center gap-3">
             {(isPresentationMode || IS_DEMO) && (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                <Sparkles className="w-3 h-3 text-amber-400" />
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/15 text-[#F9E7BA] border border-[#C5A46D]/40 uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                <Sparkles className="w-3 h-3 text-[#C5A46D]" />
                 DEMO MODE
               </span>
             )}

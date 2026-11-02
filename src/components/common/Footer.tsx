@@ -271,10 +271,17 @@ export const Footer: React.FC = () => {
               </button>
               <span>•</span>
               <button
-                onClick={() => setCurrentView('admin-login')}
+                onClick={() => setCurrentView('login')}
                 className="text-[#C5A46D] hover:underline"
               >
-                Staff Portal
+                Portal Sign In
+              </button>
+              <span>•</span>
+              <button
+                onClick={() => setCurrentView('register')}
+                className="text-slate-400 hover:text-[#C5A46D]"
+              >
+                Register as Dealer
               </button>
             </div>
           </div>

@@ -42,9 +42,9 @@ export const AgenciesSection: React.FC = () => {
           {dealers.map((dealer) => {
             const agencyName = dealer.agencyOrBranch || dealer.agencyAffiliation || 'TaisarTownHub Senior Advisory';
             
-            // Count files managed by this agency
+            // Count files managed by this agency (soft-deleted listings excluded)
             const fileCount = properties.filter(
-              (p) => p.assignedDealerId === dealer.id || p.contactPerson === dealer.fullName
+              (p) => !p.deletedAt && (p.assignedDealerId === dealer.id || p.contactPerson === dealer.fullName)
             ).length;
 
             const whatsAppMsg = `Salam ${dealer.fullName}! I saw your agency "${agencyName}" on TaisarTownHub. Please share currently available files in Taiser Town Scheme 45.`;

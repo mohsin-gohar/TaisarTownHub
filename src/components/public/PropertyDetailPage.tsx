@@ -38,7 +38,9 @@ export const PropertyDetailPage: React.FC = () => {
     showToast
   } = useApp();
 
-  const rawProperty = properties.find((p) => p.id === selectedPropertyId) || properties[0];
+  // Soft-deleted listings must never render, even via a stale selected id.
+  const activeProperties = properties.filter((p) => !p.deletedAt);
+  const rawProperty = activeProperties.find((p) => p.id === selectedPropertyId) || activeProperties[0];
   const property: PublicProperty = toPublicProperty(rawProperty);
   const [activeImage, setActiveImage] = useState<string>(property?.images[0] || '');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);

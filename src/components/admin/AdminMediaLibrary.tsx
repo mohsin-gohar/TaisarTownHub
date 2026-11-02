@@ -273,7 +273,7 @@ export const AdminMediaLibrary: React.FC = () => {
 
                   <button
                     onClick={() => handleDelete(item)}
-                    className="p-1 rounded text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
                     title="Delete media asset"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

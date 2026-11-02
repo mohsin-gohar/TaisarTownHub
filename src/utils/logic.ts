@@ -110,6 +110,10 @@ export function filterProperties(
   criteria: FilterCriteria
 ): Property[] {
   return properties.filter((p) => {
+    // Soft-deleted listings never reach the public site (P0-5); the public
+    // serializer strips deletedAt, so the exclusion must happen here.
+    if (p.deletedAt) return false;
+
     // Phase check
     if (criteria.phase && criteria.phase !== 'All') {
       const propPhase = getPropertyPhase(p);

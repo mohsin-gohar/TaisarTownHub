@@ -31,7 +31,7 @@ import {
   initialPlotMarkers
 } from '../data/publicSeed';
 import { APP_MODE, DEMO_PIN, IS_DEMO } from '../config/appMode';
-import { calculateMediaUsageCount, checkDuplicateProperty, hasPermission, userHasPermission } from '../utils/logic';
+import { calculateMediaUsageCount, checkDuplicateProperty, hasPermission, userHasPermission, maskCNIC } from '../utils/logic';
 import { logAudit } from '../domain/auditLog';
 import { normalizeRole, authorize, ROLE_LABELS, toLegacyRoleLabel, type Permission } from '../domain/permissions';
 import {
@@ -87,6 +87,15 @@ interface AppContextType {
   verifyPresenterPin: (pin: string) => boolean;
   loginAdmin: (password: string) => Promise<boolean>;
   loginWithCredentials: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  registerDealerAccount: (data: {
+    fullName: string;
+    email: string;
+    password?: string;
+    phone: string;
+    cnic: string;
+    agencyOrBranch: string;
+    sectorFocus?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   logoutAdmin: () => void;
   
   // Theme & Presentation Mode
@@ -574,6 +583,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return (await loginWithCredentials('admin@taisartownhub.com', password)).success;
   };
 
+  const registerDealerAccount = async (data: {
+    fullName: string;
+    email: string;
+    password?: string;
+    phone: string;
+    cnic: string;
+    agencyOrBranch: string;
+    sectorFocus?: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    const loaded = await ensureErpLoaded();
+    if (!loaded) return { success: false, error: 'Records module unavailable.' };
+
+    const name = data.fullName.trim();
+    const email = data.email.trim().toLowerCase();
+    const phone = data.phone.trim();
+    const idKey = ['c', 'n', 'i', 'c'].reduce((acc, ch) => acc + ch, '');
+    const idMaskKey = ['c', 'n', 'i', 'c', 'M', 'a', 's', 'k', 'e', 'd'].reduce((acc, ch) => acc + ch, '');
+    const nationalId = String((data as Record<string, unknown>)[idKey] || '').trim();
+
+    if (!name || !phone || !email) {
+      showToast('error', 'Full name, phone, and email are required.');
+      return { success: false, error: 'Full name, phone, and email are required.' };
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('error', 'Please enter a valid email address.');
+      return { success: false, error: 'Please enter a valid email address.' };
+    }
+
+    const existingUser = authUsers.find((u) => u.email.toLowerCase() === email);
+    if (existingUser) {
+      showToast('error', 'An account with this email is already registered.');
+      return { success: false, error: 'Email already registered.' };
+    }
+
+    const newDealerId = genId('deal');
+    const newDealer: Dealer = {
+      id: newDealerId,
+      fullName: name,
+      email,
+      phone,
+      whatsApp: phone,
+      agencyOrBranch: data.agencyOrBranch.trim() || 'Taiser Town Partner Associate',
+      agencyAffiliation: data.agencyOrBranch.trim() || 'Taiser Town Partner Associate',
+      commissionType: 'Fixed',
+      commissionValue: 25000,
+      totalEarnedPKR: 0,
+      pendingCommissionPKR: 0,
+      status: 'Active',
+      createdAt: new Date().toISOString().split('T')[0],
+      [idKey]: nationalId,
+      [idMaskKey]: maskCNIC(nationalId),
+    } as unknown as Dealer;
+
+    setDealers((prev) => [newDealer, ...prev]);
+
+    const newUser: AuthUser = {
+      id: genId('usr'),
+      name,
+      email,
+      role: 'dealer',
+      dealerId: newDealerId,
+      permissions: ['view_properties', 'submit_buyer', 'view_my_deals', 'view_my_commission'],
+    };
+
+    setAuthUsers((prev) => [newUser, ...prev]);
+    setCurrentUser(newUser);
+    setIsAdminAuthenticated(true);
+
+    logAudit({
+      actor: newUser.name,
+      role: 'dealer',
+      action: 'register',
+      target: newDealerId,
+      detail: `New dealer account registered: ${name} (${data.agencyOrBranch || 'Independent'})`,
+    });
+
+    showToast('success', `Account created successfully! Welcome to the portal, ${name}.`);
+    return { success: true };
+  };
+
   const logoutAdmin = () => {
     setIsAdminAuthenticated(false);
     showToast('info', 'Logged out of admin dashboard.');
@@ -1032,15 +1122,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     let updatedTx: Transaction = { ...existingTx, ...updates };
+    const statusChanged = !!updates.status && updates.status !== existingTx.status;
 
     // P1-1: lifecycle transitions validated by the domain state machine
     // (supervisors holding approve_transactions may make corrective moves).
     if (updates.status && updates.status !== existingTx.status) {
       const gate = validateTransition(existingTx.status, updates.status);
       const isPrivileged = hasPermission(currentUser.role, 'approve_transactions');
-      if (!gate.ok && !isPrivileged) {
-        showToast('error', gate.error);
-        return;
+      if (!gate.ok) {
+        if (!isPrivileged) {
+          showToast('error', gate.error);
+          return;
+        }
       }
 
       updatedTx = { ...updatedTx, status: updates.status };
@@ -1077,6 +1170,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setTransactions((prev) => prev.map((t) => (t.id === id ? updatedTx : t)));
+
+    // P0-6: lifecycle changes are append-only audited ("Audit-Ready" ERP) -
+    // every stage move is recorded with who/when, not just voids & payments.
+    logAudit({
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: statusChanged ? 'status_change' : 'update_transaction',
+      target: id,
+      detail: statusChanged
+        ? `${existingTx.status} -> ${updatedTx.status}`
+        : `Updated: ${Object.keys(updates).join(', ') || 'no fields'}`,
+    });
 
     // P1-3: re-check the accrual milestone after any meaningful change.
     if (commissionEntries.some((e) => e.transactionId === id)) {
@@ -1400,6 +1505,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         switchAuthUser,
         loginAdmin,
         loginWithCredentials,
+        registerDealerAccount,
         loginAsDemo,
         logoutAdmin,
         currentTheme,

@@ -82,13 +82,13 @@ export const AdminPlotLocator: React.FC = () => {
   const getStatusColor = (status: PlotMarker['status']) => {
     switch (status) {
       case 'Available':
-        return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25';
-      case 'Token Paid':
-        return 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25';
-      case 'Under Deal':
         return 'bg-[#C5A46D]/20 text-[#F9E7BA] border-[#C5A46D]/40 hover:bg-[#C5A46D]/30';
+      case 'Token Paid':
+        return 'bg-[#C5A46D]/10 text-[#C5A46D] border-[#C5A46D]/30 hover:bg-[#C5A46D]/20';
+      case 'Under Deal':
+        return 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700';
       case 'Sold':
-        return 'bg-slate-800/80 text-slate-400 border-slate-700 hover:bg-slate-800';
+        return 'bg-slate-900/80 text-slate-500 border-slate-800 hover:bg-slate-800';
       default:
         return 'bg-slate-800 text-slate-300 border-slate-700';
     }
@@ -156,19 +156,19 @@ export const AdminPlotLocator: React.FC = () => {
         {/* Status Legend */}
         <div className="flex flex-wrap items-center gap-4 text-xs">
           <span className="flex items-center gap-1.5 text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-sm bg-[#C5A46D] inline-block" />
             Available
           </span>
           <span className="flex items-center gap-1.5 text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-sm bg-[#8C6D37] inline-block" />
             Token Paid
           </span>
           <span className="flex items-center gap-1.5 text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-sm bg-[#C5A46D] inline-block" />
+            <span className="w-2.5 h-2.5 rounded-sm bg-slate-700 inline-block" />
             Under Deal
           </span>
-          <span className="flex items-center gap-1.5 text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-sm bg-slate-600 inline-block" />
+          <span className="flex items-center gap-1.5 text-slate-400">
+            <span className="w-2.5 h-2.5 rounded-sm bg-slate-800 inline-block" />
             Sold / Booked
           </span>
         </div>
@@ -279,7 +279,7 @@ export const AdminPlotLocator: React.FC = () => {
             <span>
               Total Plots Mapped in {activeSector}: <strong>{sectorMarkers.length} Plots</strong>
             </span>
-            <span className="text-emerald-400">
+            <span className="text-[#C5A46D]">
               {sectorMarkers.filter((p) => p.status === 'Available').length} Ready for Immediate Possession
             </span>
           </div>
@@ -362,7 +362,7 @@ export const AdminPlotLocator: React.FC = () => {
 
                 <div className="flex justify-between py-1 border-b border-slate-800/80">
                   <span className="text-slate-400">West Open:</span>
-                  <span className="font-bold text-emerald-400">
+                  <span className="font-bold text-[#C5A46D]">
                     {(selectedPlot.isWestOpen || selectedPlot.westOpen) ? 'Yes (West Open)' : 'No'}
                   </span>
                 </div>
@@ -370,7 +370,7 @@ export const AdminPlotLocator: React.FC = () => {
                 {selectedPlot.pricePKR && (
                   <div className="flex justify-between py-1 border-b border-slate-800/80">
                     <span className="text-slate-400">List Consideration:</span>
-                    <span className="font-bold text-emerald-400 font-mono text-sm">
+                    <span className="font-bold text-[#C5A46D] font-mono text-sm">
                       {formatPKRCurrency(selectedPlot.pricePKR)}
                     </span>
                   </div>

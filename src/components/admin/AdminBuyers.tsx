@@ -250,7 +250,7 @@ export const AdminBuyers: React.FC = () => {
                     </button>
                     <button
                       onClick={() => handleDelete(buyer.id, buyer.fullName)}
-                      className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 transition cursor-pointer"
+                      className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition cursor-pointer"
                       title="Delete Buyer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -263,14 +263,14 @@ export const AdminBuyers: React.FC = () => {
                   <span
                     className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 ${
                       buyer.paymentStatus === 'Fully Paid'
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        ? 'bg-[#C5A46D]/20 text-[#F9E7BA] border border-[#C5A46D]/40'
                         : buyer.paymentStatus === 'Advance Paid'
                         ? 'bg-[#C5A46D]/15 text-[#F9E7BA] border border-[#C5A46D]/30'
-                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                        : 'bg-slate-800 text-slate-300 border border-slate-700'
                     }`}
                   >
-                    {buyer.paymentStatus === 'Fully Paid' && <CheckCircle2 className="w-3 h-3" />}
-                    {buyer.paymentStatus === 'Advance Paid' && <Clock className="w-3 h-3" />}
+                    {buyer.paymentStatus === 'Fully Paid' && <CheckCircle2 className="w-3 h-3 text-[#C5A46D]" />}
+                    {buyer.paymentStatus === 'Advance Paid' && <Clock className="w-3 h-3 text-[#C5A46D]" />}
                     {buyer.paymentStatus}
                   </span>
 
@@ -353,7 +353,7 @@ export const AdminBuyers: React.FC = () => {
                           <span className="text-white font-medium truncate max-w-[170px]">
                             {mp.plotNumber ? `Plot ${mp.plotNumber} (${mp.sector})` : mp.title}
                           </span>
-                          <span className="text-emerald-400 font-mono font-bold">
+                          <span className="text-[#C5A46D] font-mono font-bold">
                             {formatPKRCurrency(mp.pricePKR)}
                           </span>
                         </div>
@@ -368,7 +368,7 @@ export const AdminBuyers: React.FC = () => {
               {/* Footer */}
               <div className="pt-3 mt-4 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
                 <span>Preference: {buyer.interestedPlotSize}</span>
-                <span className="text-emerald-400 font-semibold">Active Deal Lead</span>
+                <span className="text-[#C5A46D] font-semibold">Active Deal Lead</span>
               </div>
             </div>
           );

@@ -217,8 +217,8 @@ export const AdminProjects: React.FC = () => {
                   <td className="py-3.5 px-4">
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                       proj.status === 'Ready for Possession' ? 'bg-[#C5A46D]/15 text-[#F9E7BA] border-[#C5A46D]/30' :
-                      proj.status === 'Booking Open' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
-                      proj.status === 'Under Development' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
+                      proj.status === 'Booking Open' ? 'bg-[#C5A46D]/25 text-[#F9E7BA] border-[#C5A46D]/40' :
+                      proj.status === 'Under Development' ? 'bg-[#C5A46D]/10 text-[#C5A46D] border-[#C5A46D]/30' :
                       'bg-slate-800 text-slate-300 border-slate-700'
                     }`}>
                       {proj.status}
@@ -245,7 +245,7 @@ export const AdminProjects: React.FC = () => {
                       </button>
                       <button
                         onClick={() => handleDelete(proj.id, proj.title)}
-                        className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-[#101C2C] transition-colors"
+                        className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
                         title="Delete Project"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

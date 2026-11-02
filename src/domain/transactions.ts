@@ -63,7 +63,7 @@ export function stageIndex(status: TransactionStatus): number {
 }
 
 export type TransitionResult =
-  | { ok: true }
+  | { ok: true; error?: never }
   | { ok: false; error: string };
 
 /**
@@ -194,7 +194,7 @@ export interface DealPayloadRef {
 }
 
 export type DealValidationResult =
-  | { ok: true }
+  | { ok: true; error?: never }
   | { ok: false; error: string };
 
 /**
@@ -231,7 +231,7 @@ export function validateDealPayload(
 }
 
 export type ValidatePaymentResult =
-  | { ok: true; currentCollected: number }
+  | { ok: true; currentCollected: number; error?: never }
   | { ok: false; error: string };
 
 /**

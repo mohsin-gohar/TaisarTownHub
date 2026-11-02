@@ -13,16 +13,32 @@
  */
 export type AppMode = 'public' | 'demo' | 'production';
 
+export function resolveModeFromEnv(env?: { VITE_APP_MODE?: string; VITE_DEMO_MODE?: string }): AppMode {
+  const safeEnv = env || {};
+  const raw = String(safeEnv.VITE_APP_MODE || '').toLowerCase().trim();
+  if (raw === 'demo') return 'demo';
+  if (raw === 'production') return 'production';
+  if (raw === 'public') return 'public';
+
+  // Legacy fallback: ONLY when VITE_DEMO_MODE is explicitly 'true' do we activate demo mode.
+  if (safeEnv.VITE_DEMO_MODE === 'true') {
+    return 'demo';
+  }
+
+  // Safe default: Missing or unconfigured environment always defaults to 'public'.
+  return 'public';
+}
+
 function resolveMode(): AppMode {
-  const raw = String(import.meta.env.VITE_APP_MODE || '').toLowerCase();
-  if (raw === 'public' || raw === 'demo' || raw === 'production') return raw as AppMode;
-  // Legacy fallback for older .env files that only know VITE_DEMO_MODE.
-  return import.meta.env.VITE_DEMO_MODE === 'false' ? 'production' : 'demo';
+  const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as { env?: Record<string, string> }).env : undefined;
+  return resolveModeFromEnv(metaEnv);
 }
 
 export const APP_MODE: AppMode = resolveMode();
 
 /** Presenter PIN for demo builds. Public warning: this is a speed bump, not security. */
-export const DEMO_PIN: string = String(import.meta.env.VITE_DEMO_PIN || '4545');
+export const DEMO_PIN: string = String(
+  (typeof import.meta !== 'undefined' ? (import.meta as { env?: Record<string, string> }).env?.VITE_DEMO_PIN : undefined) || '4545'
+);
 
 export const IS_DEMO: boolean = APP_MODE === 'demo';

@@ -334,7 +334,7 @@ export const AdminProperties: React.FC = () => {
                   </td>
                   <td className="py-3.5 px-4">
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                      prop.status === 'Available' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30' :
+                      prop.status === 'Available' ? 'bg-[#C5A46D]/15 text-[#F9E7BA] border-[#C5A46D]/30' :
                       prop.status === 'Under Deal' ? 'bg-[#C5A46D]/15 text-[#F9E7BA] border-[#C5A46D]/30' :
                       'bg-slate-800 text-slate-300 border-slate-700'
                     }`}>
@@ -373,7 +373,7 @@ export const AdminProperties: React.FC = () => {
                       </button>
                       <button
                         onClick={() => handleDelete(prop.id, prop.title)}
-                        className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-[#101C2C] transition-colors"
+                        className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
                         title="Delete Listing"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -522,7 +522,7 @@ export const AdminProperties: React.FC = () => {
               {/* Pricing (Public vs Private ERP) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-emerald-400">Public Sale Price (PKR) *</label>
+                  <label className="text-xs font-semibold text-[#C5A46D]">Public Sale Price (PKR) *</label>
                   <input
                     type="number"
                     required

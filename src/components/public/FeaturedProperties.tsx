@@ -26,7 +26,8 @@ export const FeaturedProperties: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const featured = properties.filter((p) => p.isFeatured).slice(0, 6).map(toPublicProperty);
+  const activeProperties = properties.filter((p) => !p.deletedAt);
+  const featured = activeProperties.filter((p) => p.isFeatured).slice(0, 6).map(toPublicProperty);
 
   return (
     <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#101C2C]/50 border-t border-[#C5A46D]/15">
@@ -51,7 +52,7 @@ export const FeaturedProperties: React.FC = () => {
             }}
             className="mt-4 md:mt-0 inline-flex items-center gap-2 text-sm font-semibold text-[#C5A46D] hover:text-[#E0C79A] group transition-colors cursor-pointer"
           >
-            <span>Browse All Properties ({properties.length})</span>
+            <span>Browse All Properties ({activeProperties.length})</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </div>

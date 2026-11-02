@@ -106,6 +106,47 @@ test('checkDuplicateProperty flags matching plot and sector', () => {
   assert.equal(editSelfCheck.isDuplicate, false);
 });
 
+test('filterProperties never returns soft-deleted listings (H3 regression)', () => {
+  const active: Property = {
+    id: 'p-1',
+    title: 'Plot R-66 Sector 63',
+    description: '120 Sq Yd on 100ft road',
+    pricePKR: 3500000,
+    formattedPrice: 'PKR 35 Lacs',
+    location: 'Sector 63, Karachi',
+    sector: 'Sector 63',
+    block: 'Block A',
+    plotNumber: 'R-66',
+    sizeSqYards: 120,
+    type: 'Residential Plot',
+    status: 'Available',
+    isFeatured: true,
+    images: ['https://example.com/r66.jpg'],
+    features: ['100ft Road Facing'],
+    possessionReady: true,
+    mdaApproved: true,
+    createdDate: '2026-01-01',
+    contactPerson: 'Saleem Siddiqui',
+    contactPhone: '03001234567',
+    contactWhatsApp: '03001234567'
+  };
+  const deleted: Property = {
+    ...active,
+    id: 'p-2',
+    plotNumber: 'R-67',
+    deletedAt: '2026-11-01T00:00:00.000Z',
+    deletedBy: 'Syed Moazzam Ali'
+  };
+
+  const all = filterProperties([active, deleted], {});
+  assert.equal(all.length, 1);
+  assert.equal(all[0].id, 'p-1');
+
+  // Even when every filter matches the deleted row, it must not surface.
+  const bySearch = filterProperties([active, deleted], { searchTerm: 'R-67' });
+  assert.equal(bySearch.length, 0);
+});
+
 test('calculateCommission calculates fixed, percentage, and custom rates', () => {
   // Handwritten requirement example: 20,000 fixed
   assert.equal(calculateCommission(3500000, 'Fixed', 20000), 20000);

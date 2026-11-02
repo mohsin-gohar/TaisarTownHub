@@ -96,7 +96,7 @@ export const AdminOverview: React.FC = () => {
           <div className="font-serif-luxury text-3xl font-bold text-white">
             {formatPKRCurrency(financials.totalSalesVolume)}
           </div>
-          <div className="text-[11px] text-emerald-400 flex items-center gap-1">
+          <div className="text-[11px] text-[#C5A46D] flex items-center gap-1">
             <TrendingUp className="w-3.5 h-3.5" />
             <span className="font-semibold">+12.4% this quarter</span>
             <span className="text-slate-500">• {financials.totalDealsCount} active deals</span>
@@ -121,14 +121,14 @@ export const AdminOverview: React.FC = () => {
         <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-semibold uppercase">Receivables at Transfer</span>
-            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400">
+            <div className="p-2 rounded-xl bg-[#C5A46D]/15 text-[#C5A46D]">
               <Clock className="w-5 h-5" />
             </div>
           </div>
-          <div className="font-serif-luxury text-3xl font-bold text-amber-400">
+          <div className="font-serif-luxury text-3xl font-bold text-white">
             {formatPKRCurrency(financials.pendingReceivables)}
           </div>
-          <div className="text-[11px] text-amber-300">
+          <div className="text-[11px] text-slate-400">
             Due upon MDA transfer completion
           </div>
         </div>
@@ -157,7 +157,7 @@ export const AdminOverview: React.FC = () => {
             <span className="font-bold text-white text-sm">
               Handwritten Notes Record: Plot R-66 (Sector 63, Scheme 45)
             </span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#C5A46D]/20 text-[#F9E7BA] border border-[#C5A46D]/40">
               Integrated & Verified
             </span>
           </div>
@@ -308,9 +308,9 @@ export const AdminOverview: React.FC = () => {
                   </td>
                   <td className="py-3.5 px-4">
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                      inq.status === 'Pending' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
-                      inq.status === 'Contacted' ? 'bg-[#C5A46D]/15 text-[#F9E7BA] border-[#C5A46D]/30' :
-                      inq.status === 'Resolved' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
+                      inq.status === 'Pending' ? 'bg-[#C5A46D]/10 text-[#C5A46D] border-[#C5A46D]/30' :
+                      inq.status === 'Contacted' ? 'bg-[#C5A46D]/20 text-[#F9E7BA] border-[#C5A46D]/40' :
+                      inq.status === 'Resolved' ? 'bg-[#C5A46D]/30 text-white border-[#C5A46D]/50' :
                       'bg-slate-800 text-slate-300 border-slate-700'
                     }`}>
                       {inq.status}

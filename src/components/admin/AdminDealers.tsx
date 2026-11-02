@@ -227,23 +227,23 @@ export const AdminDealers: React.FC = () => {
         <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Commission Settled / Paid</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <CheckCircle2 className="w-4 h-4 text-[#C5A46D]" />
           </div>
-          <div className="text-2xl font-bold font-serif-luxury text-emerald-400 mt-2">
+          <div className="text-2xl font-bold font-serif-luxury text-[#C5A46D] mt-2">
             {formatPKRCurrency(totalAgencyCommissionPaid)}
           </div>
-          <div className="text-[11px] text-emerald-400/80 mt-1">Disbursed to agents via cash/transfer</div>
+          <div className="text-[11px] text-slate-400 mt-1">Disbursed to agents via cash/transfer</div>
         </div>
 
         <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Pending Payouts</span>
-            <Clock className="w-4 h-4 text-amber-400" />
+            <Clock className="w-4 h-4 text-[#C5A46D]" />
           </div>
-          <div className="text-2xl font-bold font-serif-luxury text-amber-400 mt-2">
+          <div className="text-2xl font-bold font-serif-luxury text-white mt-2">
             {formatPKRCurrency(totalAgencyCommissionPending)}
           </div>
-          <div className="text-[11px] text-amber-400/80 mt-1">Due upon registry and possession transfer</div>
+          <div className="text-[11px] text-slate-400 mt-1">Due upon registry and possession transfer</div>
         </div>
       </div>
 
@@ -306,7 +306,7 @@ export const AdminDealers: React.FC = () => {
                     </button>
                     <button
                       onClick={() => handleDelete(dealer.id, dealer.fullName)}
-                      className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 transition cursor-pointer"
+                      className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition cursor-pointer"
                       title="Delete Dealer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -350,7 +350,7 @@ export const AdminDealers: React.FC = () => {
                   </div>
                   <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase block">Earned</span>
-                    <span className="font-bold text-emerald-400 text-xs">
+                    <span className="font-bold text-[#C5A46D] text-xs">
                       {formatPKRCurrency(earned)}
                     </span>
                   </div>
@@ -364,7 +364,7 @@ export const AdminDealers: React.FC = () => {
                   </div>
                   <div className="flex justify-between items-center pt-1 border-t border-slate-800">
                     <span className="font-semibold text-slate-300">Pending Payable:</span>
-                    <span className={`font-mono font-bold ${pendingBalance > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                    <span className={`font-mono font-bold ${pendingBalance > 0 ? 'text-[#F9E7BA]' : 'text-slate-400'}`}>
                       {formatPKRCurrency(pendingBalance)}
                     </span>
                   </div>
@@ -434,9 +434,9 @@ export const AdminDealers: React.FC = () => {
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Already Paid:</span>
-                  <span className="text-emerald-400 font-mono">{formatPKRCurrency(ledgerPaid)}</span>
+                  <span className="text-[#C5A46D] font-mono">{formatPKRCurrency(ledgerPaid)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-amber-400 pt-1 border-t border-slate-800">
+                <div className="flex justify-between font-bold text-[#C5A46D] pt-1 border-t border-slate-800">
                   <span>Payable (accrued):</span>
                   <span>{formatPKRCurrency(ledgerPayable)}</span>
                 </div>

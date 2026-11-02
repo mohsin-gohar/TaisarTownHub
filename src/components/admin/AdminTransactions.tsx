@@ -336,7 +336,7 @@ export const AdminTransactions: React.FC = () => {
           <div className="text-2xl font-bold font-serif-luxury text-white mt-1">
             {formatPKRCurrency(financials.totalSalesVolume)}
           </div>
-          <div className="text-[11px] text-emerald-400 mt-1">{financials.totalDealsCount} Total Deals</div>
+          <div className="text-[11px] text-[#C5A46D] mt-1">{financials.totalDealsCount} Total Deals</div>
         </div>
 
         <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
@@ -436,7 +436,7 @@ export const AdminTransactions: React.FC = () => {
                         )}
                         {txn.voided && (
                           <span
-                            className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-600/90 text-white"
+                            className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-300 border border-slate-700"
                             title={txn.voidReason ? `Voided by ${txn.voidedBy}: ${txn.voidReason}` : undefined}
                           >
                             VOIDED
@@ -473,7 +473,7 @@ export const AdminTransactions: React.FC = () => {
                     </td>
 
                     <td className="py-4 px-4">
-                      <div className="text-emerald-400 font-mono font-semibold">
+                      <div className="text-white font-mono font-semibold">
                         Paid: {formatPKRCurrency(money.collected)}
                       </div>
                       <div className="text-slate-400 font-mono text-[11px]">
@@ -485,18 +485,18 @@ export const AdminTransactions: React.FC = () => {
                     </td>
 
                     <td className="py-4 px-4">
-                      <div className="font-bold text-amber-300 font-mono">
+                      <div className="font-bold text-[#F9E7BA] font-mono">
                         {formatPKRCurrency(commEntry?.amountPKR ?? txn.commissionPKR ?? txn.commissionAmountPKR ?? 0)}
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
                         (commEntry?.status ?? txn.commissionStatus) === 'Paid'
-                          ? 'bg-emerald-500/20 text-emerald-400'
+                          ? 'bg-[#C5A46D]/20 text-[#F9E7BA]'
                           : (commEntry?.status ?? txn.commissionStatus) === 'Accrued'
-                          ? 'bg-amber-500/20 text-amber-300'
+                          ? 'bg-[#C5A46D]/10 text-[#C5A46D]'
                           : (commEntry?.status ?? txn.commissionStatus) === 'Partially Paid'
-                          ? 'bg-blue-500/20 text-blue-300'
+                          ? 'bg-slate-800 text-slate-300'
                           : (commEntry?.status ?? txn.commissionStatus) === 'Cancelled'
-                          ? 'bg-rose-500/20 text-rose-300'
+                          ? 'bg-slate-800 text-slate-400'
                           : 'bg-slate-800 text-slate-400'
                       }`}>
                         {commEntry?.status ?? txn.commissionStatus}
@@ -511,11 +511,11 @@ export const AdminTransactions: React.FC = () => {
                         onChange={(e) => handleStatusSelect(txn, e.target.value as TransactionStatus)}
                         className={`text-[10px] font-bold px-2 py-1 rounded-lg border focus:outline-none ${
                           txn.status === 'Completed'
-                            ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                            ? 'bg-[#0B1220] text-[#F9E7BA] border-[#C5A46D]/40'
                             : txn.status === 'Under Transfer'
                             ? 'bg-[#101C2C] text-[#E0C79A] border-[#C5A46D]/40'
                             : txn.status === 'Advance Received'
-                            ? 'bg-amber-950/60 text-amber-300 border-amber-500/40'
+                            ? 'bg-[#0B1220] text-[#C5A46D] border-[#C5A46D]/30'
                             : 'bg-slate-800 text-slate-300 border-slate-700'
                         } ${canUpdateDeals ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
                       >
@@ -549,7 +549,7 @@ export const AdminTransactions: React.FC = () => {
                         {canVoid && !txn.voided && (
                           <button
                             onClick={() => setVoidModalTxn(txn)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 text-xs font-semibold transition cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 text-xs font-semibold transition cursor-pointer"
                             title="Void this deal with a mandatory reason (audit-preserved)"
                           >
                             <Ban className="w-3.5 h-3.5" />
@@ -704,7 +704,7 @@ export const AdminTransactions: React.FC = () => {
                   </tr>
                   <tr>
                     <td className="py-2.5 px-4 text-slate-300 font-sans">Advance / Bayana Deposit Received</td>
-                    <td className="py-2.5 px-4 text-right font-bold text-emerald-400">
+                    <td className="py-2.5 px-4 text-right font-bold text-[#C5A46D]">
                       (-) {formatPKRCurrency(selectedTxnForReceipt.advancePKR ?? selectedTxnForReceipt.advancePaymentPKR ?? 0)}
                     </td>
                   </tr>
@@ -770,7 +770,7 @@ export const AdminTransactions: React.FC = () => {
       {/* Payment Ledger Modal (P1-2): history + record payment (permission-gated) */}
       {paymentModalTxn && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-[#101C2C] text-slate-100 border border-emerald-500/40 rounded-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-[#101C2C] text-slate-100 border border-[#C5A46D]/40 rounded-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setPaymentModalTxn(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
@@ -790,13 +790,13 @@ export const AdminTransactions: React.FC = () => {
               return (
                 <>
                   <div className="grid grid-cols-3 gap-3 mb-5">
-                    <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/20">
-                      <span className="text-[10px] text-emerald-400 block">Paid</span>
-                      <strong className="text-sm font-mono text-emerald-300">{formatPKRCurrency(money.collected)}</strong>
+                    <div className="p-3 rounded-xl bg-[#0B1220] border border-[#C5A46D]/30">
+                      <span className="text-[10px] text-slate-400 block">Paid</span>
+                      <strong className="text-sm font-mono text-[#C5A46D]">{formatPKRCurrency(money.collected)}</strong>
                     </div>
-                    <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/20">
-                      <span className="text-[10px] text-amber-400 block">Balance</span>
-                      <strong className="text-sm font-mono text-amber-300">{formatPKRCurrency(money.balance)}</strong>
+                    <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-700">
+                      <span className="text-[10px] text-slate-400 block">Balance</span>
+                      <strong className="text-sm font-mono text-white">{formatPKRCurrency(money.balance)}</strong>
                     </div>
                     <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-700">
                       <span className="text-[10px] text-slate-400 block">Deal</span>
@@ -812,7 +812,7 @@ export const AdminTransactions: React.FC = () => {
                     {rows.map((row) => (
                       <div key={row.id} className="p-2.5 rounded-lg bg-[#0B1220] border border-slate-800 text-xs flex items-start justify-between gap-3">
                         <div>
-                          <div className="font-mono font-bold text-emerald-300">+ {formatPKRCurrency(row.amountPKR)}</div>
+                          <div className="font-mono font-bold text-[#C5A46D]">+ {formatPKRCurrency(row.amountPKR)}</div>
                           <div className="text-[10px] text-slate-400">
                             {row.paidAt} · {row.method} · by {row.recordedBy}
                           </div>
@@ -830,7 +830,7 @@ export const AdminTransactions: React.FC = () => {
                   {/* Record new payment — hidden without manage_payments or when frozen */}
                   {canRecordPayments && !frozen && money.balance > 0 && (
                     <form onSubmit={handleConfirmPayment} className="pt-4 border-t border-slate-800 space-y-3">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#C5A46D] block">
                         Record payment
                       </span>
                       <div className="grid grid-cols-2 gap-3">
@@ -842,7 +842,7 @@ export const AdminTransactions: React.FC = () => {
                             max={money.balance}
                             value={paymentAmount}
                             onChange={(e) => setPaymentAmount(Number(e.target.value))}
-                            className="w-full bg-[#0B1220] text-white p-2 rounded-lg border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs font-mono"
+                            className="w-full bg-[#0B1220] text-white p-2 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs font-mono"
                           />
                         </label>
                         <label className="block">
@@ -850,7 +850,7 @@ export const AdminTransactions: React.FC = () => {
                           <select
                             value={paymentMethod}
                             onChange={(e) => setPaymentMethod(e.target.value as PaymentEntry['method'])}
-                            className="w-full bg-[#0B1220] text-white p-2 rounded-lg border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs cursor-pointer"
+                            className="w-full bg-[#0B1220] text-white p-2 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs cursor-pointer"
                           >
                             <option>Bank Transfer</option>
                             <option>Pay Order</option>
@@ -866,20 +866,20 @@ export const AdminTransactions: React.FC = () => {
                           value={paymentNote}
                           onChange={(e) => setPaymentNote(e.target.value)}
                           placeholder="e.g. Pay order #PO-10231 deposited"
-                          className="w-full bg-[#0B1220] text-white p-2 rounded-lg border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs"
+                          className="w-full bg-[#0B1220] text-white p-2 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs"
                         />
                       </label>
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => setPaymentModalTxn(null)}
-                          className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                          className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer hover:bg-slate-700"
                         >
                           Close
                         </button>
                         <button
                           type="submit"
-                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+                          className="px-4 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold cursor-pointer transition shadow"
                         >
                           Record Payment
                         </button>
@@ -887,12 +887,12 @@ export const AdminTransactions: React.FC = () => {
                     </form>
                   )}
                   {canRecordPayments && frozen && (
-                    <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-500/30 text-[11px] text-rose-300">
+                    <div className="p-2.5 rounded-lg bg-[#0B1220] border border-slate-700 text-[11px] text-slate-300">
                       This deal is {paymentModalTxn.voided ? 'voided' : 'cancelled'} — payments are frozen.
                     </div>
                   )}
                   {canRecordPayments && !frozen && money.balance <= 0 && (
-                    <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-[11px] text-emerald-300">
+                    <div className="p-2.5 rounded-lg bg-[#0B1220] border border-[#C5A46D]/40 text-[11px] text-[#F9E7BA]">
                       Deal money fully banked — no outstanding balance.
                     </div>
                   )}
@@ -911,7 +911,7 @@ export const AdminTransactions: React.FC = () => {
       {/* Void Modal (P1-1): super-admin only, mandatory reason, audit-preserved */}
       {voidModalTxn && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-md bg-[#101C2C] text-slate-100 border border-rose-500/40 rounded-2xl p-6 shadow-2xl">
+          <div className="relative w-full max-w-md bg-[#101C2C] text-slate-100 border border-slate-700 rounded-2xl p-6 shadow-2xl">
             <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">
               Void Deal {voidModalTxn.dealNumber || voidModalTxn.id}
             </h3>
@@ -927,20 +927,20 @@ export const AdminTransactions: React.FC = () => {
                   value={voidReason}
                   onChange={(e) => setVoidReason(e.target.value)}
                   placeholder="e.g. Duplicate booking recorded in error; buyer withdrew before execution…"
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-rose-500 focus:outline-none text-xs"
+                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs"
                 />
               </label>
               <div className="flex justify-end gap-3 pt-1">
                 <button
                   type="button"
                   onClick={() => setVoidModalTxn(null)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer hover:bg-slate-700"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 text-xs font-bold cursor-pointer transition"
                 >
                   Void Deal
                 </button>

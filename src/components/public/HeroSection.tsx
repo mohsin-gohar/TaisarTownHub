@@ -234,7 +234,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                 <span>Search Scheme 45 Real Estate Portfolio</span>
               </div>
               <span className="text-xs text-slate-400 hidden sm:inline">
-                Over {properties.length} active plots & villas available
+                Over {properties.filter((p) => !p.deletedAt).length} active plots & villas available
               </span>
             </div>
 

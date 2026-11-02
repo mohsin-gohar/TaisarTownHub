@@ -28,6 +28,7 @@ const PropertyDetailPage = lazy(() => import('./components/public/PropertyDetail
 const ProjectsListingPage = lazy(() => import('./components/public/ProjectsListingPage').then((m) => ({ default: m.ProjectsListingPage })));
 const PropertiesListingPage = lazy(() => import('./components/public/PropertiesListingPage').then((m) => ({ default: m.PropertiesListingPage })));
 const AgenciesSection = lazy(() => import('./components/public/AgenciesSection').then((m) => ({ default: m.AgenciesSection })));
+const AuthPage = lazy(() => import('./components/public/AuthPage').then((m) => ({ default: m.AuthPage })));
 
 // Admin views
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
@@ -47,6 +48,9 @@ const VIEW_META: Record<string, { title: string; description: string }> = {
   services: { title: 'Our Services — TaisarTownHub', description: 'File verification, transfers, escrow coordination and investment advisory services.' },
   about: { title: 'About Us — TaisarTownHub', description: 'Principal brokers team for Taiser Town Scheme 45 with 20+ years of Karachi real estate experience.' },
   contact: { title: 'Contact Us — TaisarTownHub', description: 'Visit our office or send an inquiry for verified plots in Taiser Town Scheme 45.' },
+  login: { title: 'Portal Sign In — TaisarTownHub Scheme 45', description: 'Secure access for authorized consultants, property dealers, and executives.' },
+  register: { title: 'Dealer Registration — TaisarTownHub Scheme 45', description: 'Join the authorized real estate consultant and dealer network in Scheme 45.' },
+  'admin-login': { title: 'Agency Portal Access — TaisarTownHub Scheme 45', description: 'Back-office operations, financial ledger and Scheme 45 registry access.' },
 };
 
 const MainAppContent: React.FC = () => {
@@ -87,14 +91,11 @@ const MainAppContent: React.FC = () => {
   if (currentView === 'admin') {
     if (!isAdminAuthenticated) {
       return (
-        <>
-          <AdminLoginModal />
+        <Suspense fallback={<div className="min-h-screen bg-[#070B14] flex items-center justify-center text-slate-400">Loading Portal...</div>}>
+          <AuthPage initialTab="signin" />
           <ToastContainer />
           <ConfirmDialogHost />
-          <div className="min-h-screen bg-[#0B1220] flex items-center justify-center text-slate-400">
-            Redirecting to authentication...
-          </div>
-        </>
+        </Suspense>
       );
     }
     return (
@@ -162,6 +163,8 @@ const MainAppContent: React.FC = () => {
               {currentView === 'services' && <ServicesSection />}
               {currentView === 'about' && <AboutSection />}
               {currentView === 'contact' && <ContactSection />}
+              {currentView === 'login' && <AuthPage initialTab="signin" />}
+              {currentView === 'register' && <AuthPage initialTab="register" />}
             </Suspense>
             </div>
           </main>

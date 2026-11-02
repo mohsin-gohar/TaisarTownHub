@@ -202,7 +202,7 @@ export interface AuthorizeScope {
 }
 
 export type AuthzResult =
-  | { ok: true }
+  | { ok: true; error?: never }
   | { ok: false; code: 'permission_denied' | 'scope_mismatch'; error: string };
 
 /**

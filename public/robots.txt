@@ -1,0 +1,7 @@
+# TaisarTownHub — public site crawler rules
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin-login
+
+# Demo/back-office areas must never appear in search results.

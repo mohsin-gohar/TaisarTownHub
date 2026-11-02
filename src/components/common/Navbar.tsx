@@ -166,19 +166,39 @@ export const Navbar: React.FC = () => {
                 <span>WhatsApp</span>
               </a>
 
-              {/* Admin — icon-only below lg, full label from lg up */}
-              <button
-                onClick={goAdmin}
-                aria-label={isAdminAuthenticated ? 'Open admin dashboard' : 'Open admin login'}
-                className={`flex items-center justify-center lg:justify-start gap-2 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
-                  isAdminActive
-                    ? 'bg-[#C5A46D] text-[#101C2C] border-[#C5A46D] shadow-md'
-                    : 'bg-slate-800 text-slate-200 border-slate-700 hover:border-slate-500 hover:text-white'
-                }`}
-              >
-                <LayoutDashboard className="w-3.5 h-3.5 text-[#C5A46D] shrink-0" />
-                <span className="hidden lg:inline">{isAdminAuthenticated ? 'Dashboard' : 'Admin Login'}</span>
-              </button>
+              {/* Admin & Auth Actions */}
+              {!isAdminAuthenticated ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => navigateTo('login')}
+                    aria-label="Open portal sign in"
+                    className="flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700 hover:border-[#C5A46D]/60 hover:text-white transition-all cursor-pointer"
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5 text-[#C5A46D] shrink-0" />
+                    <span className="hidden sm:inline">Sign In</span>
+                  </button>
+                  <button
+                    onClick={() => navigateTo('register')}
+                    aria-label="Register as property dealer"
+                    className="hidden lg:flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] transition-all shadow-md shadow-[#C5A46D]/20 cursor-pointer"
+                  >
+                    <span>Register Dealer</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={goAdmin}
+                  aria-label="Open admin dashboard"
+                  className={`flex items-center justify-center lg:justify-start gap-2 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
+                    isAdminActive
+                      ? 'bg-[#C5A46D] text-[#101C2C] border-[#C5A46D] shadow-md'
+                      : 'bg-slate-800 text-slate-200 border-slate-700 hover:border-slate-500 hover:text-white'
+                  }`}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5 text-[#C5A46D] shrink-0" />
+                  <span className="hidden lg:inline">Dashboard</span>
+                </button>
+              )}
 
               {/* Drawer Toggle — all screens below xl */}
               <button
@@ -235,18 +255,34 @@ export const Navbar: React.FC = () => {
 
               {/* Calls to Action */}
               <div className="pt-4 mt-2 border-t border-slate-800 flex flex-col gap-2">
-                <button
-                  role="menuitem"
-                  onClick={goAdmin}
-                  className={`w-full py-2.5 px-4 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all ${
-                    isAdminActive
-                      ? 'bg-[#C5A46D] text-[#101C2C]'
-                      : 'bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C]'
-                  }`}
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  <span>{isAdminAuthenticated ? 'Admin Dashboard' : 'Admin Portal Login'}</span>
-                </button>
+                {!isAdminAuthenticated ? (
+                  <>
+                    <button
+                      role="menuitem"
+                      onClick={() => navigateTo('login')}
+                      className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 bg-[#101C2C] border border-[#C5A46D]/40 text-[#C5A46D] hover:bg-[#C5A46D]/15 transition-all"
+                    >
+                      <LayoutDashboard className="w-4 h-4 text-[#C5A46D]" />
+                      <span>Portal Sign In</span>
+                    </button>
+                    <button
+                      role="menuitem"
+                      onClick={() => navigateTo('register')}
+                      className="w-full py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] transition-all shadow-md"
+                    >
+                      <span>Register as Property Dealer</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    role="menuitem"
+                    onClick={goAdmin}
+                    className="w-full py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-[#C5A46D] text-[#101C2C] transition-all"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span>Open Admin Dashboard</span>
+                  </button>
+                )}
                 <a
                   role="menuitem"
                   href={whatsAppLink}

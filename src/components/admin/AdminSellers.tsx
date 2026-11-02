@@ -225,7 +225,7 @@ export const AdminSellers: React.FC = () => {
                     </button>
                     <button
                       onClick={() => handleDelete(seller.id, seller.fullName)}
-                      className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 transition cursor-pointer"
+                      className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition cursor-pointer"
                       title="Delete Seller"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -280,13 +280,13 @@ export const AdminSellers: React.FC = () => {
                   )}
 
                   {seller.bankName && (
-                    <div className="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-[11px] text-emerald-300 space-y-0.5">
-                      <div className="font-semibold text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />
+                    <div className="p-2.5 rounded-lg bg-[#0B1220] border border-[#C5A46D]/30 text-[11px] text-slate-300 space-y-0.5">
+                      <div className="font-semibold text-[#C5A46D] flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-[#C5A46D]" />
                         Bank Settlement Record
                       </div>
                       <div>{seller.bankName} - {seller.bankAccountTitle}</div>
-                      <div className="font-mono text-[10px] text-emerald-200/80">
+                      <div className="font-mono text-[10px] text-[#F9E7BA]">
                         {canViewSensitive ? seller.accountNumber : maskAccountNumber(seller.accountNumber)}
                       </div>
                     </div>
@@ -312,7 +312,7 @@ export const AdminSellers: React.FC = () => {
                             </span>
                             <span className="text-[10px] text-[#C5A46D]">{p.sector}</span>
                           </div>
-                          <span className="font-bold text-emerald-400 text-xs">
+                          <span className="font-bold text-[#C5A46D] text-xs">
                             {formatPKRCurrency(p.pricePKR)}
                           </span>
                         </div>

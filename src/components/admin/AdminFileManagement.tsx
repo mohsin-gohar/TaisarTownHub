@@ -154,9 +154,9 @@ export const AdminFileManagement: React.FC = () => {
         <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Internally Verified Documents</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <CheckCircle2 className="w-4 h-4 text-[#C5A46D]" />
           </div>
-          <div className="text-2xl font-bold font-serif-luxury text-emerald-400 mt-2">
+          <div className="text-2xl font-bold font-serif-luxury text-[#C5A46D] mt-2">
             {verifiedCount}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">Legally cleared for immediate sale & transfer</div>
@@ -165,23 +165,23 @@ export const AdminFileManagement: React.FC = () => {
         <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Pending Verification</span>
-            <Clock className="w-4 h-4 text-amber-400" />
+            <Clock className="w-4 h-4 text-[#C5A46D]" />
           </div>
-          <div className="text-2xl font-bold font-serif-luxury text-amber-400 mt-2">
+          <div className="text-2xl font-bold font-serif-luxury text-white mt-2">
             {pendingCount}
           </div>
-          <div className="text-[11px] text-amber-400/80 mt-1">Awaiting legal scrutiny / MDA validation</div>
+          <div className="text-[11px] text-slate-400 mt-1">Awaiting legal scrutiny / MDA validation</div>
         </div>
 
         <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Rejected / Exceptions</span>
-            <XCircle className="w-4 h-4 text-rose-400" />
+            <XCircle className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-2xl font-bold font-serif-luxury text-rose-400 mt-2">
+          <div className="text-2xl font-bold font-serif-luxury text-slate-300 mt-2">
             {rejectedCount}
           </div>
-          <div className="text-[11px] text-rose-400/80 mt-1">Requires correction or original paper verification</div>
+          <div className="text-[11px] text-slate-400 mt-1">Requires correction or original paper verification</div>
         </div>
       </div>
 
@@ -242,15 +242,15 @@ export const AdminFileManagement: React.FC = () => {
                   <span
                     className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 ${
                       doc.verificationStatus === 'Verified'
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        ? 'bg-[#C5A46D]/20 text-[#F9E7BA] border border-[#C5A46D]/40'
                         : doc.verificationStatus === 'Pending Verification'
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                        : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                        : 'bg-slate-800/80 text-slate-400 border border-slate-700'
                     }`}
                   >
-                    {doc.verificationStatus === 'Verified' && <CheckCircle2 className="w-3 h-3" />}
-                    {doc.verificationStatus === 'Pending Verification' && <Clock className="w-3 h-3" />}
-                    {doc.verificationStatus === 'Rejected' && <AlertTriangle className="w-3 h-3" />}
+                    {doc.verificationStatus === 'Verified' && <CheckCircle2 className="w-3 h-3 text-[#C5A46D]" />}
+                    {doc.verificationStatus === 'Pending Verification' && <Clock className="w-3 h-3 text-[#C5A46D]" />}
+                    {doc.verificationStatus === 'Rejected' && <AlertTriangle className="w-3 h-3 text-slate-400" />}
                     {doc.verificationStatus === 'Verified' ? 'Internally Verified' : doc.verificationStatus}
                   </span>
                 </div>
@@ -274,12 +274,12 @@ export const AdminFileManagement: React.FC = () => {
                   {doc.verifiedBy && (
                     <div className="flex items-center justify-between text-slate-300 px-1">
                       <span className="text-slate-400">Verified By:</span>
-                      <span className="text-emerald-400">{doc.verifiedBy}</span>
+                      <span className="text-[#C5A46D] font-semibold">{doc.verifiedBy}</span>
                     </div>
                   )}
 
                   {doc.rejectionReason && (
-                    <div className="p-2 rounded bg-rose-950/30 border border-rose-500/20 text-[11px] text-rose-300">
+                    <div className="p-2 rounded bg-[#0B1220] border border-slate-700 text-[11px] text-slate-300">
                       <strong>Rejection Note:</strong> {doc.rejectionReason}
                     </div>
                   )}
@@ -306,7 +306,7 @@ export const AdminFileManagement: React.FC = () => {
                   {canVerify && doc.verificationStatus !== 'Verified' && (
                     <button
                       onClick={() => handleOpenVerify(doc.id)}
-                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow"
+                      className="px-2.5 py-1.5 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Verify</span>
@@ -316,7 +316,7 @@ export const AdminFileManagement: React.FC = () => {
                   {canVerify && doc.verificationStatus !== 'Rejected' && (
                     <button
                       onClick={() => handleOpenReject(doc.id)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/50 text-slate-300 hover:text-rose-300 text-xs font-semibold transition cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition cursor-pointer"
                     >
                       Reject
                     </button>
@@ -342,7 +342,7 @@ export const AdminFileManagement: React.FC = () => {
             if (e.target === e.currentTarget) setRejectModalDocId(null);
           }}
         >
-          <div className="relative w-full max-w-md bg-[#101C2C] border border-rose-500/40 rounded-2xl p-6 shadow-2xl">
+          <div className="relative w-full max-w-md bg-[#101C2C] border border-slate-700 rounded-2xl p-6 shadow-2xl">
             <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">
               Reject Document Verification
             </h3>
@@ -354,20 +354,20 @@ export const AdminFileManagement: React.FC = () => {
               rows={3}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-rose-500 focus:outline-none text-xs"
+              className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs"
               placeholder="e.g. Signature mismatch with MDA allotment letter..."
             />
 
             <div className="flex items-center justify-end gap-3 pt-4">
               <button
                 onClick={() => setRejectModalDocId(null)}
-                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer hover:bg-slate-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmReject}
-                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 text-xs font-bold cursor-pointer transition"
               >
                 Confirm Rejection
               </button>
@@ -384,7 +384,7 @@ export const AdminFileManagement: React.FC = () => {
             if (e.target === e.currentTarget) setVerifyModalDocId(null);
           }}
         >
-          <div className="relative w-full max-w-md bg-[#101C2C] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl">
+          <div className="relative w-full max-w-md bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 shadow-2xl">
             <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">
               Verify Document
             </h3>
@@ -396,20 +396,20 @@ export const AdminFileManagement: React.FC = () => {
               rows={3}
               value={verifyNote}
               onChange={(e) => setVerifyNote(e.target.value)}
-              className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs"
+              className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs"
               placeholder="e.g. Allotment order matches MDA ledger; signature and thumb impression confirmed on-site..."
             />
 
             <div className="flex items-center justify-end gap-3 pt-4">
               <button
                 onClick={() => setVerifyModalDocId(null)}
-                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer hover:bg-slate-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmVerify}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold cursor-pointer transition shadow"
               >
                 Confirm Verification
               </button>
@@ -457,7 +457,7 @@ export const AdminFileManagement: React.FC = () => {
               {selectedDocPreview.verifiedBy && (
                 <div className="flex justify-between">
                   <span className="text-slate-400">Verified By:</span>
-                  <span className="text-emerald-400">{selectedDocPreview.verifiedBy}</span>
+                  <span className="text-[#C5A46D] font-semibold">{selectedDocPreview.verifiedBy}</span>
                 </div>
               )}
             </div>
