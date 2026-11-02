@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, X, Play } from 'lucide-react';
 
 interface LightboxProps {
@@ -29,6 +29,23 @@ export const Lightbox: React.FC<LightboxProps> = ({
   const index = Math.min(Math.max(openIndex ?? 0, 0), Math.max(total - 1, 0));
   const isVideoSlot = index >= images.length;
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Focus management: move focus into the dialog on open, restore it on close.
+  useEffect(() => {
+    if (!isOpen) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const timer = window.setTimeout(() => {
+      containerRef.current
+        ?.querySelector<HTMLElement>('button[aria-label="Close gallery"]')
+        ?.focus();
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      if (opener && typeof opener.focus === 'function') opener.focus();
+    };
+  }, [isOpen]);
+
   const goTo = useCallback(
     (next: number) => {
       if (!onNavigate || total === 0) return;
@@ -46,6 +63,26 @@ export const Lightbox: React.FC<LightboxProps> = ({
       else if (e.key === 'ArrowLeft') goTo(index - 1);
       else if (e.key === 'Home') goTo(0);
       else if (e.key === 'End') goTo(total - 1);
+      else if (e.key === 'Tab' && containerRef.current) {
+        // Focus trap: keep Tab / Shift+Tab cycling inside the dialog.
+        const focusables = containerRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, video, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        if (!containerRef.current.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', handleKey);
     const prevOverflow = document.body.style.overflow;
@@ -60,6 +97,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
 
   return (
     <div
+      ref={containerRef}
       className="fixed inset-0 z-[70] bg-black/95 backdrop-blur-sm flex flex-col animate-fadeIn"
       role="dialog"
       aria-modal="true"

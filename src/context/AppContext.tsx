@@ -470,7 +470,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Presenter PIN gate (demo builds only). Honest limitation: a client-side PIN
   // is a speed bump against casual snooping, not real access control. Demo
   // deployments must also use Vercel password protection and fictional data only.
-  const verifyPresenterPin = (pin: string): boolean => IS_DEMO && String(pin) === DEMO_PIN;
+  // H21: 3 consecutive failures lock the gate for 30 seconds (covers the login
+  // modal and every role-switch path, since they all funnel through here).
+  const pinGateRef = useRef({ fails: 0, lockedUntil: 0 });
+  const PIN_MAX_ATTEMPTS = 3;
+  const PIN_LOCK_MS = 30_000;
+
+  const verifyPresenterPin = (pin: string): boolean => {
+    if (!IS_DEMO) return false;
+    const now = Date.now();
+    const gate = pinGateRef.current;
+    if (now < gate.lockedUntil) return false; // silent reject while locked
+    if (String(pin) === DEMO_PIN) {
+      gate.fails = 0;
+      return true;
+    }
+    gate.fails += 1;
+    if (gate.fails >= PIN_MAX_ATTEMPTS) {
+      gate.fails = 0;
+      gate.lockedUntil = now + PIN_LOCK_MS;
+      showToast(
+        'error',
+        `Too many failed PIN attempts - the PIN gate is locked for ${PIN_LOCK_MS / 1000} seconds.`
+      );
+    }
+    return false;
+  };
 
   const switchAuthUser = async (role: UserRole, pin?: string): Promise<boolean> => {
     if (APP_MODE !== 'demo') {

@@ -336,7 +336,12 @@ export const AdminFileManagement: React.FC = () => {
 
       {/* Reject Reason Modal */}
       {rejectModalDocId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setRejectModalDocId(null);
+          }}
+        >
           <div className="relative w-full max-w-md bg-[#101C2C] border border-rose-500/40 rounded-2xl p-6 shadow-2xl">
             <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">
               Reject Document Verification
@@ -373,7 +378,12 @@ export const AdminFileManagement: React.FC = () => {
 
       {/* Verify Note Modal — mandatory reviewer note, no auto-generated text */}
       {verifyModalDocId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setVerifyModalDocId(null);
+          }}
+        >
           <div className="relative w-full max-w-md bg-[#101C2C] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl">
             <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">
               Verify Document
@@ -410,7 +420,12 @@ export const AdminFileManagement: React.FC = () => {
 
       {/* Document Preview Modal */}
       {selectedDocPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setSelectedDocPreview(null);
+          }}
+        >
           <div className="relative w-full max-w-2xl bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedDocPreview(null)}
@@ -461,7 +476,12 @@ export const AdminFileManagement: React.FC = () => {
 
       {/* Upload Document Modal */}
       {isUploadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setIsUploadModalOpen(false);
+          }}
+        >
           <div className="relative w-full max-w-lg bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">
               Upload Official Property Document
