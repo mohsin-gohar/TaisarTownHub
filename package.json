@@ -1,35 +1,25 @@
 {
-  "name": "taisartownhub",
-  "private": true,
+  "name": "taisartownhub-workspace",
   "version": "2.0.0",
-  "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
+  "private": true,
+  "description": "TaisarTownHub - Scheme 45 Real Estate Portal (React + Vite Frontend & Laravel + MySQL Backend)",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview",
-    "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true})\"",
-    "lint": "tsc --noEmit",
-    "test": "tsx --test \"src/**/*.test.ts\"",
-    "check:bundle": "node scripts/check-bundle.mjs",
-    "verify": "npm run lint && npm run test && npm run build && npm run check:bundle"
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "cd backend && php artisan serve --port=8080",
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix frontend run test",
+    "lint": "npm --prefix frontend run lint",
+    "start": "npm --prefix frontend run dev"
   },
-  "dependencies": {
-    "lucide-react": "^0.546.0",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1"
-  },
-  "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^22.14.0",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
-    "tailwindcss": "^4.3.3",
-    "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
-    "vite": "^8.3.5"
-  }
+  "keywords": [
+    "real-estate",
+    "scheme-45",
+    "karachi",
+    "react",
+    "laravel",
+    "mysql"
+  ],
+  "author": "TaisarTownHub Engineering Team",
+  "license": "Proprietary"
 }
