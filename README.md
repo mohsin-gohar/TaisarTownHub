@@ -17,3 +17,4 @@ See SECURITY_AUDIT.md. No production backend is configured; localStorage is demo
 
 ## Documentation
 AUDIT_REPORT.md, BUG_FIX_REPORT.md, SECURITY_AUDIT.md, DATABASE_SCHEMA.md, FIREBASE_SETUP.md, DEPLOYMENT.md, TEST_REPORT.md, CHANGELOG.md.
+"# TaisarTownHub" 
