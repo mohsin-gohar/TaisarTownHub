@@ -20,7 +20,7 @@ import { Seller } from '../../types';
 import { maskCNIC, maskAccountNumber, formatPKRCurrency, hasPermission } from '../../utils/logic';
 
 export const AdminSellers: React.FC = () => {
-  const { sellers, addSeller, updateSeller, deleteSeller, properties, showToast, activeRole, currentUser } = useApp();
+  const { sellers, addSeller, updateSeller, deleteSeller, properties, showToast, activeRole, currentUser, confirmAction } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -129,8 +129,12 @@ export const AdminSellers: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete seller record "${name}"?`)) {
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirmAction(`Are you sure you want to delete seller record "${name}"?`, {
+      title: 'Delete seller record',
+      confirmLabel: 'Delete'
+    });
+    if (ok) {
       deleteSeller(id);
       showToast('info', 'Seller record deleted.');
     }

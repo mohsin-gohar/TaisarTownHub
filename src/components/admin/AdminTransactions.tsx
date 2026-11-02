@@ -117,8 +117,10 @@ export const AdminTransactions: React.FC = () => {
       showToast('error', 'Payment amount must be a positive number.');
       return;
     }
-    recordPayment(paymentModalTxn.id, paymentAmount, paymentMethod, paymentNote.trim() || undefined);
-    setPaymentModalTxn(null);
+    // Keep the modal open when the domain gate rejects (e.g. overpay without
+    // approve_transactions) so the user can correct the amount.
+    const accepted = recordPayment(paymentModalTxn.id, paymentAmount, paymentMethod, paymentNote.trim() || undefined);
+    if (accepted) setPaymentModalTxn(null);
   };
 
   // Void (super-admin, audited) modal state

@@ -23,7 +23,8 @@ export const AdminProjects: React.FC = () => {
     deleteProject,
     setSelectedProjectId,
     setCurrentView,
-    showToast
+    showToast,
+    confirmAction
   } = useApp();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -139,8 +140,12 @@ export const AdminProjects: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string, title: string) => {
-    if (window.confirm(`Are you sure you want to delete project "${title}"?`)) {
+  const handleDelete = async (id: string, title: string) => {
+    const ok = await confirmAction(`Are you sure you want to delete project "${title}"?`, {
+      title: 'Delete project',
+      confirmLabel: 'Delete'
+    });
+    if (ok) {
       deleteProject(id);
     }
   };
@@ -181,7 +186,7 @@ export const AdminProjects: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {projects.map((proj) => (
+              {projects.filter((p) => !p.deletedAt).map((proj) => (
                 <tr key={proj.id} className="hover:bg-slate-800/40 transition-colors">
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-3">
@@ -406,3 +411,4 @@ export const AdminProjects: React.FC = () => {
     </div>
   );
 };
+

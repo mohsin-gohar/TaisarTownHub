@@ -1,5 +1,29 @@
 # Bug Fix Report — TaisarTownHub
 
+## Accessibility & data integrity — Cline audit triage (2026-11-02)
+1. Six admin delete actions used `window.confirm()` — not styled, not
+   keyboard/screen-reader accessible, and inconsistent with the navy/gold UI.
+   Replaced with a single `ConfirmDialog` (focus trap, Escape, backdrop cancel,
+   aria-alertdialog) exposed as `await confirmAction(message, opts)`; all six
+   call sites converted.
+2. Projects and Media items were hard-deleted (data loss, no audit trail) while
+   every other entity was soft-deleted — extended `deletedAt`/`deletedBy` to
+   `Project`/`MediaItem`, added `restoreProject`/`restoreMediaItem`, and grew
+   the AdminAudit recycle bin to six entity types.
+3. `formatPKRCurrency(-x)` returned a misleading unsigned string — negatives
+   now render `-PKR …` (regression-tested).
+4. `generateWhatsAppLink` built `wa.me/<digits>` from any garbage — local
+   (`0300…`), international (`0092…`) and bare 10-digit PK numbers now
+   normalize to `92…`; implausible values degrade to a number-less chat link
+   (regression-tested; the test caught and fixed a country-code drop in the
+   `0092` branch).
+5. Payment modal closed even when the domain gate rejected the payment —
+   `recordPayment` now reports success and the modal stays open so the
+   overpay/void error can be corrected in place.
+6. Commission payout modal seeded the amount with the hard-coded 20000 —
+   initial state is 0; opening the modal still defaults to the ledger-derived
+   payable amount.
+
 ## Phase 3 — transaction lifecycle + payment/commission ledgers (P1-1…P1-5) (2026-11-01)
 1. Hard delete of transactions destroyed audit history and orphaned commission
    payouts — replaced with `voidTransaction` (super-admin, mandatory reason,

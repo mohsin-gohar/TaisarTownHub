@@ -19,7 +19,10 @@ import { computeFinancials as calculateFinancialsDomain } from '../domain/transa
  */
 export function formatPKRCurrency(amount: number): string {
   if (isNaN(amount) || amount === 0) return 'PKR 0';
-  
+
+  // Negative values (refunds / reversals) render as an explicit signed amount.
+  if (amount < 0) return `-PKR ${formatPKRCurrency(Math.abs(amount)).replace(/^PKR\s/, '')}`;
+
   if (amount >= 10000000) { // 1 Crore = 10,000,000
     const crore = amount / 10000000;
     return `PKR ${crore % 1 === 0 ? crore.toFixed(0) : crore.toFixed(2)} Crore`;
@@ -58,9 +61,19 @@ export function calculateInstallmentPlan(
  * Generate official WhatsApp click-to-chat link
  */
 export function generateWhatsAppLink(rawPhone: string, textMessage: string): string {
-  const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
   const encodedMsg = encodeURIComponent(textMessage);
-  return `https://wa.me/${cleanPhone}?text=${encodedMsg}`;
+
+  // Normalize to WhatsApp international format (digits only, no '+').
+  let digits = (rawPhone || '').replace(/[^0-9]/g, '');
+  if (digits.startsWith('0092')) digits = `92${digits.slice(4)}`; // 0092... → 92...
+  else if (digits.startsWith('0')) digits = `92${digits.slice(1)}`; // 0300... → 92300...
+  else if (digits.length === 10) digits = `92${digits}`; // 3001234567 → 923001234567
+
+  // Implausible numbers degrade to a number-less WhatsApp chat link
+  // rather than a broken wa.me/<garbage> URL.
+  if (digits.length < 10 || digits.length > 15) return `https://wa.me/?text=${encodedMsg}`;
+
+  return `https://wa.me/${digits}?text=${encodedMsg}`;
 }
 
 export interface FilterCriteria {

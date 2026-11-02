@@ -27,7 +27,7 @@ export const ProjectsListingPage: React.FC = () => {
     'Development Projects'
   ];
 
-  const filteredProjects = projects.map(toPublicProject).filter((p) => {
+  const filteredProjects = projects.filter((p) => !p.deletedAt).map(toPublicProject).filter((p) => {
     if (selectedCategory !== 'All' && p.category !== selectedCategory) return false;
     if (searchQuery.trim() !== '') {
       const q = searchQuery.toLowerCase();
@@ -208,3 +208,4 @@ export const ProjectsListingPage: React.FC = () => {
     </div>
   );
 };
+

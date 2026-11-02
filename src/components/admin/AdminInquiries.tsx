@@ -25,6 +25,7 @@ export const AdminInquiries: React.FC = () => {
     updateInquiryStatus,
     updateInquiryNotes,
     deleteInquiry,
+    confirmAction,
     showToast
   } = useApp();
 
@@ -65,8 +66,12 @@ export const AdminInquiries: React.FC = () => {
     setEditingNotesId(null);
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (window.confirm(`Delete inquiry from ${name}?`)) {
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirmAction(`Delete inquiry from ${name}?`, {
+      title: 'Delete inquiry',
+      confirmLabel: 'Delete'
+    });
+    if (ok) {
       deleteInquiry(id);
     }
   };

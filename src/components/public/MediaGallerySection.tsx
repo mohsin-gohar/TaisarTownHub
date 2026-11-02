@@ -163,3 +163,4 @@ export const MediaGallerySection: React.FC = () => {
     </section>
   );
 };
+

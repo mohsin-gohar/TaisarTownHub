@@ -21,7 +21,7 @@ import { Buyer, BuyerPaymentStatus } from '../../types';
 import { maskCNIC, formatPKRCurrency, hasPermission } from '../../utils/logic';
 
 export const AdminBuyers: React.FC = () => {
-  const { buyers, addBuyer, updateBuyer, deleteBuyer, properties, dealers, showToast, setSelectedPropertyId, setCurrentView, currentUser } = useApp();
+  const { buyers, addBuyer, updateBuyer, deleteBuyer, properties, dealers, showToast, setSelectedPropertyId, setCurrentView, currentUser, confirmAction } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -139,8 +139,12 @@ export const AdminBuyers: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Delete buyer record "${name}"?`)) {
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirmAction(`Delete buyer record "${name}"?`, {
+      title: 'Delete buyer record',
+      confirmLabel: 'Delete'
+    });
+    if (ok) {
       deleteBuyer(id);
       showToast('info', 'Buyer record removed.');
     }

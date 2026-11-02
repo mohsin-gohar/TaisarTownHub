@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { getAuditLog, type AuditEntry } from '../../domain/auditLog';
-import { Trash2, RotateCcw, Shield, Clock, FileText, Users, UserCheck, Briefcase, Home } from 'lucide-react';
+import { Trash2, RotateCcw, Shield, Clock, FileText, Users, UserCheck, Briefcase, Home, Building2 } from 'lucide-react';
 
 export const AdminAudit: React.FC = () => {
   const {
@@ -121,3 +121,6 @@ export const AdminAudit: React.FC = () => {
     </div>
   );
 };
+
+
+

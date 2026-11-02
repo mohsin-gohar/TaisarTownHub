@@ -23,6 +23,13 @@ test('formatPKRCurrency formats Lacs and Crores correctly', () => {
   assert.equal(formatPKRCurrency(0), 'PKR 0');
 });
 
+test('formatPKRCurrency renders negative amounts with an explicit sign', () => {
+  assert.equal(formatPKRCurrency(-3500000), '-PKR 35 Lacs');
+  assert.equal(formatPKRCurrency(-12500000), '-PKR 1.25 Crore');
+  assert.equal(formatPKRCurrency(-85000), '-PKR 85,000');
+  assert.equal(formatPKRCurrency(NaN), 'PKR 0');
+});
+
 test('calculateInstallmentPlan computes down payment and monthly correctly', () => {
   const result = calculateInstallmentPlan(4000000, 25, 2);
   assert.equal(result.downPayment, 1000000);
@@ -34,6 +41,18 @@ test('calculateInstallmentPlan computes down payment and monthly correctly', () 
 test('generateWhatsAppLink produces valid encoded wa.me URL', () => {
   const link = generateWhatsAppLink('+92 300 1234567', 'Salam, I want info on Sector 70-D');
   assert.ok(link.startsWith('https://wa.me/923001234567?text='));
+});
+
+test('generateWhatsAppLink normalizes local and international PK formats', () => {
+  // 0300... local format
+  assert.ok(generateWhatsAppLink('03001234567', 'hi').startsWith('https://wa.me/923001234567?text='));
+  // 0092... international dialing prefix
+  assert.ok(generateWhatsAppLink('00923001234567', 'hi').startsWith('https://wa.me/923001234567?text='));
+  // Bare 10-digit national number
+  assert.ok(generateWhatsAppLink('3001234567', 'hi').startsWith('https://wa.me/923001234567?text='));
+  // Implausible number degrades to a number-less chat link, never a broken wa.me/<garbage> URL
+  assert.equal(generateWhatsAppLink('12345', 'hi'), 'https://wa.me/?text=hi');
+  assert.equal(generateWhatsAppLink('', 'hi'), 'https://wa.me/?text=hi');
 });
 
 test('validateInquiryForm checks required fields strictly', () => {

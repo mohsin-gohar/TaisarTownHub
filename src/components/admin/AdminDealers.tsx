@@ -21,7 +21,7 @@ import { maskCNIC, formatPKRCurrency, hasPermission } from '../../utils/logic';
 import { AgencyDetailsModal } from '../common/AgencyDetailsModal';
 
 export const AdminDealers: React.FC = () => {
-  const { dealers, properties, addDealer, updateDealer, deleteDealer, payDealerCommission, transactions, commissionEntries, showToast, currentUser } = useApp();
+  const { dealers, properties, addDealer, updateDealer, deleteDealer, payDealerCommission, transactions, commissionEntries, showToast, currentUser, confirmAction } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -33,7 +33,7 @@ export const AdminDealers: React.FC = () => {
   // Payout settlement modal
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [selectedDealerForPayout, setSelectedDealerForPayout] = useState<Dealer | null>(null);
-  const [payoutAmount, setPayoutAmount] = useState<number>(20000);
+  const [payoutAmount, setPayoutAmount] = useState<number>(0);
   const [ledgerEarned, setLedgerEarned] = useState<number>(0);
   const [ledgerPaid, setLedgerPaid] = useState<number>(0);
   const [ledgerPayable, setLedgerPayable] = useState<number>(0);
@@ -163,8 +163,12 @@ export const AdminDealers: React.FC = () => {
     setIsPayoutModalOpen(false);
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Remove dealer record "${name}"?`)) {
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirmAction(`Remove dealer record "${name}"?`, {
+      title: 'Remove dealer',
+      confirmLabel: 'Remove'
+    });
+    if (ok) {
       deleteDealer(id);
       showToast('info', 'Dealer removed.');
     }

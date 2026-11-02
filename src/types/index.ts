@@ -400,6 +400,9 @@ export interface Project {
   completionYear: string;
   developerName: string;
   createdDate: string;
+  /** Soft-delete (audit). */
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export interface MediaItem {
@@ -486,3 +489,7 @@ export interface ClientTheme {
 }
 
 export type DeviceViewport = 'desktop' | 'tablet' | 'mobile';
+
+
+
+

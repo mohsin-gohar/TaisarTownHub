@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
 import { ToastContainer } from './components/common/ToastContainer';
+import { ConfirmDialogHost } from './components/common/ConfirmDialog';
 // WhatsApp floating button hidden for now per client request.
 
 import { DeviceFrame } from './components/presentation/DeviceFrame';
@@ -89,6 +90,7 @@ const MainAppContent: React.FC = () => {
         <>
           <AdminLoginModal />
           <ToastContainer />
+          <ConfirmDialogHost />
           <div className="min-h-screen bg-[#0B1220] flex items-center justify-center text-slate-400">
             Redirecting to authentication...
           </div>
@@ -101,6 +103,7 @@ const MainAppContent: React.FC = () => {
           <AdminLayout />
         </Suspense>
         <ToastContainer />
+        <ConfirmDialogHost />
         {APP_MODE === 'demo' && <PresentationBar />}
       </>
     );
@@ -169,6 +172,9 @@ const MainAppContent: React.FC = () => {
 
       {/* Floating Helpers */}
       <ToastContainer />
+
+      {/* Global accessible confirmation dialog (replaces window.confirm) */}
+      <ConfirmDialogHost />
 
       {/* Login modal popup if requested */}
       {currentView === 'admin-login' && (

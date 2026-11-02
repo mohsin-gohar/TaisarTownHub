@@ -139,7 +139,7 @@ interface AppContextType {
   deleteTransaction: (id: string) => void;
   /** Record a payment on a deal (manage_payments gate); updates the ledger,
    *  derived payment status and the accrual milestone. */
-  recordPayment: (transactionId: string, amount: number, method: PaymentEntry['method'], note?: string) => void;
+  recordPayment: (transactionId: string, amount: number, method: PaymentEntry['method'], note?: string) => boolean;
   /** Void a deal with a mandatory reason (void_transactions gate); preserves
    *  the record with an audit trail instead of hard-deleting it. */
   voidTransaction: (id: string, reason: string) => void;
@@ -172,6 +172,18 @@ interface AppContextType {
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
   removeToast: (id: string) => void;
   resetToDefaultData: () => Promise<void>;
+
+  // Accessible confirmation dialog (replaces window.confirm)
+  pendingConfirm: {
+    message: string;
+    title?: string;
+    confirmLabel?: string;
+  } | null;
+  confirmAction: (
+    message: string,
+    options?: { title?: string; confirmLabel?: string }
+  ) => Promise<boolean>;
+  resolveConfirm: (accepted: boolean) => void;
 }
 
 const STORAGE_KEY_PREFIX = 'taisartownhub_v2_';
@@ -404,6 +416,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTimeout(() => {
       removeToast(id);
     }, 4500);
+  };
+
+  // Accessible confirmation dialog state (replaces window.confirm()).
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    message: string;
+    title?: string;
+    confirmLabel?: string;
+    resolve: (accepted: boolean) => void;
+  } | null>(null);
+
+  const confirmAction = (
+    message: string,
+    options?: { title?: string; confirmLabel?: string }
+  ): Promise<boolean> =>
+    new Promise<boolean>((resolve) => {
+      setPendingConfirm({
+        message,
+        title: options?.title,
+        confirmLabel: options?.confirmLabel,
+        resolve,
+      });
+    });
+
+  const resolveConfirm = (accepted: boolean) => {
+    setPendingConfirm((prev) => {
+      prev?.resolve(accepted);
+      return null;
+    });
   };
 
   const removeToast = (id: string) => {
@@ -1035,19 +1075,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   /** P1-2 payment ledger. Admin/Super Admin record money movements; the deal's
    *  payment status and stage are derived, never hand-typed past the balance. */
-  const recordPayment = (transactionId: string, amount: number, method: PaymentEntry['method'], note?: string) => {
-    if (!requirePermission('manage_payments')) return;
+  const recordPayment = (transactionId: string, amount: number, method: PaymentEntry['method'], note?: string): boolean => {
+    if (!requirePermission('manage_payments')) return false;
     const txn = transactions.find((t) => t.id === transactionId);
     if (!txn) {
       showToast('error', 'Transaction not found.');
-      return;
+      return false;
     }
     const gate = validatePayment(txn, paymentEntries, amount, {
       allowOverpay: hasPermission(currentUser.role, 'approve_transactions'),
     });
     if (!gate.ok) {
       showToast('error', gate.error);
-      return;
+      return false;
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -1102,6 +1142,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `Payment of PKR ${amount.toLocaleString()} recorded${updatedTx.status !== txn.status ? ` — deal moved to "${updatedTx.status}".` : '.'}`
     );
     logAudit({ actor: currentUser.name, role: currentUser.role, action: 'record_payment', target: transactionId, detail: 'PKR ' + amount.toLocaleString() + ' via ' + method });
+    return true;
   };
 
   /** P1-1: voiding replaces hard delete - the record stays with an audit trail;
@@ -1395,6 +1436,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showToast,
         removeToast,
         resetToDefaultData,
+        pendingConfirm,
+        confirmAction,
+        resolveConfirm,
       }}
     >
       {children}
@@ -1409,3 +1453,9 @@ export const useApp = () => {
   }
   return context;
 };
+
+
+
+
+
+

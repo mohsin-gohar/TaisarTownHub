@@ -1,6 +1,39 @@
 ﻿# Changelog
 
-## 2.0.4 — Phase 4: storage (IndexedDB) + audit log + soft delete + Firebase flag (P0-6)
+## 2.0.5 - Accessibility & data-integrity fixes (Cline audit triage)
+
+### Added
+- `src/components/common/ConfirmDialog.tsx`: accessible confirmation dialog
+  (`role="alertdialog"`, focus trap, Escape/backdrop cancel, aria-labelledby /
+  aria-describedby) driven by `confirmAction()` promise API in AppContext;
+  mounted in all three App branches (public, admin, unauthenticated admin).
+- `restoreProject`/`restoreMediaItem`; AdminAudit recycle bin now covers six
+  entity types (Sellers, Buyers, Dealers, Properties, Projects, Media).
+- Regression tests: negative `formatPKRCurrency`, WhatsApp PK phone
+  normalization (0300 / 0092 / bare 10-digit / implausible fallback).
+
+### Changed
+- All six `window.confirm()` delete call sites (AdminBuyers, AdminDealers,
+  AdminInquiries, AdminProjects, AdminProperties, AdminSellers) converted to
+  `await confirmAction(...)` — deletes are now keyboard-accessible and styled.
+- `formatPKRCurrency` renders negative amounts as `-PKR …` (refunds/reversals).
+- `generateWhatsAppLink` normalizes local/international PK formats to
+  `wa.me/92…`; implausible numbers degrade to `wa.me/?text=…` instead of a
+  broken URL.
+- `recordPayment` returns `boolean`; the payment modal stays open when the
+  domain gate rejects a payment (e.g. overpay without `approve_transactions`)
+  so the user can correct the amount.
+- Commission payout modal no longer seeds the amount with the magic number
+  20000 (it already defaults to the ledger-derived payable on open; initial
+  state is now 0).
+
+### Fixed
+- Projects and Media library rows were permanently destroyed on delete — now
+  soft-deleted (`deletedAt`/`deletedBy`) and restorable from the recycle bin;
+  public listings (`FeaturedProjects`, `ProjectsListingPage`,
+  `MediaGallerySection`) filter deleted records.
+
+## 2.0.4 - Phase 4: storage (IndexedDB) + audit log + soft delete + Firebase flag (P0-6)
 
 ### Added
 - `src/storage/indexedDb.ts`: dependency-free IndexedDB wrapper (audit_log + kv

@@ -27,7 +27,8 @@ export const AdminProperties: React.FC = () => {
     setSelectedPropertyId,
     setCurrentView,
     showToast,
-    activeRole
+    activeRole,
+    confirmAction
   } = useApp();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -218,8 +219,12 @@ export const AdminProperties: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string, title: string) => {
-    if (window.confirm(`Are you sure you want to delete listing "${title}"?`)) {
+  const handleDelete = async (id: string, title: string) => {
+    const ok = await confirmAction(`Are you sure you want to delete listing "${title}"?`, {
+      title: 'Delete listing',
+      confirmLabel: 'Delete'
+    });
+    if (ok) {
       deleteProperty(id);
     }
   };
