@@ -223,11 +223,90 @@ try {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Navigation State
-  const [currentView, setCurrentView] = useState<string>('home');
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+// Navigation State
+  const [currentView, setCurrentViewRaw] = useState<string>(() => {
+    // Initialize from URL path on mount
+    const path = window.location.pathname;
+    const viewMap: Record<string, string> = {
+      '/': 'home',
+      '/home': 'home',
+      '/projects': 'projects',
+      '/properties': 'properties',
+      '/agencies': 'agencies',
+      '/guide': 'guide',
+      '/gallery': 'gallery',
+      '/services': 'services',
+      '/about': 'about',
+      '/contact': 'contact',
+      '/login': 'login',
+      '/register': 'register',
+      '/admin': 'admin',
+      '/admin-login': 'admin-login',
+    };
+    return viewMap[path] || 'home';
+  });
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('project') || null;
+  });
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('property') || null;
+  });
   const [adminTab, setAdminTab] = useState<string>('overview');
+
+const setCurrentView = React.useCallback((view: string) => {
+    setCurrentViewRaw(view);
+    // Update URL without page reload
+    const pathMap: Record<string, string> = {
+      'home': '/',
+      'projects': '/projects',
+      'project-detail': '/projects',
+      'properties': '/properties',
+      'property-detail': '/properties',
+      'agencies': '/agencies',
+      'guide': '/guide',
+      'gallery': '/gallery',
+      'services': '/services',
+      'about': '/about',
+      'contact': '/contact',
+      'login': '/login',
+      'register': '/register',
+      'admin': '/admin',
+      'admin-login': '/admin-login',
+    };
+    const path = pathMap[view] || '/';
+    if (window.location.pathname !== path) {
+      window.history.pushState({ view }, '', path);
+    }
+  }, []);
+
+  // Handle browser back/forward navigation
+  React.useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const path = window.location.pathname;
+      const viewMap: Record<string, string> = {
+        '/': 'home',
+        '/home': 'home',
+        '/projects': 'projects',
+        '/properties': 'properties',
+        '/agencies': 'agencies',
+        '/guide': 'guide',
+        '/gallery': 'gallery',
+        '/services': 'services',
+        '/about': 'about',
+        '/contact': 'contact',
+        '/login': 'login',
+        '/register': 'register',
+        '/admin': 'admin',
+        '/admin-login': 'admin-login',
+      };
+      const view = viewMap[path] || 'home';
+      setCurrentViewRaw(view);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Presentation & Theme State
   const [currentThemeId, setCurrentThemeId] = useState<ClientThemeId>(() => {
