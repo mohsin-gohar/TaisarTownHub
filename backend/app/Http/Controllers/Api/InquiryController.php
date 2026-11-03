@@ -5,43 +5,95 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Inquiry;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class InquiryController extends Controller
 {
-    public function index()
+    /**
+     * List inquiries with filtering.
+     */
+    public function index(Request $request)
     {
-        return response()->json(Inquiry::latest()->get());
+        $query = Inquiry::query();
+
+        if ($request->filled('status') && $request->status !== 'All') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('source')) {
+            $query->where('source', $request->source);
+        }
+
+        // Mask CNIC in responses
+        $inquiries = $query->latest()->get();
+        foreach ($inquiries as $inquiry) {
+            // Ensure CNIC is masked if present
+            if ($inquiry->cnic) {
+                $inquiry->cnic = $this->maskCnic($inquiry->cnic);
+            }
+        }
+
+        return response()->json($inquiries);
     }
 
+    /**
+     * Store a new inquiry with validation.
+     */
     public function store(Request $request)
     {
-        $request->validate([
-            'fullName' => 'required|string',
-            'phone' => 'required|string',
-            'message' => 'required|string',
+        $data = $request->validate([
+            'fullName' => 'required|string|max:255',
+            'phone' => 'required|string|max:20',
+            'message' => 'required|string|max:2000',
+            'email' => 'nullable|email|max:255',
+            'subject' => 'nullable|string|max:255',
+            'preferredPropertyOrProject' => 'nullable|string|max:255',
+            'budgetRange' => 'nullable|string|max:50',
+            'source' => 'nullable|string|max:50',
         ]);
 
+        // Sanitize input
+        $data['fullName'] = strip_tags($data['fullName']);
+        $data['message'] = strip_tags($data['message']);
+
         $inquiry = Inquiry::create([
-            'id' => 'inq-' . now()->timestamp,
-            'fullName' => $request->fullName,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'subject' => $request->input('subject', 'Property Consultation'),
-            'message' => $request->message,
-            'preferredPropertyOrProject' => $request->preferredPropertyOrProject,
-            'budgetRange' => $request->budgetRange,
+            'id' => 'inq-' . Str::uuid(),
+            'fullName' => $data['fullName'],
+            'email' => $data['email'] ?? null,
+            'phone' => $data['phone'],
+            'subject' => $data['subject'] ?? 'Property Consultation',
+            'message' => $data['message'],
+            'preferredPropertyOrProject' => $data['preferredPropertyOrProject'] ?? null,
+            'budgetRange' => $data['budgetRange'] ?? null,
             'status' => 'Pending',
             'adminNotes' => 'Received via API integration.',
-            'source' => $request->input('source', 'React Web Portal'),
+            'source' => $data['source'] ?? 'React Web Portal',
         ]);
 
         return response()->json($inquiry, 201);
     }
 
+    /**
+     * Update inquiry status.
+     */
     public function updateStatus(Request $request, $id)
     {
+        $request->validate([
+            'status' => 'required|string|in:Pending,Contacted,In Progress,Resolved',
+        ]);
+
         $inquiry = Inquiry::findOrFail($id);
         $inquiry->update(['status' => $request->status]);
+
         return response()->json($inquiry);
+    }
+
+    private function maskCnic(string $cnic): string
+    {
+        $clean = preg_replace('/[^0-9]/', '', $cnic);
+        if (strlen($clean) < 7) {
+            return str_repeat('*', strlen($clean));
+        }
+        return substr($clean, 0, 5) . str_repeat('*', strlen($clean) - 9) . substr($clean, -4);
     }
 }

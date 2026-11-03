@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class VideoComment extends Model
 {
+    use SoftDeletes;
+
     protected $keyType = 'string';
     public $incrementing = false;
 
@@ -14,7 +17,7 @@ class VideoComment extends Model
     ];
 
     protected $casts = [
-        'isDealer' => 'boolean'
+        'isDealer' => 'boolean',
     ];
 
     public function video()

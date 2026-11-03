@@ -19,4 +19,26 @@ class Dealer extends Model
         'assignedPropertiesCount', 'completedDealsCount', 'dealsClosed',
         'status', 'avatar'
     ];
+
+    protected $hidden = ['cnic'];
+
+    public function user()
+    {
+        return $this->hasOne(User::class, 'dealer_id', 'id');
+    }
+
+    public function properties()
+    {
+        return $this->hasMany(Property::class, 'assignedDealerId', 'id');
+    }
+
+    public function transactions()
+    {
+        return $this->hasMany(Transaction::class, 'dealerId', 'id');
+    }
+
+    public function dealerFiles()
+    {
+        return $this->hasMany(DealerFile::class, 'dealer_id', 'id');
+    }
 }

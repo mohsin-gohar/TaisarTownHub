@@ -18,8 +18,11 @@ class Property extends Model
         'block', 'sizeSqYards', 'roadWidthFeet', 'type', 'status',
         'isFeatured', 'possessionReady', 'mdaApproved', 'westOpen',
         'cornerPlot', 'parkFacing', 'mainBoulevard', 'images', 'features',
-        'contactPerson', 'contactPhone', 'assignedDealerId'
+        'contactPerson', 'contactPhone', 'assignedDealerId',
+        'purchasePricePKR', 'sellingPricePKR', 'internalNotes'
     ];
+
+    protected $hidden = ['purchasePricePKR', 'sellingPricePKR', 'internalNotes'];
 
     protected $casts = [
         'images' => 'array',
@@ -32,4 +35,9 @@ class Property extends Model
         'parkFacing' => 'boolean',
         'mainBoulevard' => 'boolean',
     ];
+
+    public function assignedDealer()
+    {
+        return $this->belongsTo(Dealer::class, 'assignedDealerId', 'id');
+    }
 }

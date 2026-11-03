@@ -13,12 +13,13 @@ class Project extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'id', 'title', 'subtitle', 'description', 'phase', 'sector',
-        'startingPricePKR', 'formattedPrice', 'status', 'images', 'features'
+        'id', 'title', 'description', 'location', 'status',
+        'isFeatured', 'images', 'features'
     ];
 
     protected $casts = [
         'images' => 'array',
-        'features' => 'array'
+        'features' => 'array',
+        'isFeatured' => 'boolean',
     ];
 }

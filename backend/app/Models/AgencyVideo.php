@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class AgencyVideo extends Model
 {
+    use SoftDeletes;
+
     protected $keyType = 'string';
     public $incrementing = false;
 
@@ -18,7 +21,7 @@ class AgencyVideo extends Model
     protected $casts = [
         'tags' => 'array',
         'likes' => 'integer',
-        'views' => 'integer'
+        'views' => 'integer',
     ];
 
     public function comments()

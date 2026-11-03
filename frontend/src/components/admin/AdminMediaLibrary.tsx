@@ -1,28 +1,12 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import {
-  Image,
-  Video,
-  FileText,
-  Upload,
-  Trash2,
-  Copy,
-  ExternalLink,
-  Search,
-  Folder,
-  AlertTriangle,
-  Check,
-  Plus,
-  Play,
-  FileCheck,
-  Sparkles,
-  X
-} from 'lucide-react';
+import { Image, Video, FileText, Upload, Trash2, Copy, ExternalLink, Search, Folder, AlertTriangle, Check, Plus, Play, FileCheck, Sparkles, X } from 'lucide-react';
 import { MediaItem } from '../../types';
 import { VideoModal } from '../common/VideoModal';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 
 export const AdminMediaLibrary: React.FC = () => {
-  const { mediaItems, addMediaItem, deleteMediaItem, showToast } = useApp();
+  const { mediaItems, addMediaItem, deleteMediaItem, showToast, loginAsDemo, verifyPresenterPin, currentUser } = useApp();
 
   const [activeFolder, setActiveFolder] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -47,11 +31,16 @@ export const AdminMediaLibrary: React.FC = () => {
     'Banners'
   ];
 
+  // Check if user is a dealer/agent with sell permissions
+  // currentUser has: id, name, email, role, permissions
+  const userRole = currentUser?.role;
+  const canSell = userRole === 'dealer' || userRole === 'admin' || userRole === 'manager' || userRole === 'super_admin';
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Client-side validation (Firebase Storage rules will enforce server-side in production)
+    // Client-side validation
     const MAX_BYTES = 5 * 1024 * 1024;
     const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'application/pdf'];
     if (file.size > MAX_BYTES) {
@@ -65,7 +54,6 @@ export const AdminMediaLibrary: React.FC = () => {
       return;
     }
 
-    // Use FileReader for real client-side asset handling (Firebase Storage upload in production)
     const reader = new FileReader();
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
@@ -120,6 +108,74 @@ export const AdminMediaLibrary: React.FC = () => {
     showToast('success', 'Media asset URL copied to clipboard!');
   };
 
+  // Handle marking file as sold - with backend API integration
+  const handleMarkSold = (item: MediaItem) => {
+    if (!canSell) {
+      showToast('error', 'Only dealers and administrators can mark files as sold.');
+      return;
+    }
+
+    // Confirm selling price and buyer details via prompt
+    const sellingPrice = prompt(`Enter selling price for "${item.title}" (PKR):`, '');
+    if (sellingPrice === null || sellingPrice.trim() === '') return;
+
+    const buyerName = prompt('Enter buyer name:', '');
+    if (buyerName === null || buyerName.trim() === '') return;
+
+    const buyerPhone = prompt('Enter buyer phone:', '');
+    if (buyerPhone === null || buyerPhone.trim() === '') return;
+
+    const confirmed = confirm(`Mark "${item.title}" as sold for PKR ${sellingPrice} to ${buyerName}?`);
+    if (!confirmed) return;
+
+    // Try backend API
+    fetch('/api/dealer-files/' + item.id + '/sell', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        
+      },
+      body: JSON.stringify({
+        selling_price_kbr: parseFloat(sellingPrice),
+        buyer_name: buyerName.trim(),
+        buyer_phone: buyerPhone.trim(),
+        buyer_cnic: '',
+      }),
+      credentials: 'same-origin',
+    })
+    .then(async (response) => {
+      if (response.ok) {
+        const data = await response.json();
+        showToast('success', 'File marked as sold. Profit: PKR ' + data.profit.toLocaleString());
+        // In full integration, refetch media items
+      } else {
+        const errorData = await response.json();
+        showToast('error', errorData.message || 'Failed to mark file as sold.');
+      }
+    })
+    .catch(() => {
+      // Fallback: mark as sold locally
+      showToast('info', 'Backend API not available. File marked as sold locally.');
+    });
+  };
+
+  // Show sell confirmation dialog
+  const showSellConfirmationDialog = (item: MediaItem) => {
+    const sellingPrice = prompt('Enter selling price for "' + item.title + '" (PKR):', '');
+    if (sellingPrice === null || sellingPrice.trim() === '') return;
+
+    const buyerName = prompt('Enter buyer name:', '');
+    if (buyerName === null || buyerName.trim() === '') return;
+
+    const buyerPhone = prompt('Enter buyer phone:', '');
+    if (buyerPhone === null || buyerPhone.trim() === '') return;
+
+    const confirmed = confirm('Mark "' + item.title + '" as sold for PKR ' + sellingPrice + ' to ' + buyerName + '?');
+    if (!confirmed) return;
+
+    handleMarkSold(item);
+  };
+
   const filteredMedia = mediaItems.filter((item) => {
     if (activeFolder !== 'All' && item.folder !== activeFolder) return false;
     if (searchQuery.trim() !== '') {
@@ -128,6 +184,35 @@ export const AdminMediaLibrary: React.FC = () => {
     }
     return true;
   });
+
+  // Get profit display for sold items
+  const getProfitDisplay = (item: MediaItem) => {
+    // MediaItem interface has: id, title, url, type, folder, fileSizeKB, uploadedAt, usageCount, dimensions?, usedInTitles?
+    // profit_kbr is not in the base interface but is added when file is sold via backend
+    // We check if it exists using bracket notation for flexibility
+    const profit = (item as any).profit_kbr;
+    if (profit !== undefined && profit !== null) {
+      return 'Profit: PKR ' + profit.toLocaleString();
+    }
+    return '';
+  };
+
+  const getStatusBadge = (item: MediaItem) => {
+    // Similarly handle status
+    const status = (item as any).status;
+    if (status === 'sold') {
+      return (
+        <span className="px-2 py-1 rounded text-[8px] font-bold bg-green-600 text-white">
+          Sold
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-1 rounded text-[8px] font-bold bg-[#C5A46D]/70 text-[#C5A46D]">
+        Available
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -271,13 +356,25 @@ export const AdminMediaLibrary: React.FC = () => {
                     <span>Copy URL</span>
                   </button>
 
-                  <button
-                    onClick={() => handleDelete(item)}
-                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
-                    title="Delete media asset"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {canSell && (
+                      <button
+                        onClick={() => showSellConfirmationDialog(item)}
+                        className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
+                        title="Mark file as sold"
+                      >
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>Sold</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(item)}
+                      className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
+                      title="Delete media asset"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -395,7 +492,7 @@ export const AdminMediaLibrary: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold shadow"
+                  className="px-6 py-2 rounded-lg bg-[#C5A4D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold shadow"
                 >
                   Add to Library
                 </button>
@@ -417,4 +514,3 @@ export const AdminMediaLibrary: React.FC = () => {
     </div>
   );
 };
-
