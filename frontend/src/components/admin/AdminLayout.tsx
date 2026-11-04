@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { hasAnyPermission } from '../../utils/logic';
 import { normalizeRole } from '../../domain/permissions';
 import { IS_DEMO } from '../../config/appMode';
+import { AdminModuleSkeleton } from './AdminModuleSkeleton';
 import {
   Building2,
   Home,
@@ -304,7 +305,7 @@ export const AdminLayout: React.FC = () => {
 
         {/* Tab Content */}
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          <Suspense fallback={<div className="min-h-[40vh] flex items-center justify-center text-slate-400">Loading module...</div>}>
+          <Suspense fallback={<AdminModuleSkeleton />}>
             {adminTab === 'overview' && <AdminOverview />}
             {adminTab === 'projects' && <AdminProjects />}
             {adminTab === 'properties' && <AdminProperties />}

@@ -9,12 +9,20 @@ use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\DealerFilesController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\WorkspaceController;
 
 /*
 |--------------------------------------------------------------------------
 | API Health Check
 |--------------------------------------------------------------------------
 */
+Route::get('/catalog', [WorkspaceController::class, 'catalog']);
+Route::post('/subscribers', [WorkspaceController::class, 'subscribe'])->middleware('throttle:10,1');
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/workspace', [WorkspaceController::class, 'show']);
+    Route::put('/workspace', [WorkspaceController::class, 'save']);
+});
+
 Route::get('/health', function () {
     return response()->json([
         'status' => 'healthy',
@@ -39,17 +47,31 @@ Route::middleware('auth:sanctum')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Properties
+| Properties — public reads, authenticated writes
 |--------------------------------------------------------------------------
 */
-Route::apiResource('properties', PropertyController::class);
+Route::get('properties', [PropertyController::class, 'index']);
+Route::get('properties/{id}', [PropertyController::class, 'show']);
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('properties', [PropertyController::class, 'store']);
+    Route::match(['put', 'patch'], 'properties/{id}', [PropertyController::class, 'update']);
+    Route::delete('properties/{id}', [PropertyController::class, 'destroy']);
+});
 
 /*
 |--------------------------------------------------------------------------
-| Agencies & Dealers
+| Agencies & Dealers — public directory, authenticated mutations
 |--------------------------------------------------------------------------
 */
-Route::apiResource('dealers', DealerController::class);
+Route::get('dealers', [DealerController::class, 'index']);
+Route::get('dealers/{id}', [DealerController::class, 'show']);
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('dealers', [DealerController::class, 'store']);
+    Route::match(['put', 'patch'], 'dealers/{id}', [DealerController::class, 'update']);
+    Route::delete('dealers/{id}', [DealerController::class, 'destroy']);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -78,7 +100,7 @@ Route::middleware('auth:sanctum')->group(function () {
 */
 Route::get('videos', [AgencyVideoController::class, 'index']);
 Route::get('videos/{id}', [AgencyVideoController::class, 'show']);
-Route::post('videos', [AgencyVideoController::class, 'store'])->middleware('throttle:10,1');
+Route::post('videos', [AgencyVideoController::class, 'store'])->middleware(['auth:sanctum', 'throttle:10,1']);
 Route::post('videos/{id}/like', [AgencyVideoController::class, 'like'])->middleware('throttle:30,1');
 Route::post('videos/{id}/comments', [AgencyVideoController::class, 'comment'])->middleware('throttle:10,1');
 
@@ -87,14 +109,19 @@ Route::post('videos/{id}/comments', [AgencyVideoController::class, 'comment'])->
 | Inquiries CRM
 |--------------------------------------------------------------------------
 */
-Route::get('inquiries', [InquiryController::class, 'index']);
 Route::post('inquiries', [InquiryController::class, 'store'])->middleware('throttle:10,1');
-Route::patch('inquiries/{id}/status', [InquiryController::class, 'updateStatus']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('inquiries', [InquiryController::class, 'index']);
+    Route::patch('inquiries/{id}/status', [InquiryController::class, 'updateStatus']);
+});
 
 /*
 |--------------------------------------------------------------------------
 | Transactions & Projects
 |--------------------------------------------------------------------------
 */
-Route::apiResource('transactions', TransactionController::class)->only(['index', 'store']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('transactions', [TransactionController::class, 'index']);
+    Route::post('transactions', [TransactionController::class, 'store']);
+});
 Route::apiResource('projects', ProjectController::class)->only(['index', 'show']);

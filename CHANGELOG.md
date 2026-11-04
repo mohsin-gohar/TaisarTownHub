@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.0.7 - Close the gaps the previous audit called finished
+
+### Fixed
+- Projects and media assets are soft-deleted and restorable from the audit recycle bin. Media deletion is refused while an active listing still references the file URL, including `documentUrl`.
+- The media library no longer offers a Sold action that reported a local sale when the ledger API was never reached.
+- Laravel writes for properties, dealers, inquiries, transactions, and videos now require a Sanctum token plus the same permission names as the frontend matrix. Inquiry lists and the transaction ledger are no longer public.
+- Admin no longer receives `manage_dealers`, `manage_users`, `pay_commissions`, or `void_transactions` on the server. Login no longer creates a dealer user with the password `password`.
+- API 500 responses no longer echo internal exception text. Validation errors return field messages.
+
+### Added
+- `src/domain/mediaPolicy.ts` with regression tests for the usage guard, soft-delete, and restore.
+- Persisted `audit_logs` table (writes fall back to the log file if the table is not migrated yet).
+- Admin module skeleton and a phone-sized audit log.
+- Root `npm run verify` delegates to the frontend gates.
+- PHPUnit coverage for the server permission matrix.
+
+### Honest status
+Firebase is still a flag, not an integration. The ERP dashboard still keeps its working set in the browser and mirrors public reads to MySQL when the API is up. This build is a verified demo-grade product with authenticated API writes. It is not a hosted multi-tenant production deployment.
+
 ## 2.0.6 - Deep Audit, Discriminated Union TypeScript Fixes, Strict Mode, Auth Portal & Deployment Safety
 
 ### Added

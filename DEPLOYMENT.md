@@ -9,9 +9,9 @@ npm install
 npm run verify
 ```
 
-`npm run verify` executes all four gates:
+From the repository root, `npm run verify` runs the frontend pipeline. It executes all four gates:
 1. `npm run lint` — TypeScript check (`tsc --noEmit`) under strict mode.
-2. `npm run test` — All 59 unit tests across 9 test suites.
+2. `npm run test` — 64 unit tests across 9 suites.
 3. `npm run build` — Production Vite build.
 4. `npm run check:bundle` — Scans public assets to ensure zero private ERP data or demo credentials leak.
 
@@ -25,7 +25,7 @@ The application supports three build modes via `src/config/appMode.ts`:
 | :--- | :--- | :--- |
 | **`public`** (Default) | *(None or `VITE_APP_MODE=public`)* | Marketing website, public listings, project showcase, file verification lookup, contact forms, and portal login/registration. **No demo role switcher, no fictional credentials exposed.** Safe fallback if env vars are unset. |
 | **`demo`** | `VITE_APP_MODE=demo` or `VITE_DEMO_MODE=true` | Client presentation build with device frames (desktop, tablet, mobile), theme switcher, PIN-gated role switcher (`4545`), and seeded fictional ERP records. |
-| **`production`** | `VITE_APP_MODE=production` | Real production ERP environment. Demo role switching and instant demo logins are completely disabled. Requires Firebase Authentication & Firestore configuration. |
+| **`production`** | `VITE_APP_MODE=production` | Demo role switching and instant demo logins are disabled. Firebase is **not** wired in this build. Staff auth for the API is Laravel Sanctum. The dashboard still loads its working set in the browser. |
 
 ---
 

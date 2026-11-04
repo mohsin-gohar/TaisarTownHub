@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AgencyVideo;
+use App\Models\BusinessRecord;
 use App\Models\VideoComment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class AgencyVideoController extends Controller
 {
+    use AuthorizesApi;
+
     /**
      * List agency videos with filtering.
      */
@@ -40,6 +43,8 @@ class AgencyVideoController extends Controller
      */
     public function store(Request $request)
     {
+        $this->requireAny($request, ['upload_media', 'manage_media']);
+
         $data = $request->validate([
             'id' => 'nullable|string',
             'title' => 'required|string|max:255',
@@ -74,6 +79,15 @@ class AgencyVideoController extends Controller
      */
     public function like($id)
     {
+        $record = BusinessRecord::where('collection', 'videos')->where('record_id', $id)->first();
+        if ($record) {
+            $payload = $record->payload ?? [];
+            $payload['likes'] = (int) ($payload['likes'] ?? 0) + 1;
+            $record->payload = $payload;
+            $record->save();
+            return response()->json(['likes' => $payload['likes'], 'message' => 'Liked successfully']);
+        }
+
         $video = AgencyVideo::findOrFail($id);
         $video->increment('likes');
 
@@ -90,6 +104,22 @@ class AgencyVideoController extends Controller
             'comment' => 'required|string|max:1000',
             'isDealer' => 'nullable|boolean',
         ]);
+
+        $stored = BusinessRecord::where('collection', 'videos')->where('record_id', $id)->first();
+        if ($stored) {
+            $payload = $stored->payload ?? [];
+            $comment = [
+                'id' => 'comm-' . Str::uuid(),
+                'userName' => strip_tags($data['userName']),
+                'comment' => strip_tags($data['comment']),
+                'createdAt' => 'Just now',
+                'isDealer' => (bool) ($data['isDealer'] ?? false),
+            ];
+            $payload['comments'] = array_merge([$comment], $payload['comments'] ?? []);
+            $stored->payload = $payload;
+            $stored->save();
+            return response()->json($comment, 201);
+        }
 
         $video = AgencyVideo::findOrFail($id);
 

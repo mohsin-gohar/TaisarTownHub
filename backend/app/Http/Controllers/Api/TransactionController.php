@@ -4,18 +4,26 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Transaction;
-use App\Models\Dealer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class TransactionController extends Controller
 {
+    use AuthorizesApi;
+
     /**
      * List transactions with filtering.
      */
     public function index(Request $request)
     {
+        $this->requireAny($request, ['view_transactions', 'view_my_deals']);
+
         $query = Transaction::query();
+
+        $user = $request->user();
+        if (!$user->hasPermission('view_transactions')) {
+            $query->where('dealerId', $user->dealer_id);
+        }
 
         if ($request->filled('dealerId')) {
             $query->where('dealerId', $request->dealerId);
@@ -33,6 +41,8 @@ class TransactionController extends Controller
      */
     public function store(Request $request)
     {
+        $this->requireAny($request, ['create_transactions']);
+
         $data = $request->validate([
             'propertyId' => 'required|string|exists:properties,id',
             'propertyTitle' => 'required|string|max:255',
@@ -77,12 +87,7 @@ class TransactionController extends Controller
         $transaction = Transaction::create($data);
 
         // Audit log
-        \Log::info('AUDIT', [
-            'action' => 'transaction_created',
-            'target' => $transaction->id,
-            'deal_number' => $transaction->dealNumber,
-            'timestamp' => now()->toIso8601String(),
-        ]);
+        $this->writeAudit($request, 'transaction_created', $transaction->id, "Deal {$transaction->dealNumber} created");
 
         return response()->json($transaction, 201);
     }

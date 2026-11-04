@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BusinessRecord;
 use App\Models\Dealer;
 use App\Models\User;
+use App\Support\RolePermissions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -21,25 +23,7 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // Find user by email
         $user = User::where('email', $request->email)->first();
-
-        // Also check dealers table (for dealer accounts)
-        if (!$user) {
-            $dealer = Dealer::where('email', $request->email)->first();
-            if ($dealer) {
-                // Create a user record from dealer if needed
-                $user = User::firstOrCreate(
-                    ['email' => $dealer->email],
-                    [
-                        'name' => $dealer->fullName,
-                        'password' => Hash::make('password'), // Default password for demo
-                        'role' => $dealer->role ?? 'dealer',
-                        'dealer_id' => $dealer->id,
-                    ]
-                );
-            }
-        }
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
@@ -59,7 +43,7 @@ class AuthController extends Controller
                 'email' => $user->email,
                 'role' => $user->role,
                 'dealer_id' => $user->dealer_id,
-                'permissions' => $this->getPermissionsForRole($user->role),
+                'permissions' => RolePermissions::forRole($user->role),
             ],
         ]);
     }
@@ -103,6 +87,21 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth-token')->plainTextToken;
 
+        BusinessRecord::put('dealers', $dealer->id, [
+            'id' => $dealer->id,
+            'fullName' => $dealer->fullName,
+            'email' => $dealer->email,
+            'phone' => $dealer->phone,
+            'agencyOrBranch' => $dealer->agencyOrBranch,
+            'agencyAffiliation' => $dealer->agencyOrBranch,
+            'role' => 'dealer',
+            'status' => 'Active',
+            'totalEarnedPKR' => 0,
+            'pendingCommissionPKR' => 0,
+            'cnicMasked' => $dealer->cnicMasked,
+            'createdAt' => now()->toDateString(),
+        ]);
+
         return response()->json([
             'success' => true,
             'token' => $token,
@@ -112,7 +111,7 @@ class AuthController extends Controller
                 'email' => $user->email,
                 'role' => $user->role,
                 'dealer_id' => $dealer->id,
-                'permissions' => $this->getPermissionsForRole('dealer'),
+                'permissions' => RolePermissions::forRole('dealer'),
             ],
         ], 201);
     }
@@ -132,7 +131,7 @@ class AuthController extends Controller
                 'email' => $user->email,
                 'role' => $user->role,
                 'dealer_id' => $user->dealer_id,
-                'permissions' => $this->getPermissionsForRole($user->role),
+                'permissions' => RolePermissions::forRole($user->role),
             ],
         ]);
     }
@@ -148,43 +147,6 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Logged out successfully.',
         ]);
-    }
-
-    /**
-     * Get permissions for a role (server-side RBAC).
-     */
-    private function getPermissionsForRole(string $role): array
-    {
-        $permissions = [
-            'super_admin' => [
-                'view_properties', 'edit_properties', 'delete_properties', 'view_private_financials',
-                'view_transactions', 'edit_transactions', 'void_transactions', 'manage_dealers',
-                'manage_users', 'pay_commissions', 'view_audit', 'manage_projects', 'manage_cms',
-                'view_inquiries', 'manage_inquiries', 'upload_media', 'verify_documents', 'manage_sellers',
-                'manage_buyers', 'view_plot_locator', 'manage_plot_locator', 'view_dealers', 'view_commissions',
-                'export_data', 'manage_settings', 'view_all_reports', 'manage_roles',
-            ],
-            'admin' => [
-                'view_properties', 'edit_properties', 'delete_properties', 'view_private_financials',
-                'view_transactions', 'edit_transactions', 'manage_dealers', 'view_audit', 'manage_projects',
-                'manage_cms', 'view_inquiries', 'manage_inquiries', 'upload_media', 'verify_documents',
-                'manage_sellers', 'manage_buyers', 'view_plot_locator', 'manage_plot_locator', 'view_dealers',
-                'view_commissions', 'export_data', 'manage_settings',
-            ],
-            'manager' => [
-                'view_properties', 'view_transactions', 'edit_transactions', 'view_inquiries',
-                'manage_inquiries', 'upload_media', 'verify_documents', 'view_plot_locator',
-                'view_dealers', 'view_commissions',
-            ],
-            'dealer' => [
-                'view_properties', 'view_my_deals', 'view_my_commission', 'submit_buyer', 'view_dealers',
-            ],
-            'operator' => [
-                'view_properties', 'edit_properties', 'upload_media', 'view_inquiries',
-            ],
-        ];
-
-        return $permissions[$role] ?? [];
     }
 
     /**

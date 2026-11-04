@@ -3,7 +3,9 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use App\Models\BusinessRecord;
 use App\Models\Dealer;
+use App\Models\User;
 use App\Models\Property;
 use App\Models\AgencyVideo;
 use App\Models\VideoComment;
@@ -14,6 +16,8 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        $this->seedBusinessRecords();
+
         // 1. Seed 12 Scheme 45 Verified Agencies
         $dealers = [
             [
@@ -469,5 +473,59 @@ class DatabaseSeeder extends Seeder
             'adminNotes' => 'Overseas buyer from UAE. Very interested in possession plots.',
             'source' => 'Web Portal'
         ]);
+    }
+
+    /**
+     * Load every business collection into MySQL. Existing rows are kept so a
+     * later db:seed does not wipe staff edits. Empty collections are filled.
+     */
+    private function seedBusinessRecords(): void
+    {
+        $path = database_path('seed-data/workspace.json');
+        if (!is_file($path)) {
+            return;
+        }
+
+        $data = json_decode(file_get_contents($path), true);
+        if (!is_array($data)) {
+            return;
+        }
+
+        foreach ($data['staff'] ?? [] as $staff) {
+            if (empty($staff['email']) || empty($staff['password'])) {
+                continue;
+            }
+            User::updateOrCreate(
+                ['email' => $staff['email']],
+                [
+                    'name' => $staff['name'],
+                    'password' => $staff['password'],
+                    'role' => $staff['role'] ?? 'operator',
+                    'dealer_id' => $staff['dealer_id'] ?? null,
+                ]
+            );
+        }
+
+        $lists = [
+            'projects', 'properties', 'dealers', 'sellers', 'buyers',
+            'transactions', 'payments', 'commissions', 'files', 'plots',
+            'media', 'videos', 'inquiries', 'testimonials',
+        ];
+
+        foreach ($lists as $collection) {
+            if (BusinessRecord::where('collection', $collection)->exists()) {
+                continue;
+            }
+            foreach ($data[$collection] ?? [] as $row) {
+                if (!is_array($row) || empty($row['id'])) {
+                    continue;
+                }
+                BusinessRecord::put($collection, (string) $row['id'], $row);
+            }
+        }
+
+        if (!BusinessRecord::where('collection', 'cms')->where('record_id', 'default')->exists() && is_array($data['cms'] ?? null)) {
+            BusinessRecord::put('cms', 'default', $data['cms']);
+        }
     }
 }

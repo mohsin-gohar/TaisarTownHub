@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { getAuditLog, type AuditEntry } from '../../domain/auditLog';
-import { Trash2, RotateCcw, Shield, Clock, FileText, Users, UserCheck, Briefcase, Home, Building2 } from 'lucide-react';
+import { Trash2, RotateCcw, Shield, Clock, FileText, Users, UserCheck, Briefcase, Home, Building2, Image } from 'lucide-react';
 
 export const AdminAudit: React.FC = () => {
   const {
-    properties, sellers, buyers, dealers,
-    restoreProperty, restoreSeller, restoreBuyer, restoreDealer,
+    properties, sellers, buyers, dealers, projects, mediaItems,
+    restoreProperty, restoreSeller, restoreBuyer, restoreDealer, restoreProject, restoreMediaItem,
     currentUser,
   } = useApp();
 
@@ -17,8 +17,10 @@ export const AdminAudit: React.FC = () => {
   const trashedSellers = sellers.filter((s) => s.deletedAt);
   const trashedBuyers = buyers.filter((b) => b.deletedAt);
   const trashedDealers = dealers.filter((d) => d.deletedAt);
+  const trashedProjects = projects.filter((p) => p.deletedAt);
+  const trashedMedia = mediaItems.filter((m) => m.deletedAt);
 
-  const totalTrashed = trashedProperties.length + trashedSellers.length + trashedBuyers.length + trashedDealers.length;
+  const totalTrashed = trashedProperties.length + trashedSellers.length + trashedBuyers.length + trashedDealers.length + trashedProjects.length + trashedMedia.length;
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -47,7 +49,22 @@ export const AdminAudit: React.FC = () => {
 
       {tab === 'audit' && (
         <div className="bg-[#101C2C] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="md:hidden divide-y divide-slate-800">
+            {audit.length === 0 && (
+              <p className="py-6 text-center text-slate-500 text-xs">No audit entries yet.</p>
+            )}
+            {audit.map((e: AuditEntry) => (
+              <article key={e.id} className="p-4 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[10px] text-[#C5A46D]">{e.action}</span>
+                  <span className="font-mono text-[10px] text-slate-500">{e.at.replace('T', ' ').slice(0, 19)}</span>
+                </div>
+                <p className="text-xs text-slate-200">{e.actor} <span className="text-slate-500">({e.role})</span></p>
+                <p className="text-[11px] text-slate-400">{e.detail || e.target || '—'}</p>
+              </article>
+            ))}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
                 <tr>
@@ -86,6 +103,8 @@ export const AdminAudit: React.FC = () => {
             { label: 'Sellers', icon: Users, items: trashedSellers.map((s) => ({ id: s.id, name: s.fullName, deletedAt: s.deletedAt, deletedBy: s.deletedBy, restore: () => restoreSeller(s.id) })) },
             { label: 'Buyers', icon: UserCheck, items: trashedBuyers.map((b) => ({ id: b.id, name: b.fullName, deletedAt: b.deletedAt, deletedBy: b.deletedBy, restore: () => restoreBuyer(b.id) })) },
             { label: 'Dealers', icon: Briefcase, items: trashedDealers.map((d) => ({ id: d.id, name: d.fullName, deletedAt: d.deletedAt, deletedBy: d.deletedBy, restore: () => restoreDealer(d.id) })) },
+            { label: 'Projects', icon: Building2, items: trashedProjects.map((p) => ({ id: p.id, name: p.title, deletedAt: p.deletedAt, deletedBy: p.deletedBy, restore: () => restoreProject(p.id) })) },
+            { label: 'Media', icon: Image, items: trashedMedia.map((m) => ({ id: m.id, name: m.title, deletedAt: m.deletedAt, deletedBy: m.deletedBy, restore: () => restoreMediaItem(m.id) })) },
           ].map((group) => (
             <div key={group.label} className="bg-[#101C2C] rounded-2xl border border-slate-800 shadow-xl p-5">
               <div className="flex items-center gap-2 mb-3">

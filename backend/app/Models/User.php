@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use App\Support\RolePermissions;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -55,16 +56,7 @@ class User extends Authenticatable
      */
     public function hasPermission(string $permission): bool
     {
-        $rolePermissions = [
-            'super_admin' => ['*'],
-            'admin' => ['view_properties', 'edit_properties', 'delete_properties', 'view_private_financials', 'view_transactions', 'edit_transactions', 'manage_dealers', 'view_audit', 'manage_projects', 'manage_cms', 'view_inquiries', 'manage_inquiries', 'upload_media', 'verify_documents', 'manage_sellers', 'manage_buyers', 'view_plot_locator', 'manage_plot_locator', 'view_dealers', 'view_commissions', 'export_data', 'manage_settings'],
-            'manager' => ['view_properties', 'view_transactions', 'edit_transactions', 'view_inquiries', 'manage_inquiries', 'upload_media', 'verify_documents', 'view_plot_locator', 'view_dealers', 'view_commissions'],
-            'dealer' => ['view_properties', 'view_my_deals', 'view_my_commission', 'submit_buyer', 'view_dealers'],
-            'operator' => ['view_properties', 'edit_properties', 'upload_media', 'view_inquiries'],
-        ];
-
-        $permissions = $rolePermissions[$this->role] ?? [];
-        return in_array('*', $permissions) || in_array($permission, $permissions);
+        return RolePermissions::allows($this->role, $permission);
     }
 
     /**

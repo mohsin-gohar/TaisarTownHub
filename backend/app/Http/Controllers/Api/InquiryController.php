@@ -3,17 +3,22 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BusinessRecord;
 use App\Models\Inquiry;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class InquiryController extends Controller
 {
+    use AuthorizesApi;
+
     /**
      * List inquiries with filtering.
      */
     public function index(Request $request)
     {
+        $this->requireAny($request, ['view_inquiries']);
+
         $query = Inquiry::query();
 
         if ($request->filled('status') && $request->status !== 'All') {
@@ -56,7 +61,7 @@ class InquiryController extends Controller
         $data['fullName'] = strip_tags($data['fullName']);
         $data['message'] = strip_tags($data['message']);
 
-        $inquiry = Inquiry::create([
+        $record = [
             'id' => 'inq-' . Str::uuid(),
             'fullName' => $data['fullName'],
             'email' => $data['email'] ?? null,
@@ -66,11 +71,26 @@ class InquiryController extends Controller
             'preferredPropertyOrProject' => $data['preferredPropertyOrProject'] ?? null,
             'budgetRange' => $data['budgetRange'] ?? null,
             'status' => 'Pending',
-            'adminNotes' => 'Received via API integration.',
+            'adminNotes' => 'Received via the public website.',
             'source' => $data['source'] ?? 'React Web Portal',
+            'submittedAt' => now()->format('Y-m-d H:i'),
+        ];
+        BusinessRecord::put('inquiries', $record['id'], $record);
+
+        Inquiry::updateOrCreate(['id' => $record['id']], [
+            'fullName' => $record['fullName'],
+            'email' => $record['email'],
+            'phone' => $record['phone'],
+            'subject' => $record['subject'],
+            'message' => $record['message'],
+            'preferredPropertyOrProject' => $record['preferredPropertyOrProject'],
+            'budgetRange' => $record['budgetRange'],
+            'status' => 'Pending',
+            'adminNotes' => $record['adminNotes'],
+            'source' => $record['source'],
         ]);
 
-        return response()->json($inquiry, 201);
+        return response()->json($record, 201);
     }
 
     /**
@@ -78,6 +98,8 @@ class InquiryController extends Controller
      */
     public function updateStatus(Request $request, $id)
     {
+        $this->requireAny($request, ['view_inquiries']);
+
         $request->validate([
             'status' => 'required|string|in:Pending,Contacted,In Progress,Resolved',
         ]);

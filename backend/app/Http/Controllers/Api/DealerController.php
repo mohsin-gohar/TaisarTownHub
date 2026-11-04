@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 
 class DealerController extends Controller
 {
+    use AuthorizesApi;
+
     /**
      * List dealers (with CNIC masking for privacy).
      */
@@ -51,6 +53,8 @@ class DealerController extends Controller
      */
     public function store(Request $request)
     {
+        $this->requireAny($request, ['manage_dealers']);
+
         $data = $request->validate([
             'id' => 'required|string|unique:dealers,id',
             'fullName' => 'required|string|max:255',
@@ -72,6 +76,7 @@ class DealerController extends Controller
         }
 
         $dealer = Dealer::create($data);
+        $this->writeAudit($request, 'dealer_created', $dealer->id, "Dealer {$dealer->fullName} created");
 
         return response()->json($dealer, 201);
     }
@@ -81,6 +86,8 @@ class DealerController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $this->requireAny($request, ['manage_dealers']);
+
         $dealer = Dealer::findOrFail($id);
 
         $data = $request->validate([
@@ -103,6 +110,7 @@ class DealerController extends Controller
         }
 
         $dealer->update($data);
+        $this->writeAudit($request, 'dealer_updated', $dealer->id, "Dealer {$dealer->fullName} updated");
 
         return response()->json($dealer);
     }
@@ -110,10 +118,13 @@ class DealerController extends Controller
     /**
      * Soft delete a dealer.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $this->requireAny($request, ['manage_dealers']);
+
         $dealer = Dealer::findOrFail($id);
         $dealer->delete();
+        $this->writeAudit($request, 'dealer_deleted', $dealer->id, "Dealer {$dealer->fullName} soft-deleted");
 
         return response()->json(['message' => 'Dealer deleted successfully']);
     }

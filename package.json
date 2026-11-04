@@ -10,6 +10,8 @@
     "build": "npm --prefix frontend run build",
     "test": "npm --prefix frontend run test",
     "lint": "npm --prefix frontend run lint",
+    "check:bundle": "npm --prefix frontend run check:bundle",
+    "verify": "npm --prefix frontend run verify",
     "start": "npm --prefix frontend run dev"
   },
   "keywords": [

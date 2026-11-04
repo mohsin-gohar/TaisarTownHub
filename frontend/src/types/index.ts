@@ -416,6 +416,19 @@ export interface MediaItem {
   usageCount: number;
   dimensions?: string;
   usedInTitles?: string[];
+  /** Soft-delete (audit). Hidden from the library until restored. */
+  deletedAt?: string;
+  deletedBy?: string;
+  /** Sale attribution: set when the asset is marked sold from the dashboard. */
+  soldAt?: string;
+  soldPricePKR?: number;
+  basePricePKR?: number;
+  profitPKR?: number;
+  buyerName?: string;
+  buyerPhone?: string;
+  buyerNationalIdMasked?: string;
+  soldBy?: string;
+  soldByRole?: string;
 }
 
 export interface VideoComment {

@@ -1,5 +1,15 @@
 # Security Audit — TaisarTownHub
 
+## Phase 9 honesty (2026-11-03)
+
+- Firebase is **not integrated**. `src/config/firebase.ts` stays a no-op unless `VITE_FIREBASE_*` is set, and the Firebase SDK is not a dependency. Do not describe this build as Firebase-backed.
+- Mutating API routes require `auth:sanctum`. Public visitors can read the property and dealer directory, submit an inquiry, and like or comment on a video. They cannot list inquiries or transactions, and they cannot create or delete records.
+- The server permission matrix matches `src/domain/permissions.ts`. Agency Admin cannot manage dealers, manage users, pay commissions, or void deals.
+- Login does not mint accounts. A missing user is an authentication failure.
+- CORS defaults to `http://localhost:3000` and `http://127.0.0.1:3000`. Set `CORS_ALLOWED_ORIGINS` before any other origin is allowed.
+- Private property prices stay hidden on the model unless the caller has `view_sensitive_cnic`.
+- Audit rows are appended to `audit_logs` when that table exists, and also written to the Laravel log. Records are not updated or deleted by the application.
+
 ## Controls implemented
 
 ### Phase 5 — Strict Typing, App Mode Hardening & Auth Portal (2026-11-02)

@@ -261,7 +261,7 @@ export const AdminOverview: React.FC = () => {
 
           <div className="p-4 rounded-xl bg-[#0B1220] border border-slate-800 text-xs text-slate-400 space-y-1">
             <span className="font-bold text-white block">Central Media Storage</span>
-            <span>Total stored files: {mediaItems.length} assets across 6 folders.</span>
+            <span>Total stored files: {mediaItems.filter((item) => !item.deletedAt).length} assets across 6 folders.</span>
           </div>
         </div>
       </div>

@@ -160,8 +160,8 @@ class DealerFilesController extends Controller
     {
         $user = $request->user();
 
-        // Only super_admin and admin can view other dealers' reports
-        if ($user->role !== 'super_admin' && $user->role !== 'admin' && $user->dealer_id !== $dealerId) {
+        $canViewAll = $user->hasPermission('view_commissions');
+        if (!$canViewAll && (string) $user->dealer_id !== (string) $dealerId) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -193,7 +193,7 @@ class DealerFilesController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role !== 'super_admin' && $user->role !== 'admin') {
+        if (!$user->hasPermission('view_commissions')) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

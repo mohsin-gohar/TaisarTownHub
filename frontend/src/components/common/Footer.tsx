@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { api } from '../../services/api';
 import {
   Building2,
   Phone,
@@ -33,10 +34,11 @@ export const Footer: React.FC = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const handleNewsletter = (e: React.FormEvent) => {
+  const handleNewsletter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newsletterEmail.trim() || !/^\S+@\S+\.\S+$/.test(newsletterEmail)) return;
-    // Demo capture only — no backend wiring in demo mode.
+    const saved = await api.subscribe(newsletterEmail.trim());
+    if (!saved) return;
     setNewsletterDone(true);
     setNewsletterEmail('');
   };
@@ -212,7 +214,7 @@ export const Footer: React.FC = () => {
               {newsletterDone ? (
                 <div className="flex items-center gap-2 text-xs text-emerald-400 animate-fadeIn">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>You're on the list — demo subscription saved locally.</span>
+                  <span>You're on the list - subscription saved to our database.</span>
                 </div>
               ) : (
                 <form onSubmit={handleNewsletter} className="flex gap-2">
@@ -233,7 +235,7 @@ export const Footer: React.FC = () => {
                   </button>
                 </form>
               )}
-              <span className="block text-[10px] text-slate-500">Demo mode — no data leaves your browser.</span>
+              <span className="block text-[10px] text-slate-500">Stored securely in our MySQL database.</span>
             </div>
           </div>
         </div>

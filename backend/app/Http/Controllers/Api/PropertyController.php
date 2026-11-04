@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Auth;
 
 class PropertyController extends Controller
 {
+    use AuthorizesApi;
+
     /**
      * List properties with filtering.
      */
@@ -50,10 +52,10 @@ class PropertyController extends Controller
     {
         $property = Property::whereNull('deleted_at')->findOrFail($id);
 
-        // Hide private financials unless authorized
+        // Private financials stay hidden unless the caller can see unmasked records.
         $user = Auth::guard('sanctum')->user();
-        if (!$user || !$user->hasPermission('view_private_financials')) {
-            $property->makeHidden(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
+        if ($user && $user->hasPermission('view_sensitive_cnic')) {
+            $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
         }
 
         return response()->json($property);
@@ -64,6 +66,8 @@ class PropertyController extends Controller
      */
     public function store(Request $request)
     {
+        $this->requireAny($request, ['create_properties', 'edit_properties']);
+
         $data = $request->validate([
             'id' => 'required|string|unique:properties,id',
             'title' => 'required|string|max:255',
@@ -96,7 +100,7 @@ class PropertyController extends Controller
         $property = Property::create($data);
 
         // Audit log
-        $this->logAudit($request, 'property_created', $property->id, "Property {$property->title} created");
+        $this->writeAudit($request, 'property_created', $property->id, "Property {$property->title} created");
 
         return response()->json($property, 201);
     }
@@ -106,6 +110,8 @@ class PropertyController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $this->requireAny($request, ['edit_properties']);
+
         $property = Property::whereNull('deleted_at')->findOrFail($id);
 
         $data = $request->validate([
@@ -139,7 +145,7 @@ class PropertyController extends Controller
         $property->update($data);
 
         // Audit log
-        $this->logAudit($request, 'property_updated', $property->id, "Property {$property->title} updated");
+        $this->writeAudit($request, 'property_updated', $property->id, "Property {$property->title} updated");
 
         return response()->json($property);
     }
@@ -147,31 +153,15 @@ class PropertyController extends Controller
     /**
      * Soft delete a property.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $property = Property::whereNull('deleted_at')->findOrFail($id);
-        $property->delete(); // Soft delete
+        $this->requireAny($request, ['delete_properties']);
 
-        // Audit log
-        $this->logAudit(request(), 'property_deleted', $property->id, "Property {$property->title} soft-deleted");
+        $property = Property::whereNull('deleted_at')->findOrFail($id);
+        $property->delete();
+
+        $this->writeAudit($request, 'property_deleted', $property->id, "Property {$property->title} soft-deleted");
 
         return response()->json(['message' => 'Property deleted successfully']);
-    }
-
-    /**
-     * Simple audit log helper.
-     */
-    protected function logAudit(Request $request, string $action, string $target, string $detail): void
-    {
-        $user = $request->user();
-        \Log::info('AUDIT', [
-            'actor' => $user ? $user->name : 'anonymous',
-            'role' => $user ? $user->role : 'none',
-            'action' => $action,
-            'target' => $target,
-            'detail' => $detail,
-            'ip' => $request->ip(),
-            'timestamp' => now()->toIso8601String(),
-        ]);
     }
 }

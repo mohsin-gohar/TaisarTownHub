@@ -356,19 +356,21 @@ export function calculateMediaUsageCount(
   const titles: string[] = [];
 
   for (const p of properties) {
+    if (p.deletedAt) continue;
     if (p.images.includes(mediaUrl)) {
       titles.push(p.title);
     }
   }
 
   for (const pr of projects) {
+    if (pr.deletedAt) continue;
     if (pr.coverImage === mediaUrl || pr.galleryImages.includes(mediaUrl)) {
       titles.push(pr.title);
     }
   }
 
   for (const doc of documents) {
-    if (doc.url === mediaUrl) {
+    if (doc.url === mediaUrl || doc.documentUrl === mediaUrl) {
       titles.push(doc.title);
     }
   }
@@ -465,4 +467,63 @@ export function toPublicProjects(list: Project[]): Project[] {
  */
 export function isFiniteNonNegative(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n) && n >= 0;
+}
+
+/**
+ * Media sale economics (dealer/agency file attribution).
+ *
+ * Profit = selling price - cost price. When the asset has no recorded cost
+ * (e.g. agency-owned stock), a default 30% commissionable margin is assumed
+ * so the sale still produces an auditable profit figure instead of zero.
+ */
+export function calculateMediaSaleProfit(
+  sellingPricePKR: unknown,
+  costPricePKR?: unknown
+): { ok: boolean; error?: string; sellingPrice: number; costPrice: number; profit: number; marginPct: number } {
+  if (!isFiniteNonNegative(sellingPricePKR) || (sellingPricePKR as number) <= 0) {
+    return { ok: false, error: 'Selling price must be a positive amount in PKR.', sellingPrice: 0, costPrice: 0, profit: 0, marginPct: 0 };
+  }
+  const sellingPrice = Math.round(sellingPricePKR as number);
+  let costPrice: number;
+  if (costPricePKR === undefined || costPricePKR === null || costPricePKR === '') {
+    costPrice = Math.round(sellingPrice * 0.7); // default 30% agency margin
+  } else if (isFiniteNonNegative(costPricePKR)) {
+    costPrice = Math.round(costPricePKR as number);
+  } else {
+    return { ok: false, error: 'Cost price must be a non-negative amount in PKR.', sellingPrice, costPrice: 0, profit: 0, marginPct: 0 };
+  }
+  if (costPrice > sellingPrice) {
+    return { ok: false, error: 'Cost price cannot exceed the selling price.', sellingPrice, costPrice, profit: 0, marginPct: 0 };
+  }
+  const profit = sellingPrice - costPrice;
+  const marginPct = sellingPrice > 0 ? Math.round((profit / sellingPrice) * 1000) / 10 : 0;
+  return { ok: true, sellingPrice, costPrice, profit, marginPct };
+}
+
+/**
+ * Aggregate sold media assets into a per-seller attribution summary
+ * (who sold what, how many files, and how much profit was earned).
+ */
+export function summarizeMediaSales(
+  items: Array<Pick<MediaItemSaleFields, 'soldBy' | 'soldByRole' | 'profitPKR' | 'soldPricePKR'>>
+): Array<{ seller: string; role: string; filesSold: number; totalSaleValue: number; totalProfit: number }> {
+  const bySeller = new Map<string, { seller: string; role: string; filesSold: number; totalSaleValue: number; totalProfit: number }>();
+  for (const item of items || []) {
+    if (!item?.soldBy) continue;
+    const key = item.soldBy;
+    const entry = bySeller.get(key) ?? { seller: item.soldBy, role: item.soldByRole ?? '', filesSold: 0, totalSaleValue: 0, totalProfit: 0 };
+    entry.filesSold += 1;
+    entry.totalSaleValue += isFiniteNonNegative(item.soldPricePKR) ? (item.soldPricePKR as number) : 0;
+    entry.totalProfit += isFiniteNonNegative(item.profitPKR) ? (item.profitPKR as number) : 0;
+    bySeller.set(key, entry);
+  }
+  return [...bySeller.values()].sort((a, b) => b.totalProfit - a.totalProfit);
+}
+
+/** Structural subset used by summarizeMediaSales (avoids importing full type). */
+export interface MediaItemSaleFields {
+  soldBy?: string;
+  soldByRole?: string;
+  profitPKR?: number;
+  soldPricePKR?: number;
 }
