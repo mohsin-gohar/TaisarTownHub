@@ -17,6 +17,7 @@ import {
 import { formatPKRCurrency, toPublicProject } from '../../utils/logic';
 import { VideoModal } from '../common/VideoModal';
 import { Lightbox } from '../common/Lightbox';
+import { EmptyState } from '../common/EmptyState';
 
 export const ProjectDetailPage: React.FC = () => {
   const {
@@ -29,23 +30,38 @@ export const ProjectDetailPage: React.FC = () => {
   } = useApp();
 
   const rawProject = projects.find((p) => p.id === selectedProjectId) || projects[0];
-  const project = toPublicProject(rawProject);
+  const project = rawProject ? toPublicProject(rawProject) : undefined;
   const [activeImage, setActiveImage] = useState<string>(project?.coverImage || '');
   const [isVideoModalOpen, setIsVideoModalOpen] = useState<boolean>(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  // Project gallery: cover + galleryImages
-  const projectGallery: string[] = project ? [project.coverImage, ...project.galleryImages] : [];
-  const openLightbox = () => {
-    if (!project) return;
-    const idx = projectGallery.indexOf(activeImage || project.coverImage);
-    setLightboxIndex(idx < 0 ? 0 : idx);
-  };
-
   // Quick inquiry state
   const [inquiryName, setInquiryName] = useState('');
   const [inquiryPhone, setInquiryPhone] = useState('');
-  const [inquiryMsg, setInquiryMsg] = useState(`I would like booking details and payment schedule for ${project.title}.`);
+  const [inquiryMsg, setInquiryMsg] = useState(
+    project ? `I would like booking details and payment schedule for ${project.title}.` : ''
+  );
+
+  if (!project) {
+    return (
+      <div className="py-24 px-4 text-center max-w-lg mx-auto min-h-[60vh] flex items-center justify-center">
+        <EmptyState
+          icon={<Building2 className="w-8 h-8 text-[#C5A46D]" />}
+          title="Project Not Found"
+          description="The selected real estate development project is currently unavailable."
+          actionLabel="Explore All Master Projects"
+          onAction={() => setCurrentView('projects')}
+        />
+      </div>
+    );
+  }
+
+  // Project gallery: cover + galleryImages
+  const projectGallery: string[] = [project.coverImage, ...project.galleryImages];
+  const openLightbox = () => {
+    const idx = projectGallery.indexOf(activeImage || project.coverImage);
+    setLightboxIndex(idx < 0 ? 0 : idx);
+  };
 
   const handleInquirySubmit = (e: React.FormEvent) => {
     e.preventDefault();

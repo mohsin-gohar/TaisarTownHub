@@ -24,7 +24,8 @@ class WorkspaceController extends Controller
         'is100ftRoadFacing', 'type', 'status', 'isFeatured', 'images', 'videoUrl',
         'features', 'bedrooms', 'bathrooms', 'possessionReady', 'mdaApproved',
         'cornerPlot', 'westOpen', 'parkFacing', 'mainBoulevard', 'createdDate',
-        'contactPerson', 'contactPhone', 'contactWhatsApp',
+        'contactPerson', 'contactPhone', 'contactWhatsApp', 'assignedDealerId',
+        'agencyName',
     ];
 
     public function subscribe(Request $request)

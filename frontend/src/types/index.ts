@@ -78,6 +78,7 @@ export interface Property {
   buyerName?: string;
   assignedDealerId?: string;
   assignedDealerName?: string;
+  agencyName?: string;
   internalNotes?: string;
   /** Soft-delete (audit): record is hidden, not destroyed. */
   deletedAt?: string;

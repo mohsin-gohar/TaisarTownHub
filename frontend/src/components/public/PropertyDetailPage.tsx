@@ -23,6 +23,7 @@ import {
 } from '../../utils/logic';
 import { Property, PublicProperty } from '../../types';
 import { Lightbox } from '../common/Lightbox';
+import { EmptyState } from '../common/EmptyState';
 
 const VIDEO_SENTINEL = '__tth_video__';
 
@@ -39,21 +40,10 @@ export const PropertyDetailPage: React.FC = () => {
   // Soft-deleted listings must never render, even via a stale selected id.
   const activeProperties = properties.filter((p) => !p.deletedAt);
   const rawProperty = activeProperties.find((p) => p.id === selectedPropertyId) || activeProperties[0];
-  const property: PublicProperty = toPublicProperty(rawProperty);
-  const [activeImage, setActiveImage] = useState<string>(property?.images[0] || '');
+  const property: PublicProperty | undefined = rawProperty ? toPublicProperty(rawProperty) : undefined;
+
+  const [activeImage, setActiveImage] = useState<string>(property?.images?.[0] || '');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-
-  // Gallery model: images + optional virtual video slot
-  const gallery: string[] = property?.images ?? [];
-  const hasVideo = !!property?.videoUrl;
-  const activeIsVideo = activeImage === VIDEO_SENTINEL && hasVideo;
-  const mainSrc = activeIsVideo ? '' : activeImage || gallery[0];
-
-  const openLightbox = () => {
-    if (!property) return;
-    const idx = activeIsVideo ? gallery.length : gallery.indexOf(mainSrc);
-    setLightboxIndex(idx < 0 ? 0 : idx);
-  };
 
   // Installment Calculator State
   const [downPaymentPct, setDownPaymentPct] = useState<number>(25);
@@ -62,7 +52,36 @@ export const PropertyDetailPage: React.FC = () => {
   // Inquiry Form State
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [message, setMessage] = useState(`Salam, I am interested in Property ID ${property.id}: ${property.title}. Please provide file verification and token procedure.`);
+  const [message, setMessage] = useState(
+    property
+      ? `Salam, I am interested in Property ID ${property.id}: ${property.title}. Please provide file verification and token procedure.`
+      : ''
+  );
+
+  if (!property) {
+    return (
+      <div className="py-24 px-4 text-center max-w-lg mx-auto min-h-[60vh] flex items-center justify-center">
+        <EmptyState
+          icon={<Home className="w-8 h-8 text-[#C5A46D]" />}
+          title="Listing Not Available"
+          description="The selected property is currently unavailable or has been archived."
+          actionLabel="Explore All Verified Properties"
+          onAction={() => setCurrentView('properties')}
+        />
+      </div>
+    );
+  }
+
+  // Gallery model: images + optional virtual video slot
+  const gallery: string[] = property.images ?? [];
+  const hasVideo = !!property.videoUrl;
+  const activeIsVideo = activeImage === VIDEO_SENTINEL && hasVideo;
+  const mainSrc = activeIsVideo ? '' : activeImage || gallery[0];
+
+  const openLightbox = () => {
+    const idx = activeIsVideo ? gallery.length : gallery.indexOf(mainSrc);
+    setLightboxIndex(idx < 0 ? 0 : idx);
+  };
 
   const installmentResult = calculateInstallmentPlan(
     property.pricePKR,

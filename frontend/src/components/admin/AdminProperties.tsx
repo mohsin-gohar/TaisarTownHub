@@ -151,6 +151,12 @@ export const AdminProperties: React.FC = () => {
     const featureList = formData.features.split(',').map((f) => f.trim()).filter(Boolean);
     const formattedPrice = formatPKRCurrency(Number(formData.pricePKR));
 
+    const selectedDealer = dealers.find((d) => d.id === formData.assignedDealerId);
+    const assignedContactPerson = selectedDealer?.fullName || 'Authorized Consultant';
+    const assignedContactPhone = selectedDealer?.phone || '+92 321 8292831';
+    const assignedContactWhatsApp = selectedDealer?.whatsApp || selectedDealer?.phone || '+92 321 8292831';
+    const assignedAgencyName = selectedDealer?.agencyOrBranch || selectedDealer?.agencyAffiliation || 'TaisarTownHub Premier Advisory';
+
     if (editingPropId) {
       const result = updateProperty(editingPropId, {
         title: formData.title,
@@ -177,6 +183,10 @@ export const AdminProperties: React.FC = () => {
         parkFacing: formData.parkFacing,
         sellerId: formData.sellerId,
         assignedDealerId: formData.assignedDealerId,
+        contactPerson: assignedContactPerson,
+        contactPhone: assignedContactPhone,
+        contactWhatsApp: assignedContactWhatsApp,
+        agencyName: assignedAgencyName,
         images: [formData.image],
         features: featureList,
       });
@@ -211,12 +221,13 @@ export const AdminProperties: React.FC = () => {
         parkFacing: formData.parkFacing,
         sellerId: formData.sellerId,
         assignedDealerId: formData.assignedDealerId,
+        agencyName: assignedAgencyName,
         images: [formData.image],
         features: featureList,
         mdaApproved: true,
-        contactPerson: 'Saleem Siddiqui',
-        contactPhone: '+92 321 8292831',
-        contactWhatsApp: '+92 321 8292831'
+        contactPerson: assignedContactPerson,
+        contactPhone: assignedContactPhone,
+        contactWhatsApp: assignedContactWhatsApp
       });
       if (!result.success) {
         // addProperty already surfaced the specific error (duplicate / permission)

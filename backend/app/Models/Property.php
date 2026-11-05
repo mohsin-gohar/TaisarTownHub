@@ -18,7 +18,8 @@ class Property extends Model
         'block', 'sizeSqYards', 'roadWidthFeet', 'type', 'status',
         'isFeatured', 'possessionReady', 'mdaApproved', 'westOpen',
         'cornerPlot', 'parkFacing', 'mainBoulevard', 'images', 'features',
-        'contactPerson', 'contactPhone', 'assignedDealerId',
+        'contactPerson', 'contactPhone', 'contactWhatsApp', 'assignedDealerId',
+        'agencyName', 'createdDate',
         'purchasePricePKR', 'sellingPricePKR', 'internalNotes'
     ];
 

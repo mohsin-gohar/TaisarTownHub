@@ -5,6 +5,7 @@ import {
   X,
   Building2,
   Mail,
+  Phone,
   ShieldCheck,
   CheckCircle2,
   FileCheck,
@@ -34,10 +35,21 @@ export const AgencyDetailsModal: React.FC<AgencyDetailsModalProps> = ({
 
   if (!isOpen || !dealer) return null;
 
-  // Find all properties / files associated with this dealer
+  // Robust multi-key match: assignedDealerId, contactPerson name, or agency affiliation
+  const dealerNameClean = (dealer.fullName || '').trim().toLowerCase();
+  const dealerAgencyClean = (dealer.agencyOrBranch || dealer.agencyAffiliation || '').trim().toLowerCase();
+
   const dealerProperties = properties.filter((p) => {
-    return p.assignedDealerId === dealer.id || p.contactPerson === dealer.fullName;
+    if (!p || p.deletedAt) return false;
+    const matchId = Boolean(p.assignedDealerId && p.assignedDealerId === dealer.id);
+    const matchName = Boolean(p.contactPerson && dealerNameClean && p.contactPerson.trim().toLowerCase() === dealerNameClean);
+    const matchAgency = Boolean(p.agencyName && dealerAgencyClean && p.agencyName.trim().toLowerCase() === dealerAgencyClean);
+    return matchId || matchName || matchAgency;
   });
+
+  const phase1Count = dealerProperties.filter((p) => getPropertyPhase(p) === 'Phase 1').length;
+  const phase2Count = dealerProperties.filter((p) => getPropertyPhase(p) === 'Phase 2').length;
+  const phase3Count = dealerProperties.filter((p) => getPropertyPhase(p) === 'Phase 3').length;
 
   // Filter by Phase tab
   const filteredProperties = dealerProperties.filter((p) => {
@@ -109,6 +121,17 @@ export const AgencyDetailsModal: React.FC<AgencyDetailsModalProps> = ({
                 <span>Authorized Agency Partner Desk</span>
               </span>
 
+              {dealer.phone && (
+                <a
+                  href={`tel:${dealer.phone}`}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
+                  title="Direct Agency Phone Line"
+                >
+                  <Phone className="w-3.5 h-3.5 text-[#C5A46D]" />
+                  <span>{dealer.phone}</span>
+                </a>
+              )}
+
               {dealer.email && (
                 <a
                   href={`mailto:${dealer.email}`}
@@ -174,27 +197,86 @@ export const AgencyDetailsModal: React.FC<AgencyDetailsModalProps> = ({
             </div>
 
             {/* Phase Selector Tabs */}
-            <div className="flex items-center gap-1 bg-[#0B1220] p-1 rounded-xl border border-slate-800 shrink-0">
-              {(['All', 'Phase 1', 'Phase 2', 'Phase 3'] as const).map((phase) => (
-                <button
-                  key={phase}
-                  onClick={() => setActivePhaseTab(phase)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                    activePhaseTab === phase
-                      ? 'bg-[#C5A46D] text-[#101C2C] font-bold shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {phase}
-                </button>
-              ))}
+            <div className="flex items-center gap-1 bg-[#0B1220] p-1 rounded-xl border border-slate-800 shrink-0 overflow-x-auto max-w-full">
+              <button
+                onClick={() => setActivePhaseTab('All')}
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
+                  activePhaseTab === 'All'
+                    ? 'bg-[#C5A46D] text-[#101C2C] font-bold shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                All ({dealerProperties.length})
+              </button>
+              <button
+                onClick={() => setActivePhaseTab('Phase 1')}
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
+                  activePhaseTab === 'Phase 1'
+                    ? 'bg-[#C5A46D] text-[#101C2C] font-bold shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Phase 1 ({phase1Count})
+              </button>
+              <button
+                onClick={() => setActivePhaseTab('Phase 2')}
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
+                  activePhaseTab === 'Phase 2'
+                    ? 'bg-[#C5A46D] text-[#101C2C] font-bold shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Phase 2 ({phase2Count})
+              </button>
+              <button
+                onClick={() => setActivePhaseTab('Phase 3')}
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
+                  activePhaseTab === 'Phase 3'
+                    ? 'bg-[#C5A46D] text-[#101C2C] font-bold shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Phase 3 ({phase3Count})
+              </button>
             </div>
           </div>
 
           {/* Files Grid */}
           {filteredProperties.length === 0 ? (
-            <div className="p-8 text-center bg-[#0B1220] rounded-2xl border border-slate-800 text-slate-400 text-xs">
-              No files currently listed under {activePhaseTab} for this agency.
+            <div className="p-8 text-center bg-[#0B1220] rounded-2xl border border-slate-800 space-y-4">
+              <div className="w-12 h-12 mx-auto rounded-xl bg-[#C5A46D]/15 flex items-center justify-center border border-[#C5A46D]/30 text-[#C5A46D]">
+                <FileCheck className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h4 className="font-serif-luxury font-bold text-white text-base">
+                  {activePhaseTab === 'All' ? 'Off-Market Allotment Desk' : `Exclusive ${activePhaseTab} Allotment Quota`}
+                </h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  {activePhaseTab === 'All'
+                    ? `Verified off-market allotment orders and biometric transfer records for ${agencyName} are currently active under private desk scrutiny.`
+                    : `No publicly advertised files listed under ${activePhaseTab} for ${agencyName}. Off-market allotment orders and sector demarcation maps are available upon client consultation.`}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                {dealerProperties.length > 0 && activePhaseTab !== 'All' && (
+                  <button
+                    onClick={() => setActivePhaseTab('All')}
+                    className="px-4 py-2 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold transition shadow cursor-pointer"
+                  >
+                    View All ({dealerProperties.length}) Available Agency Files
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    onClose();
+                    setCurrentView('contact');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer"
+                >
+                  Request Off-Market Allotment Search
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

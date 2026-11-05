@@ -40,9 +40,17 @@ export const AgenciesSection: React.FC = () => {
             const agencyName = dealer.agencyOrBranch || dealer.agencyAffiliation || 'TaisarTownHub Senior Advisory';
             
             // Count files managed by this agency (soft-deleted listings excluded)
-            const fileCount = properties.filter(
-              (p) => !p.deletedAt && (p.assignedDealerId === dealer.id || p.contactPerson === dealer.fullName)
-            ).length;
+            const dealerNameClean = (dealer.fullName || '').trim().toLowerCase();
+            const dealerAgencyClean = (dealer.agencyOrBranch || dealer.agencyAffiliation || '').trim().toLowerCase();
+            const dealerProps = properties.filter((p) => {
+              if (!p || p.deletedAt) return false;
+              const matchId = Boolean(p.assignedDealerId && p.assignedDealerId === dealer.id);
+              const matchName = Boolean(p.contactPerson && dealerNameClean && p.contactPerson.trim().toLowerCase() === dealerNameClean);
+              const matchAgency = Boolean(p.agencyName && dealerAgencyClean && p.agencyName.trim().toLowerCase() === dealerAgencyClean);
+              return matchId || matchName || matchAgency;
+            });
+            const fileCount = dealerProps.length;
+            const coveredPhases = Array.from(new Set(dealerProps.map((p) => p.phase || 'Phase 1'))).filter(Boolean);
 
             return (
               <div
@@ -101,6 +109,12 @@ export const AgenciesSection: React.FC = () => {
                         {dealer.dealsClosed || dealer.completedDealsCount || 6}+ Successful
                       </span>
                     </div>
+                    {coveredPhases.length > 0 && (
+                      <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between text-[10px]">
+                        <span className="text-slate-500 uppercase tracking-wider">Stock Coverage:</span>
+                        <span className="text-[#C5A46D] font-medium">{coveredPhases.join(' • ')}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
