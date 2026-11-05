@@ -259,6 +259,21 @@ export function checkDuplicateProperty(
 }
 
 /**
+ * Boolean gate used by the property add/edit form.
+ * Deliberately returns a primitive boolean so callers can never accidentally treat the
+ * result object of checkDuplicateProperty() as truthy (which blocked every save).
+ */
+export function isDuplicatePlot(
+  properties: Property[],
+  plotNumber?: string,
+  sector?: string,
+  block?: string,
+  excludeId?: string
+): boolean {
+  return checkDuplicateProperty(properties, plotNumber, sector, block, excludeId).isDuplicate === true;
+}
+
+/**
  * Calculate dealer commission based on agreement
  * - Fixed: fixed amount (e.g. 20,000 PKR from handwritten note example)
  * - Percentage: rate % of total deal amount

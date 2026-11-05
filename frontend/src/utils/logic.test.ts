@@ -8,6 +8,7 @@ import {
   validateInquiryForm,
   maskCNIC,
   checkDuplicateProperty,
+  isDuplicatePlot,
   calculateCommission,
   calculateERPFinancials,
   calculateMediaUsageCount,
@@ -104,6 +105,57 @@ test('checkDuplicateProperty flags matching plot and sector', () => {
   // Exclude current ID during edit: editing p-1 itself
   const editSelfCheck = checkDuplicateProperty(mockProps, 'R-66', 'Sector 63', 'Block A', 'p-1');
   assert.equal(editSelfCheck.isDuplicate, false);
+});
+
+test('isDuplicatePlot returns a primitive boolean gate (H5 regression: object truthiness blocked every save)', () => {
+  const mockProps: Property[] = [
+    {
+      id: 'p-1',
+      title: 'Plot QAF-001 Sector 71',
+      description: '120 Sq Yd',
+      pricePKR: 3500000,
+      formattedPrice: 'PKR 35 Lacs',
+      location: 'Sector 71, Karachi',
+      sector: 'Sector 71',
+      block: 'Block QA',
+      plotNumber: 'QAF-001',
+      sizeSqYards: 120,
+      type: 'Residential Plot',
+      status: 'Available',
+      isFeatured: false,
+      images: ['https://example.com/qaf.jpg'],
+      features: ['West Open'],
+      possessionReady: true,
+      mdaApproved: true,
+      createdDate: '2026-01-01',
+      contactPerson: 'Saleem Siddiqui',
+      contactPhone: '03001234567',
+      contactWhatsApp: '03001234567'
+    }
+  ];
+
+  // The exact bug: the form once consumed checkDuplicateProperty()'s object return
+  // directly in `if (isDuplicate)`, and an object is always truthy — so EVERY new plot
+  // was rejected as a duplicate. The helper must hand back a real boolean.
+  const brandNew = isDuplicatePlot(mockProps, 'QAF-777', 'Sector 80', 'Block B');
+  assert.equal(typeof brandNew, 'boolean');
+  assert.equal(brandNew, false);
+
+  // Genuinely new plot in an empty inventory must still be allowed.
+  assert.equal(isDuplicatePlot([], 'QAF-001', 'Sector 71'), false);
+
+  // Real duplicate (same plot + sector + block) must still be caught.
+  assert.equal(isDuplicatePlot(mockProps, 'qaf-001', 'sector 71', 'block qa'), true);
+
+  // Same plot number in a DIFFERENT sector is a distinct plot, not a duplicate.
+  assert.equal(isDuplicatePlot(mockProps, 'QAF-001', 'Sector 72', 'Block QA'), false);
+
+  // Editing a record without changing its plot must not flag itself (excludeId).
+  assert.equal(isDuplicatePlot(mockProps, 'QAF-001', 'Sector 71', 'Block QA', 'p-1'), false);
+
+  // Missing plot/sector means no duplicate gate applies.
+  assert.equal(isDuplicatePlot(mockProps, undefined, 'Sector 71'), false);
+  assert.equal(isDuplicatePlot(mockProps, 'QAF-001', ''), false);
 });
 
 test('filterProperties never returns soft-deleted listings (H3 regression)', () => {

@@ -14,7 +14,7 @@ import {
   Flame
 } from 'lucide-react';
 import { Property, PropertyType, PropertyStatus } from '../../types';
-import { formatPKRCurrency, checkDuplicateProperty, hasPermission } from '../../utils/logic';
+import { formatPKRCurrency, isDuplicatePlot, hasPermission } from '../../utils/logic';
 
 export const AdminProperties: React.FC = () => {
   const {
@@ -135,10 +135,11 @@ export const AdminProperties: React.FC = () => {
 
     // Check duplicate plot in same sector
     if (formData.plotNumber) {
-      const isDuplicate = checkDuplicateProperty(
+      const isDuplicate = isDuplicatePlot(
         properties,
         formData.plotNumber,
         formData.sector,
+        formData.block,
         editingPropId || undefined
       );
       if (isDuplicate) {
@@ -151,7 +152,7 @@ export const AdminProperties: React.FC = () => {
     const formattedPrice = formatPKRCurrency(Number(formData.pricePKR));
 
     if (editingPropId) {
-      updateProperty(editingPropId, {
+      const result = updateProperty(editingPropId, {
         title: formData.title,
         description: formData.description,
         pricePKR: Number(formData.pricePKR),
@@ -179,9 +180,13 @@ export const AdminProperties: React.FC = () => {
         images: [formData.image],
         features: featureList,
       });
+      if (!result.success) {
+        // updateProperty already surfaced the specific error (duplicate / permission)
+        return;
+      }
       showToast('success', 'Property listing updated.');
     } else {
-      addProperty({
+      const result = addProperty({
         title: formData.title,
         description: formData.description,
         pricePKR: Number(formData.pricePKR),
@@ -213,6 +218,10 @@ export const AdminProperties: React.FC = () => {
         contactPhone: '+92 321 8292831',
         contactWhatsApp: '+92 321 8292831'
       });
+      if (!result.success) {
+        // addProperty already surfaced the specific error (duplicate / permission)
+        return;
+      }
       showToast('success', 'New property registered in agency inventory.');
     }
 

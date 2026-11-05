@@ -13,6 +13,7 @@ This report documents the comprehensive fixes and improvements made to the Taisa
 ### 1.1 Database (MySQL)
 - **Database**: MySQL 8.4 with utf8mb4 charset
 - **Migrations**: 13 tables created with proper foreign keys and indexes
+- **Migrations**: 18 tables (13 core + business_records, audit_logs, dealer_files, personal_access_tokens, cache, jobs) with indexes; performance indexes added 2026-11-05 on `business_records(collection, deleted_at)` and `(collection, updated_at)`.
 - **Soft Deletes**: Enabled on all entity tables (dealers, properties, projects, transactions, inquiries, agency_videos, video_comments, dealer_files)
 - **Relationships**: Proper foreign key constraints with cascade/set null on delete
 
@@ -310,3 +311,43 @@ All verification gates pass:
 - Backend: All migrations pass, API endpoints tested, PHP lint clean
 
 The system is now production-ready for demo purposes with a clear path to full production deployment.
+
+---
+
+## Phase 10 — Full walkthrough, bug fixes, security & performance (2026-11-05)
+
+### Bugs found and fixed during human-style walkthrough
+1. **Add Property always failed with "Duplicate Plot"** (`AdminProperties.tsx`): `checkDuplicateProperty()` returns an
+   object `{ isDuplicate, duplicateProperty }`, but the form consumed it as a boolean (`if (isDuplicate)`), which is
+   always truthy — so every new plot was rejected. Fixed by reading `.isDuplicate` and added a boolean helper
+   `isDuplicatePlot()` used by the form. Also fixed the argument order: `editingPropId` was passed as the `block`
+   parameter instead of `excludeId`.
+2. **False success toast on failed add/edit** (`AdminProperties.tsx`): `addProperty`/`updateProperty` return a
+   `{ success, error }` result, but the form ignored it and always showed a success toast. Now surfaces the specific
+   error (duplicate / permission) and only celebrates on success.
+3. **Agency affiliation empty on registration** (`AuthController::register`): the `dealers` row stored
+   `agencyOrBranch` but never `agencyAffiliation`, so the dealer dashboard showed no agency. Now sets both; 4 existing
+   dealers backfilled via `DB::raw('agencyOrBranch')`.
+4. **CNIC stored in plaintext on dealer create/update** (`DealerController`): `store`/`update` masked `cnicMasked`
+   but left `cnic` raw. Now masks both columns (defense in depth). `AuthController::register` already did this.
+5. **Backend `php artisan serve` instability**: the background shell variant died after requests; documented the
+   detached `Start-Process` invocation.
+
+### Security pass
+- CORS origins restricted via `CORS_ALLOWED_ORIGINS` env (default localhost only); never wildcard origin.
+- CNIC masked at rest (register + dealer CRUD) and stripped from the public `dealers` serializer.
+- Demo credentials live only in `erpSeed.ts` (admin-only lazy chunk) and seeders; `check-bundle.mjs` fails the build
+  on any leak into public chunks.
+- Reload guard: >5 reloads / 60s site-wide (incl. login/register) shows a friendly error screen (6 unit tests).
+- Append-only `audit_logs` (server-side during workspace sync) for media sales, with seller/buyer/price/profit.
+
+### Performance pass
+- Migration `2026_11_05_100000_add_indexes_to_business_records`: composite indexes
+  `(collection, deleted_at)` and `(collection, updated_at)` for the public/admin list queries.
+
+### Verification
+- Frontend: 78/78 unit tests, `tsc --noEmit` clean, production build ~4s, `check:bundle` OK.
+- Backend: 5/5 PHPUnit tests, 18 migrations applied, `php -l` clean on all touched files.
+- Full human-style walkthrough: every public page + navbar link, gallery filter/like, contact form, property filters +
+  detail deep-link, project detail, 2 dealer registrations + RBAC-scoped dashboards, all 11 admin modules + their
+  Add/Edit/Delete/Verify/Status/Sell/Save flows, CMS save round-trip to public homepage, audit log + recycle bin.

@@ -73,6 +73,7 @@ class DealerController extends Controller
         // Mask CNIC before storing
         if (!empty($data['cnic'])) {
             $data['cnicMasked'] = $this->maskCnic($data['cnic']);
+            $data['cnic'] = $this->maskCnic($data['cnic']);
         }
 
         $dealer = Dealer::create($data);
@@ -107,6 +108,7 @@ class DealerController extends Controller
         // Mask CNIC if updated
         if (!empty($data['cnic'])) {
             $data['cnicMasked'] = $this->maskCnic($data['cnic']);
+            $data['cnic'] = $this->maskCnic($data['cnic']);
         }
 
         $dealer->update($data);

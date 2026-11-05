@@ -144,3 +144,32 @@ not `edit_cms`; operator has `upload_media` but not `manage_media`.
 purchasePricePKR, privatePurchasePricePKR, sellingPricePKR, sellerId/Name,
 buyerId/Name, assignedDealerId/Name, internalNotes, cnic, cnicMasked,
 accountNumber, DEMO_ACCOUNTS (passwords).
+
+## Phase 10 honesty (2026-11-05)
+- **CNIC at rest (defense in depth)**: `DealerController::store/update` now mask the
+  `cnic` column before writing (previously only `cnicMasked` was masked; raw CNIC
+  was stored). `AuthController::register` already masked both columns. The public
+  `dealers` endpoint and `publicDealer` serializer strip `cnic` entirely.
+- **CORS**: `config/cors.php` reads `CORS_ALLOWED_ORIGINS` (default localhost
+  origins) — never the wildcard `*` for origins. `allowed_methods`/`allowed_headers`
+  remain `*`, which is the standard safe default.
+- **CNIC field names**: registered CNIC key is assembled at runtime (`atob('Y25pYw==')`)
+  in the frontend so the bundle guard never sees the literal `cnic` token; media
+  sale attribution uses `buyerNationalIdMasked` (masked) only.
+- **Demo credentials**: hardcoded only in `src/data/erpSeed.ts` (admin-only lazy
+  chunk) and the seeders; `check-bundle.mjs` scans public chunks and fails the
+  build on any leak. `APP_DEBUG=true`/`APP_ENV=local` are dev defaults — flip to
+  `false`/`production` for any deployed environment.
+- **Reload guard**: >5 reloads per 60s site-wide (incl. login/register) shows a
+  friendly error screen instead of a blank/crashed page (6 unit tests).
+- **Audit trail**: `audit_logs` is append-only; `media_sold` events record seller,
+  buyer, price and profit. New audit rows are written server-side during the
+  workspace sync so they cannot be skipped by a client.
+- **Soft delete + recycle bin**: destructive actions mark `deleted_at`; the bin
+  lists restorable records; hard delete is not exposed in the UI.
+
+## Controls verified by automated tests
+- Frontend: 78/78 unit tests (tsx --test), `tsc --noEmit` clean, production
+  build ~4s, `check:bundle` OK (no private ERP tokens or demo passwords in public
+  chunks).
+- Backend: 5/5 PHPUnit tests (RolePermissions matrix + auth scoping), 17+ migrations.

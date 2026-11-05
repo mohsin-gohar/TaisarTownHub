@@ -72,6 +72,7 @@ class AuthController extends Controller
             'cnic' => $this->maskCnic($request->cnic),
             'cnicMasked' => $this->maskCnic($request->cnic),
             'agencyOrBranch' => $request->agencyOrBranch,
+            'agencyAffiliation' => $request->agencyOrBranch,
             'role' => 'dealer',
             'status' => 'Active',
         ]);
