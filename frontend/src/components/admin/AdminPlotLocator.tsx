@@ -34,14 +34,14 @@ export const AdminPlotLocator: React.FC = () => {
         (prop) =>
           prop.sector === marker.sector &&
           (prop.plotNumber?.toLowerCase() === marker.plotNumber.toLowerCase() ||
-           prop.title.toLowerCase().includes(`plot ${marker.plotNumber.toLowerCase()}`))
+           (prop.title?.toLowerCase() || '').includes(`plot ${marker.plotNumber.toLowerCase()}`))
       );
 
       // Find matching active transaction
       const matchingTx = transactions.find(
         (t) =>
           t.sector === marker.sector &&
-          t.plotNumber.toLowerCase() === marker.plotNumber.toLowerCase() &&
+          (t.plotNumber?.toLowerCase() === marker.plotNumber.toLowerCase()) &&
           t.status !== 'Cancelled'
       );
 

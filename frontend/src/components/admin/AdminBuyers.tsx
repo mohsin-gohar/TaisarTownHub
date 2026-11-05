@@ -216,7 +216,7 @@ export const AdminBuyers: React.FC = () => {
           // Matching properties in inventory within budget
           const matchingProperties = properties.filter(
             (p) =>
-              p.sector.toLowerCase().includes(buyer.interestedSector.toLowerCase()) &&
+              (p.sector || '').toLowerCase().includes((buyer.interestedSector || '').toLowerCase()) &&
               p.pricePKR <= (buyer.budgetPKR || 4500000) * 1.15
           );
 

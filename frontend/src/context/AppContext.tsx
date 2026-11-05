@@ -365,7 +365,7 @@ const setCurrentView = React.useCallback((view: string) => {
     id: 'anonymous',
     name: 'Anonymous Visitor',
     email: 'visitor@taisartownhub.com',
-    role: 'admin' as UserRole, // display role irrelevant until an admin session begins
+    role: 'operator' as UserRole, // least-privilege placeholder until an admin session begins
     permissions: [],
   }));
 
@@ -673,6 +673,7 @@ const setCurrentView = React.useCallback((view: string) => {
 
   const verifyPresenterPin = (pin: string): boolean => {
     if (!IS_DEMO) return false;
+    if (!DEMO_PIN) return false; // PIN gate disabled when no env var is set
     const now = Date.now();
     const gate = pinGateRef.current;
     if (now < gate.lockedUntil) return false; // silent reject while locked

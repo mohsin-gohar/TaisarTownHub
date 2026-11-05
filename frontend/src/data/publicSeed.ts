@@ -717,7 +717,6 @@ export const initialProperties: Property[] = [
     contactPerson: 'Zubair Ahmed Khan',
     contactPhone: '+92 315 2891901',
     contactWhatsApp: '+92 315 2891901',
-    assignedDealerId: 'deal-4'
   },
   // Al-Noor Property Advisors (Bilal Ahmed Khan)
   {
@@ -750,7 +749,6 @@ export const initialProperties: Property[] = [
     contactPerson: 'Bilal Ahmed Khan',
     contactPhone: '0321-7654321',
     contactWhatsApp: '0321-7654321',
-    assignedDealerId: 'deal-6aebff5257f92',
     createdDate: '2026-02-15'
   },
   {
@@ -782,7 +780,6 @@ export const initialProperties: Property[] = [
     contactPerson: 'Bilal Ahmed Khan',
     contactPhone: '0321-7654321',
     contactWhatsApp: '0321-7654321',
-    assignedDealerId: 'deal-6aebff5257f92',
     createdDate: '2026-02-12'
   },
   {
@@ -814,7 +811,6 @@ export const initialProperties: Property[] = [
     contactPerson: 'Bilal Ahmed Khan',
     contactPhone: '0321-7654321',
     contactWhatsApp: '0321-7654321',
-    assignedDealerId: 'deal-6aebff5257f92',
     createdDate: '2026-02-10'
   },
   {
@@ -845,7 +841,6 @@ export const initialProperties: Property[] = [
     contactPerson: 'Bilal Ahmed Khan',
     contactPhone: '0321-7654321',
     contactWhatsApp: '0321-7654321',
-    assignedDealerId: 'deal-6aebff5257f92',
     createdDate: '2026-02-08'
   },
   // Zenith Properties Scheme 45 (Sana Fatima)
@@ -877,7 +872,6 @@ export const initialProperties: Property[] = [
     contactPerson: 'Sana Fatima',
     contactPhone: '0333-1122334',
     contactWhatsApp: '0333-1122334',
-    assignedDealerId: 'deal-6aebffd36f827',
     createdDate: '2026-02-14'
   },
   // Akhtar Property Consultants (Naveed Akhtar)
@@ -909,7 +903,6 @@ export const initialProperties: Property[] = [
     contactPerson: 'Naveed Akhtar',
     contactPhone: '0300-9876543',
     contactWhatsApp: '0300-9876543',
-    assignedDealerId: 'deal-6aeab8d940a83',
     createdDate: '2026-02-15'
   }
 ];

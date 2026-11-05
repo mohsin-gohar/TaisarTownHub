@@ -120,8 +120,8 @@ export const AdminProperties: React.FC = () => {
       parkFacing: !!prop.parkFacing,
       sellerId: prop.sellerId || '',
       assignedDealerId: prop.assignedDealerId || '',
-      image: prop.images[0] || '',
-      features: prop.features.join(', ')
+      image: (prop.images && prop.images.length ? prop.images[0] : '') || '',
+      features: (prop.features || []).join(', ')
     });
     setIsModalOpen(true);
   };

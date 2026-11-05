@@ -95,9 +95,9 @@ class WorkspaceController extends Controller
                 $this->auditNewMediaSales($request, $rows);
             }
 
-            if (count($rows) === 0 && BusinessRecord::where('collection', $name)->whereNull('deleted_at')->exists()) {
-                continue;
-            }
+            // Allow persisting an intentionally emptied collection (the previous
+            // guard skipped the sync whenever the incoming rows were empty, which
+            // made "delete all" impossible and silently dropped the change).
             $this->syncList($name, $rows);
         }
 

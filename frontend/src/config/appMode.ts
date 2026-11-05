@@ -38,7 +38,7 @@ export const APP_MODE: AppMode = resolveMode();
 
 /** Presenter PIN for demo builds. Public warning: this is a speed bump, not security. */
 export const DEMO_PIN: string = String(
-  (typeof import.meta !== 'undefined' ? (import.meta as { env?: Record<string, string> }).env?.VITE_DEMO_PIN : undefined) || '4545'
+  (typeof import.meta !== 'undefined' ? (import.meta as { env?: Record<string, string> }).env?.VITE_DEMO_PIN : undefined) || ''
 );
 
 export const IS_DEMO: boolean = APP_MODE === 'demo';
