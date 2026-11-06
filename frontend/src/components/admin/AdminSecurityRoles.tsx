@@ -27,46 +27,30 @@ export const AdminSecurityRoles: React.FC = () => {
     {
       role: 'super_admin',
       title: 'Super Admin',
-      desc: 'Complete system control, role assignment, unmasked CNICs, private pricing, and database migration.',
+      desc: 'Complete system control, role assignment, unmasked CNICs, private pricing, database migration, and staff management.',
       color: 'border-[#C5A46D]/60 bg-[#C5A46D]/20 text-[#F9E7BA]'
     },
     {
       role: 'admin',
-      title: 'Agency Director (Admin)',
-      desc: 'Full back-office operations: property CRUD, seller/buyer records, dealer payouts, and CMS builder.',
+      title: 'Agency Admin',
+      desc: 'Full back-office operations: property CRUD, seller/buyer records, staff registration, task assignment, dealer payouts, and CMS builder.',
       color: 'border-[#C5A46D]/40 bg-[#C5A46D]/15 text-[#C5A46D]'
-    },
-    {
-      role: 'manager',
-      title: 'Branch Manager',
-      desc: 'Oversees deals, client inquiries, file verification status, and plot inventory allocations.',
-      color: 'border-slate-700 bg-slate-800 text-slate-200'
-    },
-    {
-      role: 'dealer',
-      title: 'Real Estate Dealer / Broker',
-      desc: 'Scoped view: deals closed, personal commission statement, and qualified buyer assignments.',
-      color: 'border-amber-500/40 bg-amber-500/15 text-amber-300'
-    },
-    {
-      role: 'operator',
-      title: 'Data Entry Operator',
-      desc: 'Restricted permissions: property listing entry, document scanning, and draft inquiries only.',
-      color: 'border-slate-700 bg-slate-800/80 text-slate-300'
     }
   ];
 
   const permissionsMatrix = [
-    { module: 'Public Listings & Search', super_admin: true, admin: true, manager: true, dealer: true, operator: true },
-    { module: 'Property Listing Creation & Editing', super_admin: true, admin: true, manager: true, dealer: false, operator: true },
-    { module: 'Private Purchase Prices & Margins', super_admin: true, admin: true, manager: false, dealer: false, operator: false },
-    { module: 'Seller Records & Unmasked CNIC', super_admin: true, admin: true, manager: false, dealer: false, operator: false },
-    { module: 'Buyer CRM & Lead Pipelines', super_admin: true, admin: true, manager: true, dealer: true, operator: false },
-    { module: 'Dealer Commission Payout Execution', super_admin: true, admin: true, manager: false, dealer: false, operator: false },
-    { module: 'Property File Legal Verification', super_admin: true, admin: true, manager: true, dealer: false, operator: false },
-    { module: 'Plot Map Status Assignment', super_admin: true, admin: true, manager: true, dealer: false, operator: false },
-    { module: 'Website CMS & Brand Customization', super_admin: true, admin: true, manager: false, dealer: false, operator: false },
-    { module: 'Permanent Deletion & System Purge', super_admin: true, admin: false, manager: false, dealer: false, operator: false },
+    { module: 'Public Listings & Search', super_admin: true, admin: true },
+    { module: 'Property Listing Creation & Editing', super_admin: true, admin: true },
+    { module: 'Private Purchase Prices & Margins', super_admin: true, admin: true },
+    { module: 'Seller Records & Unmasked CNIC', super_admin: true, admin: true },
+    { module: 'Buyer CRM & Lead Pipelines', super_admin: true, admin: true },
+    { module: 'Dealer Commission Payout Execution', super_admin: true, admin: true },
+    { module: 'Property File Legal Verification', super_admin: true, admin: true },
+    { module: 'Plot Map Status Assignment', super_admin: true, admin: true },
+    { module: 'Website CMS & Brand Customization', super_admin: true, admin: true },
+    { module: 'Permanent Deletion & System Purge', super_admin: true, admin: false },
+    { module: 'Staff Registration & Task Assignment', super_admin: true, admin: true },
+    { module: 'User & Security Management', super_admin: true, admin: false },
   ];
 
   const firestoreRulesSample = `rules_version = '2';
@@ -179,7 +163,7 @@ service cloud.firestore {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
           {roles.map((item) => {
             const isActive = activeRole === item.role;
 
@@ -240,10 +224,7 @@ service cloud.firestore {
               <tr>
                 <th className="py-3 px-4">System Operation / Module</th>
                 <th className="py-3 px-4 text-center">Super Admin</th>
-                <th className="py-3 px-4 text-center">Agency Director</th>
-                <th className="py-3 px-4 text-center">Branch Manager</th>
-                <th className="py-3 px-4 text-center">Dealer / Agent</th>
-                <th className="py-3 px-4 text-center">Data Operator</th>
+                <th className="py-3 px-4 text-center">Agency Admin</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
@@ -261,27 +242,6 @@ service cloud.firestore {
                   </td>
                   <td className="py-3 px-4 text-center">
                     {row.admin ? (
-                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    {row.manager ? (
-                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    {row.dealer ? (
-                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    {row.operator ? (
                       <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
                     ) : (
                       <XCircle className="w-4 h-4 text-slate-600 mx-auto" />

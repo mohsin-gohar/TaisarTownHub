@@ -100,7 +100,7 @@ export const initialProjects: Project[] = [
     videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-a-residential-suburb-with-houses-and-gardens-41617-large.mp4',
     startingPricePKR: 2800000,
     plotSizes: ['80 Sq. Yds', '120 Sq. Yds', '240 Sq. Yds', '400 Sq. Yds'],
-    masterPlanImage: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1200&q=80',
+    masterPlanImage: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
     completionYear: '2026',
     developerName: 'Malir Development Authority & Allied Builders',
     createdDate: '2026-01-10',
@@ -128,9 +128,9 @@ export const initialProjects: Project[] = [
     description: 'Inspired by modern urban lifestyle hubs, Al-Samnan Residency delivers boundary-walled community security coupled with a multi-level commercial arcade on the ground and mezzanine levels. Designed for forward-thinking merchants and families seeking peace of mind, uninterrupted electricity provision, and high rental appreciation.',
     status: 'Booking Open',
     isFeatured: true,
-    coverImage: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1200&q=80',
+    coverImage: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
     galleryImages: [
-      'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
       'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80',
       'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80'
     ],
@@ -237,7 +237,7 @@ export const initialProperties: Property[] = [
     images: [
       'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1000&q=80'
+      'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1000&q=80'
     ],
     features: ['100ft Road Facing', '24ft Frontage x 45ft Depth', 'MDA Computerized Allotment', 'Leveled High Elevation Land', 'Ready for Biometric Transfer'],
     possessionReady: true,
@@ -330,7 +330,7 @@ export const initialProperties: Property[] = [
     isFeatured: true,
     images: [
       'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1000&q=80'
+      'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1000&q=80'
     ],
     features: ['150ft Main Boulevard', 'Ground + 4 Commercial Approval', 'Heavy Commercial Footfall', 'Frontage 40 Feet', 'High Capital Appreciation'],
     possessionReady: true,
@@ -456,7 +456,7 @@ export const initialProperties: Property[] = [
     status: 'Hot Deal',
     isFeatured: true,
     images: [
-      'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1000&q=80'
     ],
     features: ['High Footfall Retail', 'Corner Shutter Entrance', 'Dedicated Electric Sub-Meter', 'Basement Parking Access', 'High Rental Potential'],
@@ -911,7 +911,7 @@ export const initialMedia: MediaItem[] = [
   {
     id: 'med-1',
     title: 'Taiser Town Master Plan Overview',
-    url: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1200&q=80',
+    url: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
     type: 'image',
     folder: 'Projects',
     fileSizeKB: 1420,

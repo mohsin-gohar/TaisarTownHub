@@ -773,7 +773,7 @@ export const initialPropertyFiles: PropertyFileItem[] = [
     fileType: 'pdf',
     category: 'Site Demarcation Map',
     fileSize: '4.8 MB',
-    url: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1200&q=80',
+    url: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
     verificationStatus: 'Verified',
     verifiedBy: 'Super Admin',
     verifiedAt: '2026-02-15',
