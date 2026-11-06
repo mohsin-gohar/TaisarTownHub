@@ -83,8 +83,8 @@ export const Footer: React.FC = () => {
           {/* Brand Info */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#C5A46D] to-[#8C6D37] flex items-center justify-center shadow-md border border-[#F9E7BA]/40">
-                <Building2 className="w-5 h-5 text-[#101C2C]" />
+              <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shadow-md border border-[#F9E7BA]/40 overflow-hidden">
+                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div>
                 <span className="font-serif-luxury text-xl font-bold text-white">

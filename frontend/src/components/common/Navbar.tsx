@@ -99,9 +99,11 @@ export const Navbar: React.FC = () => {
               className="flex items-center gap-2 sm:gap-3 cursor-pointer group min-w-0"
               aria-label={`${currentTheme.agencyName} — go to homepage`}
             >
-              <div className="w-10 h-10 lg:w-11 lg:h-11 shrink-0 rounded-lg bg-gradient-to-br from-[#C5A46D] to-[#8C6D37] flex items-center justify-center shadow-lg shadow-[#C5A46D]/20 border border-[#F9E7BA]/40 group-hover:scale-105 transition-transform">
-                <Building2 className="w-5 h-5 lg:w-6 lg:h-6 text-[#101C2C]" />
-              </div>
+              <img
+                src="/logo.png"
+                alt={`${currentTheme.agencyName} logo`}
+                className="w-10 h-10 lg:w-11 lg:h-11 shrink-0 rounded-lg object-contain group-hover:scale-105 transition-transform"
+              />
               <div className="min-w-0 text-left">
                 <span className="font-serif-luxury text-sm sm:text-lg lg:text-2xl font-bold tracking-tight text-white group-hover:text-[#C5A46D] transition-colors truncate block max-w-[140px] sm:max-w-none leading-tight">
                   {currentTheme.agencyName}

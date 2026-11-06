@@ -132,8 +132,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
 
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#C5A46D] to-[#8C6D37] flex items-center justify-center mx-auto shadow-lg shadow-[#C5A46D]/20 border border-[#F9E7BA]/40">
-            <Building2 className="w-7 h-7 text-[#101C2C]" />
+          <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center mx-auto shadow-lg shadow-[#C5A46D]/20 border border-[#F9E7BA]/40 overflow-hidden">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="font-serif-luxury text-2xl sm:text-3xl font-bold text-white tracking-tight">
             {currentTheme.agencyName}
