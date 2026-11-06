@@ -71,9 +71,8 @@ interface HeroSlide {
 const HERO_SLIDES: HeroSlide[] = [
   {
     id: 'moon',
-    background:
-      'https://images.unsplash.com/photo-1470816743791-2d2560bb5f1a?auto=format&fit=crop&w=1920&q=80',
-    alt: 'Full moon over the Taiser Town night sky'
+    background: '/image.png',
+    alt: 'Uploaded night property view for Taiser Town'
   },
   {
     id: 'hero',

@@ -23,7 +23,7 @@ test('hero has a slideshow with four to five slides', () => {
 
 test('hero slideshow starts on the full moon slide and rotates', () => {
   const source = read('./HeroSection.tsx');
-  assert.ok(source.includes('photo-1470816743791-2d2560bb5f1a'), 'full moon slide missing');
+  assert.ok(source.includes("background: '/image.png'"), 'first slide must use the uploaded image');
   assert.ok(source.includes('photo-1600585154340-be6161a56a0c'), 'configured hero slide missing');
   const interval = Number(source.match(/HERO_SLIDE_INTERVAL_MS = (\d+)/)?.[1] ?? 0);
   assert.ok(interval >= 4000 && interval <= 6000, `interval out of 4-5s range: ${interval}`);
