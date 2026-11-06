@@ -61,6 +61,49 @@ const StaggeredWords: React.FC<{ text: string; gold: boolean; delay?: number; is
 
 const TRUST_AVATARS = ['AS', 'KH', 'ST', 'MR', 'IJ'];
 
+interface HeroSlide {
+  id: string;
+  background: string;
+  alt: string;
+}
+
+/** Auto-rotating hero slides — midnight moon, then property scenes. */
+const HERO_SLIDES: HeroSlide[] = [
+  {
+    id: 'moon',
+    background:
+      'https://images.unsplash.com/photo-1470816743791-2d2560bb5f1a?auto=format&fit=crop&w=1920&q=80',
+    alt: 'Full moon over the Taiser Town night sky'
+  },
+  {
+    id: 'hero',
+    background:
+      'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1920&q=80',
+    alt: 'Modern residential villa at Taiser Town Scheme 45'
+  },
+  {
+    id: 'plots',
+    background:
+      'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1920&q=80',
+    alt: 'Verified residential plots and houses for sale'
+  },
+  {
+    id: 'house',
+    background:
+      'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1920&q=80',
+    alt: 'Premium house under construction at Scheme 45'
+  },
+  {
+    id: 'villa',
+    background:
+      'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=1920&q=80',
+    alt: 'Residential villa aerial view'
+  }
+];
+
+/** Slides advance every 4–5 seconds; reduced motion disables the autoplay. */
+const HERO_SLIDE_INTERVAL_MS = 4500;
+
 export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
   const { cmsConfig, currentTheme, setCurrentView, properties } = useApp();
 
@@ -70,11 +113,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
   const [selectedBudget, setSelectedBudget] = useState<string>('All');
   const [selectedSize, setSelectedSize] = useState<string>('All');
 
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+
   // Parallax: background drifts slower than scroll; content fades gently.
   const heroRef = useRef<HTMLDivElement>(null);
   const bgRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const reduceMotion = usePrefersReducedMotion();
+
+  // Hero slideshow: cross-fade between slides on an interval (4–5s).
+  useEffect(() => {
+    if (reduceMotion) return;
+    const timer = window.setInterval(() => {
+      setActiveSlideIndex((prev) => (prev + 1) % HERO_SLIDES.length);
+    }, HERO_SLIDE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [reduceMotion]);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -121,17 +175,31 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
 
   return (
     <div ref={heroRef} className="relative min-h-[92vh] flex flex-col justify-center overflow-hidden">
-      {/* Background Image — LCP priority, slow cinematic zoom + scroll parallax */}
+      {/* Background Slideshow — cross-fade between property visuals */}
       <div className="absolute inset-0 z-0">
-        <div ref={bgRef} className="absolute inset-0 -bottom-[16%] will-change-transform">
-          <img
-            src={cmsConfig.heroBackground}
-            alt="Aerial view of Taiser Town Scheme 45, Karachi — master-planned plots and boulevards"
-            fetchPriority="high"
-            decoding="async"
-            className="w-full h-full object-cover object-center scale-105 transform animate-subtleZoom"
-          />
-        </div>
+        {HERO_SLIDES.map((slide, index) => {
+          const isActive = index === activeSlideIndex;
+          return (
+            <div
+              key={slide.id}
+              className="absolute inset-0"
+              style={{ opacity: isActive ? 1 : 0, transition: 'opacity 1800ms ease-in-out' }}
+            >
+              <div
+                ref={isActive ? bgRef : undefined}
+                className={`absolute inset-0 -bottom-[16%] will-change-transform ${isActive && !isStatic ? 'animate-subtleZoom' : ''}`}
+              >
+                <img
+                  src={slide.background}
+                  alt={slide.alt}
+                  fetchPriority={isActive ? 'high' : 'auto'}
+                  decoding="async"
+                  className="w-full h-full object-cover object-center scale-105"
+                />
+              </div>
+            </div>
+          );
+        })}
         <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-[#0B1220]/80 to-[#101C2C]/70" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#0B1220]/40 to-[#0B1220]" />
       </div>
