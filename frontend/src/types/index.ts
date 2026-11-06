@@ -317,6 +317,9 @@ export interface PropertyFileItem {
   verifiedAt?: string;
   uploadedAt?: string;
   notes?: string;
+  /** Soft-delete (audit): hidden from the desk, restorable from the Recycle Bin. */
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export interface PlotMarker {

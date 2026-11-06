@@ -70,7 +70,7 @@ export const AdminMediaLibrary: React.FC = () => {
       const isPdf = file.type.includes('pdf');
 
       addMediaItem({
-        title: file.name.replace(/\.[^/.]+$/, ''),
+        title: uploadTitle.trim() || file.name.replace(/\.[^/.]+$/, ''),
         url: dataUrl,
         type: isVid ? 'video' : isPdf ? 'pdf' : 'image',
         folder: uploadFolder,
@@ -502,7 +502,7 @@ export const AdminMediaLibrary: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-lg bg-[#C5A4D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold shadow"
+                  className="px-6 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold shadow"
                 >
                   Add to Library
                 </button>

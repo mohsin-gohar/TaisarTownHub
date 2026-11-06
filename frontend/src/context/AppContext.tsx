@@ -163,6 +163,7 @@ interface AppContextType {
   addPropertyFile: (file: Omit<PropertyFileItem, 'id' | 'uploadedAt'>) => void;
   verifyPropertyFile: (id: string, status: DocumentVerificationStatus, notes?: string) => void;
   deletePropertyFile: (id: string) => void;
+  restorePropertyFile: (id: string) => void;
 
   plotMarkers: PlotMarker[];
   updatePlotMarker: (id: string, updates: Partial<PlotMarker>) => void;
@@ -1554,8 +1555,40 @@ const setCurrentView = React.useCallback((view: string) => {
 
   const deletePropertyFile = (id: string) => {
     if (!requirePermission(['verify_documents', 'upload_documents'])) return;
-    setPropertyFiles((prev) => prev.filter((f) => f.id !== id));
-    showToast('info', 'Document removed.');
+    const file = propertyFiles.find((f) => f.id === id);
+    if (!file || file.deletedAt) return;
+    const today = new Date().toISOString().split('T')[0];
+    setPropertyFiles((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, deletedAt: today, deletedBy: currentUser.name } : f))
+    );
+    showToast('info', 'Document moved to trash (soft-deleted, restorable).');
+    logAudit({
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: 'soft_delete_document',
+      target: id,
+      detail: file.title
+    });
+  };
+
+  const restorePropertyFile = (id: string) => {
+    if (!requirePermission(['verify_documents', 'upload_documents'])) return;
+    setPropertyFiles((prev) =>
+      prev.map((f) => {
+        if (f.id !== id) return f;
+        const restored = { ...f };
+        delete restored.deletedAt;
+        delete restored.deletedBy;
+        return restored;
+      })
+    );
+    showToast('success', 'Document restored to the verification desk.');
+    logAudit({
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: 'restore_document',
+      target: id
+    });
   };
 
   // Plot Locator
@@ -1582,7 +1615,7 @@ const setCurrentView = React.useCallback((view: string) => {
   const deleteMediaItem = (id: string): { success: boolean; message?: string } => {
     if (!requirePermission('manage_media')) return { success: false, message: 'Permission denied.' };
     const item = mediaItems.find((m) => m.id === id);
-    const decision = decideMediaDeletion(item, properties, projects, propertyFiles);
+    const decision = decideMediaDeletion(item, properties, projects, propertyFiles.filter((f) => !f.deletedAt));
     if (!decision.ok) {
       showToast('error', decision.message);
       return { success: false, message: decision.message };
@@ -1867,6 +1900,7 @@ const setCurrentView = React.useCallback((view: string) => {
         addPropertyFile,
         verifyPropertyFile,
         deletePropertyFile,
+        restorePropertyFile,
         plotMarkers,
         updatePlotMarker,
         mediaItems,

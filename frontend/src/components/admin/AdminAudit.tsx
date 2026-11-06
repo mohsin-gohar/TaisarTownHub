@@ -5,8 +5,8 @@ import { Trash2, RotateCcw, Shield, Clock, FileText, Users, UserCheck, Briefcase
 
 export const AdminAudit: React.FC = () => {
   const {
-    properties, sellers, buyers, dealers, projects, mediaItems,
-    restoreProperty, restoreSeller, restoreBuyer, restoreDealer, restoreProject, restoreMediaItem,
+    properties, sellers, buyers, dealers, projects, mediaItems, propertyFiles,
+    restoreProperty, restoreSeller, restoreBuyer, restoreDealer, restoreProject, restoreMediaItem, restorePropertyFile,
     currentUser,
   } = useApp();
 
@@ -19,8 +19,9 @@ export const AdminAudit: React.FC = () => {
   const trashedDealers = dealers.filter((d) => d.deletedAt);
   const trashedProjects = projects.filter((p) => p.deletedAt);
   const trashedMedia = mediaItems.filter((m) => m.deletedAt);
+  const trashedFiles = propertyFiles.filter((f) => f.deletedAt);
 
-  const totalTrashed = trashedProperties.length + trashedSellers.length + trashedBuyers.length + trashedDealers.length + trashedProjects.length + trashedMedia.length;
+  const totalTrashed = trashedProperties.length + trashedSellers.length + trashedBuyers.length + trashedDealers.length + trashedProjects.length + trashedMedia.length + trashedFiles.length;
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -105,6 +106,7 @@ export const AdminAudit: React.FC = () => {
             { label: 'Dealers', icon: Briefcase, items: trashedDealers.map((d) => ({ id: d.id, name: d.fullName, deletedAt: d.deletedAt, deletedBy: d.deletedBy, restore: () => restoreDealer(d.id) })) },
             { label: 'Projects', icon: Building2, items: trashedProjects.map((p) => ({ id: p.id, name: p.title, deletedAt: p.deletedAt, deletedBy: p.deletedBy, restore: () => restoreProject(p.id) })) },
             { label: 'Media', icon: Image, items: trashedMedia.map((m) => ({ id: m.id, name: m.title, deletedAt: m.deletedAt, deletedBy: m.deletedBy, restore: () => restoreMediaItem(m.id) })) },
+            { label: 'Property Documents', icon: FileText, items: trashedFiles.map((f) => ({ id: f.id, name: f.title, deletedAt: f.deletedAt, deletedBy: f.deletedBy, restore: () => restorePropertyFile(f.id) })) },
           ].map((group) => (
             <div key={group.label} className="bg-[#101C2C] rounded-2xl border border-slate-800 shadow-xl p-5">
               <div className="flex items-center gap-2 mb-3">

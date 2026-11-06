@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   FileCheck,
@@ -15,13 +15,20 @@ import {
   Upload,
   Calendar,
   X,
-  Eye
+  Eye,
+  Trash2
 } from 'lucide-react';
 import { PropertyFileItem, DocumentCategory, DocumentVerificationStatus } from '../../types';
 import { hasPermission } from '../../utils/logic';
+import {
+  DOCUMENT_UPLOAD_ACCEPT,
+  hasViewableDocument,
+  isPdfDocument,
+  validateDocumentFile
+} from '../../utils/documentUpload';
 
 export const AdminFileManagement: React.FC = () => {
-  const { propertyFiles, verifyPropertyFile, addPropertyFile, properties, showToast, currentUser } = useApp();
+  const { propertyFiles, verifyPropertyFile, addPropertyFile, deletePropertyFile, properties, showToast, currentUser, confirmAction } = useApp();
 
   // P0-4: verify/reject are verifier actions. Operators (upload-only role) get
   // the upload path but never the decision buttons — and the context action
@@ -47,11 +54,95 @@ export const AdminFileManagement: React.FC = () => {
     category: 'Allotment Order' as DocumentCategory,
     fileNumber: 'TT-63-A-066',
     propertyId: properties[0]?.id || '',
-    documentUrl: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=1200&q=80',
+    documentUrl: '',
     notes: 'Official document copy'
   });
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const [documentFileName, setDocumentFileName] = useState('');
+  const [documentFileSize, setDocumentFileSize] = useState('');
+  const [documentFileType, setDocumentFileType] = useState<'pdf' | 'image' | undefined>(undefined);
+  const [documentFileError, setDocumentFileError] = useState('');
+
+  const resetUploadForm = () => {
+    setFormData({
+      title: '',
+      category: 'Allotment Order',
+      fileNumber: 'TT-63-A-066',
+      propertyId: properties[0]?.id || '',
+      documentUrl: '',
+      notes: 'Official document copy'
+    });
+    setDocumentFileName('');
+    setDocumentFileSize('');
+    setDocumentFileType(undefined);
+    setDocumentFileError('');
+    if (documentInputRef.current) documentInputRef.current.value = '';
+  };
+
+  const openUploadModal = () => {
+    resetUploadForm();
+    setIsUploadModalOpen(true);
+  };
+
+  const closeUploadModal = () => {
+    setIsUploadModalOpen(false);
+    resetUploadForm();
+  };
+
+  const clearSelectedDocument = () => {
+    setFormData((prev) => ({ ...prev, documentUrl: '' }));
+    setDocumentFileName('');
+    setDocumentFileSize('');
+    setDocumentFileType(undefined);
+    setDocumentFileError('');
+    if (documentInputRef.current) documentInputRef.current.value = '';
+  };
+
+  /**
+   * Read the selected scan into a data URL so the file is stored with the
+   * record itself (no orphaned local path). Validation happens before any
+   * state changes; size/type limits live in utils/documentUpload.ts.
+   */
+  const handleDocumentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateDocumentFile(file);
+    if (!validation.ok) {
+      const message = validation.error ?? 'Invalid document file.';
+      setDocumentFileError(message);
+      setDocumentFileName('');
+      setDocumentFileSize('');
+      setDocumentFileType(undefined);
+      setFormData((prev) => ({ ...prev, documentUrl: '' }));
+      if (documentInputRef.current) documentInputRef.current.value = '';
+      showToast('error', message);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      setFormData((prev) => ({
+        ...prev,
+        documentUrl: dataUrl,
+        title: prev.title.trim() ? prev.title : file.name.replace(/\.[^.]+$/, '')
+      }));
+      setDocumentFileName(file.name);
+      setDocumentFileSize(validation.fileSize ?? '');
+      setDocumentFileType(validation.fileType);
+      setDocumentFileError('');
+    };
+    reader.onerror = () => {
+      const message = 'Could not read the selected file. Please try again.';
+      setDocumentFileError(message);
+      showToast('error', message);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const filteredDocs = propertyFiles.filter((doc) => {
+    if (doc.deletedAt) return false;
     const matchesSearch =
       doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (doc.fileNumber || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -84,6 +175,14 @@ export const AdminFileManagement: React.FC = () => {
     setRejectReason('Discrepancy with MDA Master Record / Requires Stamp Revision.');
   };
 
+  const handleDeleteDoc = async (doc: PropertyFileItem) => {
+    const confirmed = await confirmAction(
+      `Move document "${doc.title}" to the Recycle Bin? It can be restored later by an admin.`,
+      { title: 'Delete property document', confirmLabel: 'Delete' }
+    );
+    if (confirmed) deletePropertyFile(doc.id);
+  };
+
   const handleConfirmReject = () => {
     if (!rejectModalDocId) return;
     verifyPropertyFile(rejectModalDocId, 'Rejected', rejectReason);
@@ -97,30 +196,43 @@ export const AdminFileManagement: React.FC = () => {
       showToast('error', 'Please enter document title.');
       return;
     }
+    if (!hasViewableDocument(formData.documentUrl)) {
+      showToast('error', 'Attach the document scan or paste a hosted file URL.');
+      setDocumentFileError('Attach a PDF/JPG/PNG/WebP scan, or paste a hosted URL below.');
+      return;
+    }
 
     const linkedProp = properties.find((p) => p.id === formData.propertyId);
 
     addPropertyFile({
-      title: formData.title,
+      title: formData.title.trim(),
       category: formData.category,
-      fileNumber: formData.fileNumber,
+      fileNumber: formData.fileNumber.trim(),
       plotNumber: linkedProp?.plotNumber,
       sector: linkedProp?.sector,
       propertyId: formData.propertyId,
       documentUrl: formData.documentUrl,
+      fileType: documentFileType,
+      fileSize: documentFileSize || undefined,
       verificationStatus: 'Pending Verification',
       verifiedBy: '',
       verifiedAt: '',
       notes: formData.notes
     });
 
-    showToast('success', 'Property document uploaded and queued for verification.');
-    setIsUploadModalOpen(false);
+    closeUploadModal();
   };
 
-  const pendingCount = propertyFiles.filter((d) => d.verificationStatus === 'Pending Verification').length;
-  const verifiedCount = propertyFiles.filter((d) => d.verificationStatus === 'Verified').length;
-  const rejectedCount = propertyFiles.filter((d) => d.verificationStatus === 'Rejected').length;
+  const activeDocs = propertyFiles.filter((d) => !d.deletedAt);
+  const pendingCount = activeDocs.filter((d) => d.verificationStatus === 'Pending Verification').length;
+  const verifiedCount = activeDocs.filter((d) => d.verificationStatus === 'Verified').length;
+  const rejectedCount = activeDocs.filter((d) => d.verificationStatus === 'Rejected').length;
+
+  const previewDocUrl = selectedDocPreview
+    ? selectedDocPreview.documentUrl || selectedDocPreview.url
+    : undefined;
+  const previewHasFile = hasViewableDocument(previewDocUrl);
+  const previewIsPdf = isPdfDocument(selectedDocPreview?.fileType, previewDocUrl);
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -141,7 +253,7 @@ export const AdminFileManagement: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setIsUploadModalOpen(true)}
+          onClick={openUploadModal}
           className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
         >
           <Upload className="w-4 h-4" />
@@ -327,6 +439,15 @@ export const AdminFileManagement: React.FC = () => {
                       Awaiting verification
                     </span>
                   )}
+
+                  <button
+                    onClick={() => handleDeleteDoc(doc)}
+                    title="Delete document"
+                    aria-label={`Delete ${doc.title}`}
+                    className="p-1.5 rounded-lg bg-slate-800/70 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-slate-700 cursor-pointer transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -442,18 +563,54 @@ export const AdminFileManagement: React.FC = () => {
             </span>
 
             <div className="my-4 rounded-xl overflow-hidden border border-slate-800 bg-[#0B1220]">
-              <img
-                src={selectedDocPreview.documentUrl}
-                alt={selectedDocPreview.title}
-                className="w-full h-80 object-cover"
-              />
+              {!previewHasFile ? (
+                <div className="h-44 flex flex-col items-center justify-center gap-2 text-slate-500 px-6 text-center">
+                  <FileText className="w-8 h-8 text-slate-600" />
+                  <p className="text-xs">
+                    No scanned copy attached to this record. Upload a PDF or image scan to preview it here.
+                  </p>
+                </div>
+              ) : previewIsPdf ? (
+                <iframe
+                  src={previewDocUrl}
+                  title={`PDF preview: ${selectedDocPreview.title}`}
+                  className="w-full h-80 bg-white"
+                />
+              ) : (
+                <img
+                  src={previewDocUrl}
+                  alt={selectedDocPreview.title}
+                  className="w-full h-80 object-contain bg-[#0B1220]"
+                />
+              )}
             </div>
+
+            {previewHasFile && (
+              <a
+                href={previewDocUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C5A46D] hover:text-[#D4AF37]"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open document in a new tab</span>
+              </a>
+            )}
 
             <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-800 text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-slate-400">Verification Status:</span>
                 <span className="font-bold text-white">{selectedDocPreview.verificationStatus}</span>
               </div>
+              {selectedDocPreview.fileType && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Attached File:</span>
+                  <span className="font-semibold text-white uppercase">
+                    {selectedDocPreview.fileType}
+                    {selectedDocPreview.fileSize ? ` · ${selectedDocPreview.fileSize}` : ''}
+                  </span>
+                </div>
+              )}
               {selectedDocPreview.verifiedBy && (
                 <div className="flex justify-between">
                   <span className="text-slate-400">Verified By:</span>
@@ -479,7 +636,7 @@ export const AdminFileManagement: React.FC = () => {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setIsUploadModalOpen(false);
+            if (e.target === e.currentTarget) closeUploadModal();
           }}
         >
           <div className="relative w-full max-w-lg bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -487,7 +644,7 @@ export const AdminFileManagement: React.FC = () => {
               Upload Official Property Document
             </h3>
             <p className="text-xs text-slate-400 mb-6">
-              File documents will be placed in queue for legal verification.
+              Attach a PDF or a clear phone scan. Files are stored with the property record and queued for legal verification.
             </p>
 
             <form onSubmit={handleUploadSubmit} className="space-y-4 text-xs">
@@ -549,14 +706,74 @@ export const AdminFileManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Document Scan Image / PDF URL</label>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Document Scan — PDF / JPG / PNG / WebP, max 5 MB *
+                </label>
                 <input
-                  type="text"
-                  required
-                  value={formData.documentUrl}
-                  onChange={(e) => setFormData({ ...formData, documentUrl: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono text-[11px]"
+                  ref={documentInputRef}
+                  type="file"
+                  accept={DOCUMENT_UPLOAD_ACCEPT}
+                  onChange={handleDocumentFileChange}
+                  className="hidden"
                 />
+                <button
+                  type="button"
+                  onClick={() => documentInputRef.current?.click()}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-[#0B1220] border-2 border-dashed border-[#C5A46D]/40 hover:border-[#C5A46D] text-left cursor-pointer transition-colors"
+                >
+                  <span className="w-9 h-9 rounded-lg bg-[#C5A46D]/15 border border-[#C5A46D]/30 flex items-center justify-center shrink-0">
+                    <Upload className="w-4 h-4 text-[#C5A46D]" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-white font-semibold truncate">
+                      {documentFileName || 'Choose a document from your computer'}
+                    </span>
+                    <span className="block text-[11px] text-slate-400 truncate">
+                      {documentFileName
+                        ? `${documentFileSize} · ready to upload`
+                        : 'PDF allotment orders, transfer deeds, or a clear phone scan'}
+                    </span>
+                  </span>
+                </button>
+                {documentFileName && (
+                  <button
+                    type="button"
+                    onClick={clearSelectedDocument}
+                    className="mt-1.5 text-[11px] text-slate-400 hover:text-white underline cursor-pointer"
+                  >
+                    Remove selected file
+                  </button>
+                )}
+                {documentFileError && (
+                  <p role="alert" className="mt-1.5 text-[11px] text-rose-400">
+                    {documentFileError}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Or paste a hosted scan URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://your-storage.example.com/allotment-order.pdf"
+                  value={formData.documentUrl.startsWith('data:') ? '' : formData.documentUrl}
+                  disabled={formData.documentUrl.startsWith('data:')}
+                  onChange={(e) => {
+                    setFormData({ ...formData, documentUrl: e.target.value });
+                    setDocumentFileName('');
+                    setDocumentFileSize('');
+                    setDocumentFileType(undefined);
+                    setDocumentFileError('');
+                  }}
+                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                {formData.documentUrl.startsWith('data:') && (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    A local file is attached. Remove it to paste a hosted URL instead.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -573,7 +790,7 @@ export const AdminFileManagement: React.FC = () => {
               <div className="flex items-center justify-end gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setIsUploadModalOpen(false)}
+                  onClick={closeUploadModal}
                   className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 font-semibold cursor-pointer"
                 >
                   Cancel
