@@ -2,24 +2,14 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   ShieldCheck,
-  UserCheck,
-  Lock,
   Key,
-  Database,
   CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Code,
-  Copy,
-  Check,
-  Server,
-  Layers
+  XCircle
 } from 'lucide-react';
 import { UserRole } from '../../types';
 
 export const AdminSecurityRoles: React.FC = () => {
-  const { activeRole, switchAuthUser, currentUser, verifyPresenterPin, showToast } = useApp();
-  const [copiedRules, setCopiedRules] = useState(false);
+  const { activeRole, switchAuthUser } = useApp();
   const [presenterPin, setPresenterPin] = useState('');
   const [switching, setSwitching] = useState(false);
 
@@ -53,56 +43,6 @@ export const AdminSecurityRoles: React.FC = () => {
     { module: 'User & Security Management', super_admin: true, admin: false },
   ];
 
-  const firestoreRulesSample = `rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    function getUserRole() {
-      return request.auth.token.role;
-    }
-    function isSuperAdmin() {
-      return isAuthenticated() && getUserRole() == 'super_admin';
-    }
-    function isAdminOrManager() {
-      return isAuthenticated() && (getUserRole() in ['super_admin', 'admin', 'manager']);
-    }
-
-    // Public properties (anyone can read, authorized can write)
-    match /properties/{propId} {
-      allow read: if true;
-      allow write: if isAdminOrManager();
-      allow delete: if isSuperAdmin();
-    }
-
-    // Confidential Sellers & CNIC
-    match /sellers/{sellerId} {
-      allow read, write: if isAuthenticated() && (getUserRole() in ['super_admin', 'admin']);
-    }
-
-    // Real Estate Transactions & Deals
-    match /transactions/{txnId} {
-      allow read: if isAdminOrManager() || (getUserRole() == 'dealer' && resource.data.dealerId == request.auth.uid);
-      allow write: if isAdminOrManager();
-    }
-
-    // Document Verification Desk
-    match /propertyFiles/{fileId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdminOrManager();
-    }
-  }
-}`;
-
-  const handleCopyRules = () => {
-    navigator.clipboard.writeText(firestoreRulesSample);
-    setCopiedRules(true);
-    showToast('success', 'Production Firestore rules copied to clipboard.');
-    setTimeout(() => setCopiedRules(false), 2500);
-  };
-
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Header */}
@@ -117,7 +57,7 @@ service cloud.firestore {
             </span>
           </div>
           <p className="text-xs text-slate-300 mt-1">
-            Enforcing field-level masking for CNICs, private purchase prices, dealer commissions, and cloud security rules.
+            Enforcing field-level masking for CNICs, private purchase prices, dealer commissions, and server-side access controls.
           </p>
         </div>
 
@@ -130,19 +70,19 @@ service cloud.firestore {
         </div>
       </div>
 
-      {/* Instant Role Switcher for Client Demo Presentations */}
+      {/* Session Role Switcher */}
       <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
         <div>
           <h3 className="font-serif-luxury text-lg font-bold text-white">
-            Client Presentation Mode — 1-Click Role Switcher
+            Session Role Switcher
           </h3>
           <p className="text-xs text-slate-400">
-            During client meetings, switch between these roles to demonstrate how access permissions dynamically restrict or expose features.
+            Switch the active session between administrative roles to review how access boundaries apply.
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-3 items-center">
-          {/* Presenter PIN gate — role switching is demo-only and PIN-gated */}
+          {/* Presenter PIN gate */}
           <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-2">
             <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
               <Key className="w-3 h-3" />
@@ -158,7 +98,7 @@ service cloud.firestore {
               className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none font-mono tracking-widest"
             />
             <p className="text-[9px] text-slate-500 leading-snug">
-              Demo build only. A client-side PIN is a speed bump, not real security.
+              Role switching requires the presenter PIN configured for this deployment.
             </p>
           </div>
         </div>
@@ -199,7 +139,7 @@ service cloud.firestore {
                 </div>
 
                 <div className="pt-3 mt-2 border-t border-slate-800 text-[10px] text-slate-400 font-bold">
-                  {isActive ? '● Currently Active' : 'Click to Simulate'}
+                  {isActive ? '● Currently Active' : 'Switch to this role'}
                 </div>
               </button>
             );
@@ -214,7 +154,7 @@ service cloud.firestore {
             Granular Permissions Matrix
           </h3>
           <p className="text-xs text-slate-400">
-            Mapping of operational capabilities across administrative, managerial, and field dealer levels.
+            Mapping of operational capabilities across Super Admin and Agency Admin roles.
           </p>
         </div>
 
@@ -254,32 +194,35 @@ service cloud.firestore {
         </div>
       </div>
 
-      {/* Cloud Firebase Production Architecture */}
+      {/* Production Security Controls */}
       <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="font-serif-luxury text-lg font-bold text-white flex items-center gap-2">
-              <Server className="w-5 h-5 text-[#C5A46D]" />
-              <span>Production Firebase Firestore Security Rules</span>
-            </h3>
-            <p className="text-xs text-slate-400">
-              Deployable firestore.rules guarding backend database collections in production Cloud deployments.
-            </p>
-          </div>
-
-          <button
-            onClick={handleCopyRules}
-            className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-[#C5A46D] flex items-center gap-1.5 cursor-pointer border border-slate-700 self-start sm:self-auto"
-          >
-            {copiedRules ? <Check className="w-3.5 h-3.5 text-[#C5A46D]" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedRules ? 'Copied to Clipboard' : 'Copy Firestore Rules'}</span>
-          </button>
+        <div>
+          <h3 className="font-serif-luxury text-lg font-bold text-white flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-[#C5A46D]" />
+            <span>Production Security Controls</span>
+          </h3>
+          <p className="text-xs text-slate-400">
+            Enforced by the Laravel API, Sanctum authentication, and the MySQL workspace layer.
+          </p>
         </div>
 
-        <div className="bg-[#0B1220] p-4 rounded-xl border border-slate-800 overflow-x-auto">
-          <pre className="text-xs font-mono text-slate-300 leading-relaxed">
-            {firestoreRulesSample}
-          </pre>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[
+            { title: 'Server-side authorization', desc: 'Every mutation is checked against the signed-in role before it reaches the database.' },
+            { title: 'Password hashing', desc: 'Passwords are stored with Laravel hashing; plaintext credentials are never persisted.' },
+            { title: 'CNIC masking at rest', desc: 'National ID values are masked in API responses and unmasked only on an explicit, permissioned request.' },
+            { title: 'Audit trail', desc: 'Logins, media sales, verification decisions, and destructive actions are recorded for review.' },
+            { title: 'CORS allowlist', desc: 'API origins are restricted to the dashboard domains configured for this deployment.' },
+            { title: 'Transport security', desc: 'Production deployments terminate TLS at the web server; keep HTTPS enforced for the dashboard and API.' },
+          ].map((item) => (
+            <div key={item.title} className="p-4 rounded-xl bg-[#0B1220] border border-slate-800">
+              <div className="flex items-center gap-2 text-xs font-bold text-white">
+                <CheckCircle2 className="w-4 h-4 text-[#C5A46D] shrink-0" />
+                <span>{item.title}</span>
+              </div>
+              <p className="mt-1.5 text-[11px] text-slate-400 leading-relaxed">{item.desc}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>

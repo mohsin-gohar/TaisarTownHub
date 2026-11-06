@@ -27,6 +27,14 @@ test('admin header does not show internal/demo status badges', () => {
   assert.equal(source.includes('View Public Site'), true);
 });
 
+test('security page describes the live architecture, not demo/Firebase copy', () => {
+  const source = read('../admin/AdminSecurityRoles.tsx');
+  assert.equal(source.includes('Firebase Firestore'), false);
+  assert.equal(source.includes('Client Presentation Mode'), false);
+  assert.equal(source.includes('Demo build only'), false);
+  assert.equal(source.includes('Production Security Controls'), true);
+});
+
 test('footer does not describe the product as a demo', () => {
   const source = read('./Footer.tsx');
   assert.equal(source.includes('Real Estate Demo & Agency Platform'), false);
