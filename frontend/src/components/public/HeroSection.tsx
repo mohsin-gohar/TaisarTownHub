@@ -67,12 +67,12 @@ interface HeroSlide {
   alt: string;
 }
 
-/** Auto-rotating hero slides — midnight moon, then property scenes. */
+/** Auto-rotating hero slides — dramatic golden sunset & full moon, then luxury property scenes. */
 const HERO_SLIDES: HeroSlide[] = [
   {
-    id: 'moon',
+    id: 'sunset-moon',
     background: '/image.png',
-    alt: 'Uploaded night property view for Taiser Town'
+    alt: 'Dramatic golden sunset rays with glowing full moon over coastal horizon'
   },
   {
     id: 'hero',
@@ -199,8 +199,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
             </div>
           );
         })}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-[#0B1220]/80 to-[#101C2C]/70" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#0B1220]/40 to-[#0B1220]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-[#0B1220]/65 to-[#0B1220]/25" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#0B1220]/30 to-[#0B1220]/75" />
       </div>
 
       <div
@@ -450,6 +450,23 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
           <ChevronDown className="w-4 h-4 animate-scrollHint text-[#C5A46D]" />
         </span>
       </button>
+
+      {/* Hero Slide Switcher Dots */}
+      <div className="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-2 bg-[#0B1220]/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#C5A46D]/30 shadow-lg">
+        {HERO_SLIDES.map((slide, idx) => (
+          <button
+            key={slide.id}
+            onClick={() => setActiveSlideIndex(idx)}
+            aria-label={`Switch to slide ${idx + 1}`}
+            className={`transition-all duration-300 rounded-full cursor-pointer ${
+              idx === activeSlideIndex
+                ? 'w-6 h-2 bg-[#C5A46D] shadow-sm shadow-[#C5A46D]/50'
+                : 'w-2 h-2 bg-slate-500 hover:bg-slate-300'
+            }`}
+            title={idx === 0 ? 'Golden Sunset Moon' : `Slide ${idx + 1}`}
+          />
+        ))}
+      </div>
     </div>
   );
 };

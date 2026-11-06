@@ -20,7 +20,7 @@ export const initialCMSConfig: CMSConfig = {
   tagline: 'Premier Real Estate Agency & Project Showcase — Scheme 45, Karachi',
   heroHeadline: 'Discover Your Place. Build Your Future.',
   heroSubtitle: 'Explore verified residential plots, commercial opportunities, and master-planned housing societies across Taiser Town Scheme 45, Karachi.',
-  heroBackground: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1920&q=80',
+  heroBackground: '/hero-bg.jpg',
   statsProjectsCount: '45+',
   statsPropertiesCount: '320+',
   statsSatisfiedClients: '1,450+',
