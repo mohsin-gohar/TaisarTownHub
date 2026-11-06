@@ -2,7 +2,6 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useApp } from '../../context/AppContext';
 import { hasAnyPermission } from '../../utils/logic';
 import { normalizeRole } from '../../domain/permissions';
-import { IS_DEMO } from '../../config/appMode';
 import { AdminModuleSkeleton } from './AdminModuleSkeleton';
 import {
   Building2,
@@ -14,7 +13,6 @@ import {
   ExternalLink,
   ShieldCheck,
   LayoutDashboard,
-  Sparkles,
   Layers,
   ChevronRight,
   MapPin,
@@ -59,9 +57,7 @@ export const AdminLayout: React.FC = () => {
     transactions,
     propertyFiles,
     activeRole,
-    currentUser,
-    isPresentationMode,
-    backendConnected
+    currentUser
   } = useApp();
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -265,39 +261,26 @@ export const AdminLayout: React.FC = () => {
       {/* Main Workspace Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Top Header */}
-        <header className="sticky top-0 z-30 bg-[#101C2C]/90 backdrop-blur-md border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span>Admin</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-white font-semibold capitalize">
+        <header className="sticky top-0 z-30 bg-[#101C2C]/90 backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs text-slate-400 min-w-0">
+            <span className="hidden sm:inline">Admin</span>
+            <ChevronRight className="w-3.5 h-3.5 hidden sm:inline" />
+            <span className="text-white font-semibold capitalize truncate">
               {sidebarLinks.find((s) => s.id === adminTab)?.label || 'Overview'}
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            {backendConnected && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-950/70 text-emerald-400 border border-emerald-500/30 shadow-sm" title="Connected to Laravel 12 API + MySQL Database">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>MySQL Live</span>
-              </span>
-            )}
-
-            {(isPresentationMode || IS_DEMO) && (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/15 text-[#F9E7BA] border border-[#C5A46D]/40 uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                <Sparkles className="w-3 h-3 text-[#C5A46D]" />
-                DEMO MODE
-              </span>
-            )}
-
+          <div className="flex items-center gap-3 shrink-0">
             <div className="hidden sm:flex items-center gap-2 text-xs text-slate-300">
               <span className="w-2 h-2 rounded-full bg-[#C5A46D]" />
               <span>Active Role: <strong className="text-[#C5A46D] capitalize">{activeRole.replace('_', ' ')}</strong></span>
             </div>
             <button
               onClick={() => setCurrentView('home')}
+              aria-label="View public website"
               className="text-xs text-[#C5A46D] hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <span>Exit to Live Site</span>
+              <span className="hidden sm:inline">View Public Site</span>
               <ExternalLink className="w-3 h-3" />
             </button>
           </div>

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
 import {
-  Building2,
   Phone,
   Mail,
   MapPin,
@@ -100,7 +99,7 @@ export const Footer: React.FC = () => {
             </p>
             <div className="pt-2 flex items-center gap-2 text-xs text-emerald-400">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Independent Real Estate Demo & Agency Platform</span>
+              <span>Independent Real Estate Advisory & Agency Platform</span>
             </div>
             {/* Social Links */}
             <div className="pt-3 flex items-center gap-2.5">
@@ -114,8 +113,8 @@ export const Footer: React.FC = () => {
                   key={label}
                   href="#"
                   onClick={(e) => e.preventDefault()}
-                  aria-label={`${currentTheme.agencyName} on ${label} (demo link)`}
-                  title={`${label} (demo)`}
+                  aria-label={`${currentTheme.agencyName} on ${label}`}
+                  title={label}
                   className="w-9 h-9 rounded-lg bg-[#101C2C] border border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#C5A46D] hover:border-[#C5A46D]/50 hover:shadow-[0_0_12px_rgba(197,164,109,0.35)] hover:-translate-y-0.5 transition-all cursor-pointer"
                 >
                   <Icon className="w-4 h-4" />
@@ -206,7 +205,7 @@ export const Footer: React.FC = () => {
               </div>
             </div>
 
-            {/* Newsletter (demo UI only) */}
+            {/* Newsletter */}
             <div className="pt-4 space-y-2">
               <h4 className="text-white font-semibold text-xs uppercase tracking-wider">
                 Market Insights Newsletter
@@ -235,7 +234,7 @@ export const Footer: React.FC = () => {
                   </button>
                 </form>
               )}
-              <span className="block text-[10px] text-slate-500">Stored securely in our MySQL database.</span>
+              <span className="block text-[10px] text-slate-500">We respect your privacy. Unsubscribe anytime.</span>
             </div>
           </div>
         </div>

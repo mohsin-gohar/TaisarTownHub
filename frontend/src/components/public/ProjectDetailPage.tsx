@@ -6,7 +6,6 @@ import {
   Calendar,
   CheckCircle2,
   FileText,
-  Download,
   Play,
   Share2,
   Building2,
@@ -255,7 +254,7 @@ export const ProjectDetailPage: React.FC = () => {
                 Official Project Documents & Brochures
               </h3>
               <p className="text-xs text-slate-400">
-                Download verified sector layouts, payment plans, and engineering specifications.
+                Request verified sector layouts, payment plans, and engineering specifications from our advisory desk.
               </p>
 
               <div className="space-y-3 pt-2">
@@ -275,11 +274,11 @@ export const ProjectDetailPage: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => showToast('info', `Downloading ${doc.title} (Demo file)`)}
+                      onClick={() => showToast('info', `${doc.title}: contact our advisory desk for a verified copy of this document.`)}
                       className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#C5A46D] hover:text-[#101C2C] text-xs font-semibold text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download</span>
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Request Copy</span>
                     </button>
                   </div>
                 ))}

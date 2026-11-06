@@ -409,7 +409,7 @@ export const AdminPlotLocator: React.FC = () => {
                 }}
                 className="text-xs text-[#C5A46D] hover:underline font-bold cursor-pointer"
               >
-                Inspect Plot R-66 (Handwritten Demo) &rarr;
+                Inspect Plot R-66 (Handwritten Record) &rarr;
               </button>
             </div>
           )}

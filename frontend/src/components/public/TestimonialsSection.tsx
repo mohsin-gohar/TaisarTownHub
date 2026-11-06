@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { Testimonial } from '../../types';
-import { Star, Quote, Sparkles, CheckCircle2, BadgeCheck } from 'lucide-react';
+import { Star, Quote, Sparkles, CheckCircle2 } from 'lucide-react';
 import { Reveal } from '../common/Reveal';
 
 export const TestimonialsSection: React.FC = () => {
@@ -41,14 +41,6 @@ export const TestimonialsSection: React.FC = () => {
                   aria-hidden="true"
                   className="absolute -top-4 left-7 w-10 h-10 text-[#C5A46D]/30 fill-[#C5A46D]/10 group-hover:text-[#C5A46D]/50 transition-colors"
                 />
-
-                {/* Demo verified badge */}
-                {t.isVerifiedDemo && (
-                  <span className="absolute top-4 right-4 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                    <BadgeCheck className="w-3 h-3" />
-                    Demo
-                  </span>
-                )}
 
                 <div className="space-y-4">
                   {/* Stars */}
