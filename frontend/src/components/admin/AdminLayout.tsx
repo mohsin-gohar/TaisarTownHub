@@ -116,6 +116,14 @@ export const AdminLayout: React.FC = () => {
     }
   }, [activeRole, adminTab, accessibleSidebarLinks, setAdminTab]);
 
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Admin ERP — TaisarTownHub';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+
   const handleSelectTab = (tabId: string) => {
     setAdminTab(tabId);
     setMobileSidebarOpen(false);
