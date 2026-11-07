@@ -179,7 +179,7 @@ interface AppContextType {
   agencyVideos: AgencyVideo[];
   likeAgencyVideo: (videoId: string) => void;
   addAgencyVideoComment: (videoId: string, userName: string, comment: string) => void;
-  addAgencyVideo: (video: Omit<AgencyVideo, 'id' | 'likes' | 'comments' | 'views'>) => void;
+  addAgencyVideo: (video: Omit<AgencyVideo, 'id' | 'likes' | 'comments' | 'views'>) => Promise<{ ok: boolean }>;
   
   // Inquiries & CMS
   inquiries: Inquiry[];
@@ -1710,15 +1710,16 @@ const setCurrentView = React.useCallback((view: string) => {
     );
 
     if (alreadyLiked) {
+      // Un-like: drop the local mirror only; server likes are append-only
+      // counters keyed by visitor state, never decremented retroactively.
       localStorage.removeItem(likedKey);
       showToast('info', 'Like removed from video tour.');
     } else {
       localStorage.setItem(likedKey, 'true');
       showToast('success', 'Liked! Thank you for supporting our partner agency video tour.');
-    }
-
-    if (backendConnected) {
-      api.likeVideo(videoId).catch(() => {});
+      if (backendConnected) {
+        api.likeVideo(videoId).catch(() => {});
+      }
     }
   };
 
@@ -1752,17 +1753,42 @@ const setCurrentView = React.useCallback((view: string) => {
     showToast('success', 'Your comment has been posted!');
   };
 
-  const addAgencyVideo = (videoData: Omit<AgencyVideo, 'id' | 'likes' | 'comments' | 'views'>) => {
+  const addAgencyVideo = (videoData: Omit<AgencyVideo, 'id' | 'likes' | 'comments' | 'views'>): Promise<{ ok: boolean }> => {
+    const requirePublishRights = (): boolean => {
+      // Mirrors the Laravel backend gate (AuthorizesApi: upload_media|manage_media).
+      return requirePermission(['manage_media', 'upload_media']);
+    };
+
     const newVideo: AgencyVideo = {
       ...videoData,
       id: `vid-${Date.now()}`,
-      likes: 1,
+      likes: 0,
       comments: [],
-      views: 12
+      views: 0,
     };
 
-    setAgencyVideos((prev) => [newVideo, ...prev]);
-    showToast('success', 'New agency video walkthrough added successfully!');
+    if (!requirePublishRights()) {
+      showToast('error', 'You do not have permission to publish agency video tours. Please sign in with a manager or higher agency account.');
+      return Promise.resolve({ ok: false });
+    }
+
+    if (backendConnected) {
+      return api
+        .createAgencyVideo({ ...newVideo } as unknown as Record<string, unknown>)
+        .then((created) => {
+          setAgencyVideos((prev) => (prev.some((v) => v.id === created.id) ? prev : [created, ...prev]));
+          showToast('success', 'New agency video walkthrough added successfully!');
+          return { ok: true };
+        })
+        .catch(() => {
+          showToast('error', 'Could not publish the video tour to the media archive. Please try again later.');
+          return { ok: false };
+        });
+    }
+
+    // Offline / API unreachable: never claim success without persistence.
+    showToast('error', 'Publishing is currently unavailable. Please keep the agency API running before adding video tours.');
+    return Promise.resolve({ ok: false });
   };
 
   // Inquiries Management

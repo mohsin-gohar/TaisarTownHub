@@ -80,6 +80,19 @@ export const api = {
     }
   },
 
+  async createAgencyVideo(video: Record<string, unknown>): Promise<any | null> {
+    try {
+      const res = await apiFetch('/videos', {
+        method: 'POST',
+        body: JSON.stringify(video),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
   async likeVideo(videoId: string): Promise<boolean> {
     try {
       const res = await fetch(`${API_BASE_URL}/videos/${videoId}/like`, { method: 'POST' });

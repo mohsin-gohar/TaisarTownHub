@@ -70,7 +70,7 @@ export const MediaGallerySection: React.FC = () => {
     }
   };
 
-  const handleCreateVideo = (e: React.FormEvent) => {
+  const handleCreateVideo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newVideo.title.trim() || !newVideo.description.trim()) {
       showToast('error', 'Please fill in the title and description.');
@@ -79,7 +79,7 @@ export const MediaGallerySection: React.FC = () => {
 
     const selectedDealer = dealers.find((d) => d.id === newVideo.agencyId) || dealers[0];
 
-    addAgencyVideo({
+    const result = await addAgencyVideo({
       title: newVideo.title,
       description: newVideo.description,
       videoUrl: newVideo.videoUrl,
@@ -95,20 +95,24 @@ export const MediaGallerySection: React.FC = () => {
       tags: [newVideo.phase, newVideo.sector, 'On-Ground Tour']
     });
 
-    setIsAddModalOpen(false);
-    setNewVideo({
-      title: '',
-      description: '',
-      videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-a-residential-suburb-with-houses-and-gardens-41617-large.mp4',
-      thumbnailUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80',
-      agencyId: dealers[0]?.id || 'deal-1',
-      agencyName: dealers[0]?.agencyOrBranch || 'TaisarTownHub Premier Advisory',
-      dealerName: dealers[0]?.fullName || 'Saleem Siddiqui',
-      dealerAvatar: dealers[0]?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-      phase: 'Phase 1',
-      sector: 'Sector 70-D',
-      duration: '3:30'
-    });
+    if (result.ok) {
+      setIsAddModalOpen(false);
+      setNewVideo({
+        title: '',
+        description: '',
+        videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-a-residential-suburb-with-houses-and-gardens-41617-large.mp4',
+        thumbnailUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80',
+        agencyId: dealers[0]?.id || 'deal-1',
+        agencyName: dealers[0]?.agencyOrBranch || 'TaisarTownHub Premier Advisory',
+        dealerName: dealers[0]?.fullName || 'Saleem Siddiqui',
+        dealerAvatar: dealers[0]?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+        phase: 'Phase 1',
+        sector: 'Sector 70-D',
+        duration: '3:30'
+      });
+    }
+    // On failure the modal stays open with entered values intact and no
+    // false success is shown to the user.
   };
 
   return (
