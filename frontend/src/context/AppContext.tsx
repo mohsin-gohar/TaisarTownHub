@@ -227,33 +227,48 @@ try {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// Helpers for URL route parsing
+const parseAdminTabFromPath = (path: string): string => {
+  if (path.startsWith('/admin/')) {
+    const sub = path.replace('/admin/', '').split('/')[0].split('?')[0];
+    if (sub === 'verification') return 'file_management';
+    if (sub === 'locator') return 'plot_locator';
+    return sub || 'overview';
+  }
+  return 'overview';
+};
+
+const VIEW_MAP: Record<string, string> = {
+  '/': 'home',
+  '/home': 'home',
+  '/projects': 'projects',
+  '/properties': 'properties',
+  '/agencies': 'agencies',
+  '/guide': 'guide',
+  '/scheme45-guide': 'guide',
+  '/gallery': 'gallery',
+  '/media-gallery': 'gallery',
+  '/services': 'services',
+  '/about': 'about',
+  '/contact': 'contact',
+  '/login': 'login',
+  '/auth': 'login',
+  '/signin': 'login',
+  '/register': 'register',
+  '/admin': 'admin',
+  '/admin-login': 'admin-login',
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-// Navigation State
+  // Navigation State
   const [currentView, setCurrentViewRaw] = useState<string>(() => {
-    // Initialize from URL path on mount; a deep-linked record query param
-    // (?property= / ?project=) selects the detail view so refresh and
-    // shared links land on the same screen.
     const params = new URLSearchParams(window.location.search);
     if (params.get('property')) return 'property-detail';
     if (params.get('project')) return 'project-detail';
     const path = window.location.pathname;
-    const viewMap: Record<string, string> = {
-      '/': 'home',
-      '/home': 'home',
-      '/projects': 'projects',
-      '/properties': 'properties',
-      '/agencies': 'agencies',
-      '/guide': 'guide',
-      '/gallery': 'gallery',
-      '/services': 'services',
-      '/about': 'about',
-      '/contact': 'contact',
-      '/login': 'login',
-      '/register': 'register',
-      '/admin': 'admin',
-      '/admin-login': 'admin-login',
-    };
-    return viewMap[path] || 'home';
+    if (path === '/admin-login') return 'admin-login';
+    if (path.startsWith('/admin')) return 'admin';
+    return VIEW_MAP[path] || 'home';
   });
   const [selectedProjectId, setSelectedProjectIdState] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -263,7 +278,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const params = new URLSearchParams(window.location.search);
     return params.get('property') || null;
   });
-  const [adminTab, setAdminTab] = useState<string>('overview');
+  const [adminTab, setAdminTabRaw] = useState<string>(() => {
+    return parseAdminTabFromPath(window.location.pathname);
+  });
+  const adminTabRef = useRef(adminTab);
+
+  const setAdminTab = React.useCallback((tab: string) => {
+    adminTabRef.current = tab;
+    setAdminTabRaw(tab);
+    if (window.location.pathname.startsWith('/admin')) {
+      const targetPath = tab === 'overview' ? '/admin' : `/admin/${tab}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ view: 'admin', tab }, '', targetPath);
+      }
+    }
+  }, []);
 
   // Synchronous mirrors so URL updates can read the id being set in the same
   // event handler (state may not be committed yet when setCurrentView runs).
@@ -297,26 +326,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'admin-login': '/admin-login',
   };
   const viewFromPath = React.useCallback((path: string): string => {
-    const viewMap: Record<string, string> = {
-      '/': 'home',
-      '/home': 'home',
-      '/projects': 'projects',
-      '/properties': 'properties',
-      '/agencies': 'agencies',
-      '/guide': 'guide',
-      '/gallery': 'gallery',
-      '/services': 'services',
-      '/about': 'about',
-      '/contact': 'contact',
-      '/login': 'login',
-      '/register': 'register',
-      '/admin': 'admin',
-      '/admin-login': 'admin-login',
-    };
-    return viewMap[path] || 'home';
+    if (path === '/admin-login') return 'admin-login';
+    if (path.startsWith('/admin')) return 'admin';
+    return VIEW_MAP[path] || 'home';
   }, []);
 
-const setCurrentView = React.useCallback((view: string) => {
+  const setCurrentView = React.useCallback((view: string) => {
     setCurrentViewRaw(view);
     // Update URL without page reload. Detail views deep-link the selected
     // record via a query param so pages are shareable and refresh-safe.
@@ -325,6 +340,9 @@ const setCurrentView = React.useCallback((view: string) => {
       path = `/properties?property=${encodeURIComponent(selectedPropertyIdRef.current)}`;
     } else if (view === 'project-detail' && selectedProjectIdRef.current) {
       path = `/projects?project=${encodeURIComponent(selectedProjectIdRef.current)}`;
+    } else if (view === 'admin') {
+      const tab = adminTabRef.current;
+      path = tab && tab !== 'overview' ? `/admin/${tab}` : '/admin';
     }
     if (window.location.pathname + window.location.search !== path) {
       window.history.pushState({ view }, '', path);
@@ -340,7 +358,13 @@ const setCurrentView = React.useCallback((view: string) => {
       setSelectedPropertyIdState(params.get('property') || null);
       selectedProjectIdRef.current = params.get('project') || null;
       selectedPropertyIdRef.current = params.get('property') || null;
-      setCurrentViewRaw(viewFromPath(window.location.pathname));
+      const path = window.location.pathname;
+      if (path.startsWith('/admin')) {
+        const tab = parseAdminTabFromPath(path);
+        adminTabRef.current = tab;
+        setAdminTabRaw(tab);
+      }
+      setCurrentViewRaw(viewFromPath(path));
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -356,19 +380,34 @@ const setCurrentView = React.useCallback((view: string) => {
   const [isPresentationMode, setIsPresentationMode] = useState<boolean>(false);
   const [deviceViewport, setDeviceViewport] = useState<DeviceViewport>('desktop');
 
-  // Auth & RBAC State
-  // NOTE: Authentication state is NEVER restored from localStorage.
-  // A full page reload always requires a fresh (PIN-gated demo, or credential) login.
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+  // Auth & RBAC State: seamlessly initialize from sessionStorage if an active tab session exists
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    try {
+      const saved = sessionStorage.getItem('tth_user');
+      const token = getAuthToken();
+      return Boolean(saved && token);
+    } catch {
+      return false;
+    }
+  });
 
-  // Placeholder until an admin session begins; real profile arrives with login.
-  const [currentUser, setCurrentUser] = useState<AuthUser>(() => ({
-    id: 'anonymous',
-    name: 'Anonymous Visitor',
-    email: 'visitor@taisartownhub.com',
-    role: 'operator' as UserRole, // least-privilege placeholder until an admin session begins
-    permissions: [],
-  }));
+  // User profile: restore from active tab session if present, else least-privilege visitor
+  const [currentUser, setCurrentUser] = useState<AuthUser>(() => {
+    try {
+      const saved = sessionStorage.getItem('tth_user');
+      const token = getAuthToken();
+      if (saved && token) {
+        return JSON.parse(saved) as AuthUser;
+      }
+    } catch {}
+    return {
+      id: 'anonymous',
+      name: 'Anonymous Visitor',
+      email: 'visitor@taisartownhub.com',
+      role: 'operator' as UserRole,
+      permissions: [],
+    };
+  });
 
   // ---- ERP seed hydration (admin-only, dynamically imported chunk) ----
   // The ERP chunk (sellers/buyers/dealers/transactions/files/inquiries/auth users/

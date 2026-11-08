@@ -361,7 +361,7 @@ export const initialProperties: Property[] = [
     isFeatured: false,
     images: [
       'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1524813686514-a57563d77d66?auto=format&fit=crop&w=1000&q=80'
+      'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80'
     ],
     features: ['Budget Friendly', 'Clean Allotment Order', '30ft Street', 'Rapidly Appreciating Sector', 'Fast Biometric Transfer'],
     possessionReady: false,
@@ -551,7 +551,7 @@ export const initialProperties: Property[] = [
     status: 'Available',
     isFeatured: false,
     images: [
-      'https://images.unsplash.com/photo-1524813686514-a57563d77d66?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80'
     ],
     features: ['Lowest Investment Entry', 'Clean Computerized File', 'Direct Owner Handover', 'High Capital Yield Potential', 'NADRA Biometric Transfer Ready'],
@@ -674,7 +674,7 @@ export const initialProperties: Property[] = [
     status: 'Available',
     isFeatured: false,
     images: [
-      'https://images.unsplash.com/photo-1524813686514-a57563d77d66?auto=format&fit=crop&w=1000&q=80'
+      'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80'
     ],
     features: ['Low Budget Entry', '100% Paid Dues', 'Computerized Balloted', 'Ideal for Low-Cost Home'],
     possessionReady: false,
