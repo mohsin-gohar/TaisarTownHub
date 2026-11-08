@@ -149,7 +149,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
   };
 
   return (
-    <div ref={heroRef} className="relative min-h-[70vh] sm:min-h-[92vh] flex flex-col justify-center overflow-hidden">
+    <div ref={heroRef} className="relative min-h-0 sm:min-h-[92vh] flex flex-col justify-center overflow-hidden">
       {/* Background Slideshow — cross-fade between premium property visuals every 6-8s */}
       <div className="absolute inset-0 z-0">
         {HERO_SLIDES.map((slide, index) => {
@@ -163,7 +163,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
             >
               <div
                 ref={isActive ? bgRef : undefined}
-                className="absolute top-0 inset-x-0 h-[42vh] sm:h-full will-change-transform"
+                className="absolute top-0 inset-x-0 aspect-[5/6] sm:aspect-auto sm:h-full will-change-transform"
               >
                 <img
                   src={slide.background}
