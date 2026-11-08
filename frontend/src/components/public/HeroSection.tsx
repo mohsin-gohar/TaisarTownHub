@@ -61,44 +61,6 @@ const StaggeredWords: React.FC<{ text: string; gold: boolean; delay?: number; is
 
 const TRUST_AVATARS = ['AS', 'KH', 'ST', 'MR', 'IJ'];
 
-interface HeroSlide {
-  id: string;
-  background: string;
-  alt: string;
-}
-
-/** Auto-rotating hero slides — dramatic golden sunset & full moon, then luxury property scenes. */
-const HERO_SLIDES: HeroSlide[] = [
-  {
-    id: 'sunset-moon',
-    background: '/image.png',
-    alt: 'Dramatic golden sunset rays with glowing full moon over coastal horizon'
-  },
-  {
-    id: 'hero',
-    background: '/hero-bg.jpg',
-    alt: 'Modern residential villa at Taiser Town Scheme 45'
-  },
-  {
-    id: 'plots',
-    background: '/image.png',
-    alt: 'Verified residential plots and houses for sale'
-  },
-  {
-    id: 'house',
-    background: '/hero-bg.jpg',
-    alt: 'Premium house under construction at Scheme 45'
-  },
-  {
-    id: 'villa',
-    background: '/image.png',
-    alt: 'Residential villa aerial view'
-  }
-];
-
-/** Slides advance every 4–5 seconds; reduced motion disables the autoplay. */
-const HERO_SLIDE_INTERVAL_MS = 4500;
-
 export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
   const { cmsConfig, currentTheme, setCurrentView, properties } = useApp();
 
@@ -108,22 +70,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
   const [selectedBudget, setSelectedBudget] = useState<string>('All');
   const [selectedSize, setSelectedSize] = useState<string>('All');
 
-  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
-
   // Parallax: background drifts slower than scroll; content fades gently.
   const heroRef = useRef<HTMLDivElement>(null);
   const bgRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const reduceMotion = usePrefersReducedMotion();
-
-  // Hero slideshow: cross-fade between slides on an interval (4–5s).
-  useEffect(() => {
-    if (reduceMotion) return;
-    const timer = window.setInterval(() => {
-      setActiveSlideIndex((prev) => (prev + 1) % HERO_SLIDES.length);
-    }, HERO_SLIDE_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [reduceMotion]);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -170,31 +121,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
 
   return (
     <div ref={heroRef} className="relative min-h-[92vh] flex flex-col justify-center overflow-hidden">
-      {/* Background Slideshow — cross-fade between property visuals */}
+      {/* Background — single responsive hero image (no multi-slide flash) */}
       <div className="absolute inset-0 z-0">
-        {HERO_SLIDES.map((slide, index) => {
-          const isActive = index === activeSlideIndex;
-          return (
-            <div
-              key={slide.id}
-              className="absolute inset-0"
-              style={{ opacity: isActive ? 1 : 0, transition: 'opacity 1800ms ease-in-out' }}
-            >
-              <div
-                ref={isActive ? bgRef : undefined}
-                className={`absolute inset-0 -bottom-[16%] will-change-transform ${isActive && !isStatic ? 'animate-subtleZoom' : ''}`}
-              >
-                <img
-                  src={slide.background}
-                  alt={slide.alt}
-                  fetchPriority={isActive ? 'high' : 'auto'}
-                  decoding="async"
-                  className={`w-full h-full object-cover scale-105 ${index === 0 ? 'object-center' : 'object-center'}`}
-                />
-              </div>
-            </div>
-          );
-        })}
+        <div ref={bgRef} className="absolute inset-0 -bottom-[16%] will-change-transform">
+          <img
+            src="/image.png"
+            alt="Dramatic golden sunset rays with glowing full moon over Taiser Town Scheme 45"
+            fetchPriority="high"
+            decoding="async"
+            className="w-full h-full object-cover object-center scale-105"
+          />
+        </div>
         <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-[#0B1220]/65 to-[#0B1220]/25" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#0B1220]/30 to-[#0B1220]/75" />
       </div>
@@ -447,22 +384,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
         </span>
       </button>
 
-      {/* Hero Slide Switcher Dots */}
-      <div className="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-2 bg-[#0B1220]/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#C5A46D]/30 shadow-lg">
-        {HERO_SLIDES.map((slide, idx) => (
-          <button
-            key={slide.id}
-            onClick={() => setActiveSlideIndex(idx)}
-            aria-label={`Switch to slide ${idx + 1}`}
-            className={`transition-all duration-300 rounded-full cursor-pointer ${
-              idx === activeSlideIndex
-                ? 'w-6 h-2 bg-[#C5A46D] shadow-sm shadow-[#C5A46D]/50'
-                : 'w-2 h-2 bg-slate-500 hover:bg-slate-300'
-            }`}
-            title={idx === 0 ? 'Golden Sunset Moon' : `Slide ${idx + 1}`}
-          />
-        ))}
-      </div>
     </div>
   );
 };
