@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X, Play } from 'lucide-react';
 
 interface LightboxProps {
@@ -94,8 +95,9 @@ export const Lightbox: React.FC<LightboxProps> = ({
   }, [isOpen, index, total, goTo, onClose]);
 
   if (!isOpen) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       ref={containerRef}
       className="fixed inset-0 z-[70] bg-black/95 backdrop-blur-sm flex flex-col animate-fadeIn"
@@ -138,9 +140,9 @@ export const Lightbox: React.FC<LightboxProps> = ({
           <button
             onClick={() => goTo(index - 1)}
             aria-label="Previous image"
-            className="absolute left-3 z-10 p-2.5 rounded-full bg-[#101C2C]/80 border border-white/10 text-white hover:bg-[#C5A46D] hover:text-[#101C2C] transition-colors cursor-pointer"
+            className="absolute left-3 z-10 p-3 rounded-full bg-[#101C2C]/90 border border-white/20 text-white hover:bg-[#C5A46D] hover:text-[#101C2C] transition-colors cursor-pointer touch-none sm:cursor-pointer"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-6 h-6" />
           </button>
         )}
 
@@ -167,9 +169,9 @@ export const Lightbox: React.FC<LightboxProps> = ({
           <button
             onClick={() => goTo(index + 1)}
             aria-label="Next image"
-            className="absolute right-3 z-10 p-2.5 rounded-full bg-[#101C2C]/80 border border-white/10 text-white hover:bg-[#C5A46D] hover:text-[#101C2C] transition-colors cursor-pointer"
+            className="absolute right-3 z-10 p-3 rounded-full bg-[#101C2C]/90 border border-white/20 text-white hover:bg-[#C5A46D] hover:text-[#101C2C] transition-colors cursor-pointer touch-none sm:cursor-pointer"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-6 h-6" />
           </button>
         )}
       </div>
@@ -207,6 +209,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
           )}
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 };

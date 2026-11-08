@@ -159,11 +159,11 @@
   }
 
   @keyframes tth-pageIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
   }
   .animate-pageEnter {
-    animation: tth-pageIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: tth-pageIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
   /* Staggered word-by-word headline reveal (CSS-only, no runtime) */
@@ -229,7 +229,7 @@
 
 /* Page transition wrapper (used with motion in App) */
 .page-surface {
-  will-change: opacity, transform;
+  will-change: opacity;
 }
 
 /* Print: receipt/memo only */

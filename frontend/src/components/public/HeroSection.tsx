@@ -76,26 +76,22 @@ const HERO_SLIDES: HeroSlide[] = [
   },
   {
     id: 'hero',
-    background:
-      'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1920&q=80',
+    background: '/hero-bg.jpg',
     alt: 'Modern residential villa at Taiser Town Scheme 45'
   },
   {
     id: 'plots',
-    background:
-      'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1920&q=80',
+    background: '/image.png',
     alt: 'Verified residential plots and houses for sale'
   },
   {
     id: 'house',
-    background:
-      'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1920&q=80',
+    background: '/hero-bg.jpg',
     alt: 'Premium house under construction at Scheme 45'
   },
   {
     id: 'villa',
-    background:
-      'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=1920&q=80',
+    background: '/image.png',
     alt: 'Residential villa aerial view'
   }
 ];
@@ -193,7 +189,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                   alt={slide.alt}
                   fetchPriority={isActive ? 'high' : 'auto'}
                   decoding="async"
-                  className={`w-full h-full object-cover scale-105 ${index === 0 ? 'object-[center_25%]' : 'object-center'}`}
+                  className={`w-full h-full object-cover scale-105 ${index === 0 ? 'object-center' : 'object-center'}`}
                 />
               </div>
             </div>

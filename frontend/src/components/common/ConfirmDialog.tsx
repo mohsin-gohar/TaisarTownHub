@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -49,7 +50,9 @@ export const ConfirmDialog: React.FC<{
     return () => document.removeEventListener('keydown', onKey);
   }, [onCancel]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn"
       onMouseDown={(e) => {
@@ -102,7 +105,8 @@ export const ConfirmDialog: React.FC<{
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../../context/AppContext';
 import {
   Video,
@@ -30,6 +31,20 @@ export const MediaGallerySection: React.FC = () => {
 
   // Upload Video Tour Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isAddModalOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsAddModalOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [isAddModalOpen]);
   const [newVideo, setNewVideo] = useState({
     title: '',
     description: '',
@@ -366,9 +381,14 @@ export const MediaGallerySection: React.FC = () => {
         )}
 
         {/* Modal: Add Agency Video Walkthrough */}
-        {isAddModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-            <div className="bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+        {isAddModalOpen && typeof document !== 'undefined' && createPortal(
+          <div
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setIsAddModalOpen(false);
+            }}
+          >
+            <div className="bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-scaleUp">
               <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-[#0B1220]">
                 <div className="flex items-center gap-2">
                   <Video className="w-5 h-5 text-[#C5A46D]" />
@@ -492,7 +512,8 @@ export const MediaGallerySection: React.FC = () => {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </section>
