@@ -193,7 +193,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                   alt={slide.alt}
                   fetchPriority={isActive ? 'high' : 'auto'}
                   decoding="async"
-                  className="w-full h-full object-cover object-center scale-105"
+                  className={`w-full h-full object-cover scale-105 ${index === 0 ? 'object-[center_25%]' : 'object-center'}`}
                 />
               </div>
             </div>
