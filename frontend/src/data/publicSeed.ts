@@ -97,7 +97,7 @@ export const initialProjects: Project[] = [
       'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
       'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80'
     ],
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-a-residential-suburb-with-houses-and-gardens-41617-large.mp4',
+    videoUrl: '/sample-video.mp4',
     startingPricePKR: 2800000,
     plotSizes: ['80 Sq. Yds', '120 Sq. Yds', '240 Sq. Yds', '400 Sq. Yds'],
     masterPlanImage: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
@@ -134,7 +134,7 @@ export const initialProjects: Project[] = [
       'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80',
       'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80'
     ],
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-flying-towards-a-skyscrapers-complex-in-a-sunny-day-42468-large.mp4',
+    videoUrl: '/sample-video.mp4',
     startingPricePKR: 4200000,
     plotSizes: ['120 Sq. Yds Plots', 'Ground Floor Retail Shops', 'Mezzanine Offices'],
     completionYear: '2027',
@@ -971,7 +971,7 @@ export const initialMedia: MediaItem[] = [
   {
     id: 'med-6',
     title: 'Taiser Town Drone Tour HD (Video)',
-    url: 'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-a-residential-suburb-with-houses-and-gardens-41617-large.mp4',
+    url: '/sample-video.mp4',
     type: 'video',
     folder: 'Videos',
     fileSizeKB: 14500,

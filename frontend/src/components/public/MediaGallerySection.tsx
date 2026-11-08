@@ -33,7 +33,7 @@ export const MediaGallerySection: React.FC = () => {
   const [newVideo, setNewVideo] = useState({
     title: '',
     description: '',
-    videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-a-residential-suburb-with-houses-and-gardens-41617-large.mp4',
+    videoUrl: '/sample-video.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80',
     agencyId: dealers[0]?.id || 'deal-1',
     agencyName: dealers[0]?.agencyOrBranch || dealers[0]?.agencyAffiliation || 'TaisarTownHub Premier Advisory',
@@ -100,7 +100,7 @@ export const MediaGallerySection: React.FC = () => {
       setNewVideo({
         title: '',
         description: '',
-        videoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-a-residential-suburb-with-houses-and-gardens-41617-large.mp4',
+        videoUrl: '/sample-video.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80',
         agencyId: dealers[0]?.id || 'deal-1',
         agencyName: dealers[0]?.agencyOrBranch || 'TaisarTownHub Premier Advisory',
