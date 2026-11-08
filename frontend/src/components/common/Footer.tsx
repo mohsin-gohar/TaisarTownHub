@@ -104,15 +104,16 @@ export const Footer: React.FC = () => {
             {/* Social Links */}
             <div className="pt-3 flex items-center gap-2.5">
               {[
-                { Icon: Facebook, label: 'Facebook' },
-                { Icon: Instagram, label: 'Instagram' },
-                { Icon: Linkedin, label: 'LinkedIn' },
-                { Icon: Youtube, label: 'YouTube' },
-              ].map(({ Icon, label }) => (
+                { Icon: Facebook, label: 'Facebook', href: cmsConfig.facebookUrl || 'https://facebook.com' },
+                { Icon: Instagram, label: 'Instagram', href: cmsConfig.instagramUrl || 'https://instagram.com' },
+                { Icon: Linkedin, label: 'LinkedIn', href: 'https://linkedin.com' },
+                { Icon: Youtube, label: 'YouTube', href: cmsConfig.youtubeUrl || 'https://youtube.com' },
+              ].map(({ Icon, label, href }) => (
                 <a
                   key={label}
-                  href="#"
-                  onClick={(e) => e.preventDefault()}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   aria-label={`${currentTheme.agencyName} on ${label}`}
                   title={label}
                   className="w-9 h-9 rounded-lg bg-[#101C2C] border border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#C5A46D] hover:border-[#C5A46D]/50 hover:shadow-[0_0_12px_rgba(197,164,109,0.35)] hover:-translate-y-0.5 transition-all cursor-pointer"

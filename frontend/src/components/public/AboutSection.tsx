@@ -11,6 +11,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Reveal } from '../common/Reveal';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 export const AboutSection: React.FC = () => {
   const { cmsConfig, currentTheme } = useApp();
@@ -96,7 +97,7 @@ export const AboutSection: React.FC = () => {
           {/* Visual Showcase */}
           <Reveal className="relative" y={26}>
             <div className="relative rounded-2xl overflow-hidden border border-[#C5A46D]/30 shadow-2xl">
-              <img
+              <ImageWithFallback
                 src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80"
                 alt="Luxury Modern Architecture"
                 loading="lazy"
@@ -166,7 +167,7 @@ export const AboutSection: React.FC = () => {
                 <div
                   className="bg-[#101C2C] rounded-2xl overflow-hidden border border-slate-800 text-center p-6 space-y-4 hover:border-[#C5A46D]/40 transition-colors"
                 >
-                  <img
+                  <ImageWithFallback
                     src={member.image}
                     alt={member.name}
                     loading="lazy"

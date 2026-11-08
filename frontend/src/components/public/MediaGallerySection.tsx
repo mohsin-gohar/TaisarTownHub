@@ -296,6 +296,7 @@ export const MediaGallerySection: React.FC = () => {
                     {/* Share Button */}
                     <button
                       onClick={() => handleShareVideo(video)}
+                      aria-label={`Share link for ${video.title}`}
                       className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
                       title="Share Video Link"
                     >

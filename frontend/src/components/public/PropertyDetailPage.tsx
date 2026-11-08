@@ -24,6 +24,7 @@ import {
 import { Property, PublicProperty } from '../../types';
 import { Lightbox } from '../common/Lightbox';
 import { EmptyState } from '../common/EmptyState';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 const VIDEO_SENTINEL = '__tth_video__';
 
@@ -189,7 +190,7 @@ export const PropertyDetailPage: React.FC = () => {
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              <img
+              <ImageWithFallback
                 src={mainSrc}
                 alt={property.title}
                 fetchPriority="high"
@@ -231,7 +232,7 @@ export const PropertyDetailPage: React.FC = () => {
                   activeImage === img && !activeIsVideo ? 'border-[#C5A46D] scale-105' : 'border-slate-800 opacity-60 hover:opacity-100'
                 }`}
               >
-                <img src={img} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                <ImageWithFallback src={img} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               </button>
             ))}
             {hasVideo && (

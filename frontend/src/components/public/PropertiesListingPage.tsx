@@ -16,6 +16,7 @@ import { Property, PropertyType, PublicProperty } from '../../types';
 import { filterProperties, toPublicProperty } from '../../utils/logic';
 import { EmptyState } from '../common/EmptyState';
 import { FavoriteHeart } from '../common/FavoriteHeart';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 interface PropertiesListingPageProps {
   initialFilter?: {
@@ -308,7 +309,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                     className="relative h-56 overflow-hidden cursor-pointer"
                     onClick={() => handleOpenProperty(prop)}
                   >
-                    <img
+                    <ImageWithFallback
                       src={prop.images[0]}
                       alt={prop.title}
                       loading="lazy"

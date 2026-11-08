@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Dealer } from '../../types';
 import { AgencyDetailsModal } from '../common/AgencyDetailsModal';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 export const AgenciesSection: React.FC = () => {
   const { dealers, properties } = useApp();
@@ -61,7 +62,7 @@ export const AgenciesSection: React.FC = () => {
                   {/* Avatar & Verification Badge */}
                   <div className="flex items-start justify-between">
                     <div className="relative">
-                      <img
+                      <ImageWithFallback
                         src={dealer.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80'}
                         alt={dealer.fullName}
                         className="w-16 h-16 rounded-2xl object-cover border-2 border-[#C5A46D]/40 group-hover:border-[#C5A46D] transition shadow"

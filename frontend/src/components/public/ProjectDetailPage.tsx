@@ -17,6 +17,7 @@ import { formatPKRCurrency, toPublicProject } from '../../utils/logic';
 import { VideoModal } from '../common/VideoModal';
 import { Lightbox } from '../common/Lightbox';
 import { EmptyState } from '../common/EmptyState';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 export const ProjectDetailPage: React.FC = () => {
   const {
@@ -140,7 +141,7 @@ export const ProjectDetailPage: React.FC = () => {
               if (e.key === 'Enter' || e.key === ' ') openLightbox();
             }}
           >
-            <img
+            <ImageWithFallback
               src={activeImage || project.coverImage}
               alt={project.title}
               fetchPriority="high"
@@ -173,7 +174,7 @@ export const ProjectDetailPage: React.FC = () => {
                   activeImage === img ? 'border-[#C5A46D] scale-105' : 'border-slate-800 opacity-60 hover:opacity-100'
                 }`}
               >
-                <img src={img} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                <ImageWithFallback src={img} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               </button>
             ))}
           </div>

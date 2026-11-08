@@ -13,6 +13,7 @@ import { formatPKRCurrency, toPublicProject } from '../../utils/logic';
 import { Project, ProjectCategory } from '../../types';
 import { Reveal } from '../common/Reveal';
 import { EmptyState } from '../common/EmptyState';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 export const ProjectsListingPage: React.FC = () => {
   const { projects, setSelectedProjectId, setCurrentView } = useApp();
@@ -121,7 +122,7 @@ export const ProjectsListingPage: React.FC = () => {
                 className="relative h-60 overflow-hidden cursor-pointer"
                 onClick={() => handleOpenProject(project.id)}
               >
-                <img
+                <ImageWithFallback
                   src={project.coverImage}
                   alt={project.title}
                   loading="lazy"
