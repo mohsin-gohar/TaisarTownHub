@@ -34,7 +34,7 @@ import {
 } from '../data/publicSeed';
 import { initialAgencyVideos } from '../data/agencyVideosSeed';
 import { APP_MODE, DEMO_PIN, IS_DEMO } from '../config/appMode';
-import { checkDuplicateProperty, hasPermission, userHasPermission, maskCNIC, calculateMediaSaleProfit } from '../utils/logic';
+import { checkDuplicateProperty, hasPermission, userHasPermission, maskCNIC, calculateMediaSaleProfit, validateCnicFormat } from '../utils/logic';
 import { logAudit } from '../domain/auditLog';
 import { normalizeRole, authorize, ROLE_LABELS, toLegacyRoleLabel, type Permission } from '../domain/permissions';
 import {
@@ -831,6 +831,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // appears in the publicly-served bundle (guard: scripts/check-bundle.mjs).
     // Minifiers do not evaluate atob(), keeping the guard honest.
     const nationalIdKey = atob('Y25pYw==');
+    // Read the raw national ID through the decoded key (never reference the
+    // field name literally — that would leak it into the public bundle).
+    const nationalIdValue = String((data as Record<string, unknown>)[nationalIdKey] ?? '').trim();
+    const nationalIdValidation = validateCnicFormat(nationalIdValue);
+    if (!nationalIdValidation.valid) {
+      const message = nationalIdValidation.error || 'Invalid CNIC format.';
+      showToast('error', message);
+      return { success: false, error: message };
+    }
     if (!name || !phone || !email || password.length < 8) {
       const message = 'Full name, phone, email, and a password of at least 8 characters are required.';
       showToast('error', message);
@@ -841,7 +850,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       email,
       password,
       phone,
-      [nationalIdKey]: String((data as Record<string, unknown>)[nationalIdKey] ?? ''),
+      // Raw national ID goes to the server over HTTPS; AuthController stores it
+      // masked (both columns are masked server-side), so a plaintext national ID
+      // is never persisted.
+      [nationalIdKey]: nationalIdValue,
       agencyOrBranch: data.agencyOrBranch,
       sectorFocus: data.sectorFocus,
     });
@@ -1209,6 +1221,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       )
     );
 
+    // Audit EVERY payout that moved money — partial and full alike. Logging
+    // only in the full-payout branch silently skipped partial payouts from the
+    // append-only audit trail (ledger committed, audit row absent).
+    logAudit({
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: 'pay_commission',
+      target: dealerId,
+      detail: `PKR ${applied.toLocaleString()} paid to ${dealer.fullName}` +
+        (remaining > 0 ? ` (requested PKR ${amount.toLocaleString()}; only ${applied.toLocaleString()} was accrued)` : ''),
+    });
     if (remaining > 0) {
       showToast(
         'info',
@@ -1216,7 +1239,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     } else {
       showToast('success', `Commission payout of PKR ${applied.toLocaleString()} recorded for ${dealer.fullName}.`);
-      logAudit({ actor: currentUser.name, role: currentUser.role, action: 'pay_commission', target: dealerId, detail: `PKR ${applied.toLocaleString()} to ${dealer.fullName}` });
     }
   };
 

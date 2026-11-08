@@ -11,7 +11,9 @@ class DealerController extends Controller
     use AuthorizesApi;
 
     /**
-     * List dealers (with CNIC masking for privacy).
+     * List dealers. CNIC is never serialized — the Dealer model declares
+     * `protected $hidden = ['cnic']`, so the full number never leaves the
+     * server regardless of who calls this endpoint.
      */
     public function index(Request $request)
     {
@@ -23,27 +25,15 @@ class DealerController extends Controller
 
         $dealers = $query->latest()->get();
 
-        // Mask CNIC in responses
-        foreach ($dealers as $dealer) {
-            if ($dealer->cnic) {
-                $dealer->cnic = $this->maskCnic($dealer->cnic);
-            }
-        }
-
         return response()->json($dealers);
     }
 
     /**
-     * Show a single dealer.
+     * Show a single dealer. CNIC stays hidden via the model's $hidden array.
      */
     public function show($id)
     {
         $dealer = Dealer::findOrFail($id);
-
-        // Mask CNIC
-        if ($dealer->cnic) {
-            $dealer->cnic = $this->maskCnic($dealer->cnic);
-        }
 
         return response()->json($dealer);
     }
@@ -70,10 +60,12 @@ class DealerController extends Controller
             'avatar' => 'nullable|string',
         ]);
 
-        // Mask CNIC before storing
+        // Persist the masked copy for display, but NEVER overwrite the raw CNIC
+        // column with its own masked form — that permanently destroys the
+        // national ID and makes later re-masking impossible. The raw value is
+        // what the ERP needs; the masked value is what UI surfaces show.
         if (!empty($data['cnic'])) {
             $data['cnicMasked'] = $this->maskCnic($data['cnic']);
-            $data['cnic'] = $this->maskCnic($data['cnic']);
         }
 
         $dealer = Dealer::create($data);
@@ -105,10 +97,10 @@ class DealerController extends Controller
             'avatar' => 'nullable|string',
         ]);
 
-        // Mask CNIC if updated
+        // Persist the masked copy for display, but never overwrite the raw CNIC
+        // column with its own masked form (data destruction).
         if (!empty($data['cnic'])) {
             $data['cnicMasked'] = $this->maskCnic($data['cnic']);
-            $data['cnic'] = $this->maskCnic($data['cnic']);
         }
 
         $dealer->update($data);

@@ -158,8 +158,11 @@ export const AdminDealers: React.FC = () => {
       return;
     }
 
+    // The context action is the single source of truth for what actually
+    // moved — it clamps to accrued balances and reports the applied amount.
+    // Showing a fixed success toast here would double-announce and could
+    // claim a larger amount than was actually paid.
     payDealerCommission(selectedDealerForPayout.id, payoutAmount);
-    showToast('success', `Recorded PKR ${payoutAmount.toLocaleString()} commission payment to ${selectedDealerForPayout.fullName}.`);
     setIsPayoutModalOpen(false);
   };
 

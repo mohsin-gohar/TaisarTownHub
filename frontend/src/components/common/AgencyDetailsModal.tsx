@@ -34,6 +34,28 @@ export const AgencyDetailsModal: React.FC<AgencyDetailsModalProps> = ({
   const { properties, setSelectedPropertyId, setCurrentView, cmsConfig, showToast } = useApp();
   const [activePhaseTab, setActivePhaseTab] = useState<'All' | 'Phase 1' | 'Phase 2' | 'Phase 3'>('All');
 
+  // NOTE: hooks must run on every render (Rules of Hooks). Early returns happen below.
+
+  // Escape key handler
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
+  // Lock body scroll while modal is active
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen || !dealer) return null;
 
   // Robust multi-key match: assignedDealerId, contactPerson name, or agency affiliation
@@ -57,26 +79,6 @@ export const AgencyDetailsModal: React.FC<AgencyDetailsModalProps> = ({
     if (activePhaseTab === 'All') return true;
     return getPropertyPhase(p) === activePhaseTab;
   });
-
-  // Escape key handler
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
-
-  // Lock body scroll while modal is active
-  useEffect(() => {
-    if (!isOpen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [isOpen]);
 
   const agencyName = dealer.agencyOrBranch || dealer.agencyAffiliation || 'TaisarTownHub Senior Advisory';
 

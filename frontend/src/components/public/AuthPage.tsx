@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { maskCNIC } from '../../utils/logic';
 import {
   Building2,
   ArrowRight,
@@ -42,11 +43,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regCnic, setRegCnic] = useState('');
+  const [regCnicMasked, setRegCnicMasked] = useState('');
   const [regAgency, setRegAgency] = useState('');
   const [regSector, setRegSector] = useState('Sector 63');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regTermsAgreed, setRegTermsAgreed] = useState(false);
+  
+  // CNIC masking effect
+  useEffect(() => {
+    setRegCnicMasked(maskCNIC(regCnic));
+  }, [regCnic]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,8 +296,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 <input
                   type="text"
                   placeholder="42101-1234567-1"
-                  value={regCnic}
-                  onChange={(e) => setRegCnic(e.target.value)}
+                  value={regCnicMasked}
+                  onChange={(e) => {
+                    setRegCnic(e.target.value);
+                    setRegCnicMasked(maskCNIC(e.target.value));
+                  }}
                   className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
                 />
               </div>
