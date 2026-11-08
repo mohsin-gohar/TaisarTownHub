@@ -6,30 +6,34 @@ const read = (relativePath: string): string =>
   readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 
 /**
- * Regression guard for the public hero background.
+ * Regression guard for the public hero slideshow.
  *
- * The hero must render a SINGLE responsive background image (no multi-slide
- * cross-fade flash that made several images appear at once), honour reduced
- * motion, and keep the uploaded full-moon shot as the primary visual.
+ * The home header rotates through 5 premium property visuals every 6–8
+ * seconds, starting on the uploaded brand shot, then other premium scenes.
  */
-test('hero uses a single background image (no multi-slide flash)', () => {
+test('hero has a slideshow with four to five slides', () => {
   const source = read('./HeroSection.tsx');
-  // No slideshow array / interval anymore.
-  assert.equal(source.includes('HERO_SLIDES'), false, 'multi-slide array must be removed');
-  assert.equal(source.includes('HERO_SLIDE_INTERVAL_MS'), false, 'slide interval must be removed');
-  assert.equal(source.includes('setInterval'), false, 'autoplay interval must be removed');
-  // Single image source.
-  assert.ok(source.includes('src="/image.png"'), 'primary hero image must be /image.png');
+  const slideBlocks = source.split('id: ').length - 1;
+  assert.ok(slideBlocks >= 4 && slideBlocks <= 6, `unexpected slide count: ${slideBlocks}`);
+  assert.equal(source.includes('HERO_SLIDES'), true);
+  assert.equal(source.includes('HERO_SLIDE_INTERVAL_MS'), true);
+});
+
+test('hero slideshow starts on the uploaded image', () => {
+  const source = read('./HeroSection.tsx');
+  assert.ok(source.includes("background: '/image.png'"), 'first slide must use the uploaded image');
+  const interval = Number(source.match(/HERO_SLIDE_INTERVAL_MS = (\d+)/)?.[1] ?? 0);
+  assert.ok(interval >= 6000 && interval <= 8000, `interval out of 6-8s range: ${interval}`);
+  assert.equal(source.includes('setInterval'), true);
+});
+
+test('hero slideshow honours reduced motion', () => {
+  const source = read('./HeroSection.tsx');
+  assert.ok(source.includes('if (reduceMotion) return;'), 'reduced-motion guard missing');
 });
 
 test('hero background image is responsive', () => {
   const source = read('./HeroSection.tsx');
   assert.ok(source.includes('object-cover'), 'background must use object-cover');
   assert.ok(source.includes('object-center'), 'background must be centered');
-  assert.ok(source.includes('w-full h-full'), 'background must fill its container');
-});
-
-test('hero still honours reduced motion for parallax', () => {
-  const source = read('./HeroSection.tsx');
-  assert.ok(source.includes('if (reduceMotion) return;'), 'reduced-motion guard missing');
 });

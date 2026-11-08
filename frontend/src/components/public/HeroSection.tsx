@@ -59,6 +59,24 @@ const StaggeredWords: React.FC<{ text: string; gold: boolean; delay?: number; is
   );
 };
 
+interface HeroSlide {
+  id: string;
+  background: string;
+  alt: string;
+}
+
+/** Auto-rotating hero slides — uploaded brand shot first, then premium property scenes. */
+const HERO_SLIDES: HeroSlide[] = [
+  { id: 'uploaded', background: '/image.png', alt: 'TaisarTownHub — Taiser Town Scheme 45 signature vista' },
+  { id: 'modern-villa', background: '/hero-slide-2.jpg', alt: 'Modern luxury villa with pool at Taiser Town' },
+  { id: 'residential', background: '/hero-slide-3.jpg', alt: 'Premium residential home exterior' },
+  { id: 'classic-home', background: '/hero-slide-4.jpg', alt: 'Classic family home in Scheme 45' },
+  { id: 'modern-estate', background: '/hero-slide-5.jpg', alt: 'Contemporary estate at Taiser Town' },
+];
+
+/** Slides advance every 6–8 seconds; reduced motion disables the autoplay. */
+const HERO_SLIDE_INTERVAL_MS = 7000;
+
 const TRUST_AVATARS = ['AS', 'KH', 'ST', 'MR', 'IJ'];
 
 export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
@@ -69,6 +87,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
   const [selectedSector, setSelectedSector] = useState<string>('All');
   const [selectedBudget, setSelectedBudget] = useState<string>('All');
   const [selectedSize, setSelectedSize] = useState<string>('All');
+
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
 
   // Parallax: background drifts slower than scroll; content fades gently.
   const heroRef = useRef<HTMLDivElement>(null);
@@ -100,6 +120,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
     };
   }, [reduceMotion]);
 
+  // Hero slideshow: cross-fade between slides on an interval (6–8s).
+  useEffect(() => {
+    if (reduceMotion) return;
+    const timer = window.setInterval(() => {
+      setActiveSlideIndex((prev) => (prev + 1) % HERO_SLIDES.length);
+    }, HERO_SLIDE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [reduceMotion]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSearch({
@@ -121,17 +150,33 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
 
   return (
     <div ref={heroRef} className="relative min-h-[92vh] flex flex-col justify-center overflow-hidden">
-      {/* Background — single responsive hero image (no multi-slide flash) */}
+      {/* Background Slideshow — cross-fade between premium property visuals every 6-8s */}
       <div className="absolute inset-0 z-0">
-        <div ref={bgRef} className="absolute inset-0 -bottom-[16%] will-change-transform">
-          <img
-            src="/image.png"
-            alt="Dramatic golden sunset rays with glowing full moon over Taiser Town Scheme 45"
-            fetchPriority="high"
-            decoding="async"
-            className="w-full h-full object-cover object-center scale-105"
-          />
-        </div>
+        {HERO_SLIDES.map((slide, index) => {
+          const isActive = index === activeSlideIndex;
+          return (
+            <div
+              key={slide.id}
+              className="absolute inset-0"
+              style={{ opacity: isActive ? 1 : 0, transition: 'opacity 1500ms ease-in-out', zIndex: isActive ? 1 : 0 }}
+              aria-hidden={!isActive}
+            >
+              <div
+                ref={isActive ? bgRef : undefined}
+                className="absolute inset-0 -bottom-[16%] will-change-transform"
+              >
+                <img
+                  src={slide.background}
+                  alt={slide.alt}
+                  fetchPriority={isActive ? 'high' : 'auto'}
+                  decoding="async"
+                  loading={isActive ? 'eager' : 'lazy'}
+                  className="w-full h-full object-cover object-center scale-105"
+                />
+              </div>
+            </div>
+          );
+        })}
         <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-[#0B1220]/65 to-[#0B1220]/25" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#0B1220]/30 to-[#0B1220]/75" />
       </div>
@@ -370,6 +415,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Hero Slide Switcher Dots */}
+      <div className="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-2 bg-[#0B1220]/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#C5A46D]/30 shadow-lg">
+        {HERO_SLIDES.map((slide, idx) => (
+          <button
+            key={slide.id}
+            onClick={() => setActiveSlideIndex(idx)}
+            aria-label={`Switch to slide ${idx + 1}`}
+            className={`transition-all duration-300 rounded-full cursor-pointer ${
+              idx === activeSlideIndex
+                ? 'w-6 h-2 bg-[#C5A46D] shadow-sm shadow-[#C5A46D]/50'
+                : 'w-2 h-2 bg-slate-500 hover:bg-slate-300'
+            }`}
+          />
+        ))}
       </div>
 
       {/* Scroll-down indicator */}
