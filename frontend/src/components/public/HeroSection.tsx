@@ -171,7 +171,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                   fetchPriority={isActive ? 'high' : 'auto'}
                   decoding="async"
                   loading={isActive ? 'eager' : 'lazy'}
-                  className="w-full h-full object-cover object-center scale-105"
+                  className="w-full h-full object-contain sm:object-cover object-center scale-105"
                 />
               </div>
             </div>
