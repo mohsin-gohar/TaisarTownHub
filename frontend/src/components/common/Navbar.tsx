@@ -98,7 +98,7 @@ export const Navbar: React.FC = () => {
               aria-label={`${currentTheme.agencyName} — go to homepage`}
             >
               <img
-                src="/logo.png"
+                src="/logo.jpg"
                 alt={`${currentTheme.agencyName} logo`}
                 className="w-10 h-10 lg:w-11 lg:h-11 shrink-0 rounded-lg object-contain group-hover:scale-105 transition-transform"
               />

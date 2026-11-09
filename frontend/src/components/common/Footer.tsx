@@ -83,7 +83,7 @@ export const Footer: React.FC = () => {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shadow-md border border-[#F9E7BA]/40 overflow-hidden">
-                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                <img src="/logo.jpg" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div>
                 <span className="font-serif-luxury text-xl font-bold text-white">

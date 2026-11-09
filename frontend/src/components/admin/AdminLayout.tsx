@@ -135,7 +135,7 @@ export const AdminLayout: React.FC = () => {
       <div className="md:hidden bg-[#101C2C] border-b border-[#C5A46D]/20 px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-lg">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-[#F9E7BA]/40 shadow shrink-0 overflow-hidden">
-            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+            <img src="/logo.jpg" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <span className="font-serif-luxury font-bold text-xs text-white block">
@@ -169,7 +169,7 @@ export const AdminLayout: React.FC = () => {
           <div className="p-5 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shadow-lg border border-[#F9E7BA]/40 shrink-0 overflow-hidden">
-                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                <img src="/logo.jpg" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div className="min-w-0">
                 <span className="font-serif-luxury font-bold text-sm text-white block truncate">
