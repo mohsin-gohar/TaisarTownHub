@@ -18,11 +18,13 @@ import {
   MapPin,
   Compass
 } from 'lucide-react';
-import { VideoModal } from '../common/VideoModal';
+import { hasPermission } from '../../utils/logic';
 import { AgencyVideo } from '../../types';
+import { VideoModal } from '../common/VideoModal';
 
 export const MediaGallerySection: React.FC = () => {
-  const { agencyVideos, likeAgencyVideo, addAgencyVideoComment, addAgencyVideo, dealers, showToast } = useApp();
+  const { agencyVideos, likeAgencyVideo, addAgencyVideoComment, addAgencyVideo, dealers, showToast, currentUser } = useApp();
+  const canPublishTour = hasPermission(currentUser.role, 'upload_media') || hasPermission(currentUser.role, 'manage_media');
   const [selectedPhase, setSelectedPhase] = useState<string>('All');
   const [activeVideo, setActiveVideo] = useState<{ url: string; title: string } | null>(null);
   const [activeCommentsVideoId, setActiveCommentsVideoId] = useState<string | null>(null);
@@ -147,9 +149,10 @@ export const MediaGallerySection: React.FC = () => {
             </p>
           </div>
 
-          {/* Action: Add Agency Video Walkthrough */}
+          {canPublishTour && (
           <div className="flex flex-wrap items-center gap-3">
             <button
+              type="button"
               onClick={() => setIsAddModalOpen(true)}
               className="px-5 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition shadow-lg shadow-[#C5A46D]/20 flex items-center gap-2 cursor-pointer"
             >
@@ -157,6 +160,7 @@ export const MediaGallerySection: React.FC = () => {
               <span>Add Agency Video Tour</span>
             </button>
           </div>
+          )}
         </div>
 
         {/* Phase Filter Tabs */}
@@ -415,7 +419,7 @@ export const MediaGallerySection: React.FC = () => {
                     onChange={(e) => setNewVideo({ ...newVideo, agencyId: e.target.value })}
                     className="w-full bg-[#0B1220] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#C5A46D] focus:outline-none"
                   >
-                    {dealers.map((d) => (
+                    {(dealers || []).map((d) => (
                       <option key={d.id} value={d.id}>
                         {d.agencyOrBranch || d.agencyAffiliation || 'TaisarTownHub Advisory'} — {d.fullName}
                       </option>

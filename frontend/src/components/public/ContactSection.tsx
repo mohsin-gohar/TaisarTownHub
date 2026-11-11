@@ -9,8 +9,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
-  Building2,
-  Bot
+  Building2
 } from 'lucide-react';
 import { validateInquiryForm } from '../../utils/logic';
 
@@ -131,15 +130,14 @@ export const ContactSection: React.FC = () => {
                 </div>
               </div>
 
-              {/* AI Chatbot Coming Soon Card */}
               <div className="pt-4 border-t border-slate-800">
                 <div className="p-4 rounded-xl bg-[#0B1220] border border-[#C5A46D]/20 text-center space-y-1.5 shadow-inner">
                   <div className="text-xs font-bold text-[#F9E7BA] flex items-center justify-center gap-1.5">
-                    <Bot className="w-4 h-4 text-[#C5A46D]" />
-                    <span>AI Consultation & Chatbot Desk (Coming Soon)</span>
+                    <Phone className="w-4 h-4 text-[#C5A46D]" />
+                    <span>Speak with the advisory desk</span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Our digital automated assistant is currently in integration. Please submit your site inquiry on the right for immediate priority review by our senior consultants.
+                    Call or WhatsApp {cmsConfig.contactPhone.trim()}. Written inquiries on this page are saved to the agency desk and reviewed by a consultant.
                   </p>
                 </div>
               </div>

@@ -275,7 +275,12 @@ export const ProjectDetailPage: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => showToast('info', `${doc.title}: contact our advisory desk for a verified copy of this document.`)}
+                      type="button"
+                      onClick={() => {
+                        setInquiryMsg(`Please send a verified copy of "${doc.title}" for ${project.title}.`);
+                        document.getElementById('project-booking')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        showToast('info', 'Add your name and phone, then send the request. It is stored with the agency inquiries.');
+                      }}
                       className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#C5A46D] hover:text-[#101C2C] text-xs font-semibold text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <FileText className="w-3.5 h-3.5" />
@@ -302,7 +307,7 @@ export const ProjectDetailPage: React.FC = () => {
                 </p>
               </div>
 
-              <form onSubmit={handleInquirySubmit} className="space-y-4">
+              <form id="project-booking" onSubmit={handleInquirySubmit} className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-300">Your Full Name</label>
                   <input

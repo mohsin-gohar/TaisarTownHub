@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useApp } from '../../context/AppContext';
+import { api, getApiAgencyId, setApiAgencyId } from '../../services/api';
 import { hasAnyPermission } from '../../utils/logic';
 import { normalizeRole } from '../../domain/permissions';
 import { AdminModuleSkeleton } from './AdminModuleSkeleton';
@@ -40,6 +41,15 @@ const AdminFileManagement = lazy(() => import('./AdminFileManagement').then((m) 
 const AdminPlotLocator = lazy(() => import('./AdminPlotLocator').then((m) => ({ default: m.AdminPlotLocator })));
 const AdminSecurityRoles = lazy(() => import('./AdminSecurityRoles').then((m) => ({ default: m.AdminSecurityRoles })));
 const AdminAudit = lazy(() => import('./AdminAudit').then((m) => ({ default: m.AdminAudit })));
+const AdminAgencyDashboard = lazy(() => import('./AdminAgencyDashboard').then((m) => ({ default: m.AdminAgencyDashboard })));
+const AdminStaffManager = lazy(() => import('./AdminStaffManager').then((m) => ({ default: m.AdminStaffManager })));
+const AdminDocumentVault = lazy(() => import('./AdminDocumentVault').then((m) => ({ default: m.AdminDocumentVault })));
+const AdminModerationDesk = lazy(() => import('./AdminModerationDesk').then((m) => ({ default: m.AdminModerationDesk })));
+const AdminCrmPipeline = lazy(() => import('./AdminCrmPipeline').then((m) => ({ default: m.AdminCrmPipeline })));
+const AdminNotifications = lazy(() => import('./AdminNotifications').then((m) => ({ default: m.AdminNotifications })));
+const AdminSubscription = lazy(() => import('./AdminSubscription').then((m) => ({ default: m.AdminSubscription })));
+const AdminLocations = lazy(() => import('./AdminLocations').then((m) => ({ default: m.AdminLocations })));
+const AdminMediaStudio = lazy(() => import('./AdminMediaStudio').then((m) => ({ default: m.AdminMediaStudio })));
 
 export const AdminLayout: React.FC = () => {
   const {
@@ -61,6 +71,59 @@ export const AdminLayout: React.FC = () => {
   } = useApp();
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [enterprisePermissions, setEnterprisePermissions] = useState<string[]>([]);
+  const [agencyMemberships, setAgencyMemberships] = useState<any[]>([]);
+  const [platformAgencies, setPlatformAgencies] = useState<any[]>([]);
+  const [agencyContextId, setAgencyContextId] = useState(() => getApiAgencyId() ?? '');
+
+  // The legacy auth payload only carries matrix permissions; enterprise
+  // capability keys and agency membership context come from /auth/me. This
+  // fetch is cosmetic for the sidebar — every screen still has server-side
+  // enforcement on each request.
+  useEffect(() => {
+    let active = true;
+    void api.getMe().then(async (me) => {
+      if (!active || !me) return;
+      const permissions: string[] = Array.isArray(me.enterprise_permissions) ? me.enterprise_permissions : [];
+      const memberships: any[] = Array.isArray(me.agencies) ? me.agencies : [];
+      setEnterprisePermissions(permissions);
+      setAgencyMemberships(memberships);
+
+      // Platform operators with agency-management rights may enter any
+      // agency's workspace. The server only honours X-Agency-Id for
+      // cross-agency admins, so members can never use this to escape scope.
+      if (memberships.length === 0 && permissions.includes('admin.manage_agencies')) {
+        const agenciesBody = await api.getAdminAgencies();
+        if (active) {
+          setPlatformAgencies(Array.isArray(agenciesBody?.agencies) ? agenciesBody.agencies : []);
+        }
+      }
+    });
+    return () => { active = false; };
+  }, []);
+
+  const hasEnterprise = (permission: string) => enterprisePermissions.includes(permission);
+  const hasAgencyContext = agencyMemberships.length > 0 || Boolean(agencyContextId);
+  const canApproveListings = hasEnterprise('properties.approve');
+  const canManageStaff = hasEnterprise('agency.manage_staff');
+  const canUploadDocuments = hasEnterprise('documents.upload');
+  const canDeleteDocuments = hasEnterprise('documents.delete');
+  const canAssignLeads = hasEnterprise('crm.assign_lead');
+  const canEditLeads = hasEnterprise('crm.update_lead') || hasEnterprise('crm.manage_lead');
+  const canCreateLeads = hasEnterprise('crm.create_lead');
+  const canUploadMedia = hasEnterprise('upload_media') || hasEnterprise('manage_media');
+  const agencyOptions = agencyMemberships.length > 0
+    ? agencyMemberships.map((membership) => ({
+        id: String(membership.agency_id ?? membership.id ?? ''),
+        name: membership.agency?.name || membership.agency_name || membership.name || 'My agency',
+      })).filter((option) => option.id)
+    : platformAgencies.map((agency) => ({ id: String(agency.id), name: agency.name }));
+
+  const handleAgencyContext = (id: string) => {
+    setAgencyContextId(id);
+    setApiAgencyId(id || null);
+    if (id) setAdminTab('agency_dashboard');
+  };
 
   // Dealer accounts only ever see deals booked under their own dealer profile,
   // so their badge must count the scoped set — never the full ledger size.
@@ -99,6 +162,23 @@ export const AdminLayout: React.FC = () => {
     { id: 'cms', label: 'Website CMS & Builder', icon: Settings, permission: 'edit_cms' },
     { id: 'security', label: 'Security & Roles', icon: Shield, permission: 'manage_users' },
     { id: 'audit', label: 'Audit & Recycle Bin', icon: Shield, permission: 'manage_users' },
+    ...(hasAgencyContext && hasEnterprise('agency.view')
+      ? [
+          { id: 'agency_dashboard', label: 'Agency Dashboard', icon: Building2 },
+          { id: 'staff', label: 'Staff & Roles', icon: Users },
+          { id: 'documents', label: 'Document Vault', icon: FileText },
+          { id: 'crm', label: 'CRM Pipeline', icon: Inbox },
+          { id: 'media_studio', label: 'Media Studio', icon: Image },
+          { id: 'subscription', label: 'Subscription & Usage', icon: Settings },
+        ]
+      : []),
+    ...(canApproveListings
+      ? [
+          { id: 'moderation', label: 'Moderation Desk', icon: FileCheck },
+          { id: 'locations', label: 'Locations & Categories', icon: MapPin },
+        ]
+      : []),
+    { id: 'notifications', label: 'Notifications', icon: Inbox },
   ];
 
   // Sidebar visibility is enforced here AND in context actions (requirePermission) —
@@ -196,6 +276,26 @@ export const AdminLayout: React.FC = () => {
               <span className="font-bold text-[#C5A46D] capitalize">{activeRole.replace('_', ' ')}</span>
             </div>
           </div>
+
+          {/* Agency context: members switch between their memberships; platform
+              operators with admin.manage_agencies may enter any agency. */}
+          {agencyOptions.length > 0 && (
+            <div className="px-4 pt-2 pb-1">
+              <label className="block text-[9px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
+                Agency context
+              </label>
+              <select
+                value={agencyContextId}
+                onChange={(e) => handleAgencyContext(e.target.value)}
+                className="w-full px-3 py-1.5 rounded-lg bg-[#0B1220] border border-slate-800 text-[11px] text-white focus:outline-none focus:border-[#C5A46D]"
+              >
+                {agencyMemberships.length === 0 && <option value="">Platform view</option>}
+                {agencyOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Nav items */}
           <nav className="p-3 space-y-1">
@@ -296,7 +396,7 @@ export const AdminLayout: React.FC = () => {
 
         {/* Tab Content */}
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          <Suspense fallback={<AdminModuleSkeleton />}>
+          <Suspense key={agencyContextId || 'platform'} fallback={<AdminModuleSkeleton />}>
             {adminTab === 'overview' && <AdminOverview />}
             {adminTab === 'projects' && <AdminProjects />}
             {adminTab === 'properties' && <AdminProperties />}
@@ -311,6 +411,19 @@ export const AdminLayout: React.FC = () => {
             {adminTab === 'cms' && <AdminCMS />}
             {adminTab === 'security' && <AdminSecurityRoles />}
             {adminTab === 'audit' && <AdminAudit />}
+            {adminTab === 'agency_dashboard' && <AdminAgencyDashboard onNavigate={handleSelectTab} />}
+            {adminTab === 'staff' && <AdminStaffManager canManage={canManageStaff} />}
+            {adminTab === 'documents' && (
+              <AdminDocumentVault canUpload={canUploadDocuments} canDelete={canDeleteDocuments} />
+            )}
+            {adminTab === 'moderation' && <AdminModerationDesk canModerate={canApproveListings} />}
+            {adminTab === 'crm' && (
+              <AdminCrmPipeline canAssign={canAssignLeads} canEdit={canEditLeads} canCreate={canCreateLeads} />
+            )}
+            {adminTab === 'media_studio' && <AdminMediaStudio canUpload={canUploadMedia} />}
+            {adminTab === 'subscription' && <AdminSubscription />}
+            {adminTab === 'locations' && <AdminLocations canManage={canApproveListings} />}
+            {adminTab === 'notifications' && <AdminNotifications />}
           </Suspense>
         </div>
       </main>

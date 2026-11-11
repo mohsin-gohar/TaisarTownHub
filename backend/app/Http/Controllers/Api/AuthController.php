@@ -5,16 +5,22 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessRecord;
 use App\Models\Dealer;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Support\RolePermissions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    use AuthorizesApi;
+
     /**
      * Login with email and password, issue Sanctum token.
+     * Per-account lockout: after N failed attempts (system setting) the
+     * account is locked for M minutes — independent of the shared IP throttle.
      */
     public function login(Request $request)
     {
@@ -25,31 +31,68 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (!$user) {
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
         }
 
-        // Issue Sanctum token
+        // Locked account check
+        if ($user->locked_until !== null && $user->locked_until->isFuture()) {
+            $minutes = (int) ceil($user->locked_until->diffInMinutes(now()));
+            throw ValidationException::withMessages([
+                'email' => ["Account temporarily locked. Try again in {$minutes} minute(s)."],
+            ]);
+        }
+
+        if ($user->status === 'suspended') {
+            throw ValidationException::withMessages([
+                'email' => ['This account has been suspended. Contact support.'],
+            ]);
+        }
+
+        if (!Hash::check($request->password, $user->password)) {
+            $maxAttempts = (int) SystemSetting::get('security.login_max_attempts', 5);
+            $lockoutMinutes = (int) SystemSetting::get('security.login_lockout_minutes', 15);
+
+            $failed = (int) $user->failed_attempts + 1;
+            $updates = ['failed_attempts' => $failed];
+            if ($failed >= $maxAttempts) {
+                $updates['locked_until'] = now()->addMinutes($lockoutMinutes);
+                $updates['failed_attempts'] = 0;
+                Log::warning('Account locked after failed logins', [
+                    'user_id' => $user->id, 'ip' => $request->ip(), 'attempts' => $failed,
+                ]);
+            }
+            User::where('id', $user->id)->update($updates);
+
+            throw ValidationException::withMessages([
+                'email' => ['The provided credentials are incorrect.'],
+            ]);
+        }
+
+        // Success: reset counters
+        User::where('id', $user->id)->update([
+            'failed_attempts' => 0,
+            'locked_until' => null,
+            'last_login_at' => now(),
+        ]);
+
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
             'success' => true,
             'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-                'dealer_id' => $user->dealer_id,
-                'permissions' => RolePermissions::forRole($user->role),
-            ],
+            'user' => $this->userPayload($user),
         ]);
     }
 
     /**
      * Register a new dealer account.
+     *
+     * NOTE: this used to fabricate 3 "verified" featured properties and fake
+     * deal statistics for every registrant. Removed — accounts now start with
+     * real (zero) counters and no invented inventory.
      */
     public function register(Request $request)
     {
@@ -73,9 +116,7 @@ class AuthController extends Controller
         $avatar = $defaultAvatars[crc32($request->email) % count($defaultAvatars)];
         $dealerId = 'deal-' . uniqid();
         $agencyName = $request->agencyOrBranch ?: $request->fullName . ' & Associates';
-        $sector = $request->sectorFocus ?: 'Sector 63';
 
-        // Create dealer record
         $dealer = Dealer::create([
             'id' => $dealerId,
             'fullName' => $request->fullName,
@@ -88,131 +129,22 @@ class AuthController extends Controller
             'role' => 'dealer',
             'status' => 'Active',
             'avatar' => $avatar,
-            'assignedPropertiesCount' => 3,
-            'completedDealsCount' => 6,
-            'dealsClosed' => 6,
+            'assignedPropertiesCount' => 0,
+            'completedDealsCount' => 0,
+            'dealsClosed' => 0,
         ]);
 
-        // Create user record
         $user = User::create([
             'name' => $request->fullName,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'dealer',
             'dealer_id' => $dealer->id,
+            'phone' => $request->phone,
+            'last_login_at' => now(),
         ]);
 
         $token = $user->createToken('auth-token')->plainTextToken;
-
-        // Auto-allocate 3 verified Scheme 45 property files to agency stock
-        $propId1 = 'prop-' . uniqid();
-        $propId2 = 'prop-' . uniqid();
-        $propId3 = 'prop-' . uniqid();
-
-        $starterFiles = [
-            [
-                'id' => $propId1,
-                'plotNumber' => 'P-' . rand(100, 999),
-                'fileNumber' => 'MDA-70D-' . rand(1000, 9999),
-                'title' => '120 Sq. Yd. Prime West-Open Residential Plot',
-                'description' => "Verified 120 square yard plot in Sector 70-D, Phase 1. Managed and represented exclusively by {$agencyName}. Complete biometric desk clearance and immediate construction possession.",
-                'pricePKR' => 3600000,
-                'formattedPrice' => 'PKR 36 Lacs',
-                'location' => 'Sector 70-D, Street 12, Taiser Town Scheme 45, Karachi',
-                'phase' => 'Phase 1',
-                'sector' => 'Sector 70-D',
-                'sizeSqYards' => 120,
-                'type' => 'Residential Plot',
-                'status' => 'Available',
-                'isFeatured' => true,
-                'possessionReady' => true,
-                'mdaApproved' => true,
-                'westOpen' => true,
-                'cornerPlot' => false,
-                'parkFacing' => false,
-                'mainBoulevard' => false,
-                'images' => [
-                    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
-                    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80'
-                ],
-                'features' => ['West Open', '40ft Carpeted Street', 'MDA Verified File', 'Ready for Construction', 'Biometric Ready'],
-                'contactPerson' => $request->fullName,
-                'contactPhone' => $request->phone,
-                'contactWhatsApp' => $request->phone,
-                'assignedDealerId' => $dealer->id,
-                'agencyName' => $agencyName,
-                'createdDate' => now()->toDateString(),
-            ],
-            [
-                'id' => $propId2,
-                'plotNumber' => 'R-' . rand(50, 250),
-                'fileNumber' => 'MDA-63-' . rand(1000, 9999),
-                'title' => '120 Sq. Yd. 100ft Boulevard Residential Plot',
-                'description' => "High elevation residential plot on the main 100ft road in Sector 63, Phase 2. Handled by {$agencyName}. Ideal for residential villa with high investment appreciation.",
-                'pricePKR' => 3500000,
-                'formattedPrice' => 'PKR 35 Lacs',
-                'location' => 'Sector 63, 100ft Boulevard, Taiser Town Scheme 45, Karachi',
-                'phase' => 'Phase 2',
-                'sector' => 'Sector 63',
-                'sizeSqYards' => 120,
-                'type' => 'Residential Plot',
-                'status' => 'Hot Deal',
-                'isFeatured' => true,
-                'possessionReady' => true,
-                'mdaApproved' => true,
-                'westOpen' => false,
-                'cornerPlot' => false,
-                'parkFacing' => false,
-                'mainBoulevard' => true,
-                'images' => [
-                    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80'
-                ],
-                'features' => ['100ft Boulevard Facing', 'MDA Computerized Allotment', 'Leveled Land', 'Ready for Biometric Transfer'],
-                'contactPerson' => $request->fullName,
-                'contactPhone' => $request->phone,
-                'contactWhatsApp' => $request->phone,
-                'assignedDealerId' => $dealer->id,
-                'agencyName' => $agencyName,
-                'createdDate' => now()->toDateString(),
-            ],
-            [
-                'id' => $propId3,
-                'plotNumber' => 'B-' . rand(10, 150),
-                'fileNumber' => 'MDA-78-' . rand(1000, 9999),
-                'title' => '80 Sq. Yd. Balloted Investment Plot File',
-                'description' => "Balloted 80 sq. yd. affordable plot file in Sector 78, Phase 2. Guaranteed clean chain of title with computerized MDA ballot record verified by {$agencyName}.",
-                'pricePKR' => 2200000,
-                'formattedPrice' => 'PKR 22 Lacs',
-                'location' => 'Sector 78, Block B, Taiser Town Scheme 45, Karachi',
-                'phase' => 'Phase 2',
-                'sector' => 'Sector 78',
-                'sizeSqYards' => 80,
-                'type' => 'Residential Plot',
-                'status' => 'Available',
-                'isFeatured' => false,
-                'possessionReady' => false,
-                'mdaApproved' => true,
-                'westOpen' => true,
-                'cornerPlot' => false,
-                'parkFacing' => false,
-                'mainBoulevard' => false,
-                'images' => [
-                    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80'
-                ],
-                'features' => ['MDA Balloted File', 'Low Entry Investment', 'High ROI Potential', 'Clear Title'],
-                'contactPerson' => $request->fullName,
-                'contactPhone' => $request->phone,
-                'contactWhatsApp' => $request->phone,
-                'assignedDealerId' => $dealer->id,
-                'agencyName' => $agencyName,
-                'createdDate' => now()->toDateString(),
-            ]
-        ];
-
-        foreach ($starterFiles as $file) {
-            \App\Models\Property::updateOrCreate(['id' => $file['id']], $file);
-            BusinessRecord::put('properties', $file['id'], $file);
-        }
 
         BusinessRecord::put('dealers', $dealer->id, [
             'id' => $dealer->id,
@@ -224,46 +156,37 @@ class AuthController extends Controller
             'role' => 'dealer',
             'status' => 'Active',
             'avatar' => $avatar,
-            'assignedPropertiesCount' => 3,
-            'completedDealsCount' => 6,
-            'dealsClosed' => 6,
+            'assignedPropertiesCount' => 0,
+            'completedDealsCount' => 0,
+            'dealsClosed' => 0,
             'totalEarnedPKR' => 0,
             'pendingCommissionPKR' => 0,
             'cnicMasked' => $dealer->cnicMasked,
             'createdAt' => now()->toDateString(),
         ]);
 
+        $this->writeAudit($request, 'auth.register', 'user:' . $user->id, 'Dealer account created', [
+            'agency_id' => null,
+            'entity_type' => 'user',
+            'entity_id' => (string) $user->id,
+        ]);
+
         return response()->json([
             'success' => true,
             'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-                'dealer_id' => $dealer->id,
-                'permissions' => RolePermissions::forRole('dealer'),
-            ],
+            'user' => $this->userPayload($user->fresh()),
         ], 201);
     }
 
     /**
-     * Get authenticated user info.
+     * Get authenticated user info (incl. agency memberships + effective perms).
      */
     public function me(Request $request)
     {
-        $user = $request->user();
-
         return response()->json([
             'success' => true,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-                'dealer_id' => $user->dealer_id,
-                'permissions' => RolePermissions::forRole($user->role),
-            ],
+            'user' => $this->userPayload($request->user()),
+            'agency_id' => $this->agencyId($request),
         ]);
     }
 
@@ -278,6 +201,43 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Logged out successfully.',
         ]);
+    }
+
+    /**
+     * Logout everywhere - revoke all tokens of this user.
+     */
+    public function logoutAll(Request $request)
+    {
+        $request->user()->tokens()->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Logged out from all devices.',
+        ]);
+    }
+
+    /**
+     * Payload for login/me responses. `permissions` keeps the legacy matrix
+     * shape the existing frontend gates expect; `enterprise` adds the
+     * membership-scoped keys and `agencies` lets the client pick a context.
+     */
+    private function userPayload(User $user): array
+    {
+        $memberships = $user->memberAgencies();
+        $defaultAgency = $memberships[0]['agency_id'] ?? null;
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'dealer_id' => $user->dealer_id,
+            'phone' => $user->phone,
+            'permissions' => RolePermissions::forRole($user->role),
+            'enterprise_permissions' => $user->permissionsFor($defaultAgency),
+            'agencies' => $memberships,
+            'is_platform' => $memberships === [],
+        ];
     }
 
     /**

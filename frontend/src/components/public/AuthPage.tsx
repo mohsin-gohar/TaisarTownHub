@@ -90,7 +90,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
       return;
     }
 
-    if (regPassword && regConfirmPassword && regPassword !== regConfirmPassword) {
+    if (regPassword.length < 8) {
+      showToast('error', 'Password must be at least 8 characters.');
+      return;
+    }
+
+    if (regPassword !== regConfirmPassword) {
       showToast('error', 'Passwords do not match.');
       return;
     }
@@ -346,7 +351,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 <input
                   type="password"
                   required
-                  placeholder="Min 6 characters"
+                  placeholder="Min 8 characters"
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
                   className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"

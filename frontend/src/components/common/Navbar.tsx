@@ -106,8 +106,12 @@ export const Navbar: React.FC = () => {
                 <span className="font-serif-luxury text-sm sm:text-lg lg:text-2xl font-bold tracking-tight text-white group-hover:text-[#C5A46D] transition-colors truncate block max-w-[140px] sm:max-w-none leading-tight">
                   {currentTheme.agencyName}
                 </span>
-                <span className="block text-[9px] lg:text-[10px] uppercase tracking-widest text-[#C5A46D] font-semibold leading-tight">
-                  Scheme 45, Karachi
+                <span
+                  lang="ur"
+                  dir="rtl"
+                  className="font-urdu block text-[10px] sm:text-[11px] lg:text-[13px] leading-[1.7] text-[#C5A46D] font-semibold truncate max-w-[150px] sm:max-w-none"
+                >
+                  مضبوط بنیاد، پائیدار ترقی
                 </span>
               </div>
             </button>

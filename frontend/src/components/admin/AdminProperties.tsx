@@ -56,8 +56,8 @@ export const AdminProperties: React.FC = () => {
     westOpen: true,
     cornerPlot: false,
     parkFacing: false,
-    sellerId: sellers[0]?.id || '',
-    assignedDealerId: dealers[0]?.id || '',
+    sellerId: sellers?.[0]?.id || '',
+    assignedDealerId: dealers?.[0]?.id || '',
     image: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
     features: 'West Open, 100ft Main Boulevard, 24x45 Dimension, MDA Verified File, Ready for Possession'
   });
@@ -86,8 +86,8 @@ export const AdminProperties: React.FC = () => {
       westOpen: true,
       cornerPlot: false,
       parkFacing: false,
-      sellerId: sellers[0]?.id || '',
-      assignedDealerId: dealers[0]?.id || '',
+      sellerId: sellers?.[0]?.id || '',
+      assignedDealerId: dealers?.[0]?.id || '',
       image: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
       features: 'West Open, 100ft Main Boulevard, MDA Verified File, Ready for Construction'
     });
@@ -587,7 +587,7 @@ export const AdminProperties: React.FC = () => {
                     className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
                   >
                     <option value="">None / Agency Stock</option>
-                    {sellers.map((s) => (
+                    {(sellers || []).map((s) => (
                       <option key={s.id} value={s.id}>{s.fullName} ({s.cnic})</option>
                     ))}
                   </select>
@@ -601,7 +601,7 @@ export const AdminProperties: React.FC = () => {
                     className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
                   >
                     <option value="">Direct Agency Desk</option>
-                    {dealers.map((d) => (
+                    {(dealers || []).map((d) => (
                       <option key={d.id} value={d.id}>{d.fullName} ({d.agencyOrBranch})</option>
                     ))}
                   </select>

@@ -357,7 +357,8 @@ export type UserRole =
   | 'admin'
   | 'manager'
   | 'dealer'
-  | 'operator';
+  | 'operator'
+  | 'visitor';
 
 export interface AuthUser {
   id: string;

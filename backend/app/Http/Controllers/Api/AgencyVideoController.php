@@ -76,65 +76,125 @@ class AgencyVideoController extends Controller
 
     /**
      * Like a video.
+     *
+     * Requires authentication — likes are attributed to the signed-in account
+     * (one like per user per video), never to anonymous client input.
      */
-    public function like($id)
+    public function like(Request $request, $id)
     {
+        $user = $request->user();
+
         $record = BusinessRecord::where('collection', 'videos')->where('record_id', $id)->first();
         if ($record) {
             $payload = $record->payload ?? [];
+            $likedBy = array_map('strval', $payload['likedBy'] ?? []);
+            $uid = 'u:' . $user->id;
+
+            if (in_array($uid, $likedBy, true)) {
+                // Idempotent: already liked by this user
+                return response()->json([
+                    'likes' => (int) ($payload['likes'] ?? 0),
+                    'message' => 'Already liked',
+                    'liked' => true,
+                ]);
+            }
+
+            $likedBy[] = $uid;
+            // Cap the stored id list so the payload cannot grow unbounded
+            if (count($likedBy) > 5000) {
+                $likedBy = array_slice($likedBy, -5000);
+            }
+            $payload['likedBy'] = $likedBy;
             $payload['likes'] = (int) ($payload['likes'] ?? 0) + 1;
             $record->payload = $payload;
             $record->save();
-            return response()->json(['likes' => $payload['likes'], 'message' => 'Liked successfully']);
+
+            return response()->json([
+                'likes' => $payload['likes'],
+                'message' => 'Liked successfully',
+                'liked' => true,
+            ]);
         }
 
         $video = AgencyVideo::findOrFail($id);
-        $video->increment('likes');
 
-        return response()->json(['likes' => $video->likes, 'message' => 'Liked successfully']);
+        // Dedupe via the like table when present, otherwise best-effort increment
+        $alreadyLiked = \App\Models\VideoLike::where('agency_video_id', $video->id)
+            ->where('user_id', $user->id)
+            ->exists();
+
+        if ($alreadyLiked) {
+            return response()->json([
+                'likes' => $video->likes,
+                'message' => 'Already liked',
+                'liked' => true,
+            ]);
+        }
+
+        [$like, $created] = \App\Models\VideoLike::firstOrCreate([
+            'agency_video_id' => $video->id,
+            'user_id' => $user->id,
+        ]);
+
+        if ($created) {
+            $video->increment('likes');
+        }
+
+        return response()->json([
+            'likes' => $video->fresh()->likes,
+            'message' => 'Liked successfully',
+            'liked' => true,
+        ]);
     }
 
     /**
      * Add a comment to a video.
+     *
+     * Requires authentication. The display name and dealer flag come from the
+     * server-side account — clients can no longer impersonate a dealer or
+     * another person.
      */
     public function comment(Request $request, $id)
     {
+        $user = $request->user();
+
         $data = $request->validate([
-            'userName' => 'required|string|max:100',
             'comment' => 'required|string|max:1000',
-            'isDealer' => 'nullable|boolean',
         ]);
+
+        $comment = strip_tags($data['comment']);
+        $userName = strip_tags($user->name);
+        $isDealer = in_array($user->role, ['dealer', 'admin', 'super_admin'], true)
+            || $user->memberships()->where('status', 'active')->exists();
 
         $stored = BusinessRecord::where('collection', 'videos')->where('record_id', $id)->first();
         if ($stored) {
             $payload = $stored->payload ?? [];
-            $comment = [
+            $row = [
                 'id' => 'comm-' . Str::uuid(),
-                'userName' => strip_tags($data['userName']),
-                'comment' => strip_tags($data['comment']),
-                'createdAt' => 'Just now',
-                'isDealer' => (bool) ($data['isDealer'] ?? false),
+                'userName' => $userName,
+                'comment' => $comment,
+                'createdAt' => now()->toDateTimeString(),
+                'isDealer' => $isDealer,
+                'userId' => $user->id,
             ];
-            $payload['comments'] = array_merge([$comment], $payload['comments'] ?? []);
+            $payload['comments'] = array_merge([$row], $payload['comments'] ?? []);
             $stored->payload = $payload;
             $stored->save();
-            return response()->json($comment, 201);
+            return response()->json($row, 201);
         }
 
         $video = AgencyVideo::findOrFail($id);
 
-        // Sanitize comment
-        $data['comment'] = strip_tags($data['comment']);
-        $data['userName'] = strip_tags($data['userName']);
-
-        $comment = VideoComment::create([
+        $row = VideoComment::create([
             'id' => 'comm-' . Str::uuid(),
             'agency_video_id' => $video->id,
-            'userName' => $data['userName'],
-            'comment' => $data['comment'],
-            'isDealer' => $data['isDealer'] ?? false,
+            'userName' => $userName,
+            'comment' => $comment,
+            'isDealer' => $isDealer,
+            'user_id' => $user->id,
         ]);
 
-        return response()->json($comment, 201);
+        return response()->json($row, 201);
     }
 }

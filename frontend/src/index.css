@@ -24,6 +24,10 @@
   .font-brand {
     font-family: 'Cinzel', serif;
   }
+
+  .font-urdu {
+    font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Noto Naskh Arabic', serif;
+  }
 }
 
 /* Glassmorphism helpers */

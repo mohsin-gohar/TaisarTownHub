@@ -1,5 +1,7 @@
 import React from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { api } from '../../services/api';
 import {
   Building2,
   Home,
@@ -21,6 +23,42 @@ import {
 } from 'lucide-react';
 import { formatPKRCurrency, calculateERPFinancials } from '../../utils/logic';
 
+interface AdminDashboardData {
+  listings?: {
+    total?: number;
+    public?: number;
+    pending?: number;
+    draft?: number;
+    rejected?: number;
+    featured?: number;
+    created_30d?: number;
+  };
+  leads?: {
+    total?: number;
+    new?: number;
+    open?: number;
+    converted?: number;
+    due_follow_ups?: number;
+    created_30d?: number;
+  };
+  finance?: {
+    collected_total?: number;
+    collected_30d?: number;
+    commission_pending?: number;
+    commission_paid?: number;
+    active_deals?: number;
+    voided_deals?: number;
+    deal_value?: number;
+  };
+  metrics?: {
+    lead_conversion_pct?: number;
+    deal_close_pct?: number;
+    pending_approval_pct?: number;
+    listings_per_lead?: number;
+  };
+  series?: Array<{ date: string; listings?: number; leads?: number; payments?: number }>;
+}
+
 export const AdminOverview: React.FC = () => {
   const {
     projects,
@@ -38,9 +76,36 @@ export const AdminOverview: React.FC = () => {
     setCurrentView
   } = useApp();
 
+  const [dashboard, setDashboard] = useState<AdminDashboardData | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void api.getAdminDashboard().then((data) => {
+      if (mounted && data) setDashboard(data);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const pendingInquiries = inquiries.filter((i) => i.status === 'Pending').length;
   const verifiedFiles = propertyFiles.filter((f) => f.verificationStatus === 'Verified').length;
   const financials = calculateERPFinancials(transactions, paymentEntries, commissionEntries);
+
+  const totalSalesVolume = Number(dashboard?.finance?.deal_value ?? financials.totalSalesVolume);
+  const advancesCollected = Number(dashboard?.finance?.collected_total ?? financials.totalAdvancesCollected);
+  const totalCommissionPayable = Number(dashboard?.finance?.commission_pending ?? financials.totalCommissionPayable);
+  const collectedThisPeriod = Number(dashboard?.finance?.collected_30d ?? advancesCollected);
+  const activeDeals = Number(dashboard?.finance?.active_deals ?? financials.totalDealsCount);
+  const leadConversionPct = Number(dashboard?.metrics?.lead_conversion_pct ?? 0);
+  const pendingApprovals = Number(dashboard?.listings?.pending ?? 0);
+  const totalListings = Number(dashboard?.listings?.total ?? properties.length);
+  const openLeads = Number(dashboard?.leads?.open ?? inquiries.length);
+  const series = Array.isArray(dashboard?.series) ? dashboard.series : [];
+  const monthlySeries = series.slice(-6).map((point) => ({
+    month: String(point.date ?? '').slice(5, 7),
+    count: Number(point.listings ?? 0) + Number(point.leads ?? 0) + Number(point.payments ?? 0),
+  }));
 
   return (
     <div className="space-y-8 animate-fadeIn">
@@ -94,12 +159,12 @@ export const AdminOverview: React.FC = () => {
             </div>
           </div>
           <div className="font-serif-luxury text-3xl font-bold text-white">
-            {formatPKRCurrency(financials.totalSalesVolume)}
+            {formatPKRCurrency(totalSalesVolume)}
           </div>
           <div className="text-[11px] text-[#C5A46D] flex items-center gap-1">
             <TrendingUp className="w-3.5 h-3.5" />
-            <span className="font-semibold">+12.4% this quarter</span>
-            <span className="text-slate-500">• {financials.totalDealsCount} active deals</span>
+            <span className="font-semibold">{formatPKRCurrency(collectedThisPeriod)} collected (30d)</span>
+            <span className="text-slate-500">• {activeDeals} active deals</span>
           </div>
         </div>
 
@@ -111,7 +176,7 @@ export const AdminOverview: React.FC = () => {
             </div>
           </div>
           <div className="font-serif-luxury text-3xl font-bold text-[#C5A46D]">
-            {formatPKRCurrency(financials.totalAdvancesCollected)}
+            {formatPKRCurrency(advancesCollected)}
           </div>
           <div className="text-[11px] text-slate-400">
             Escrow deposits & token payments
@@ -130,8 +195,7 @@ export const AdminOverview: React.FC = () => {
           </div>
           <div className="text-[11px] text-slate-400">
             Due upon MDA transfer completion
-          </div>
-        </div>
+          </div>        </div>
 
         <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
           <div className="flex items-center justify-between">
@@ -141,7 +205,7 @@ export const AdminOverview: React.FC = () => {
             </div>
           </div>
           <div className="font-serif-luxury text-3xl font-bold text-[#C5A46D]">
-            {formatPKRCurrency(financials.totalCommissionPayable)}
+            {formatPKRCurrency(totalCommissionPayable)}
           </div>
           <div className="text-[11px] text-slate-400">
             {dealers.length} Registered agents & facilitators
@@ -201,20 +265,20 @@ export const AdminOverview: React.FC = () => {
 
           {/* Clean SVG Area & Bar Visual */}
           <div className="relative h-56 w-full flex items-end justify-between gap-3 pt-6 px-2">
-            {[
-              { month: 'Oct', count: 18, height: '40%' },
-              { month: 'Nov', count: 28, height: '55%' },
-              { month: 'Dec', count: 42, height: '70%' },
-              { month: 'Jan', count: 58, height: '85%' },
-              { month: 'Feb', count: 72, height: '100%' }
-            ].map((col, idx) => (
+            {(monthlySeries.length > 0 ? monthlySeries : [
+              { month: 'Oct', count: 18 },
+              { month: 'Nov', count: 28 },
+              { month: 'Dec', count: 42 },
+              { month: 'Jan', count: 58 },
+              { month: 'Feb', count: 72 }
+            ]).map((col, idx) => (
               <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
                 <span className="text-[10px] text-slate-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                  {col.count} Leads
+                  {col.count} Events
                 </span>
                 <div
                   className="w-full max-w-[48px] rounded-t-lg bg-gradient-to-t from-[#C5A46D]/20 to-[#C5A46D] group-hover:to-[#F9E7BA] transition-all duration-300 relative"
-                  style={{ height: col.height }}
+                  style={{ height: `${Math.min(100, (Number(col.count) / Math.max(1, Math.max(...monthlySeries.map((m) => m.count), 1))) * 100)}%` }}
                 >
                   <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-white shadow" />
                 </div>
@@ -226,7 +290,7 @@ export const AdminOverview: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t border-slate-800 text-xs text-slate-400">
-            <span>Average inquiry conversion rate: <strong>32.4%</strong></span>
+            <span>Average inquiry conversion rate: <strong>{leadConversionPct}%</strong></span>
             <span className="text-[#C5A46D]">Highest demand: Sector 70-D & 71</span>
           </div>
         </div>

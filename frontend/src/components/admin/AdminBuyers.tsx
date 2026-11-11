@@ -46,7 +46,7 @@ export const AdminBuyers: React.FC = () => {
     setUnmaskedCnicIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const filteredBuyers = buyers.filter((b) => {
+  const filteredBuyers = (buyers || []).filter((b) => {
     if (b.deletedAt) return false;
     const matchesSearch =
       b.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||

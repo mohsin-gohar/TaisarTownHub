@@ -13,7 +13,7 @@ class VideoComment extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'id', 'agency_video_id', 'userName', 'comment', 'isDealer'
+        'id', 'agency_video_id', 'userName', 'comment', 'isDealer', 'user_id'
     ];
 
     protected $casts = [

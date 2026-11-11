@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Transaction extends Model
@@ -17,16 +19,98 @@ class Transaction extends Model
         'sector', 'sellerName', 'buyerName', 'dealerId', 'dealerName',
         'transactionType', 'agreementAmountPKR', 'advancePaymentPKR',
         'remainingBalancePKR', 'commissionAmountPKR', 'commissionStatus',
-        'dealStatus'
+        'dealStatus',
+        // Enterprise fields
+        'agency_id', 'created_by', 'updated_by',
+        'voided_at', 'void_reason', 'voided_by',
+        'approved_at', 'approved_by',
+        'paymentMethod', 'paymentStatus', 'transactionDate', 'internalRemarks',
     ];
 
-    public function property()
+    protected $casts = [
+        'voided_at' => 'datetime',
+        'approved_at' => 'datetime',
+    ];
+
+    /* ---------------- Relationships ---------------- */
+
+    public function property(): BelongsTo
     {
         return $this->belongsTo(Property::class, 'propertyId', 'id');
     }
 
-    public function dealer()
+    public function dealer(): BelongsTo
     {
         return $this->belongsTo(Dealer::class, 'dealerId', 'id');
+    }
+
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class, 'agency_id');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function voider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(TransactionPayment::class, 'transaction_id')->orderBy('received_at');
+    }
+
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(PaymentSchedule::class, 'transaction_id')->orderBy('installment_no');
+    }
+
+    public function commissions(): HasMany
+    {
+        return $this->hasMany(Commission::class, 'transaction_id');
+    }
+
+    /* ---------------- Scopes ---------------- */
+
+    public function scopeForAgency($query, ?string $agencyId)
+    {
+        return $agencyId === null
+            ? $query->whereNull('agency_id')
+            : $query->where('agency_id', $agencyId);
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->whereNull('voided_at');
+    }
+
+    public function isVoided(): bool
+    {
+        return $this->voided_at !== null;
+    }
+
+    public function isApproved(): bool
+    {
+        return $this->approved_at !== null;
+    }
+
+    /** Total money received against this deal. */
+    public function totalPaid(): float
+    {
+        return (float) $this->payments()->sum('amount');
+    }
+
+    public function outstandingBalance(): float
+    {
+        return max(0, (float) $this->agreementAmountPKR - $this->totalPaid());
     }
 }

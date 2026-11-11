@@ -1024,7 +1024,7 @@ export const AdminTransactions: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, sellerId: e.target.value })}
                     className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
                   >
-                    {sellers.map((s) => (
+                    {(sellers || []).map((s) => (
                       <option key={s.id} value={s.id}>{s.fullName}</option>
                     ))}
                   </select>
@@ -1037,7 +1037,7 @@ export const AdminTransactions: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, buyerId: e.target.value })}
                     className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
                   >
-                    {buyers.map((b) => (
+                    {(buyers || []).map((b) => (
                       <option key={b.id} value={b.id}>{b.fullName}</option>
                     ))}
                   </select>
@@ -1076,7 +1076,7 @@ export const AdminTransactions: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, dealerId: e.target.value })}
                     className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
                   >
-                    {dealers.map((d) => (
+                    {(dealers || []).map((d) => (
                       <option key={d.id} value={d.id}>{d.fullName} ({d.agencyOrBranch})</option>
                     ))}
                     <option value="">— Direct deal (no dealer) —</option>

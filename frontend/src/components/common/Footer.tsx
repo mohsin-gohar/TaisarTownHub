@@ -247,7 +247,7 @@ export const Footer: React.FC = () => {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-800/50 gap-4">
             <div>
-              &copy; {new Date().getFullYear()} {currentTheme.agencyName}. All rights reserved. Built for professional real estate presentations.
+              &copy; {new Date().getFullYear()} {currentTheme.agencyName}. All rights reserved.
             </div>
             <div className="flex items-center gap-4 text-xs">
               <button

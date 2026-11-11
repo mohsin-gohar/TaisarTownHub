@@ -37,7 +37,7 @@ export const AgenciesSection: React.FC = () => {
 
         {/* Agency Cards Grid (Mobile, Tablet, Desktop Responsive) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {dealers.map((dealer) => {
+          {(dealers || []).map((dealer) => {
             const agencyName = dealer.agencyOrBranch || dealer.agencyAffiliation || 'TaisarTownHub Senior Advisory';
             
             // Count files managed by this agency (soft-deleted listings excluded)

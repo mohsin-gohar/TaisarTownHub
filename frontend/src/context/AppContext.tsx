@@ -48,7 +48,7 @@ import {
   genId,
   accrueCommission,
 } from '../domain/transactions';
-import { api, getAuthToken, setAuthToken } from '../services/api';
+import { api, getAuthToken, setAuthToken, setApiAgencyId } from '../services/api';
 import { decideMediaDeletion } from '../domain/mediaPolicy';
 
 /** Read a collection from localStorage, returning fallback on failure. */
@@ -404,7 +404,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'anonymous',
       name: 'Anonymous Visitor',
       email: 'visitor@taisartownhub.com',
-      role: 'operator' as UserRole,
+      role: 'visitor' as UserRole,
       permissions: [],
     };
   });
@@ -599,6 +599,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const user = JSON.parse(savedUser) as AuthUser;
               setCurrentUser(user);
               setIsAdminAuthenticated(true);
+              const stored = JSON.parse(savedUser) as Record<string, unknown>;
+              const memberships = Array.isArray(stored.agencies)
+                ? (stored.agencies as Array<{ agency_id?: string }>)
+                : [];
+              setApiAgencyId(memberships[0]?.agency_id ?? null);
             } catch {
               sessionStorage.removeItem('tth_user');
             }
@@ -796,7 +801,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       permissions: Array.isArray(result.user.permissions) ? (result.user.permissions as AuthUser['permissions']) : [],
       dealerId: result.user.dealer_id ? String(result.user.dealer_id) : undefined,
     };
-    sessionStorage.setItem('tth_user', JSON.stringify(foundUser));
+    // Enterprise tenancy context: agency-scoped staff resolve the acting agency
+    // from their own memberships (first active membership becomes the context).
+    const memberships = Array.isArray((result.user as Record<string, unknown>).agencies)
+      ? ((result.user as Record<string, unknown>).agencies as Array<{ agency_id?: string }>)
+      : [];
+    const agencyId = memberships[0]?.agency_id ?? null;
+    setApiAgencyId(agencyId && agencyId !== 'null' ? agencyId : null);
+    sessionStorage.setItem('tth_user', JSON.stringify({ ...foundUser, agencies: memberships }));
     setCurrentUser(foundUser);
     setIsAdminAuthenticated(true);
     const workspace = await api.getWorkspace();
@@ -871,7 +883,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dealerId: result.user.dealer_id ? String(result.user.dealer_id) : undefined,
       permissions: Array.isArray(result.user.permissions) ? (result.user.permissions as AuthUser['permissions']) : [],
     };
-    sessionStorage.setItem('tth_user', JSON.stringify(newUser));
+    // Fresh dealer account: no agency memberships yet (tenancy is empty).
+    setApiAgencyId(null);
+    sessionStorage.setItem('tth_user', JSON.stringify({ ...newUser, agencies: [] }));
     setCurrentUser(newUser);
     setIsAdminAuthenticated(true);
     const workspace = await api.getWorkspace();
@@ -884,6 +898,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     staffPersistRef.current = false;
     void api.logout();
     setAuthToken(null);
+    setApiAgencyId(null);
     sessionStorage.removeItem('tth_user');
     setIsAdminAuthenticated(false);
     setSellers([]);
@@ -1886,6 +1901,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setInquiries((prev) =>
       prev.map((i) => (i.id === id ? { ...i, status } : i))
     );
+    if (backendConnected) {
+      api.updateInquiryStatus(id, status).catch(() => {});
+    }
     showToast('info', `Inquiry status changed to "${status}".`);
   };
 

@@ -1,7 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { api } from '../../services/api';
 import { getAuditLog, type AuditEntry } from '../../domain/auditLog';
 import { Trash2, RotateCcw, Shield, Clock, FileText, Users, UserCheck, Briefcase, Home, Building2, Image } from 'lucide-react';
+
+interface ServerAuditLog {
+  id: number | string;
+  actor?: string;
+  role?: string;
+  action?: string;
+  target?: string;
+  detail?: string;
+  ip?: string;
+  created_at?: string;
+  agency_id?: string | null;
+  cross_agency?: boolean;
+}
 
 export const AdminAudit: React.FC = () => {
   const {
@@ -12,6 +26,36 @@ export const AdminAudit: React.FC = () => {
 
   const [tab, setTab] = useState<'audit' | 'trash'>('audit');
   const audit = getAuditLog();
+  const [serverLogs, setServerLogs] = useState<ServerAuditLog[] | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void api.getAdminAuditLogs().then((body) => {
+      if (!mounted || !body) return;
+      const payload = body as unknown as Record<string, unknown> | null;
+      const logs = Array.isArray(payload?.logs)
+        ? (payload?.logs as ServerAuditLog[])
+        : Array.isArray(body)
+          ? (body as unknown as ServerAuditLog[])
+          : [];
+      setServerLogs(logs);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const auditEntries: AuditEntry[] = serverLogs
+    ? serverLogs.map((log) => ({
+        id: String(log.id),
+        actor: log.actor ?? 'system',
+        role: log.role ?? 'system',
+        action: log.action ?? 'audit.event',
+        target: log.target ?? '',
+        detail: log.detail ?? '',
+        at: log.created_at ?? new Date().toISOString(),
+      }))
+    : audit;
 
   const trashedProperties = properties.filter((p) => p.deletedAt);
   const trashedSellers = sellers.filter((s) => s.deletedAt);
@@ -37,7 +81,7 @@ export const AdminAudit: React.FC = () => {
             onClick={() => setTab('audit')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${tab === 'audit' ? 'bg-[#C5A46D] text-[#101C2C]' : 'bg-slate-800 text-slate-300'}`}
           >
-            Audit Log ({audit.length})
+            Audit Log ({auditEntries.length})
           </button>
           <button
             onClick={() => setTab('trash')}
@@ -51,10 +95,10 @@ export const AdminAudit: React.FC = () => {
       {tab === 'audit' && (
         <div className="bg-[#101C2C] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
           <div className="md:hidden divide-y divide-slate-800">
-            {audit.length === 0 && (
+            {auditEntries.length === 0 && (
               <p className="py-6 text-center text-slate-500 text-xs">No audit entries yet.</p>
             )}
-            {audit.map((e: AuditEntry) => (
+            {auditEntries.map((e: AuditEntry) => (
               <article key={e.id} className="p-4 space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-[10px] text-[#C5A46D]">{e.action}</span>
@@ -77,12 +121,12 @@ export const AdminAudit: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
-                {audit.length === 0 && (
+                {auditEntries.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-6 text-center text-slate-500 text-xs">No audit entries yet.</td>
                   </tr>
                 )}
-                {audit.map((e: AuditEntry) => (
+                {auditEntries.map((e: AuditEntry) => (
                   <tr key={e.id} className="hover:bg-slate-800/40">
                     <td className="py-2.5 px-4 font-mono text-[10px] text-slate-400">{e.at.replace('T', ' ').slice(0, 19)}</td>
                     <td className="py-2.5 px-4 text-slate-200">{e.actor} <span className="text-slate-500">({e.role})</span></td>

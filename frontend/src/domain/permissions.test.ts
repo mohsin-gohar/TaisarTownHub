@@ -6,6 +6,7 @@ import {
   authorize,
   normalizeRole,
   permissionsOfRole,
+  roleHasPermission,
   Permission,
 } from './permissions';
 
@@ -143,5 +144,13 @@ describe('permissions: normalizeRole', () => {
   test('unknown role falls back to least privilege (operator)', () => {
     assert.equal(normalizeRole('Chief Overlord'), 'operator');
     assert.equal(normalizeRole(undefined), 'operator');
+  });
+
+  test('public visitors have no staff permissions', () => {
+    assert.equal(normalizeRole('visitor'), 'visitor');
+    assert.equal(normalizeRole('anonymous'), 'visitor');
+    assert.equal(roleHasPermission('visitor', 'upload_media'), false);
+    assert.equal(roleHasPermission('visitor', 'create_properties'), false);
+    assert.equal(authorize({ role: 'visitor', id: 'anonymous' }, 'upload_media').ok, false);
   });
 });

@@ -14,7 +14,7 @@
  */
 import { UserRole } from '../types';
 
-export type Role = 'super_admin' | 'admin' | 'manager' | 'dealer' | 'operator';
+export type Role = 'super_admin' | 'admin' | 'manager' | 'dealer' | 'operator' | 'visitor';
 
 export const ROLE_LABELS: Record<Role, string> = {
   super_admin: 'Super Admin',
@@ -22,6 +22,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   manager: 'Branch Manager',
   dealer: 'Property Dealer',
   operator: 'Data Entry Operator',
+  visitor: 'Public Visitor',
 };
 
 /**
@@ -53,6 +54,11 @@ export function normalizeRole(input: unknown): Role {
     case 'data_operator':
     case 'entry_operator':
       return 'operator';
+    case 'visitor':
+    case 'anonymous':
+    case 'guest':
+    case 'public':
+      return 'visitor';
     default:
       return 'operator';
   }
@@ -169,6 +175,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'view_reports', 'view_properties', 'create_properties', 'edit_properties',
     'upload_media', 'upload_documents',
   ],
+  visitor: [],
 };
 
 /**
@@ -267,5 +274,6 @@ export function toLegacyRoleLabel(role: Role): UserRole {
     case 'manager': return 'Manager' as UserRole;
     case 'dealer': return 'Property Dealer' as UserRole;
     case 'operator': return 'Data Entry Operator' as UserRole;
+    case 'visitor': return 'visitor' as UserRole;
   }
 }

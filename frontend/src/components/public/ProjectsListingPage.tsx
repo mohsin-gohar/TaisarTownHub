@@ -192,6 +192,7 @@ export const ProjectsListingPage: React.FC = () => {
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => handleOpenProject(project.id)}
                     className="px-4 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow"
                   >
