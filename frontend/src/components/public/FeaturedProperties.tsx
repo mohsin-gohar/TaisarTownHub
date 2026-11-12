@@ -68,7 +68,7 @@ export const FeaturedProperties: React.FC = () => {
                   onClick={() => handleOpenProperty(prop)}
                 >
                   <ImageWithFallback
-                    src={prop.images[0]}
+                    src={prop.images?.[0]}
                     alt={prop.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />

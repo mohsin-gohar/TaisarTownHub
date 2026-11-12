@@ -64,16 +64,27 @@ export const Navbar: React.FC = () => {
   };
 
   const navLinks = [
-    { id: 'home', label: 'Home' },
-    { id: 'projects', label: 'Projects' },
-    { id: 'properties', label: 'Properties' },
-    { id: 'agencies', label: 'Agencies' },
-    { id: 'guide', label: 'Scheme 45 Guide' },
-    { id: 'gallery', label: 'Media Gallery' },
-    { id: 'services', label: 'Services' },
-    { id: 'about', label: 'About Us' },
-    { id: 'contact', label: 'Contact' },
+    { id: 'home', label: 'Home', path: '/' },
+    { id: 'projects', label: 'Projects', path: '/projects' },
+    { id: 'properties', label: 'Properties', path: '/properties' },
+    { id: 'agencies', label: 'Agencies', path: '/agencies' },
+    { id: 'guide', label: 'Scheme 45 Guide', path: '/guide' },
+    { id: 'gallery', label: 'Media Gallery', path: '/gallery' },
+    { id: 'services', label: 'Services', path: '/services' },
+    { id: 'about', label: 'About Us', path: '/about' },
+    { id: 'contact', label: 'Contact', path: '/contact' },
   ];
+
+  // Real anchors (not buttons) keep internal pages crawlable and allow
+  // middle-click / open-in-new-tab, while onClick keeps the SPA transition.
+  const linkProps = (view: string, path: string) => ({
+    href: path,
+    onClick: (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      navigateTo(view);
+    },
+  });
 
   const goAdmin = () => navigateTo(isAdminAuthenticated ? 'admin' : 'admin-login');
   const isAdminActive = currentView.startsWith('admin');
@@ -92,8 +103,8 @@ export const Navbar: React.FC = () => {
           {/* Height: 64px mobile / 80px desktop — constant per breakpoint */}
           <div className="flex items-center justify-between h-16 lg:h-20 gap-2">
             {/* Logo */}
-            <button
-              onClick={() => navigateTo('home')}
+            <a
+              {...linkProps('home', '/')}
               className="flex items-center gap-2 sm:gap-3 cursor-pointer group min-w-0"
               aria-label={`${currentTheme.agencyName} — go to homepage`}
             >
@@ -114,7 +125,7 @@ export const Navbar: React.FC = () => {
                   مضبوط بنیاد، پائیدار ترقی
                 </span>
               </div>
-            </button>
+            </a>
 
             {/* Desktop Navigation (only when 9 links fit comfortably) */}
             <nav
@@ -124,11 +135,11 @@ export const Navbar: React.FC = () => {
               {navLinks.map((link) => {
                 const isActive = currentView === link.id || (link.id === 'home' && isAdminActive === false && currentView === 'home');
                 return (
-                  <button
+                  <a
                     key={link.id}
-                    onClick={() => navigateTo(link.id)}
+                    {...linkProps(link.id, link.path)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`relative px-2.5 py-2 text-[13px] font-medium rounded-md transition-all duration-200 cursor-pointer group ${
+                    className={`relative inline-block px-2.5 py-2 text-[13px] font-medium rounded-md transition-all duration-200 cursor-pointer group ${
                       isActive
                         ? 'text-[#C5A46D] font-semibold'
                         : 'text-slate-300 hover:text-white'
@@ -144,7 +155,7 @@ export const Navbar: React.FC = () => {
                           : 'opacity-0 scale-x-0 group-hover:opacity-60 group-hover:scale-x-75'
                       }`}
                     />
-                  </button>
+                  </a>
                 );
               })}
             </nav>
@@ -154,21 +165,21 @@ export const Navbar: React.FC = () => {
               {/* Admin & Auth Actions */}
               {!isAdminAuthenticated ? (
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => navigateTo('login')}
+                  <a
+                    {...linkProps('login', '/login')}
                     aria-label="Open portal sign in"
                     className="flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700 hover:border-[#C5A46D]/60 hover:text-white transition-all cursor-pointer"
                   >
                     <LayoutDashboard className="w-3.5 h-3.5 text-[#C5A46D] shrink-0" />
                     <span className="hidden sm:inline">Sign In</span>
-                  </button>
-                  <button
-                    onClick={() => navigateTo('register')}
+                  </a>
+                  <a
+                    {...linkProps('register', '/register')}
                     aria-label="Register as property dealer"
                     className="hidden lg:flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] transition-all shadow-md shadow-[#C5A46D]/20 cursor-pointer"
                   >
                     <span>Register Dealer</span>
-                  </button>
+                  </a>
                 </div>
               ) : (
                 <button
@@ -220,10 +231,10 @@ export const Navbar: React.FC = () => {
                 {navLinks.map((link) => {
                   const isActive = currentView === link.id;
                   return (
-                    <button
+                    <a
                       key={link.id}
                       role="menuitem"
-                      onClick={() => navigateTo(link.id)}
+                      {...linkProps(link.id, link.path)}
                       aria-current={isActive ? 'page' : undefined}
                       className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center justify-between transition-colors ${
                         isActive
@@ -233,7 +244,7 @@ export const Navbar: React.FC = () => {
                     >
                       <span>{link.label}</span>
                       <ChevronRight className={`w-4 h-4 ${isActive ? 'text-[#C5A46D]' : 'text-slate-600'}`} />
-                    </button>
+                    </a>
                   );
                 })}
               </div>
@@ -242,21 +253,21 @@ export const Navbar: React.FC = () => {
               <div className="pt-4 mt-2 border-t border-slate-800 flex flex-col gap-2">
                 {!isAdminAuthenticated ? (
                   <>
-                    <button
+                    <a
                       role="menuitem"
-                      onClick={() => navigateTo('login')}
+                      {...linkProps('login', '/login')}
                       className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 bg-[#101C2C] border border-[#C5A46D]/40 text-[#C5A46D] hover:bg-[#C5A46D]/15 transition-all"
                     >
                       <LayoutDashboard className="w-4 h-4 text-[#C5A46D]" />
                       <span>Portal Sign In</span>
-                    </button>
-                    <button
+                    </a>
+                    <a
                       role="menuitem"
-                      onClick={() => navigateTo('register')}
+                      {...linkProps('register', '/register')}
                       className="w-full py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] transition-all shadow-md"
                     >
                       <span>Register as Property Dealer</span>
-                    </button>
+                    </a>
                   </>
                 ) : (
                   <button

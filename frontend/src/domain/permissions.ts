@@ -201,11 +201,19 @@ export interface AuthorizeSubject {
   permissions?: string[];
   id?: string;
   dealerId?: string;
+  /** Owning agency. Required for agency-scoped checks on admin/manager roles. */
+  agencyId?: string;
+  /** True for the platform owner; bypasses agency scoping. */
+  isSuperAdmin?: boolean;
 }
 
 export interface AuthorizeScope {
   /** When set and the acting user is a dealer, it must equal subject.dealerId. */
   dealerId?: string;
+  /** When set and the acting user is an admin, it must equal subject.agencyId. */
+  agencyId?: string;
+  /** Override agency scoping for Super Admin. */
+  overrideAgency?: boolean;
 }
 
 export type AuthzResult =
@@ -255,6 +263,16 @@ export function authorize(
   if (scope && scope.dealerId !== undefined && roleKey === 'dealer') {
     if (!subject.dealerId || subject.dealerId !== scope.dealerId) {
       return { ok: false, code: 'scope_mismatch', error: 'This record belongs to another dealer.' };
+    }
+  }
+
+  // Agency admin scoping: an admin action is restricted to records belonging
+  // to the actor's own agency. Super Admins and explicit overrides bypass this.
+  if (scope && scope.agencyId !== undefined) {
+    const bypassAgencyScope =
+      roleKey === 'super_admin' || subject.isSuperAdmin === true || scope.overrideAgency === true;
+    if (!bypassAgencyScope && (!subject.agencyId || subject.agencyId !== scope.agencyId)) {
+      return { ok: false, code: 'scope_mismatch', error: 'This record belongs to another agency.' };
     }
   }
 

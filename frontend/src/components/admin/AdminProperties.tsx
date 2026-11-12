@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Property, PropertyType, PropertyStatus } from '../../types';
 import { formatPKRCurrency, isDuplicatePlot, hasPermission } from '../../utils/logic';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 export const AdminProperties: React.FC = () => {
   const {
@@ -291,8 +292,8 @@ export const AdminProperties: React.FC = () => {
                 <tr key={prop.id} className="hover:bg-slate-800/40 transition-colors">
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-3">
-                      <img
-                        src={prop.images[0]}
+                      <ImageWithFallback
+                        src={prop.images?.[0]}
                         alt={prop.title}
                         className="w-12 h-10 rounded-lg object-cover border border-slate-700"
                       />

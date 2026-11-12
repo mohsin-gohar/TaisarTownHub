@@ -310,7 +310,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                     onClick={() => handleOpenProperty(prop)}
                   >
                     <ImageWithFallback
-                      src={prop.images[0]}
+                      src={prop.images?.[0]}
                       alt={prop.title}
                       loading="lazy"
                       decoding="async"

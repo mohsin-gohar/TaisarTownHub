@@ -75,6 +75,12 @@ export const AdminLayout: React.FC = () => {
   const [agencyMemberships, setAgencyMemberships] = useState<any[]>([]);
   const [platformAgencies, setPlatformAgencies] = useState<any[]>([]);
   const [agencyContextId, setAgencyContextId] = useState(() => getApiAgencyId() ?? '');
+  // Enterprise capability keys arrive asynchronously from /auth/me, so the
+  // tab-accessibility guard must wait for that round-trip. Without this flag a
+  // hard reload of an enterprise deep link (e.g. /admin/staff) resolves the
+  // guard against the empty default context and silently bounces the operator
+  // to Dashboard Overview.
+  const [enterpriseContextReady, setEnterpriseContextReady] = useState(false);
 
   // The legacy auth payload only carries matrix permissions; enterprise
   // capability keys and agency membership context come from /auth/me. This
@@ -98,6 +104,10 @@ export const AdminLayout: React.FC = () => {
           setPlatformAgencies(Array.isArray(agenciesBody?.agencies) ? agenciesBody.agencies : []);
         }
       }
+    }).finally(() => {
+      // Resolve the guard even when /auth/me fails, so the base role matrix
+      // still applies and no operator is left stranded on an empty module.
+      if (active) setEnterpriseContextReady(true);
     });
     return () => { active = false; };
   }, []);
@@ -190,11 +200,12 @@ export const AdminLayout: React.FC = () => {
   });
 
   useEffect(() => {
+    if (!enterpriseContextReady) return;
     const isCurrentTabAccessible = accessibleSidebarLinks.some((l) => l.id === adminTab);
     if (!isCurrentTabAccessible && accessibleSidebarLinks.length > 0) {
       setAdminTab(accessibleSidebarLinks[0].id);
     }
-  }, [activeRole, adminTab, accessibleSidebarLinks, setAdminTab]);
+  }, [activeRole, adminTab, accessibleSidebarLinks, enterpriseContextReady, setAdminTab]);
 
   useEffect(() => {
     const previousTitle = document.title;

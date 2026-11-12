@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   ArrowLeft,
@@ -45,6 +45,19 @@ export const PropertyDetailPage: React.FC = () => {
 
   const [activeImage, setActiveImage] = useState<string>(property?.images?.[0] || '');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Client-side routing keeps this component mounted while the selected listing
+  // changes, so re-sync the gallery and the pre-filled inquiry whenever the
+  // property id changes (otherwise the previous listing's image/message sticks).
+  useEffect(() => {
+    setActiveImage(property?.images?.[0] || '');
+    setLightboxIndex(null);
+    setMessage(
+      property
+        ? `Salam, I am interested in Property ID ${property.id}: ${property.title}. Please provide file verification and token procedure.`
+        : ''
+    );
+  }, [property?.id]);
 
   // Installment Calculator State
   const [downPaymentPct, setDownPaymentPct] = useState<number>(25);
@@ -163,9 +176,11 @@ export const PropertyDetailPage: React.FC = () => {
             <div className="font-serif-luxury text-3xl sm:text-4xl font-bold text-[#F9E7BA]">
               {property.formattedPrice}
             </div>
-            <span className="text-[11px] text-slate-400 block">
-              PKR {Math.round(property.pricePKR / property.sizeSqYards).toLocaleString()} / Sq. Yard
-            </span>
+            {Number(property.sizeSqYards) > 0 && (
+              <span className="text-[11px] text-slate-400 block">
+                PKR {Math.round((property.pricePKR || 0) / property.sizeSqYards).toLocaleString()} / Sq. Yard
+              </span>
+            )}
           </div>
         </div>
 
@@ -423,11 +438,11 @@ export const PropertyDetailPage: React.FC = () => {
                 </span>
                 <div className="flex items-center gap-3 mt-3 pb-3 border-b border-slate-800">
                   <div className="w-12 h-12 rounded-full bg-slate-800 border border-[#C5A46D]/40 flex items-center justify-center font-bold text-white">
-                    {property.contactPerson.split(' ').map(n => n[0]).join('')}
+                    {property.contactPerson?.split(' ').map(n => n[0]).join('') || 'TT'}
                   </div>
                   <div>
                     <h4 className="font-serif-luxury font-bold text-white text-base">
-                      {property.contactPerson}
+                      {property.contactPerson || 'Taisar Town Advisory Desk'}
                     </h4>
                     <span className="text-xs text-[#C5A46D]">Scheme 45 Senior Advisor</span>
                   </div>

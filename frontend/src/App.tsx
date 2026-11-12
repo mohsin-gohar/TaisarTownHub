@@ -34,40 +34,110 @@ const AuthPage = lazy(() => import('./components/public/AuthPage').then((m) => (
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
 const AdminLoginModal = lazy(() => import('./components/admin/AdminLoginModal').then((m) => ({ default: m.AdminLoginModal })));
 import { PropertyType } from './types';
+import {
+  SITE_NAME,
+  breadcrumbJsonLd,
+  canonicalUrl,
+  robotsContent,
+  routeSeoForView,
+} from './config/seo';
 
-/** Per-document SEO: keeps <title>/description in sync with the active view. */
-const VIEW_META: Record<string, { title: string; description: string }> = {
-  home: { title: 'TaisarTownHub — Taiser Town Scheme 45 Karachi | Verified Plots & Projects', description: 'Buy verified residential and commercial plots, villas and projects in Taiser Town Scheme 45, Karachi with transparent file verification.' },
-  projects: { title: 'Real Estate Projects — Taiser Town Scheme 45 | TaisarTownHub', description: 'Explore master-planned housing and commercial projects across all sectors of Taiser Town Scheme 45.' },
-  'project-detail': { title: 'Project Details — Taiser Town Scheme 45 | TaisarTownHub', description: 'Complete project details: plot sizes, prices, facilities and booking status.' },
-  properties: { title: 'Verified Plots & Properties — Taiser Town Scheme 45 | TaisarTownHub', description: 'Filter verified plots, villas and shops by sector, size and budget in Taiser Town Scheme 45.' },
-  'property-detail': { title: 'Property Details — Taiser Town Scheme 45 | TaisarTownHub', description: 'Property gallery, installment planner and direct advisory contact.' },
-  agencies: { title: 'Partner Agencies — TaisarTownHub', description: 'Trusted real estate agencies and dealers operating in Scheme 45.' },
-  guide: { title: 'Scheme 45 Master Plan & Area Guide | TaisarTownHub', description: 'Interactive sector map, price trends and development overview for MDA Scheme 45.' },
-  gallery: { title: 'Media Gallery — TaisarTownHub', description: 'Site photos, videos and development updates from Taiser Town Scheme 45.' },
-  services: { title: 'Our Services — TaisarTownHub', description: 'File verification, transfers, escrow coordination and investment advisory services.' },
-  about: { title: 'About Us — TaisarTownHub', description: 'Principal brokers team for Taiser Town Scheme 45 with 20+ years of Karachi real estate experience.' },
-  contact: { title: 'Contact Us — TaisarTownHub', description: 'Visit our office or send an inquiry for verified plots in Taiser Town Scheme 45.' },
-  login: { title: 'Portal Sign In — TaisarTownHub Scheme 45', description: 'Secure access for authorized consultants, property dealers, and executives.' },
-  register: { title: 'Dealer Registration — TaisarTownHub Scheme 45', description: 'Join the authorized real estate consultant and dealer network in Scheme 45.' },
-  'admin-login': { title: 'Agency Portal Access — TaisarTownHub Scheme 45', description: 'Back-office operations, financial ledger and Scheme 45 registry access.' },
+/** Upserts a <meta> tag so the runtime sync works whether or not
+ *  scripts/prerender.mts already baked the tag into the served HTML. */
+const upsertMeta = (key: 'name' | 'property', name: string, content: string) => {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[${key}="${name}"]`);
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(key, name);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
+};
+
+const upsertCanonical = (href: string) => {
+  let el = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if (!el) {
+    el = document.createElement('link');
+    el.setAttribute('rel', 'canonical');
+    document.head.appendChild(el);
+  }
+  el.setAttribute('href', href);
+};
+
+/** Replaces the per-route BreadcrumbList block (removes it when not applicable). */
+const upsertJsonLd = (id: string, data: Record<string, unknown> | null) => {
+  const existing = document.getElementById(id) as HTMLScriptElement | null;
+  if (!data) {
+    existing?.remove();
+    return;
+  }
+  const el = existing ?? document.createElement('script');
+  el.id = id;
+  el.type = 'application/ld+json';
+  el.textContent = JSON.stringify(data);
+  if (!existing) document.head.appendChild(el);
 };
 
 const MainAppContent: React.FC = () => {
-  const { currentView, isAdminAuthenticated } = useApp();
+  const {
+    currentView,
+    isAdminAuthenticated,
+    properties,
+    projects,
+    selectedPropertyId,
+    selectedProjectId,
+  } = useApp();
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentView]);
 
-  // SEO: document title + meta description per view
+  // SEO: keeps the crawlable <head> in sync with the active route — title,
+  // description, canonical, Open Graph/Twitter cards, robots directive and
+  // breadcrumb structured data. Detail pages get a unique title and
+  // description derived from the selected record instead of a generic one.
   useEffect(() => {
-    if (currentView.startsWith('admin')) return; // admin ERP keeps its own title
-    const meta = VIEW_META[currentView] || VIEW_META.home;
-    document.title = meta.title;
-    const desc = document.querySelector('meta[name="description"]');
-    if (desc) desc.setAttribute('content', meta.description);
-  }, [currentView]);
+    if (currentView.startsWith('admin')) return; // admin ERP sets its own title
+
+    const route = routeSeoForView(currentView);
+    let title = route.title;
+    let description = route.description;
+    let query = '';
+
+    if (currentView === 'property-detail') {
+      const property = properties.find((p) => p.id === selectedPropertyId);
+      if (property) {
+        query = `?property=${encodeURIComponent(property.id)}`;
+        title = `${property.title} — ${property.location} | ${SITE_NAME}`;
+        description = `${property.type}${
+          property.sizeSqYards ? ` · ${property.sizeSqYards} Sq. Yd` : ''
+        } · ${property.formattedPrice} in ${property.location}. Verified file details, gallery and installment options.`;
+      }
+    } else if (currentView === 'project-detail') {
+      const project = projects.find((p) => p.id === selectedProjectId);
+      if (project) {
+        query = `?project=${encodeURIComponent(project.id)}`;
+        title = `${project.title} — ${project.location} | ${SITE_NAME}`;
+        description = `${project.tagline} ${project.location}. Plot sizes, facilities, pricing and booking status.`;
+      }
+    }
+
+    const url = canonicalUrl(route, query);
+
+    document.title = title;
+    upsertMeta('name', 'description', description);
+    upsertMeta('name', 'robots', robotsContent(route));
+    upsertCanonical(url);
+    upsertMeta('property', 'og:title', title);
+    upsertMeta('property', 'og:description', description);
+    upsertMeta('property', 'og:url', url);
+    upsertMeta('name', 'twitter:title', title);
+    upsertMeta('name', 'twitter:description', description);
+    upsertJsonLd(
+      'route-breadcrumb-jsonld',
+      route.breadcrumb.length ? breadcrumbJsonLd(route) : null,
+    );
+  }, [currentView, properties, projects, selectedPropertyId, selectedProjectId]);
 
   const [activeFilterCriteria, setActiveFilterCriteria] = useState<{
     type?: PropertyType | 'All';

@@ -4,4 +4,6 @@ Allow: /
 Disallow: /admin
 Disallow: /admin-login
 
+Sitemap: https://taisartownhub.vercel.app/sitemap.xml
+
 # Demo/back-office areas must never appear in search results.

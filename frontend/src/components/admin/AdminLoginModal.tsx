@@ -18,6 +18,14 @@ interface AdminLoginModalProps {
   initialTab?: 'signin' | 'register';
 }
 
+/** Progressive CNIC formatter: digits only with standard 5-7-1 dashes. */
+const formatCnicInput = (value: string): string => {
+  const digits = value.replace(/[^0-9]/g, '').slice(0, 13);
+  if (digits.length <= 5) return digits;
+  if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
+};
+
 export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = 'signin' }) => {
   const {
     loginWithCredentials,
@@ -253,9 +261,12 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                 <label className="text-[10px] font-semibold text-slate-300 block mb-1">NADRA CNIC</label>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={15}
                   placeholder="42101-1234567-1"
-                  value={regCnic}
-                  onChange={(e) => setRegCnic(e.target.value)}
+                  value={formatCnicInput(regCnic)}
+                  onChange={(e) => setRegCnic(e.target.value.replace(/[^0-9]/g, '').slice(0, 13))}
                   className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
                 />
               </div>
@@ -297,7 +308,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                 <label className="text-[10px] font-semibold text-slate-300 block mb-1">Password</label>
                 <input
                   type="password"
-                  placeholder="Min 6 characters"
+                  placeholder="Min 8 characters"
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
                   className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"

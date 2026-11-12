@@ -134,7 +134,7 @@ export const AdminDealers: React.FC = () => {
 
   const handleOpenPayout = (dealer: Dealer) => {
     // Ledger-derived aggregates (single source of truth — P1-3).
-    const entries = commissionEntries.filter((c) => c.dealerId === dealer.id && !c.status.startsWith('Cancel'));
+    const entries = commissionEntries.filter((c) => c.dealerId === dealer.id && !String(c.status).startsWith('Cancel'));
     const earned = entries.reduce((sum, c) => sum + c.amountPKR, 0);
     const paid = entries.reduce((sum, c) => sum + c.paidPKR, 0);
     const payable = entries

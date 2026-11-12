@@ -21,6 +21,17 @@ interface AuthPageProps {
   initialTab?: 'signin' | 'register';
 }
 
+/**
+ * Progressive CNIC formatter: keeps digits only and inserts the standard
+ * 5-7-1 dashes (e.g. 42101-1234567-1) while the user types.
+ */
+const formatCnicInput = (value: string): string => {
+  const digits = value.replace(/[^0-9]/g, '').slice(0, 13);
+  if (digits.length <= 5) return digits;
+  if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
+};
+
 export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => {
   const {
     loginWithCredentials,
@@ -300,14 +311,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 </label>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={15}
                   placeholder="42101-1234567-1"
-                  value={regCnicMasked}
-                  onChange={(e) => {
-                    setRegCnic(e.target.value);
-                    setRegCnicMasked(maskCNIC(e.target.value));
-                  }}
+                  value={formatCnicInput(regCnic)}
+                  onChange={(e) => setRegCnic(e.target.value.replace(/[^0-9]/g, '').slice(0, 13))}
+                  aria-describedby="cnic-mask-hint"
                   className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
                 />
+                <p id="cnic-mask-hint" className="text-[10px] text-slate-500 font-mono">
+                  {regCnic.length === 13
+                    ? `Stored as ${regCnicMasked}`
+                    : '13-digit CNIC — auto-masked once complete.'}
+                </p>
               </div>
             </div>
 
