@@ -24,7 +24,7 @@ class AgencyVideoController extends Controller
             $query->where('phase', $request->phase);
         }
 
-        return response()->json($query->latest()->get());
+        return response()->json($query->orderByDesc('created_at')->orderBy('id')->get());
     }
 
     /**

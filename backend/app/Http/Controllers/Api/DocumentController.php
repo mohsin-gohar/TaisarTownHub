@@ -3,13 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\Document;
 use App\Models\DocumentAccessLog;
 use App\Models\DocumentFolder;
+use App\Models\DocumentShare;
 use App\Models\DocumentVersion;
 use App\Models\Property;
 use App\Models\SystemSetting;
+use App\Support\PlanLimits;
+use App\Services\MalwareScanner;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -191,7 +196,7 @@ class DocumentController extends Controller
      * POST /api/agency/documents — upload a file to the private vault.
      * Multipart: file (required), title, category, folder_id, property_id, tags.
      */
-    public function store(Request $request)
+    public function store(Request $request, MalwareScanner $scanner)
     {
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'documents.upload');
@@ -221,6 +226,48 @@ class DocumentController extends Controller
             ], 422);
         }
 
+        // G-?: verify the real MIME type + magic bytes, not just the extension
+        // (a PHP script renamed to .jpg would otherwise pass).
+        $realMime = mime_content_type($file->getRealPath());
+        if ($this->isDangerousMime($realMime)) {
+            return response()->json([
+                'success' => false,
+                'message' => "File type {$realMime} is not allowed.",
+            ], 422);
+        }
+
+        if (!$this->magicBytesMatch($file->getRealPath(), $ext, $realMime)) {
+            return response()->json([
+                'success' => false,
+                'message' => "File content is corrupted or does not match its type.",
+            ], 422);
+        }
+
+        // Malware scan (provider-agnostic; clamscan/clamad). Files are stored
+        // on the private disk and only served through authenticated endpoints,
+        // so they are never publicly accessible before or after scanning.
+        $scan = $scanner->scan($file->getRealPath());
+        if ($scan->skipped) {
+            if (config('malware.fail_closed', false)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Malware scanner unavailable; upload rejected.',
+                ], 422);
+            }
+            if (config('malware.log_skipped', true)) {
+                Log::warning('Upload accepted without malware scan', [
+                    'file' => $file->getClientOriginalName(),
+                    'agency_id' => $agencyId,
+                    'reason' => $scan->skipReason,
+                ]);
+            }
+        } elseif (!$scan->isClean) {
+            return response()->json([
+                'success' => false,
+                'message' => 'File failed malware scan and was rejected.',
+            ], 422);
+        }
+
         $category = $request->get('category', 'other');
         $sensitiveCategories = SystemSetting::get('document.sensitive_categories', [
             'cnic', 'registry', 'ownership', 'sale_agreement', 'transfer_letter', 'allotment_letter',
@@ -229,6 +276,12 @@ class DocumentController extends Controller
 
         if ($isSensitive) {
             $this->requirePermission($request, 'documents.view_sensitive');
+        }
+
+        // G-8: plan limit — vault storage quota is enforced server-side.
+        $agency = Agency::findOrFail($agencyId);
+        if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
+            return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded documents or upgrade your plan.', $block);
         }
 
         if ($request->folder_id) {
@@ -627,6 +680,198 @@ class DocumentController extends Controller
     /* ==================== Helpers ==================== */
 
     /** Agency-scoped lookup: a foreign id is a 404, never a 403. */
+    /* ==================== G-10: expiring share links ==================== */
+
+    /**
+     * GET /api/agency/documents/{id}/shares — list the document's share links
+     * (metadata only; the hashed token is never exposed).
+     */
+    public function sharesIndex(Request $request, string $id)
+    {
+        $agencyId = $this->requireAgency($request);
+        $this->requirePermission($request, 'documents.view');
+
+        $document = $this->findScoped($agencyId, $id);
+
+        $shares = DocumentShare::where('document_id', $document->id)
+            ->with('creator:id,name')
+            ->orderByDesc('created_at')
+            ->get(['id', 'note', 'expires_at', 'max_downloads', 'download_count',
+                'last_downloaded_at', 'revoked_at', 'created_by', 'created_at']);
+
+        return response()->json([
+            'success' => true,
+            'shares' => $shares->map(fn (DocumentShare $share) => [
+                'id' => $share->id,
+                'note' => $share->note,
+                'expires_at' => $share->expires_at?->toIso8601String(),
+                'max_downloads' => $share->max_downloads,
+                'download_count' => $share->download_count,
+                'last_downloaded_at' => $share->last_downloaded_at?->toIso8601String(),
+                'revoked_at' => $share->revoked_at?->toIso8601String(),
+                'created_at' => $share->created_at?->toIso8601String(),
+                'created_by_name' => $share->creator?->name,
+                'is_active' => $share->isActive(),
+            ]),
+        ]);
+    }
+
+    /**
+     * POST /api/agency/documents/{id}/shares — mint a public, expiring,
+     * download-capped link. The plain token is returned ONCE; only its
+     * SHA-256 hash is stored. Requires the "manage document sharing"
+     * permission — downloaders must not be able to mint public links.
+     */
+    public function sharesStore(Request $request, string $id)
+    {
+        $agencyId = $this->requireAgency($request);
+        $this->requirePermission($request, 'documents.manage_permissions');
+
+        $document = $this->findScoped($agencyId, $id);
+
+        if ($document->is_sensitive) {
+            $this->requirePermission($request, 'documents.view_sensitive');
+        }
+
+        if ($document->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shares cannot be created for trashed documents.',
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'expires_in_days' => 'nullable|integer|min:1|max:90',
+            'max_downloads' => 'nullable|integer|min:1|max:10000',
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        [$share, $plainToken] = DocumentShare::issue($document, $agencyId, $request->user()?->id, [
+            'expires_at' => now()->addDays((int) ($data['expires_in_days'] ?? 7)),
+            'max_downloads' => $data['max_downloads'] ?? null,
+            'note' => isset($data['note']) ? strip_tags($data['note']) : null,
+        ]);
+
+        $this->writeAudit($request, 'document.share_created', $document->id,
+            "Share link created for: {$document->title}", [
+                'agency_id' => $agencyId,
+                'entity_type' => 'document_share',
+                'entity_id' => $share->id,
+                'metadata' => ['expires_at' => $share->expires_at->toIso8601String()],
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Share link created. Copy the token now — it is not shown again.',
+            'share' => [
+                'id' => $share->id,
+                'note' => $share->note,
+                'expires_at' => $share->expires_at->toIso8601String(),
+                'max_downloads' => $share->max_downloads,
+            ],
+            'token' => $plainToken,
+        ], 201);
+    }
+
+    /**
+     * DELETE /api/agency/documents/{id}/shares/{shareId} — revoke a share
+     * link (idempotent; the token stops working immediately).
+     */
+    public function sharesRevoke(Request $request, string $id, string $shareId)
+    {
+        $agencyId = $this->requireAgency($request);
+        $this->requirePermission($request, 'documents.manage_permissions');
+
+        $document = $this->findScoped($agencyId, $id);
+
+        $share = DocumentShare::where('document_id', $document->id)
+            ->where('id', $shareId)
+            ->first();
+
+        if (!$share) {
+            return response()->json(['success' => false, 'message' => 'Share link not found.'], 404);
+        }
+
+        if ($share->revoked_at === null) {
+            $share->forceFill(['revoked_at' => now()])->save();
+
+            $this->writeAudit($request, 'document.share_revoked', $document->id,
+                "Share link revoked for: {$document->title}", [
+                    'agency_id' => $agencyId,
+                    'entity_type' => 'document_share',
+                    'entity_id' => $share->id,
+                ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Share link revoked.',
+        ]);
+    }
+
+    /**
+     * GET /api/shares/{token}/download — PUBLIC endpoint (no auth). The URL
+     * token is hashed and matched against the stored hash; expired, revoked
+     * and download-exhausted links are rejected. The download count is
+     * incremented under a row lock so concurrent use cannot overshoot the cap.
+     */
+    public function sharedDownload(Request $request, string $token)
+    {
+        if (!preg_match('/^[A-Za-z0-9]{20,128}$/', $token)) {
+            return response()->json(['success' => false, 'message' => 'Invalid share link.'], 404);
+        }
+
+        $share = DocumentShare::where('token_hash', hash('sha256', $token))
+            ->with('document')
+            ->first();
+
+        if (!$share || !$share->isActive()) {
+            return response()->json(['success' => false, 'message' => 'This share link is no longer available.'], 410);
+        }
+
+        $document = $share->document;
+
+        if (!$document || $document->status !== 'active') {
+            return response()->json(['success' => false, 'message' => 'This document is no longer available.'], 410);
+        }
+
+        if (!Storage::disk('documents')->exists($document->disk_path)) {
+            Log::warning('Shared document file missing on disk', ['document_id' => $document->id]);
+            return response()->json(['success' => false, 'message' => 'File is no longer available on storage.'], 410);
+        }
+
+        // Counter increment must be atomic with the availability check.
+        DB::transaction(function () use ($share): void {
+            $locked = DocumentShare::where('id', $share->id)->lockForUpdate()->first();
+            if ($locked !== null) {
+                $locked->forceFill([
+                    'download_count' => $locked->download_count + 1,
+                    'last_downloaded_at' => now(),
+                ])->save();
+            }
+        });
+
+        $this->logAccess($document, $share->agency_id, $request, 'share_download');
+
+        $this->writeAudit($request, 'document.share_download', $document->id,
+            'Downloaded via share link: ' . $document->title, [
+                'agency_id' => $share->agency_id,
+                'entity_type' => 'document_share',
+                'entity_id' => $share->id,
+                'metadata' => ['download_count' => $share->download_count + 1],
+            ]);
+
+        return Storage::disk('documents')->download(
+            $document->disk_path,
+            $document->original_name ?: $document->stored_name,
+            [
+                'Content-Type' => $document->mime_type,
+                'X-Content-Type-Options' => 'nosniff',
+                'Content-Disposition' => 'attachment; filename="' . addslashes($document->original_name ?: $document->stored_name) . '"',
+            ]
+        );
+    }
+
     private function findScoped(string $agencyId, string $id): Document
     {
         $document = Document::where('agency_id', $agencyId)->where('id', $id)->first();
@@ -654,5 +899,53 @@ class DocumentController extends Controller
         } catch (\Throwable $e) {
             Log::warning('Document access log write failed', ['error' => $e->getMessage()]);
         }
+    }
+
+    /** MIME types that must never be accepted as uploads (executable/script). */
+    private function isDangerousMime(string $mime): bool
+    {
+        return in_array(strtolower($mime), [
+            'application/x-php',
+            'application/x-httpd-php',
+            'application/x-httpd-php-source',
+            'text/html',
+            'application/xhtml+xml',
+            'application/x-python-code',
+            'application/x-ruby',
+            'application/x-sh',
+            'application/x-perl',
+            'application/x-csh',
+        ], true);
+    }
+
+    /** Verify the file's magic bytes do not indicate a dangerous executable.
+     *
+     * We reject only when the bytes clearly identify a script or binary
+     * (PHP, ELF, Windows PE, shebang). If the file's bytes cannot be read or
+     * don't match a known image/document signature, we allow it: the extension
+     * allowlist already restricts uploads to safe types, so magic bytes are a
+     * secondary "clearly dangerous" gate rather than a strict type match.
+     */
+    private function magicBytesMatch(string $path, string $ext, string $mime): bool
+    {
+        $bytes = @file_get_contents($path, false, null, 32);
+        if ($bytes === false || $bytes === '') {
+            return true; // unreadable/empty: extension allowlist is the guard
+        }
+
+        $dangerous = [
+            '<?php', '<?',        // PHP
+            "\x7fELF",            // ELF binary
+            'MZ',                 // Windows PE
+            '#!',                 // shebang script
+        ];
+
+        foreach ($dangerous as $sig) {
+            if (str_starts_with($bytes, $sig)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

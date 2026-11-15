@@ -131,6 +131,13 @@ class AdminUserController extends Controller
             $user->tokens()->delete();
         }
 
+        // A platform-side password reset is a security event the account owner
+        // must know about (Phase 6 — password change notifications).
+        if ($request->filled('password')) {
+            $user->tokens()->delete();
+            $user->notify(new \App\Notifications\PasswordChangedNotification($request->ip(), true));
+        }
+
         $this->writeAudit($request, 'user.update', 'user:' . $user->id, "User updated: {$user->email}", [
             'entity_type' => 'user',
             'entity_id' => (string) $user->id,

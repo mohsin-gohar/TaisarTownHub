@@ -43,6 +43,8 @@ class User extends Authenticatable
         'remember_token',
         'failed_attempts',
         'locked_until',
+        'mfa_secret',
+        'mfa_recovery_codes',
     ];
 
     /**
@@ -57,7 +59,43 @@ class User extends Authenticatable
             'password' => 'hashed',
             'last_login_at' => 'datetime',
             'locked_until' => 'datetime',
+            // MFA material is encrypted at rest (APP_KEY), never stored plain.
+            'mfa_secret' => 'encrypted',
+            'mfa_recovery_codes' => 'encrypted:array',
+            'mfa_enabled_at' => 'datetime',
         ];
+    }
+
+    /** True when the account has a working second factor enrolled. */
+    public function hasMfaEnabled(): bool
+    {
+        return $this->mfa_enabled_at !== null && $this->mfa_secret !== null;
+    }
+
+    /** Append-only sign-in trail for this account. */
+    public function loginHistories()
+    {
+        return $this->hasMany(LoginHistory::class, 'user_id')->orderByDesc('created_at');
+    }
+
+    /**
+     * Password reset links point at the SPA frontend (no web route exists on
+     * this token-only API).
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new \App\Notifications\ResetPasswordLink($token));
+    }
+
+    /** Convenience for verification flows. */
+    public function markEmailVerified(): bool
+    {
+        if ($this->email_verified_at !== null) {
+            return false;
+        }
+        $this->forceFill(['email_verified_at' => now()])->save();
+
+        return true;
     }
 
     /* ------------------------------------------------------------------ */
@@ -78,10 +116,13 @@ class User extends Authenticatable
     public function memberAgencies(): array
     {
         return $this->activeMemberships()
+            ->orderBy('id')
             ->get()
             ->map(fn ($m) => [
                 'agency_id' => $m->agency_id,
                 'agency_name' => $m->agency?->name,
+                'agency_status' => $m->agency?->status,
+                'verification_status' => $m->agency?->verification_status,
                 'role_id' => $m->role_id,
                 'role_key' => $m->role?->key,
                 'role_name' => $m->role?->name,
@@ -91,25 +132,98 @@ class User extends Authenticatable
     }
 
     /**
-     * Resolve the acting agency for this request. NEVER trusts a client-supplied
-     * agency id: the override header must match one of the user's own active
-     * memberships. Platform users have no agency (they act platform-wide and
-     * their cross-agency access is audited separately).
+     * Resolve context, not authorization. A null result is NOT proof of platform
+     * access: workspaceAccess() must allow the request before it may proceed.
      */
     public function resolveAgencyId(?string $requestedAgencyId = null): ?string
     {
-        $memberships = $this->activeMemberships()->get();
-
-        if ($memberships->isEmpty()) {
-            return null; // platform-level user
-        }
-
         if ($requestedAgencyId !== null && $requestedAgencyId !== '') {
-            $match = $memberships->firstWhere('agency_id', $requestedAgencyId);
-            return $match ? $match->agency_id : null; // not a member → deny, do not fall back
+            if ($this->hasPermission('admin.manage_agencies')) {
+                return Agency::whereKey($requestedAgencyId)->exists() ? $requestedAgencyId : null;
+            }
+
+            return $this->activeMemberships()->where('agency_id', $requestedAgencyId)->value('agency_id');
         }
 
-        return $memberships->first()->agency_id;
+        if ($this->isPlatformUser()) {
+            return null;
+        }
+
+        return $this->activeMemberships()->orderBy('id')->value('agency_id');
+    }
+
+    /**
+     * Authoritative workspace eligibility, evaluated from current database rows
+     * on every request (never token claims or cached membership relations).
+     * An explicit agency must never silently fall back to a different tenant.
+     *
+     * @return array{allowed: bool, status: string, message: string}
+     */
+    public function workspaceAccess(?string $agencyId = null): array
+    {
+        $result = static fn (string $status, string $message): array => [
+            'allowed' => $status === 'approved',
+            'status' => $status,
+            'message' => $message,
+        ];
+
+        if ($this->status !== 'active') {
+            $status = in_array($this->status, ['pending', 'rejected', 'suspended'], true)
+                ? $this->status : 'inactive';
+            return $result($status, match ($status) {
+                'pending' => 'Your account is pending platform-owner approval.',
+                'rejected' => 'Your account has been rejected. Contact support.',
+                'suspended' => 'Your account has been suspended. Contact support.',
+                default => 'Your account is inactive. Contact support.',
+            });
+        }
+
+        $agencyId = $agencyId === '' ? null : $agencyId;
+        if ($this->isPlatformUser() && ($agencyId === null || $this->hasPermission('admin.manage_agencies'))) {
+            if ($agencyId !== null && !Agency::whereKey($agencyId)->exists()) {
+                return $result('agency_unavailable', 'The requested agency is unavailable.');
+            }
+            // Explicit platform administrators must be able to review even
+            // pending/rejected/suspended agencies. Endpoint permissions still apply.
+            return $result('approved', 'Workspace access is approved.');
+        }
+
+        $membership = $agencyId !== null
+            ? $this->memberships()->with('agency')->where('agency_id', $agencyId)->first()
+            : $this->activeMemberships()->orderBy('id')->first();
+
+        if (!$membership) {
+            if ($agencyId !== null) {
+                return $result('forbidden', 'Access denied for the requested agency.');
+            }
+            if ($this->memberships()->exists()) {
+                return $result('membership_inactive', 'Your agency membership is inactive. Contact your agency owner.');
+            }
+            return $result('membership_required', 'An approved agency membership is required to access the workspace.');
+        }
+
+        if ($membership->status !== 'active') {
+            return $result('membership_inactive', 'Your agency membership is inactive. Contact your agency owner.');
+        }
+
+        $agency = $membership->agency;
+        if (!$agency) {
+            return $result('agency_unavailable', 'Your agency is unavailable. Contact support.');
+        }
+        if ($agency->status === 'suspended') {
+            return $result('suspended', 'Your agency has been suspended. Contact support.');
+        }
+        if ($agency->status === 'rejected' || $agency->verification_status === 'rejected') {
+            return $result('rejected', 'Your agency has been rejected. Contact support.');
+        }
+        if ($agency->status === 'active' && $agency->verification_status === 'verified') {
+            return $result('approved', 'Workspace access is approved.');
+        }
+        if (in_array($agency->status, ['active', 'pending'], true)) {
+            return $result('pending', 'Your agency is pending platform-owner approval.');
+        }
+
+        return $result('inactive', 'Your agency is inactive. Contact support.');
     }
 
     /* ------------------------------------------------------------------ */
@@ -147,6 +261,12 @@ class User extends Authenticatable
             return [];
         }
 
+        return $this->isPlatformUser() ? $this->platformPermissions() : [];
+    }
+
+    /** Raw platform-role grants, never agency membership grants. */
+    private function platformPermissions(): array
+    {
         $platform = RolePermissions::forRole($this->role);
         $roleRow = Role::where('scope', 'platform')->where('key', $this->role)->first();
         if ($roleRow) {
@@ -156,30 +276,21 @@ class User extends Authenticatable
         return $platform;
     }
 
-    /**
-     * Check a permission, optionally scoped to the acting agency.
-     * Backward compatible: single-argument calls keep legacy platform behavior.
-     */
+    /** Check a permission in the resolved agency or intentional platform scope. */
     public function hasPermission(string $permission, ?string $agencyId = null): bool
     {
-        if ($agencyId !== null) {
-            return in_array($permission, $this->permissionsFor($agencyId), true);
-        }
+        return in_array($permission, $this->permissionsFor($agencyId), true);
+    }
 
-        // Platform resolution: legacy matrix first (fast path, keeps old tests true),
-        // then enterprise platform role grants.
-        if (RolePermissions::allows($this->role, $permission)) {
+    /** Inactive memberships must never promote a member into platform scope. */
+    public function isPlatformUser(): bool
+    {
+        if (in_array('admin.manage_agencies', $this->platformPermissions(), true)) {
             return true;
         }
 
-        return in_array($permission, $this->permissionsFor(null), true);
-    }
-
-    /** True when this user holds a platform-level role (not agency-scoped). */
-    public function isPlatformUser(): bool
-    {
-        return in_array($this->role, ['super_admin', 'admin', 'manager', 'moderator', 'support'], true)
-            && $this->memberships()->where('status', 'active')->doesntExist();
+        return in_array($this->role, ['super_admin', 'admin', 'manager', 'moderator', 'support', 'operator'], true)
+            && $this->memberships()->doesntExist();
     }
 
     public function isSuperAdmin(): bool

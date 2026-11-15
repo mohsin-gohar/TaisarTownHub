@@ -238,22 +238,31 @@ export const PropertyDetailPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 overflow-x-auto pb-2">
-            {gallery.map((img, idx) => (
-              <button
-                key={idx}
-                onClick={() => setActiveImage(img)}
-                aria-label={`Show image ${idx + 1}`}
-                className={`relative w-24 h-16 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
-                  activeImage === img && !activeIsVideo ? 'border-[#C5A46D] scale-105' : 'border-slate-800 opacity-60 hover:opacity-100'
-                }`}
-              >
-                <ImageWithFallback src={img} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-              </button>
-            ))}
+            {gallery.map((img, idx) => {
+              const isActive = activeImage === img && !activeIsVideo;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveImage(img)}
+                  aria-label={`Show image ${idx + 1}`}
+                  aria-pressed={isActive}
+                  title={`View image ${idx + 1}`}
+                  className={`relative w-24 h-16 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
+                    isActive ? 'border-[#C5A46D] scale-105' : 'border-slate-800 opacity-60 hover:opacity-100'
+                  }`}
+                >
+                  <ImageWithFallback src={img} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                </button>
+              );
+            })}
             {hasVideo && (
               <button
+                type="button"
                 onClick={() => setActiveImage(VIDEO_SENTINEL)}
                 aria-label="Play property video"
+                aria-pressed={activeIsVideo}
+                title="Play property video"
                 className={`relative w-24 h-16 rounded-xl shrink-0 border-2 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                   activeIsVideo ? 'border-[#C5A46D] bg-[#C5A46D]/15' : 'border-slate-800 bg-[#101C2C] opacity-70 hover:opacity-100'
                 }`}

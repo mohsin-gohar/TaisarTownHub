@@ -360,6 +360,12 @@ export type UserRole =
   | 'operator'
   | 'visitor';
 
+export interface WorkspaceAccess {
+  allowed: boolean;
+  status: string;
+  message: string;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -368,6 +374,7 @@ export interface AuthUser {
   permissions: string[];
   /** Dealer accounts: the dealer profile this user acts as (scoped data). */
   dealerId?: string;
+  workspaceAccess?: WorkspaceAccess;
 }
 
 export interface ProjectFacility {

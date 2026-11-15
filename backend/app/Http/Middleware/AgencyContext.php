@@ -7,18 +7,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * Resolves the acting agency for the request — the ONLY source of which
- * agency a user acts for is their own active agency_members row.
- *
- * - `X-Agency-Id` header: for members it must match one of their own active
- *   memberships, otherwise the request is denied (403). For platform users it
- *   may name any agency, but only with `admin.manage_agencies`, and the
- *   request is flagged as cross-agency for audit.
- * - Without the header, members default to their first active membership;
- *   platform users act platform-wide (agency_id = null).
- *
- * The resolved value is stored on the request attributes as `agency_id`
- * and never taken from request bodies.
+ * Resolve tenant context from current memberships and enforce workspace approval.
+ * Public routes remain public; auth status and token revocation remain usable
+ * even after approval or membership is withdrawn. Platform cross-agency access
+ * requires an explicit platform grant and is flagged for controller auditing.
  */
 class AgencyContext
 {
@@ -28,37 +20,26 @@ class AgencyContext
 
         if ($user) {
             $requested = $request->header('X-Agency-Id');
-            $memberships = $user->activeMemberships()->get();
+            $access = $user->workspaceAccess($requested);
+            $request->attributes->set('workspace_access', $access);
 
-            if ($memberships->isNotEmpty()) {
-                if ($requested !== null && $requested !== '') {
-                    if (!$memberships->contains('agency_id', $requested)) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Access denied for the requested agency.',
-                        ], 403);
-                    }
-                    $agencyId = $requested;
-                } else {
-                    $agencyId = $memberships->first()->agency_id;
-                }
-                $crossAgency = false;
-            } else {
-                // Platform-level user (no memberships).
-                if ($requested !== null && $requested !== '') {
-                    if (!$user->hasPermission('admin.manage_agencies')) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Access denied for the requested agency.',
-                        ], 403);
-                    }
-                    $agencyId = $requested;
-                    $crossAgency = true;
-                } else {
-                    $agencyId = null;
-                    $crossAgency = false;
-                }
+            $protected = in_array('auth:sanctum', $request->route()?->gatherMiddleware() ?? [], true);
+            $statusOrLogout = $request->is('api/auth/me', 'api/auth/logout', 'api/auth/logout-all');
+
+            if ($protected && !$statusOrLogout && !$access['allowed']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $access['message'],
+                    'workspace_access' => $access,
+                ], 403);
             }
+
+            // Denied users may browse public content, but must not inherit a
+            // privileged tenant view on mixed public/authenticated read routes.
+            $agencyId = ($access['allowed'] || $statusOrLogout)
+                ? $user->resolveAgencyId($requested) : null;
+            $crossAgency = $access['allowed'] && $agencyId !== null
+                && $user->hasPermission('admin.manage_agencies');
 
             $request->attributes->set('agency_id', $agencyId);
             $request->attributes->set('agency_cross_agency', $crossAgency);

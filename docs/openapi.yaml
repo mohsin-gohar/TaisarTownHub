@@ -1,0 +1,1244 @@
+openapi: 3.1.0
+info:
+  title: TaisarTownHub API
+  version: 1.0.0
+  summary: Multi-agency real estate SaaS — Taiser Town (MDA Scheme 45), Karachi
+  description: |
+    Enterprise token-only API for TaisarTownHub.
+
+    Contract notes (truthful scope statement):
+    - This document is the route-accurate contract of the public and
+      authenticated HTTP surface. Bodies summarise the fields the
+      controllers actually accept/return; unspecified optional fields may
+      exist on read responses.
+    - Every endpoint is served twice, verbatim: under `/api` (legacy) and
+      `/api/v1` (versioned). A CI parity test proves route-for-route
+      equality between both prefixes.
+    - Every response carries an `X-Request-Id` header (G-16): the caller's
+      value is echoed when it matches `^[A-Za-z0-9][A-Za-z0-9_.-]{7,63}$`,
+      otherwise a UUID is generated. Send it with bug reports / support
+      tickets so server logs can be correlated.
+    - Tenant context is resolved SERVER-SIDE from the authenticated user's
+      memberships (`X-Agency-Id` may narrow platform users acting across
+      agencies; it is never accepted as a body field).
+    - Plan-limit violations return `402` with `code: plan_limit_reached`
+      plus `limit` / `used`; a limit of `0` (or absent) means UNLIMITED.
+    - Documents/files live on a private disk and are streamed only through
+      authenticated endpoints; public share links carry a one-time token
+      whose SHA-256 hash is the only thing stored server-side.
+    - Paid invoices and completed financial ledger rows are immutable
+      history; the API never rewrites them.
+  contact:
+    name: TaisarTownHub Engineering
+    email: contact@taisartownhub.com
+servers:
+  - url: '{scheme}://{host}/api'
+    description: Legacy surface
+    variables:
+      scheme: { enum: [http, https], default: http }
+      host: { default: 127.0.0.1:8090 }
+  - url: '{scheme}://{host}/api/v1'
+    description: Versioned surface (identical routes)
+    variables:
+      scheme: { enum: [http, https], default: http }
+      host: { default: 127.0.0.1:8090 }
+tags:
+  - { name: Health }
+  - { name: Auth }
+  - { name: Public Catalog }
+  - { name: Inquiries }
+  - { name: Workspace }
+  - { name: Agency Staff & Roles }
+  - { name: Properties }
+  - { name: Dealer Files }
+  - { name: Leads CRM }
+  - { name: Document Vault }
+  - { name: Document Shares }
+  - { name: Finance }
+  - { name: Expenses }
+  - { name: Reports }
+  - { name: Subscriptions & Invoices }
+  - { name: Support Desk }
+  - { name: Notifications & Favorites }
+  - { name: Admin }
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe (no auth)
+      security: []
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, example: healthy }
+                  version: { type: string }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Password login (issues Sanctum token)
+      description: Rate limited 5/min. Enumeration-safe errors. Failed attempts are logged and lockable.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Token + profile
+          headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, token, user]
+                properties:
+                  success: { type: boolean, const: true }
+                  token: { type: string }
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Error401' }
+        '422': { $ref: '#/components/responses/Error422' }
+        '429': { $ref: '#/components/responses/Error429' }
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Self-registration (role user)
+      description: Rate limited 3/min. Sends a queued verification email; verification is tracked but not login-blocking.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, password_confirmation]
+              properties:
+                name: { type: string, maxLength: 255 }
+                email: { type: string, format: email }
+                password: { type: string, format: password, minLength: 8 }
+                password_confirmation: { type: string, format: password }
+      responses:
+        '201':
+          description: Account created (token returned)
+          headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } }
+        '422': { $ref: '#/components/responses/Error422' }
+        '429': { $ref: '#/components/responses/Error429' }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request password reset
+      description: Rate limited 3/min; enumeration-safe (always succeeds outwardly); queues the mail; revokes ALL existing tokens on later reset.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { description: Accepted (queued) }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Complete password reset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, token, password, password_confirmation]
+              properties:
+                email: { type: string, format: email }
+                token: { type: string, description: SHA-256 hashed server-side }
+                password: { type: string, format: password, minLength: 8 }
+                password_confirmation: { type: string, format: password }
+      responses:
+        '200': { description: Password updated }
+        '422': { description: Invalid/expired token }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current profile, memberships and capabilities
+      responses:
+        '200':
+          description: Profile envelope
+        '401': { $ref: '#/components/responses/Error401' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current token
+      responses:
+        '200': { description: Logged out }
+  /auth/logout-all:
+    post:
+      tags: [Auth]
+      summary: Revoke every token of the account
+      responses:
+        '200': { description: All sessions ended }
+  /auth/email/resend:
+    post:
+      tags: [Auth]
+      summary: Resend the verification email
+      description: Rate limited 3/min; issues a fresh SHA-256 token.
+      responses:
+        '200': { description: Queued }
+  /auth/email/verify:
+    get:
+      tags: [Auth]
+      summary: Verify an email address (token link from mail)
+      security: []
+      parameters:
+        - { name: email, in: query, required: true, schema: { type: string, format: email } }
+        - { name: token, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Verified (or already verified) }
+        '422': { description: Invalid or expired token }
+  /catalog:
+    get:
+      tags: [Public Catalog]
+      summary: Bootstrap catalog (locations, sectors, categories, settings)
+      security: []
+      responses:
+        '200': { description: Catalog envelope }
+  /plans:
+    get:
+      tags: [Public Catalog]
+      summary: Active subscription plan catalog
+      security: []
+      responses:
+        '200': { description: Plan list }
+  /locations:
+    get:
+      tags: [Public Catalog]
+      summary: Sectors / blocks / categories
+      security: []
+      responses:
+        '200': { description: Location tree }
+  /agencies:
+    get:
+      tags: [Public Catalog]
+      summary: Public agency directory
+      security: []
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Agency list }
+  /agencies/{id}:
+    get:
+      tags: [Public Catalog]
+      summary: One public agency profile
+      security: []
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Agency }
+        '404': { $ref: '#/components/responses/Error404' }
+  /properties:
+    get:
+      tags: [Public Catalog]
+      summary: Publicly visible listings (filters)
+      security: []
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: sector, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: minPrice, in: query, schema: { type: number } }
+        - { name: maxPrice, in: query, schema: { type: number } }
+        - { name: page, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Paginated listings }
+    post:
+      tags: [Properties]
+      summary: Create a listing (enforces the plan `listings` quota → 402)
+      responses:
+        '201': { description: Created }
+        '402': { $ref: '#/components/responses/PlanLimit' }
+        '403': { $ref: '#/components/responses/Error403' }
+  /properties/{id}:
+    get:
+      tags: [Public Catalog]
+      summary: One listing (public view, privacy-filtered)
+      security: []
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Listing }
+        '404': { $ref: '#/components/responses/Error404' }
+  /projects:
+    get:
+      tags: [Public Catalog]
+      summary: Public projects
+      security: []
+      responses:
+        '200': { description: Project list }
+  /projects/{id}:
+    get:
+      tags: [Public Catalog]
+      summary: One project
+      security: []
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Project }
+  /dealers:
+    get:
+      tags: [Public Catalog]
+      summary: Public dealer directory
+      security: []
+      responses:
+        '200': { description: Dealer list }
+    post:
+      tags: [Properties]
+      summary: Create a dealer record (CNIC stored ENCRYPTED at rest)
+      responses:
+        '201': { description: Created }
+        '402': { $ref: '#/components/responses/PlanLimit' }
+  /dealers/{id}:
+    get:
+      tags: [Public Catalog]
+      summary: One dealer (CNIC masked — never returned in clear)
+      security: []
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Dealer }
+  /inquiries:
+    post:
+      tags: [Inquiries]
+      summary: Public inquiry (guest) → lands in the owning agency's CRM
+      description: Rate limited 10/min. When the listing's agency lead quota is exhausted, returns 402 with a visitor-safe message (no internal numbers).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fullName, phone, message]
+              properties:
+                fullName: { type: string, maxLength: 255 }
+                phone: { type: string, maxLength: 20 }
+                email: { type: string, format: email }
+                message: { type: string, maxLength: 2000 }
+                propertyId: { type: string }
+      responses:
+        '201': { description: Inquiry stored }
+        '402': { $ref: '#/components/responses/PlanLimit' }
+    get:
+      tags: [Inquiries]
+      summary: Agency inquiry pipeline (server-scoped)
+      responses:
+        '200': { description: Inquiry list }
+  /agency/members:
+    get:
+      tags: [Agency Staff & Roles]
+      summary: Staff members of my agency
+      responses:
+        '200': { description: Member list }
+  /agency/members/invite:
+    post:
+      tags: [Agency Staff & Roles]
+      summary: Invite a staff member (enforces the plan `staff` quota → 402)
+      responses:
+        '201': { description: Invitation created }
+        '402': { $ref: '#/components/responses/PlanLimit' }
+  /agency/members/{id}:
+    delete:
+      tags: [Agency Staff & Roles]
+      summary: Remove a member
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Removed }
+  /agency/invitations:
+    get:
+      tags: [Agency Staff & Roles]
+      summary: Pending invitations
+      responses:
+        '200': { description: Invitation list }
+  /agency/invitations/accept:
+    post:
+      tags: [Agency Staff & Roles]
+      summary: Accept an invitation (public, token-based)
+      security: []
+      responses:
+        '200': { description: Membership activated }
+  /agency/invitations/{id}:
+    delete:
+      tags: [Agency Staff & Roles]
+      summary: Revoke a pending invitation
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Revoked }
+  /agency/roles:
+    get:
+      tags: [Agency Staff & Roles]
+      summary: Agency-scoped roles + permission catalog
+      responses:
+        '200': { description: Roles }
+    post:
+      tags: [Agency Staff & Roles]
+      summary: Create an agency role (platform-only keys rejected)
+      responses:
+        '201': { description: Created }
+  /agency/roles/{id}:
+    delete:
+      tags: [Agency Staff & Roles]
+      summary: Delete an agency role
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Deleted }
+  /agency/leads:
+    get:
+      tags: [Leads CRM]
+      summary: Lead pipeline (filters + assignment state)
+      responses:
+        '200': { description: Leads }
+  /agency/leads/export:
+    get:
+      tags: [Leads CRM]
+      summary: CSV export of the pipeline
+      responses:
+        '200': { description: CSV stream }
+  /agency/leads/{id}:
+    get:
+      tags: [Leads CRM]
+      summary: One lead with activities
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Lead }
+        '404': { $ref: '#/components/responses/Error404' }
+    delete:
+      tags: [Leads CRM]
+      summary: Soft-delete a lead
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Deleted }
+  /agency/leads/{id}/assign:
+    post:
+      tags: [Leads CRM]
+      summary: Assign a lead to a member
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Assigned }
+  /agency/leads/{id}/activities:
+    post:
+      tags: [Leads CRM]
+      summary: Append an immutable activity entry
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '201': { description: Activity stored }
+  /agency/documents:
+    get:
+      tags: [Document Vault]
+      summary: Vault listing (folders, pagination, capability flags)
+      responses:
+        '200':
+          description: Paginated documents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, documents, pagination]
+                properties:
+                  success: { type: boolean, const: true }
+                  documents:
+                    type: array
+                    items: { $ref: '#/components/schemas/Document' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+                  can_upload: { type: boolean }
+                  can_see_sensitive: { type: boolean }
+    post:
+      tags: [Document Vault]
+      summary: Upload to the private vault (enforces the `storage_mb` quota → 402)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, title]
+              properties:
+                file: { type: string, format: binary }
+                title: { type: string }
+                category: { type: string }
+                folder_id: { type: string }
+                property_id: { type: string }
+                tags: { type: string }
+      responses:
+        '201': { description: Stored (disk fields never exposed) }
+        '402': { $ref: '#/components/responses/PlanLimit' }
+  /agency/documents/{id}:
+    delete:
+      tags: [Document Vault]
+      summary: Trash a document (soft delete)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Trashed }
+  /agency/documents/{id}/versions:
+    get:
+      tags: [Document Vault]
+      summary: Version history
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Versions }
+    post:
+      tags: [Document Vault]
+      summary: Upload a new version
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '201': { description: Version stored }
+  /agency/documents/{id}/download:
+    get:
+      tags: [Document Vault]
+      summary: Authenticated download (streams from the private disk)
+      description: Requires `documents.download` (+ `documents.view_sensitive` for sensitive docs). Trashed/missing files → 410.
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200':
+          description: File stream (Content-Disposition: attachment)
+        '403': { $ref: '#/components/responses/Error403' }
+        '410': { description: Trashed or missing }
+  /agency/documents/{id}/preview:
+    get:
+      tags: [Document Vault]
+      summary: Inline preview stream
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: File stream (inline) }
+  /agency/documents/{id}/restore:
+    post:
+      tags: [Document Vault]
+      summary: Restore from trash
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Restored }
+  /agency/documents/{id}/permanent:
+    delete:
+      tags: [Document Vault]
+      summary: Permanently destroy (admin capability; audited)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Destroyed }
+  /agency/documents/{id}/access-logs:
+    get:
+      tags: [Document Vault]
+      summary: Access audit trail of one document
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Access log entries }
+  /agency/documents/{id}/shares:
+    get:
+      tags: [Document Shares]
+      summary: Share links of a document (metadata only — tokens never listed)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200':
+          description: Share list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, shares]
+                properties:
+                  success: { type: boolean, const: true }
+                  shares:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        note: { type: string, nullable: true }
+                        expires_at: { type: string, format: date-time }
+                        max_downloads: { type: integer, nullable: true }
+                        download_count: { type: integer }
+                        last_downloaded_at: { type: string, format: date-time, nullable: true }
+                        revoked_at: { type: string, format: date-time, nullable: true }
+                        created_at: { type: string, format: date-time }
+                        created_by_name: { type: string, nullable: true }
+                        is_active: { type: boolean }
+    post:
+      tags: [Document Shares]
+      summary: Mint a share link (needs `documents.manage_permissions`)
+      description: |
+        The PLAIN token is returned exactly once and never stored — only its
+        SHA-256 hash is persisted. Sensitive documents additionally require
+        `documents.view_sensitive`.
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expires_in_days: { type: integer, minimum: 1, maximum: 90, default: 7 }
+                max_downloads: { type: integer, minimum: 1, maximum: 10000 }
+                note: { type: string, maxLength: 255 }
+      responses:
+        '201':
+          description: Share created — token (one-time visibility)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, share, token]
+                properties:
+                  success: { type: boolean, const: true }
+                  share:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      expires_at: { type: string, format: date-time }
+                      max_downloads: { type: integer, nullable: true }
+                  token: { type: string, minLength: 48 }
+        '403': { $ref: '#/components/responses/Error403' }
+        '422': { description: Trashed document }
+  /agency/documents/{id}/shares/{shareId}:
+    delete:
+      tags: [Document Shares]
+      summary: Revoke a share link (idempotent)
+      parameters:
+        - { $ref: '#/components/parameters/PathId' }
+        - { name: shareId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Revoked }
+        '404': { $ref: '#/components/responses/Error404' }
+  /shares/{token}/download:
+    get:
+      tags: [Document Shares]
+      summary: PUBLIC share download (capability URL)
+      description: |
+        No auth. Throttled 30/min. Expired, revoked or download-exhausted
+        links → 410. The hit counter increments under a row lock so the cap
+        cannot be overshot by concurrent use. Every hit is audit-logged.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9]{20,128}$' } }
+      responses:
+        '200':
+          description: File stream (attachment)
+        '404': { description: Malformed token }
+        '410': { description: Link no longer available }
+  /agency/media:
+    get:
+      tags: [Public Catalog]
+      summary: Agency media library
+      responses:
+        '200': { description: Media list }
+    post:
+      tags: [Public Catalog]
+      summary: Upload media
+      responses:
+        '201': { description: Stored }
+  /agency/media/{id}:
+    delete:
+      tags: [Public Catalog]
+      summary: Delete media
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Deleted }
+  /agency/media/{id}/file:
+    get:
+      tags: [Public Catalog]
+      summary: Authenticated media stream (private disk)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: File stream }
+  /agency/transactions:
+    get:
+      tags: [Finance]
+      summary: Deal ledger (server-scoped, stage state machine)
+      responses:
+        '200': { description: Deals }
+    post:
+      tags: [Finance]
+      summary: Create a deal
+      responses:
+        '201': { description: Created }
+  /agency/transactions/{id}:
+    get:
+      tags: [Finance]
+      summary: One deal with payments + commissions
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Deal }
+    put:
+      tags: [Finance]
+      summary: Update a deal
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Updated }
+  /agency/transactions/{id}/void:
+    post:
+      tags: [Finance]
+      summary: Void a deal (audited; never silently rewrites history)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Voided }
+  /agency/transactions/{id}/approve:
+    post:
+      tags: [Finance]
+      summary: Approve a deal
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Approved }
+  /agency/transactions/{id}/payments:
+    get:
+      tags: [Finance]
+      summary: Payment ledger of a deal
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Payments }
+    post:
+      tags: [Finance]
+      summary: Record a payment (append-only, audited)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '201': { description: Recorded }
+  /agency/transactions/{id}/schedules:
+    post:
+      tags: [Finance]
+      summary: Generate installment schedules
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '201': { description: Schedules stored }
+  /agency/transactions/{id}/commissions:
+    post:
+      tags: [Finance]
+      summary: Accrue a commission
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '201': { description: Commission stored }
+  /agency/payments/{id}:
+    delete:
+      tags: [Finance]
+      summary: Reverse a payment (audited; ledger stays append-only)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Reversed }
+  /agency/commissions:
+    get:
+      tags: [Finance]
+      summary: Commission ledger
+      responses:
+        '200': { description: Commissions }
+  /agency/commissions/{id}:
+    put:
+      tags: [Finance]
+      summary: Commission status transition
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Updated }
+  /agency/expenses:
+    get:
+      tags: [Expenses]
+      summary: Overhead expense ledger (date/category filters, totals)
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: category, in: query, schema: { type: string, enum: [office, marketing, salaries, utilities, transport, legal, other] } }
+      responses:
+        '200':
+          description: Expenses + totals
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, expenses, totals]
+                properties:
+                  success: { type: boolean, const: true }
+                  expenses:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        expense_date: { type: string, format: date }
+                        category: { type: string }
+                        amount_pkr: { type: integer }
+                        description: { type: string, nullable: true }
+                        payment_method: { type: string }
+                        reference: { type: string, nullable: true }
+                  totals:
+                    type: object
+                    properties:
+                      amount_pkr: { type: integer }
+    post:
+      tags: [Expenses]
+      summary: Record an expense (needs `finance.manage_payments`)
+      responses:
+        '201': { description: Recorded }
+        '422': { description: Validation (future dates, bad categories) }
+  /agency/expenses/{id}:
+    delete:
+      tags: [Expenses]
+      summary: Soft-delete an expense (row retained for audit)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Removed }
+        '404': { $ref: '#/components/responses/Error404' }
+  /agency/reports:
+    get:
+      tags: [Reports]
+      summary: Agency financial report (needs `finance.view_reports`)
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Computed from the real ledger — deals (incl. voided split), collected, commissions paid/pending, expenses by category, net
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, period, deals, collected_pkr, commissions, expenses, net_pkr]
+                properties:
+                  period:
+                    type: object
+                    properties:
+                      from: { type: string, format: date }
+                      to: { type: string, format: date }
+                  deals:
+                    type: object
+                    properties:
+                      count: { type: integer }
+                      agreed_pkr: { type: number }
+                      approved_count: { type: integer }
+                      voided_count: { type: integer }
+                  collected_pkr: { type: number }
+                  payments_count: { type: integer }
+                  commissions:
+                    type: object
+                    properties:
+                      paid_pkr: { type: number }
+                      pending_pkr: { type: number }
+                  expenses:
+                    type: object
+                    properties:
+                      total_pkr: { type: integer }
+                      by_category:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            category: { type: string }
+                            total_pkr: { type: integer }
+                  net_pkr: { type: number }
+  /agency/subscription:
+    get:
+      tags: [Subscriptions & Invoices]
+      summary: My agency's subscription, usage vs limits (0/absent = unlimited)
+      responses:
+        '200': { description: Subscription + usage }
+  /agency/subscription/invoices:
+    get:
+      tags: [Subscriptions & Invoices]
+      summary: My agency's billing history (needs `agency.view`)
+      responses:
+        '200':
+          description: Invoices + outstanding/paid totals
+  /support/tickets:
+    get:
+      tags: [Support Desk]
+      summary: My agency's tickets (platform-side accounts see their own)
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, pending, resolved, closed] } }
+        - { name: category, in: query, schema: { type: string, enum: [general, billing, technical, document, finance] } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Tickets }
+    post:
+      tags: [Support Desk]
+      summary: Raise a ticket (self-service; any authenticated account)
+      description: The agency link is resolved from the membership context — client-supplied `agency_id` is ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, body]
+              properties:
+                subject: { type: string, minLength: 5, maxLength: 190 }
+                body: { type: string, minLength: 10, maxLength: 5000 }
+                category: { type: string, enum: [general, billing, technical, document, finance] }
+                priority: { type: string, enum: [low, normal, high, urgent] }
+      responses:
+        '201': { description: Ticket + first message }
+        '422': { $ref: '#/components/responses/Error422' }
+  /support/tickets/{id}:
+    get:
+      tags: [Support Desk]
+      summary: Ticket + immutable message thread (team-scoped; 404 across tenants)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Ticket with messages }
+        '404': { $ref: '#/components/responses/Error404' }
+  /support/tickets/{id}/messages:
+    post:
+      tags: [Support Desk]
+      summary: Append a message (closed tickets reject user posts → 422)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 2, maxLength: 5000 }
+      responses:
+        '201': { description: Message added }
+        '422': { description: Ticket closed }
+  /support/tickets/{id}/status:
+    post:
+      tags: [Support Desk]
+      summary: Transition status (creator may close/reopen own; staff any)
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, pending, resolved, closed] }
+      responses:
+        '200': { description: Updated }
+        '403': { $ref: '#/components/responses/Error403' }
+  /notifications:
+    get:
+      tags: [Notifications & Favorites]
+      summary: In-app notifications (DB channel)
+      responses:
+        '200': { description: Notifications }
+  /notifications/unread-count:
+    get:
+      tags: [Notifications & Favorites]
+      summary: Unread counter
+      responses:
+        '200': { description: Count }
+  /notifications/read-all:
+    post:
+      tags: [Notifications & Favorites]
+      summary: Mark all read
+      responses:
+        '200': { description: Done }
+  /notifications/{id}/read:
+    post:
+      tags: [Notifications & Favorites]
+      summary: Mark one read
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Done }
+  /favorites:
+    get:
+      tags: [Notifications & Favorites]
+      summary: My favorites
+      responses:
+        '200': { description: Favorites }
+  /favorites/{propertyId}:
+    post:
+      tags: [Notifications & Favorites]
+      summary: Toggle favorite
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: New state }
+    delete:
+      tags: [Notifications & Favorites]
+      summary: Remove favorite
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Removed }
+  /admin/reports:
+    get:
+      tags: [Admin]
+      summary: Platform-wide report (needs `admin.view_reports`)
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Agencies, deals, collections, invoice revenue/outstanding, listings, leads, expenses }
+        '403': { $ref: '#/components/responses/Error403' }
+  /admin/agencies:
+    get:
+      tags: [Admin]
+      summary: All agencies (needs `admin.manage_agencies`)
+      responses:
+        '200': { description: Agencies }
+  /admin/agencies/{id}:
+    get:
+      tags: [Admin]
+      summary: One agency
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Agency }
+  /admin/agencies/{id}/verify:
+    put:
+      tags: [Admin]
+      summary: Verify an agency
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Verified }
+  /admin/agencies/{id}/status:
+    put:
+      tags: [Admin]
+      summary: Set agency status
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Updated }
+  /admin/agencies/{id}/subscription:
+    put:
+      tags: [Admin]
+      summary: Assign/override a subscription
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Updated }
+  /admin/plans:
+    get:
+      tags: [Admin]
+      summary: All plans (needs `admin.manage_subscriptions`)
+      responses:
+        '200': { description: Plans }
+    post:
+      tags: [Admin]
+      summary: Create a plan
+      responses:
+        '201': { description: Created }
+  /admin/plans/{id}:
+    put:
+      tags: [Admin]
+      summary: Update a plan
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Updated }
+  /admin/subscription-invoices:
+    get:
+      tags: [Admin]
+      summary: All invoices (filter by agency/status/number)
+      responses:
+        '200': { description: Invoices + totals (amount, outstanding) }
+    post:
+      tags: [Admin]
+      summary: Raise an invoice (starts pending; number INV-YYYY-NNNNNN)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agency_id, amount_pkr]
+              properties:
+                agency_id: { type: string }
+                plan_id: { type: integer, nullable: true }
+                amount_pkr: { type: integer, minimum: 0 }
+                tax_pkr: { type: integer, minimum: 0 }
+                period_start: { type: string, format: date }
+                period_end: { type: string, format: date }
+                notes: { type: string }
+      responses:
+        '201': { description: Invoice created }
+  /admin/subscription-invoices/{id}/verify:
+    post:
+      tags: [Admin]
+      summary: Mark a PENDING invoice paid (records payment + verifier)
+      description: PAID invoices are immutable financial history — a second verify returns 422.
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payment_method]
+              properties:
+                payment_method: { type: string, maxLength: 40 }
+                payment_reference: { type: string, maxLength: 120 }
+      responses:
+        '200': { description: Marked paid }
+        '422': { description: Already paid / voided }
+  /admin/support-tickets:
+    get:
+      tags: [Admin]
+      summary: All support tickets (needs `admin.support_tickets`)
+      responses:
+        '200': { description: Tickets with agency names }
+  /admin/support-tickets/{id}/assign:
+    post:
+      tags: [Admin]
+      summary: Assign a ticket to a staff account
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Assigned }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Platform user management
+      responses:
+        '200': { description: Users }
+    post:
+      tags: [Admin]
+      summary: Create a platform-side user
+      responses:
+        '201': { description: Created }
+  /admin/users/{id}:
+    put:
+      tags: [Admin]
+      summary: Update a user
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Updated }
+  /admin/users/{id}/unlock:
+    post:
+      tags: [Admin]
+      summary: Clear login lockout
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Unlocked }
+  /admin/users/{id}/revoke-tokens:
+    post:
+      tags: [Admin]
+      summary: Revoke all sessions of a user
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Revoked }
+  /admin/roles:
+    get:
+      tags: [Admin]
+      summary: Platform roles + permission catalog
+      responses:
+        '200': { description: Roles }
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      summary: Dashboard analytics (real numbers, no hardcoded stats)
+      responses:
+        '200': { description: Metrics }
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Audit trail
+      responses:
+        '200': { description: Audit log entries }
+  /admin/settings:
+    get:
+      tags: [Admin]
+      summary: System settings
+      responses:
+        '200': { description: Settings }
+    put:
+      tags: [Admin]
+      summary: Update a system setting
+      responses:
+        '200': { description: Updated }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum token
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  headers:
+    XRequestId:
+      description: Correlation ID (echoed when sane, otherwise generated UUID)
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{7,63}$' }
+  schemas:
+    Pagination:
+      type: object
+      properties:
+        current_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+        last_page: { type: integer }
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string }
+    Document:
+      type: object
+      description: disk_path / stored_name / checksum / original_name are hidden from every response
+      properties:
+        id: { type: string }
+        title: { type: string }
+        category: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+        is_sensitive: { type: boolean }
+        version: { type: integer }
+        status: { type: string, enum: [active, trash] }
+  responses:
+    Error401:
+      description: Authentication required
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Error403:
+      description: Permission denied
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Error404:
+      description: Not found (also returned instead of 403 for cross-tenant ids — enumeration safety)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Error422:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorEnvelope'
+              - type: object
+                properties:
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items: { type: string }
+    Error429:
+      description: Rate limited
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    PlanLimit:
+      description: Plan quota exhausted (G-8)
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [success, code, message]
+            properties:
+              success: { type: boolean, const: false }
+              code: { type: string, const: plan_limit_reached }
+              message: { type: string }
+              limit: { type: integer, description: absent when the message is visitor-safe (public inquiry flow) }
+              used: { type: integer, description: absent when the message is visitor-safe (public inquiry flow) }

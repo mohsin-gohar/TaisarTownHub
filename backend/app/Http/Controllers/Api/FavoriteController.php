@@ -19,7 +19,8 @@ class FavoriteController extends Controller
         $page = PropertyFavorite::where('user_id', $user->id)
             ->whereIn('property_id', Property::query()->publiclyVisible()->select('id'))
             ->with('property')
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderBy('id')
             ->paginate(min((int) $request->get('per_page', 24), 100));
 
         $ids = $page->pluck('property_id');

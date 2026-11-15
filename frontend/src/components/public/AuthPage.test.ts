@@ -29,16 +29,25 @@ test('AuthPage keeps all imports at module top', () => {
   );
 });
 
-test('AuthPage imports useEffect (used by CNIC masking effect)', () => {
+test('AuthPage imports useEffect (used by the initial-tab sync effect)', () => {
   const source = read('./AuthPage.tsx');
   assert.ok(
     /import React,\s*\{[^}]*useEffect[^}]*\}\s*from\s*'react'/.test(source),
     'useEffect must be imported from react'
   );
-  assert.ok(source.includes("import { maskCNIC } from '../../utils/logic'"), 'maskCNIC import missing');
 });
 
-test('AuthPage CNIC masking effect references maskCNIC', () => {
+test('AuthPage registration collects the same fields the backend accepts and never asks for CNIC', () => {
   const source = read('./AuthPage.tsx');
-  assert.ok(source.includes('setRegCnicMasked(maskCNIC(regCnic))'), 'CNIC masking effect body missing');
+  // Self-registration no longer retains CNIC (backend AuthController::register
+  // validates `cnic` only on the legacy route and discards it). The public
+  // form must not re-introduce a CNIC field.
+  assert.ok(source.includes('registerDealerAccount'), 'registerDealerAccount usage missing');
+  for (const field of ['regFullName', 'regEmail', 'regPhone', 'regAgency', 'regPassword']) {
+    assert.ok(source.includes(field), `registration field ${field} missing`);
+  }
+  assert.ok(
+    !/regCnic|formatCnicInput|NADRA CNIC/.test(source),
+    'CNIC must not be collected by public self-registration'
+  );
 });

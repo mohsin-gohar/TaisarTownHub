@@ -25,6 +25,16 @@ export const FeaturedProperties: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Crawlable path to a dynamic detail page (excluded from the sitemap).
+  const propertyHref = (id: string) => `/properties?property=${encodeURIComponent(id)}`;
+
+  const onPropertyLinkClick =
+    (id: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      handleOpenProperty({ id });
+    };
+
   const activeProperties = properties.filter((p) => !p.deletedAt);
   const featured = activeProperties.filter((p) => p.isFeatured).slice(0, 6).map(toPublicProperty);
 
@@ -115,11 +125,14 @@ export const FeaturedProperties: React.FC = () => {
                       <span className="truncate">{prop.location}</span>
                     </div>
 
-                    <h3
-                      onClick={() => handleOpenProperty(prop)}
-                      className="font-serif-luxury text-lg font-bold text-white group-hover:text-[#C5A46D] transition-colors cursor-pointer line-clamp-1"
-                    >
-                      {prop.title}
+                    <h3 className="font-serif-luxury text-lg font-bold text-white group-hover:text-[#C5A46D] transition-colors line-clamp-1">
+                      <a
+                        href={propertyHref(prop.id)}
+                        onClick={onPropertyLinkClick(prop.id)}
+                        className="hover:text-[#C5A46D] transition-colors"
+                      >
+                        {prop.title}
+                      </a>
                     </h3>
 
                     <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
@@ -158,13 +171,14 @@ export const FeaturedProperties: React.FC = () => {
 
                   {/* Actions */}
                   <div className="pt-2">
-                    <button
-                      onClick={() => handleOpenProperty(prop)}
+                    <a
+                      href={propertyHref(prop.id)}
+                      onClick={onPropertyLinkClick(prop.id)}
                       className="w-full py-2.5 px-3 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-[#C5A46D]/20"
                     >
-                      <span>View Details & Dossier</span>
+                      <span>View Details &amp; Dossier</span>
                       <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    </a>
                   </div>
                 </div>
                 </div>

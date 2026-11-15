@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { maskCNIC } from '../../utils/logic';
+import { getPendingMfaChallenge, clearPendingMfaChallenge } from '../../services/api';
+import { MfaChallengeForm } from '../common/MfaChallengeForm';
 import {
   Building2,
   ArrowRight,
@@ -9,7 +10,6 @@ import {
   Lock,
   Mail,
   Phone,
-  CreditCard,
   Briefcase,
   Eye,
   EyeOff,
@@ -20,17 +20,6 @@ import {
 interface AuthPageProps {
   initialTab?: 'signin' | 'register';
 }
-
-/**
- * Progressive CNIC formatter: keeps digits only and inserts the standard
- * 5-7-1 dashes (e.g. 42101-1234567-1) while the user types.
- */
-const formatCnicInput = (value: string): string => {
-  const digits = value.replace(/[^0-9]/g, '').slice(0, 13);
-  if (digits.length <= 5) return digits;
-  if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-  return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
-};
 
 export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => {
   const {
@@ -43,28 +32,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
 
   const [tab, setTab] = useState<'signin' | 'register'>(initialTab);
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Sign in state
   const [signInEmail, setSignInEmail] = useState('');
   const [signInPassword, setSignInPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // Phase 6: second-factor challenge (set when the API asks for a code).
+  const [mfaChallenge, setMfaChallenge] = useState<{ challenge: string; expiresIn: number } | null>(null);
 
   // Register state
   const [regFullName, setRegFullName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
-  const [regCnic, setRegCnic] = useState('');
-  const [regCnicMasked, setRegCnicMasked] = useState('');
+  const [officeAddress, setOfficeAddress] = useState('');
   const [regAgency, setRegAgency] = useState('');
   const [regSector, setRegSector] = useState('Sector 63');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regTermsAgreed, setRegTermsAgreed] = useState(false);
   
-  // CNIC masking effect
   useEffect(() => {
-    setRegCnicMasked(maskCNIC(regCnic));
-  }, [regCnic]);
+    setTab(initialTab);
+    setFormError('');
+  }, [initialTab]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,15 +72,33 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
       return;
     }
 
+    setFormError('');
     setBusy(true);
     try {
       const result = await loginWithCredentials(email, signInPassword);
       if (result.success) {
         setCurrentView('admin');
+      } else {
+        // The API answered with a second-factor challenge instead of an error.
+        const pending = getPendingMfaChallenge();
+        if (pending?.challenge) {
+          setMfaChallenge(pending);
+          setFormError('');
+        } else {
+          setFormError(result.error || 'The request could not be completed. Please try again.');
+        }
       }
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleMfaVerified = () => {
+    clearPendingMfaChallenge();
+    setMfaChallenge(null);
+    // The token is already stored by the API layer — reload so the app boots
+    // the authenticated workspace from the stored session.
+    window.location.assign('/admin');
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -111,6 +120,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
       return;
     }
 
+    setFormError('');
     setBusy(true);
     try {
       const result = await registerDealerAccount({
@@ -118,13 +128,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
         email: regEmail,
         password: regPassword,
         phone: regPhone,
-        cnic: regCnic,
+        officeAddress,
         agencyOrBranch: regAgency,
         sectorFocus: regSector,
       });
 
       if (result.success) {
         setCurrentView('admin');
+      } else {
+        setFormError(result.error || 'The request could not be completed. Please try again.');
       }
     } finally {
       setBusy(false);
@@ -188,12 +200,26 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            Register as Dealer / Agent
+            Register an agency
           </button>
         </div>
 
+        {formError && <p role="alert" className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200">{formError}</p>}
+
         {/* TAB 1: SIGN IN */}
-        {tab === 'signin' && (
+        {tab === 'signin' && mfaChallenge && (
+          <MfaChallengeForm
+            challenge={mfaChallenge.challenge}
+            expiresIn={mfaChallenge.expiresIn}
+            onVerified={handleMfaVerified}
+            onCancel={() => {
+              clearPendingMfaChallenge();
+              setMfaChallenge(null);
+            }}
+          />
+        )}
+
+        {tab === 'signin' && !mfaChallenge && (
           <form onSubmit={handleSignIn} className="space-y-4 animate-fadeIn">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
@@ -202,6 +228,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
               </label>
               <input
                 type="email"
+                aria-label="Account email"
+                autoComplete="username"
                 required
                 value={signInEmail}
                 onChange={(e) => setSignInEmail(e.target.value)}
@@ -227,6 +255,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
+                aria-label="Account password"
+                autoComplete="current-password"
                 required
                 value={signInPassword}
                 onChange={(e) => setSignInPassword(e.target.value)}
@@ -252,10 +282,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
             <div className="bg-[#0B1220] border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-300 space-y-1">
               <span className="font-bold text-[#C5A46D] flex items-center gap-1.5">
                 <Briefcase className="w-3.5 h-3.5" />
-                Real Estate Consultant & Dealer Registration
+                Agency registration & approval
               </span>
               <p className="text-[11px] text-slate-400">
-                Register as an affiliated dealer to inspect assigned plots, submit buyer requests, and track commission accruals in Taiser Town Scheme 45.
+                Apply for your agency workspace. The platform owner must approve your agency before you can upload documents, manage listings or access the dashboard.
               </p>
             </div>
 
@@ -265,6 +295,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 <input
                   type="text"
                   required
+                  aria-label="Full name"
+                  autoComplete="name"
+                  minLength={3}
+                  maxLength={120}
                   placeholder="e.g. Asad Siddiqui"
                   value={regFullName}
                   onChange={(e) => setRegFullName(e.target.value)}
@@ -280,6 +314,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 <input
                   type="tel"
                   required
+                  aria-label="WhatsApp or phone"
+                  autoComplete="tel"
+                  maxLength={30}
                   placeholder="0300-1234567"
                   value={regPhone}
                   onChange={(e) => setRegPhone(e.target.value)}
@@ -297,6 +334,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 <input
                   type="email"
                   required
+                  aria-label="Account email"
+                  autoComplete="email"
                   placeholder="consultant@agency.pk"
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
@@ -305,26 +344,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
-                  <CreditCard className="w-3 h-3 text-[#C5A46D]" />
-                  <span>NADRA CNIC (Masked in ERP)</span>
-                </label>
+                <label htmlFor="agency-office-address" className="text-[11px] font-semibold text-slate-300">Office address (optional)</label>
                 <input
+                  id="agency-office-address"
                   type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  maxLength={15}
-                  placeholder="42101-1234567-1"
-                  value={formatCnicInput(regCnic)}
-                  onChange={(e) => setRegCnic(e.target.value.replace(/[^0-9]/g, '').slice(0, 13))}
-                  aria-describedby="cnic-mask-hint"
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                  autoComplete="street-address"
+                  maxLength={255}
+                  placeholder="Office, street and sector"
+                  value={officeAddress}
+                  onChange={(e) => setOfficeAddress(e.target.value)}
+                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
                 />
-                <p id="cnic-mask-hint" className="text-[10px] text-slate-500 font-mono">
-                  {regCnic.length === 13
-                    ? `Stored as ${regCnicMasked}`
-                    : '13-digit CNIC — auto-masked once complete.'}
-                </p>
               </div>
             </div>
 
@@ -334,6 +364,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 <input
                   type="text"
                   required
+                  aria-label="Agency or brokerage firm"
+                  autoComplete="organization"
+                  minLength={3}
+                  maxLength={120}
                   placeholder="e.g. Al-Madina Real Estate"
                   value={regAgency}
                   onChange={(e) => setRegAgency(e.target.value)}
@@ -347,6 +381,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                   <span>Primary Sector Focus</span>
                 </label>
                 <select
+                  aria-label="Primary sector focus"
                   value={regSector}
                   onChange={(e) => setRegSector(e.target.value)}
                   className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
@@ -368,6 +403,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 <input
                   type="password"
                   required
+                  aria-label="Create password"
+                  autoComplete="new-password"
+                  minLength={8}
                   placeholder="Min 8 characters"
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
@@ -380,6 +418,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 <input
                   type="password"
                   required
+                  aria-label="Confirm password"
+                  autoComplete="new-password"
+                  minLength={8}
                   placeholder="Repeat password"
                   value={regConfirmPassword}
                   onChange={(e) => setRegConfirmPassword(e.target.value)}
@@ -406,7 +447,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
               disabled={busy}
               className="w-full py-3 px-4 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] active:scale-[0.99] text-[#101C2C] font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20 disabled:opacity-60"
             >
-              <span>{busy ? 'Registering Account…' : 'Register & Enter Portal'}</span>
+              <span>{busy ? 'Submitting application…' : 'Submit agency application'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
@@ -416,7 +457,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
         <div className="pt-3 border-t border-slate-800 text-center text-[10px] text-slate-500 space-y-1">
           <p className="flex items-center justify-center gap-1.5">
             <Lock className="w-3 h-3 text-[#C5A46D]" />
-            <span>256-bit encrypted Real Estate ERP session. Confidential records protected.</span>
+            <span>Private workspace access requires an approved agency and an authorized account.</span>
           </p>
         </div>
       </div>

@@ -9,6 +9,7 @@ use App\Models\AgencyMember;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\Permissions;
+use App\Support\PlanLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -64,14 +65,9 @@ class AgencyStaffController extends Controller
 
         $agency = Agency::findOrFail($agencyId);
 
-        // Staff quota from subscription limits
-        $limits = $agency->limits();
-        $currentCount = AgencyMember::where('agency_id', $agencyId)->count();
-        if ($currentCount >= (int) ($limits['staff'] ?? 2)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Staff limit reached for your subscription plan. Upgrade to invite more members.',
-            ], 402);
+        // G-8: staff quota (active members + pending invitations) enforced server-side.
+        if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId))) {
+            return PlanLimits::deny('Staff limit reached for your subscription plan. Upgrade to invite more members.', $block);
         }
 
         $role = $this->resolveAgencyRole($agencyId, $request->role_id);

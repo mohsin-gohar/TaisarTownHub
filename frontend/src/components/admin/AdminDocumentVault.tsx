@@ -11,6 +11,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { useApp } from '../../context/AppContext';
 import {
   EnterpriseBadge,
   EnterpriseButton,
@@ -37,6 +38,7 @@ const CATEGORIES = [
 ];
 
 export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, canDelete }) => {
+  const { confirmAction } = useApp();
   const [documents, setDocuments] = useState<any[]>([]);
   const [folders, setFolders] = useState<any[]>([]);
   const [pagination, setPagination] = useState<any>(null);
@@ -141,7 +143,11 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
   };
 
   const handleDeleteFolder = async (folder: any) => {
-    if (!window.confirm(`Delete folder "${folder.name}"? Only empty folders can be deleted.`)) return;
+    const confirmed = await confirmAction(
+      `Delete folder "${folder.name}"? Only empty folders can be deleted.`,
+      { title: 'Delete folder', confirmLabel: 'Delete folder' },
+    );
+    if (!confirmed) return;
     setBusy(`folder-${folder.id}`);
     setNotice('');
     const ok = await api.deleteDocumentFolder(String(folder.id));
@@ -196,7 +202,11 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
   };
 
   const handleDelete = async (document: any) => {
-    if (!window.confirm(`Soft-delete "${document.title}"? The file is retained for audit and can be restored by an administrator.`)) return;
+    const confirmed = await confirmAction(
+      `Soft-delete "${document.title}"? The file is retained for audit and can be restored by an administrator.`,
+      { title: 'Soft-delete document', confirmLabel: 'Soft-delete' },
+    );
+    if (!confirmed) return;
     setBusy(`delete-${document.id}`);
     setError('');
     const ok = await api.deleteAgencyDocument(String(document.id));

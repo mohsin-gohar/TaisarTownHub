@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use App\Models\Commission;
 use App\Models\Dealer;
+use App\Models\Expense;
 use App\Models\PaymentSchedule;
 use App\Models\Property;
 use App\Models\Transaction;
@@ -80,7 +81,8 @@ class FinanceController extends Controller
 
         if ($request->has('page')) {
             $page = $query->with(['payments', 'commissions'])
-                ->latest()
+                ->orderByDesc('created_at')
+                ->orderBy('id')
                 ->paginate(min((int) $request->get('per_page', 20), 100));
 
             return response()->json([
@@ -95,7 +97,9 @@ class FinanceController extends Controller
             ]);
         }
 
-        $rows = $query->with(['payments', 'commissions'])->latest()
+        $rows = $query->with(['payments', 'commissions'])
+            ->orderByDesc('created_at')
+            ->orderBy('id')
             ->limit(min((int) $request->get('per_page', 100), 300))->get();
 
         return response()->json($this->decorate($rows->all()));
@@ -333,17 +337,30 @@ class FinanceController extends Controller
             'reason' => 'required|string|min:3|max:1000',
         ]);
 
-        if ($transaction->isVoided()) {
+        // Lock the row so two concurrent voids cannot both pass the check.
+        $voided = DB::transaction(function () use ($transaction, $user, $request): ?Transaction {
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
+
+            if ($locked->isVoided()) {
+                return null;
+            }
+
+            $locked->voided_at = now();
+            $locked->void_reason = $request->reason;
+            $locked->voided_by = $user->id;
+            $locked->save();
+
+            return $locked;
+        });
+
+        if ($voided === null) {
             return response()->json([
                 'success' => false,
                 'message' => 'Deal is already voided.',
             ], 422);
         }
 
-        $transaction->voided_at = now();
-        $transaction->void_reason = $request->reason;
-        $transaction->voided_by = $user->id;
-        $transaction->save();
+        $transaction = $voided;
 
         $this->writeAudit($request, 'transaction.void', $transaction->id, "Deal voided: {$transaction->dealNumber}", [
             'agency_id' => $transaction->agency_id,
@@ -367,13 +384,26 @@ class FinanceController extends Controller
 
         $transaction = $this->findScoped($agencyId, $id, $request->user());
 
-        if ($transaction->isVoided()) {
+        // Lock the row so two concurrent approvals cannot both pass the check.
+        $approved = DB::transaction(function () use ($transaction, $request): ?Transaction {
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
+
+            if ($locked->isVoided()) {
+                return null;
+            }
+
+            $locked->approved_at = now();
+            $locked->approved_by = $request->user()->id;
+            $locked->save();
+
+            return $locked;
+        });
+
+        if ($approved === null) {
             return response()->json(['success' => false, 'message' => 'Voided deals cannot be approved.'], 422);
         }
 
-        $transaction->approved_at = now();
-        $transaction->approved_by = $request->user()->id;
-        $transaction->save();
+        $transaction = $approved;
 
         $this->writeAudit($request, 'transaction.approve', $transaction->id, "Deal approved: {$transaction->dealNumber}", [
             'agency_id' => $transaction->agency_id,
@@ -429,30 +459,51 @@ class FinanceController extends Controller
             'notes' => 'nullable|string|max:1000',
         ]);
 
-        $payment = TransactionPayment::create([
-            'agency_id' => $transaction->agency_id,
-            'transaction_id' => $transaction->id,
-            'amount' => (float) $request->amount,
-            'type' => $request->get('type', 'advance'),
-            'method' => $request->get('method', 'cash'),
-            'reference' => $request->reference,
-            'receipt_no' => $request->receipt_no,
-            'received_at' => $request->received_at ? now()->parse($request->received_at) : now(),
-            'recorded_by' => $request->user()->id,
-            'notes' => $request->notes,
-        ]);
+        // Ledger integrity: the payment insert and the derived status update
+        // are one transaction on the locked deal row — concurrent payments
+        // cannot overshoot the agreement amount silently.
+        $result = DB::transaction(function () use ($transaction, $request): array {
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
 
-        // Derive payment status from the ledger
-        $collected = $transaction->totalPaid();
-        $agreement = (float) $transaction->agreementAmountPKR;
-        if ($agreement > 0 && $collected >= $agreement) {
-            $transaction->paymentStatus = 'Fully Paid';
-        } elseif ($collected > 0) {
-            $transaction->paymentStatus = 'Partially Paid';
+            if ($locked->isVoided()) {
+                return [null, null];
+            }
+
+            $payment = TransactionPayment::create([
+                'agency_id' => $locked->agency_id,
+                'transaction_id' => $locked->id,
+                'amount' => (float) $request->amount,
+                'type' => $request->get('type', 'advance'),
+                'method' => $request->get('method', 'cash'),
+                'reference' => $request->reference,
+                'receipt_no' => $request->receipt_no,
+                'received_at' => $request->received_at ? now()->parse($request->received_at) : now(),
+                'recorded_by' => $request->user()->id,
+                'notes' => $request->notes,
+            ]);
+
+            // Derive payment status from the ledger
+            $collected = $locked->totalPaid();
+            $agreement = (float) $locked->agreementAmountPKR;
+            if ($agreement > 0 && $collected >= $agreement) {
+                $locked->paymentStatus = 'Fully Paid';
+            } elseif ($collected > 0) {
+                $locked->paymentStatus = 'Partially Paid';
+            }
+            $locked->advancePaymentPKR = (int) $collected;
+            $locked->remainingBalancePKR = max(0, (int) $agreement - (int) $collected);
+            $locked->save();
+
+            return [$payment, [$collected, $agreement]];
+        });
+
+        [$payment, $totals] = $result;
+
+        if ($payment === null) {
+            return response()->json(['success' => false, 'message' => 'Cannot record payments on a voided deal.'], 422);
         }
-        $transaction->advancePaymentPKR = (int) $collected;
-        $transaction->remainingBalancePKR = max(0, (int) $agreement - (int) $collected);
-        $transaction->save();
+
+        [$collected, $agreement] = $totals;
 
         $this->writeAudit($request, 'payment.record', $payment->id, "Payment {$payment->amount} recorded on {$transaction->dealNumber}", [
             'agency_id' => $transaction->agency_id,
@@ -592,7 +643,7 @@ class FinanceController extends Controller
             $query->where('status', $request->status);
         }
 
-        $page = $query->latest()->paginate(min((int) $request->get('per_page', 25), 100));
+        $page = $query->orderByDesc('created_at')->orderBy('id')->paginate(min((int) $request->get('per_page', 25), 100));
 
         return response()->json([
             'success' => true,
@@ -694,6 +745,187 @@ class FinanceController extends Controller
             'success' => true,
             'message' => 'Commission updated.',
             'commission' => $commission,
+        ]);
+    }
+
+    /* ==================== Agency expenses (G-7) ==================== */
+
+    /** GET /api/agency/expenses — overhead ledger, date/category filtered. */
+    public function expensesIndex(Request $request)
+    {
+        $agencyId = $this->agencyId($request);
+        $this->requirePermission($request, 'finance.view');
+
+        if ($agencyId === null) {
+            return response()->json(['success' => true, 'expenses' => [], 'totals' => ['amount_pkr' => 0]]);
+        }
+
+        $query = Expense::where('agency_id', $agencyId);
+
+        if ($request->filled('from')) {
+            $query->whereDate('expense_date', '>=', $request->from);
+        }
+        if ($request->filled('to')) {
+            $query->whereDate('expense_date', '<=', $request->to);
+        }
+        if ($request->filled('category') && in_array($request->category, Expense::CATEGORIES, true)) {
+            $query->where('category', $request->category);
+        }
+
+        $expenses = $query->orderByDesc('expense_date')->limit(500)->get();
+
+        return response()->json([
+            'success' => true,
+            'expenses' => $expenses,
+            'totals' => ['amount_pkr' => (int) $expenses->sum('amount_pkr')],
+        ]);
+    }
+
+    /** POST /api/agency/expenses — record an overhead expense. */
+    public function expensesStore(Request $request)
+    {
+        $agencyId = $this->requireAgency($request);
+        $this->requirePermission($request, 'finance.manage_payments');
+
+        $data = $request->validate([
+            'expense_date' => 'required|date|before_or_equal:today',
+            'category' => 'nullable|string|in:' . implode(',', Expense::CATEGORIES),
+            'amount_pkr' => 'required|integer|min:1|max:9999999999',
+            'description' => 'nullable|string|max:500',
+            'payment_method' => 'nullable|string|in:' . implode(',', Expense::PAYMENT_METHODS),
+            'reference' => 'nullable|string|max:120',
+        ]);
+
+        $expense = Expense::create([
+            'id' => 'exp_' . bin2hex(random_bytes(8)),
+            'agency_id' => $agencyId,
+            'expense_date' => $data['expense_date'],
+            'category' => $data['category'] ?? 'other',
+            'amount_pkr' => (int) $data['amount_pkr'],
+            'description' => isset($data['description']) ? strip_tags($data['description']) : null,
+            'payment_method' => $data['payment_method'] ?? 'cash',
+            'reference' => $data['reference'] ?? null,
+            'created_by' => $request->user()->id,
+        ]);
+
+        $this->writeAudit($request, 'expense.created', $expense->id,
+            "Expense recorded: PKR {$expense->amount_pkr} ({$expense->category})", [
+                'agency_id' => $agencyId,
+                'entity_type' => 'expense',
+                'entity_id' => $expense->id,
+                'metadata' => ['amount_pkr' => $expense->amount_pkr, 'category' => $expense->category],
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Expense recorded.',
+            'expense' => $expense,
+        ], 201);
+    }
+
+    /** DELETE /api/agency/expenses/{id} — soft delete (row stays for audit). */
+    public function expensesDestroy(Request $request, string $id)
+    {
+        $agencyId = $this->agencyId($request);
+        $this->requirePermission($request, 'finance.manage_payments');
+
+        $expense = Expense::where('agency_id', $agencyId)->where('id', $id)->first();
+        if (!$expense) {
+            return response()->json(['success' => false, 'message' => 'Expense not found.'], 404);
+        }
+
+        $expense->delete();
+
+        $this->writeAudit($request, 'expense.deleted', $expense->id,
+            "Expense soft-deleted: PKR {$expense->amount_pkr} ({$expense->category})", [
+                'agency_id' => $agencyId,
+                'entity_type' => 'expense',
+                'entity_id' => $expense->id,
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Expense removed.',
+        ]);
+    }
+
+    /* ==================== Date-filtered reports (G-12) ==================== */
+
+    /**
+     * GET /api/agency/reports?from=&to= — agency financial report computed
+     * server-side from the real ledger (no hardcoded statistics): deals,
+     * collected payments, commissions, expenses (by category) and net.
+     */
+    public function reports(Request $request)
+    {
+        $agencyId = $this->agencyId($request);
+        $this->requirePermission($request, 'finance.view_reports');
+
+        $data = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date|after_or_equal:from',
+        ]);
+
+        $from = now()->parse($data['from'] ?? now()->subDays(29)->toDateString())->startOfDay();
+        $to = now()->parse($data['to'] ?? now()->toDateString())->endOfDay();
+
+        if ($agencyId === null) {
+            return response()->json([
+                'success' => true,
+                'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+                'deals' => ['count' => 0, 'agreed_pkr' => 0, 'approved_count' => 0, 'voided_count' => 0],
+                'collected_pkr' => 0, 'payments_count' => 0,
+                'commissions' => ['paid_pkr' => 0, 'pending_pkr' => 0],
+                'expenses' => ['total_pkr' => 0, 'by_category' => []],
+                'net_pkr' => 0,
+            ]);
+        }
+
+        $dealQuery = Transaction::where('agency_id', $agencyId)
+            ->whereBetween('created_at', [$from, $to]);
+        $voidedCount = (clone $dealQuery)->whereNotNull('voided_at')->count();
+        $dealRows = (clone $dealQuery)->whereNull('voided_at')->get(['id', 'agreementAmountPKR', 'approved_at']);
+
+        $collected = DB::table('transaction_payments')
+            ->where('agency_id', $agencyId)
+            ->whereBetween('received_at', [$from, $to])
+            ->selectRaw('COALESCE(SUM(amount), 0) AS total, COUNT(*) AS n')
+            ->first();
+
+        $commissionPaid = (float) Commission::where('agency_id', $agencyId)
+            ->where('status', 'paid')
+            ->whereBetween('paid_at', [$from, $to])
+            ->sum('amount');
+        $commissionPending = (float) Commission::where('agency_id', $agencyId)
+            ->whereIn('status', ['pending', 'accrued'])
+            ->sum('amount');
+
+        $expenseRows = Expense::where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->whereDate('expense_date', '>=', $from->toDateString())
+            ->whereDate('expense_date', '<=', $to->toDateString())
+            ->get(['category', 'amount_pkr']);
+        $expenseTotal = (int) $expenseRows->sum('amount_pkr');
+        $byCategory = $expenseRows->groupBy('category')
+            ->map(fn ($rows, $category) => ['category' => $category, 'total_pkr' => (int) $rows->sum('amount_pkr')])
+            ->values()->all();
+
+        $collectedPkr = (float) $collected->total;
+
+        return response()->json([
+            'success' => true,
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'deals' => [
+                'count' => $dealRows->count(),
+                'agreed_pkr' => (float) $dealRows->sum('agreementAmountPKR'),
+                'approved_count' => $dealRows->whereNotNull('approved_at')->count(),
+                'voided_count' => $voidedCount,
+            ],
+            'collected_pkr' => $collectedPkr,
+            'payments_count' => (int) $collected->n,
+            'commissions' => ['paid_pkr' => $commissionPaid, 'pending_pkr' => $commissionPending],
+            'expenses' => ['total_pkr' => $expenseTotal, 'by_category' => $byCategory],
+            'net_pkr' => round($collectedPkr - $expenseTotal, 2),
         ]);
     }
 

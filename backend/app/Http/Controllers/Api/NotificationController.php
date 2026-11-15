@@ -12,6 +12,9 @@ class NotificationController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+        if (!$user) {
+            abort(401, 'Authentication required.');
+        }
 
         $query = $user->notifications();
 
@@ -36,15 +39,25 @@ class NotificationController extends Controller
 
     public function unreadCount(Request $request)
     {
+        $user = $request->user();
+        if (!$user) {
+            abort(401, 'Authentication required.');
+        }
+
         return response()->json([
             'success' => true,
-            'unread_count' => $request->user()->unreadNotifications()->count(),
+            'unread_count' => $user->unreadNotifications()->count(),
         ]);
     }
 
     public function markRead(Request $request, string $id)
     {
-        $notification = $request->user()->notifications()->findOrFail($id);
+        $user = $request->user();
+        if (!$user) {
+            abort(401, 'Authentication required.');
+        }
+
+        $notification = $user->notifications()->findOrFail($id);
         if ($notification->read_at === null) {
             $notification->markAsRead();
         }
@@ -57,7 +70,12 @@ class NotificationController extends Controller
 
     public function markAllRead(Request $request)
     {
-        $request->user()->unreadNotifications->each->markAsRead();
+        $user = $request->user();
+        if (!$user) {
+            abort(401, 'Authentication required.');
+        }
+
+        $user->unreadNotifications->each->markAsRead();
 
         return response()->json([
             'success' => true,

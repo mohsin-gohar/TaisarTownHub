@@ -1,0 +1,65 @@
+# G-15 — CI gates: backend feature suite, frontend verify chain, OpenAPI parse.
+#
+# Mirrors the gates proven locally: `php artisan test` (sqlite :memory:,
+# APP_KEY pinned in phpunit.xml) and `npm run verify`
+# (lint → tests → build + prerender → bundle check).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend suite (PHP 8.3)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, pdo_sqlite, bcmath, intl, zip, gd
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Run feature suite
+        run: php artisan test
+
+  frontend:
+    name: Frontend verify (Node 20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify chain (lint, tests, build + prerender, bundle check)
+        run: npm run verify
+
+  contract:
+    name: OpenAPI spec parses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate YAML syntax
+        run: python3 -c "import yaml; yaml.safe_load(open('docs/openapi.yaml', encoding='utf-8')); print('openapi.yaml: YAML OK')"

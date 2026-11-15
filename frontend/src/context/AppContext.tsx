@@ -34,7 +34,7 @@ import {
 } from '../data/publicSeed';
 import { initialAgencyVideos } from '../data/agencyVideosSeed';
 import { APP_MODE, DEMO_PIN, IS_DEMO } from '../config/appMode';
-import { checkDuplicateProperty, hasPermission, userHasPermission, maskCNIC, calculateMediaSaleProfit, validateCnicFormat } from '../utils/logic';
+import { checkDuplicateProperty, hasPermission, userHasPermission, maskCNIC, calculateMediaSaleProfit } from '../utils/logic';
 import { logAudit } from '../domain/auditLog';
 import { normalizeRole, authorize, ROLE_LABELS, toLegacyRoleLabel, type Permission } from '../domain/permissions';
 import {
@@ -50,9 +50,11 @@ import {
 } from '../domain/transactions';
 import { api, getAuthToken, setAuthToken, setApiAgencyId } from '../services/api';
 import { decideMediaDeletion } from '../domain/mediaPolicy';
+import { anonymousUser, defaultAgencyId, userFromServer } from '../domain/authSession';
 
 /** Read a collection from localStorage, returning fallback on failure. */
 function readStored<T>(key: string, fallback: T[]): T[] {
+  if (!IS_DEMO) return fallback;
   const saved = localStorage.getItem(`taisartownhub_v2_${key}`);
   if (saved) {
     try {
@@ -84,6 +86,8 @@ interface AppContextType {
   
   // Auth & RBAC
   isAdminAuthenticated: boolean;
+  isSessionLoading: boolean;
+  refreshSession: () => Promise<void>;
   currentUser: AuthUser;
   authUsers: AuthUser[];
   activeRole: UserRole;
@@ -97,7 +101,7 @@ interface AppContextType {
     email: string;
     password?: string;
     phone: string;
-    cnic: string;
+    officeAddress?: string;
     agencyOrBranch: string;
     sectorFocus?: string;
   }) => Promise<{ success: boolean; error?: string }>;
@@ -380,34 +384,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isPresentationMode, setIsPresentationMode] = useState<boolean>(false);
   const [deviceViewport, setDeviceViewport] = useState<DeviceViewport>('desktop');
 
-  // Auth & RBAC State: seamlessly initialize from sessionStorage if an active tab session exists
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    try {
-      const saved = sessionStorage.getItem('tth_user');
-      const token = getAuthToken();
-      return Boolean(saved && token);
-    } catch {
-      return false;
-    }
-  });
-
-  // User profile: restore from active tab session if present, else least-privilege visitor
-  const [currentUser, setCurrentUser] = useState<AuthUser>(() => {
-    try {
-      const saved = sessionStorage.getItem('tth_user');
-      const token = getAuthToken();
-      if (saved && token) {
-        return JSON.parse(saved) as AuthUser;
-      }
-    } catch {}
-    return {
-      id: 'anonymous',
-      name: 'Anonymous Visitor',
-      email: 'visitor@taisartownhub.com',
-      role: 'visitor' as UserRole,
-      permissions: [],
-    };
-  });
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [isSessionLoading, setIsSessionLoading] = useState(() => Boolean(getAuthToken()));
+  const [currentUser, setCurrentUser] = useState<AuthUser>(anonymousUser);
+  const sessionVersionRef = useRef(0);
 
   // ---- ERP seed hydration (admin-only, dynamically imported chunk) ----
   // The ERP chunk (sellers/buyers/dealers/transactions/files/inquiries/auth users/
@@ -451,21 +431,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authUsers, setAuthUsers] = useState<AuthUser[]>([]);
 
   // Data Collections with LocalStorage caching
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}projects`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialProjects;
-  });
-
-  const [properties, setProperties] = useState<Property[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}properties`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialProperties;
-  });
+  const [projects, setProjects] = useState<Project[]>(() => readStored('projects', IS_DEMO ? initialProjects : []));
+  const [properties, setProperties] = useState<Property[]>(() => readStored('properties', IS_DEMO ? initialProperties : []));
 
   const [sellers, setSellers] = useState<Seller[]>(() => readStored<Seller>('sellers', []));
 
@@ -481,34 +448,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [propertyFiles, setPropertyFiles] = useState<PropertyFileItem[]>(() => readStored<PropertyFileItem>('files', []));
 
-  const [plotMarkers, setPlotMarkers] = useState<PlotMarker[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}plots`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialPlotMarkers;
-  });
-
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}media`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialMedia;
-  });
-
-  const [agencyVideos, setAgencyVideos] = useState<AgencyVideo[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}agency_videos`);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialAgencyVideos;
-  });
+  const [plotMarkers, setPlotMarkers] = useState<PlotMarker[]>(() => readStored('plots', IS_DEMO ? initialPlotMarkers : []));
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>(() => readStored('media', IS_DEMO ? initialMedia : []));
+  const [agencyVideos, setAgencyVideos] = useState<AgencyVideo[]>(() => readStored('agency_videos', IS_DEMO ? initialAgencyVideos : []));
 
   const [inquiries, setInquiries] = useState<Inquiry[]>(() => readStored<Inquiry>('inquiries', []));
 
   const [cmsConfig, setCmsConfig] = useState<CMSConfig>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}cms`);
+    const saved = IS_DEMO ? localStorage.getItem(`${STORAGE_KEY_PREFIX}cms`) : null;
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { /* ignore */ }
     }
@@ -562,12 +509,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const videosFromDb = list<AgencyVideo>('videos');
     const plotsFromDb = list<PlotMarker>('plots');
     const mediaFromDb = list<MediaItem>('media');
-    if (projectsFromDb && projectsFromDb.length) setProjects(projectsFromDb);
-    if (propertiesFromDb && propertiesFromDb.length) setProperties(propertiesFromDb);
+    if (projectsFromDb) setProjects(projectsFromDb);
+    if (propertiesFromDb) setProperties(propertiesFromDb);
     if (dealersFromDb) setDealers(dealersFromDb);
-    if (videosFromDb && videosFromDb.length) setAgencyVideos(videosFromDb);
-    if (plotsFromDb && plotsFromDb.length) setPlotMarkers(plotsFromDb);
-    if (mediaFromDb && mediaFromDb.length) setMediaItems(mediaFromDb);
+    if (videosFromDb) setAgencyVideos(videosFromDb);
+    if (plotsFromDb) setPlotMarkers(plotsFromDb);
+    if (mediaFromDb) setMediaItems(mediaFromDb);
     if (data.cms && typeof data.cms === 'object' && Object.keys(data.cms as object).length) {
       setCmsConfig(data.cms as CMSConfig);
     }
@@ -584,50 +531,112 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     staffPersistRef.current = true;
   };
 
+  const clearWorkspace = () => {
+    staffPersistRef.current = false;
+    erpReadyRef.current = false;
+    setErpReady(false);
+    setProjects([]);
+    setProperties([]);
+    setDealers([]);
+    setSellers([]);
+    setBuyers([]);
+    setTransactions([]);
+    setPaymentEntries([]);
+    setCommissionEntries([]);
+    setPropertyFiles([]);
+    setInquiries([]);
+    setMediaItems([]);
+    setAgencyVideos([]);
+    setPlotMarkers([]);
+    setCmsConfig(initialCMSConfig);
+  };
+
+  const clearSession = () => {
+    clearWorkspace();
+    setAuthToken(null);
+    setApiAgencyId(null);
+    sessionStorage.removeItem('tth_user');
+    setCurrentUser(anonymousUser);
+    setIsAdminAuthenticated(false);
+  };
+
   useEffect(() => {
-    let mounted = true;
+    const onAccessDenied = (event: Event) => {
+      const { expired, access } = (event as CustomEvent).detail;
+      sessionVersionRef.current++;
+      if (expired) {
+        clearSession();
+      } else {
+        clearWorkspace();
+        setCurrentUser((user) => ({ ...user, workspaceAccess: access }));
+      }
+      setIsSessionLoading(false);
+    };
+    window.addEventListener('tth:access-denied', onAccessDenied);
+    return () => window.removeEventListener('tth:access-denied', onAccessDenied);
+  }, []);
+
+  const loadAuthenticatedWorkspace = async (payload: Record<string, unknown>, version: number) => {
+    if (version !== sessionVersionRef.current) return;
+    const user = userFromServer(payload);
+    setApiAgencyId(defaultAgencyId(payload));
+    if (user.workspaceAccess?.allowed) {
+      const workspace = await api.getWorkspace();
+      if (version !== sessionVersionRef.current) return;
+      if (workspace) {
+        applyServerData(workspace, true);
+      } else {
+        clearWorkspace();
+        user.workspaceAccess = { allowed: false, status: 'unavailable', message: 'Your workspace could not be loaded. Check your connection and try again.' };
+      }
+    } else {
+      clearWorkspace();
+    }
+    if (version !== sessionVersionRef.current) return;
+    setCurrentUser(user);
+    setIsAdminAuthenticated(true);
+    setBackendConnected(true);
+  };
+
+  const refreshSession = async () => {
+    const version = ++sessionVersionRef.current;
+    staffPersistRef.current = false;
+    setIsSessionLoading(true);
+    try {
+      const payload = getAuthToken() ? await api.getMe() : null;
+      if (version !== sessionVersionRef.current) return;
+      if (payload) {
+        await loadAuthenticatedWorkspace(payload, version);
+      } else {
+        clearSession();
+        showToast('error', 'Your session could not be verified. Please sign in again.');
+      }
+    } finally {
+      if (version === sessionVersionRef.current) setIsSessionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const version = ++sessionVersionRef.current;
     const boot = async () => {
-      const token = getAuthToken();
-      if (token) {
-        const workspace = await api.getWorkspace();
-        if (workspace && mounted) {
-          applyServerData(workspace, true);
-          setBackendConnected(true);
-          const savedUser = sessionStorage.getItem('tth_user');
-          if (savedUser) {
-            try {
-              const user = JSON.parse(savedUser) as AuthUser;
-              setCurrentUser(user);
-              setIsAdminAuthenticated(true);
-              const stored = JSON.parse(savedUser) as Record<string, unknown>;
-              const memberships = Array.isArray(stored.agencies)
-                ? (stored.agencies as Array<{ agency_id?: string }>)
-                : [];
-              setApiAgencyId(memberships[0]?.agency_id ?? null);
-            } catch {
-              sessionStorage.removeItem('tth_user');
-            }
-          }
+      if (getAuthToken()) {
+        const payload = await api.getMe();
+        if (version !== sessionVersionRef.current) return;
+        if (payload) {
+          await loadAuthenticatedWorkspace(payload, version);
+          if (version === sessionVersionRef.current) setIsSessionLoading(false);
           return;
         }
-        setAuthToken(null);
-        sessionStorage.removeItem('tth_user');
+        clearSession();
       }
       const catalog = await api.getCatalog();
-      if (!mounted) return;
-      if (catalog) {
-        applyServerData(catalog, false);
-        setBackendConnected(true);
-      } else {
-        setBackendConnected(false);
-      }
+      if (version !== sessionVersionRef.current) return;
+      if (catalog) applyServerData(catalog, false);
+      setBackendConnected(Boolean(catalog));
+      setIsSessionLoading(false);
     };
     void boot();
-    return () => {
-      mounted = false;
-    };
-    // Boot once. applyServerData closes over stable setState setters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { sessionVersionRef.current++; };
   }, []);
 
   useEffect(() => {
@@ -696,6 +705,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * is cosmetic only — this is the enforcement point.
    */
   const requirePermission = (permission: Permission | Permission[], scope?: { dealerId?: string }): boolean => {
+    if (!isAdminAuthenticated || currentUser.workspaceAccess?.allowed === false) {
+      showToast('error', 'An approved agency session is required.');
+      return false;
+    }
     const gate = authorize(currentUser, permission, scope);
     if (!gate.ok) {
       showToast('error', gate.error);
@@ -792,33 +805,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('error', message);
       return { success: false, error: message };
     }
+    const version = ++sessionVersionRef.current;
+    clearWorkspace();
     setAuthToken(result.token);
-    const foundUser: AuthUser = {
-      id: String(result.user.id ?? ''),
-      name: String(result.user.name ?? ''),
-      email: String(result.user.email ?? email),
-      role: normalizeRole(result.user.role),
-      permissions: Array.isArray(result.user.permissions) ? (result.user.permissions as AuthUser['permissions']) : [],
-      dealerId: result.user.dealer_id ? String(result.user.dealer_id) : undefined,
-    };
-    // Enterprise tenancy context: agency-scoped staff resolve the acting agency
-    // from their own memberships (first active membership becomes the context).
-    const memberships = Array.isArray((result.user as Record<string, unknown>).agencies)
-      ? ((result.user as Record<string, unknown>).agencies as Array<{ agency_id?: string }>)
-      : [];
-    const agencyId = memberships[0]?.agency_id ?? null;
-    setApiAgencyId(agencyId && agencyId !== 'null' ? agencyId : null);
-    sessionStorage.setItem('tth_user', JSON.stringify({ ...foundUser, agencies: memberships }));
-    setCurrentUser(foundUser);
-    setIsAdminAuthenticated(true);
-    const workspace = await api.getWorkspace();
-    if (!workspace) {
-      showToast('error', 'Signed in, but MySQL records could not be loaded.');
-      return { success: false, error: 'Workspace unavailable.' };
-    }
-    applyServerData(workspace, true);
-    logAudit({ actor: foundUser.name, role: foundUser.role, action: 'login', target: foundUser.id, detail: `Signed in as ${foundUser.role}` });
-    showToast('success', `Welcome back, ${foundUser.name}. Records loaded from MySQL.`);
+    await loadAuthenticatedWorkspace(result.user, version);
+    setIsSessionLoading(false);
     return { success: true };
   };
 
@@ -831,89 +822,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     email: string;
     password?: string;
     phone: string;
-    cnic: string;
+    officeAddress?: string;
     agencyOrBranch: string;
     sectorFocus?: string;
   }): Promise<{ success: boolean; error?: string }> => {
     const name = data.fullName.trim();
     const email = data.email.trim().toLowerCase();
     const phone = data.phone.trim();
-    const password = (data.password || '').trim();
-    // The national-ID key is base64-decoded at runtime so the literal token never
-    // appears in the publicly-served bundle (guard: scripts/check-bundle.mjs).
-    // Minifiers do not evaluate atob(), keeping the guard honest.
-    const nationalIdKey = atob('Y25pYw==');
-    // Read the raw national ID through the decoded key (never reference the
-    // field name literally — that would leak it into the public bundle).
-    const nationalIdValue = String((data as Record<string, unknown>)[nationalIdKey] ?? '').trim();
-    const nationalIdValidation = validateCnicFormat(nationalIdValue);
-    if (!nationalIdValidation.valid) {
-      const message = nationalIdValidation.error || 'Invalid CNIC format.';
-      showToast('error', message);
-      return { success: false, error: message };
-    }
-    if (!name || !phone || !email || password.length < 8) {
-      const message = 'Full name, phone, email, and a password of at least 8 characters are required.';
+    const password = data.password || '';
+    if (name.length < 3 || data.agencyOrBranch.trim().length < 3 || !phone || !email || password.length < 8) {
+      const message = 'Owner and agency names (at least 3 characters), phone, email and a password of at least 8 characters are required.';
       showToast('error', message);
       return { success: false, error: message };
     }
     const result = await api.register({
-      fullName: name,
+      contactName: name,
+      name: data.agencyOrBranch.trim(),
       email,
       password,
       phone,
-      // Raw national ID goes to the server over HTTPS; AuthController stores it
-      // masked (both columns are masked server-side), so a plaintext national ID
-      // is never persisted.
-      [nationalIdKey]: nationalIdValue,
-      agencyOrBranch: data.agencyOrBranch,
-      sectorFocus: data.sectorFocus,
+      office_address: data.officeAddress?.trim(),
+      description: data.sectorFocus ? `Primary sector focus: ${data.sectorFocus}` : undefined,
     });
     if (!result.success || !result.token || !result.user) {
       const message = result.error || 'Registration failed.';
       showToast('error', message);
       return { success: false, error: message };
     }
+    const version = ++sessionVersionRef.current;
+    clearWorkspace();
     setAuthToken(result.token);
-    const newUser: AuthUser = {
-      id: String(result.user.id ?? ''),
-      name: String(result.user.name ?? name),
-      email: String(result.user.email ?? email),
-      role: 'dealer',
-      dealerId: result.user.dealer_id ? String(result.user.dealer_id) : undefined,
-      permissions: Array.isArray(result.user.permissions) ? (result.user.permissions as AuthUser['permissions']) : [],
-    };
-    // Fresh dealer account: no agency memberships yet (tenancy is empty).
-    setApiAgencyId(null);
-    sessionStorage.setItem('tth_user', JSON.stringify({ ...newUser, agencies: [] }));
-    setCurrentUser(newUser);
-    setIsAdminAuthenticated(true);
-    const workspace = await api.getWorkspace();
-    if (workspace) applyServerData(workspace, true);
-    showToast('success', `Account created in MySQL. Welcome, ${name}.`);
+    await loadAuthenticatedWorkspace(result.user, version);
+    setIsSessionLoading(false);
+    showToast('success', 'Application received. Your agency needs platform approval before workspace access.');
     return { success: true };
   };
 
   const logoutAdmin = () => {
-    staffPersistRef.current = false;
+    const version = ++sessionVersionRef.current;
     void api.logout();
-    setAuthToken(null);
-    setApiAgencyId(null);
-    sessionStorage.removeItem('tth_user');
-    setIsAdminAuthenticated(false);
-    setSellers([]);
-    setBuyers([]);
-    setTransactions([]);
-    setPaymentEntries([]);
-    setCommissionEntries([]);
-    setPropertyFiles([]);
-    setInquiries([]);
-    setErpReady(false);
-    erpReadyRef.current = false;
+    clearSession();
+    setIsSessionLoading(false);
     void api.getCatalog().then((catalog) => {
-      if (catalog) applyServerData(catalog, false);
+      if (version === sessionVersionRef.current && catalog) applyServerData(catalog, false);
     });
-    showToast('info', 'Logged out. Public records remain in MySQL.');
+    showToast('info', 'Signed out. Private records have been cleared from this session.');
     setCurrentView('home');
   };
 
@@ -1951,6 +1904,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminTab,
         setAdminTab,
         isAdminAuthenticated,
+        isSessionLoading,
+        refreshSession,
         currentUser,
         authUsers,
         activeRole: currentUser.role,

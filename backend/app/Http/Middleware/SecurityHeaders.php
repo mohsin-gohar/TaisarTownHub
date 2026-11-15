@@ -22,6 +22,13 @@ class SecurityHeaders
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
         $response->headers->set('Cross-Origin-Opener-Policy', 'same-origin');
+        // Content Security Policy (Phase 12): the API answers with JSON, media
+        // or downloadable files — nothing here may ever execute or frame
+        // content. Any HTML error page is rendered without scripts.
+        $response->headers->set(
+            'Content-Security-Policy',
+            "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; sandbox"
+        );
         // Public marketing media must render from a different origin (the
         // frontend domain) when the API lives on its own subdomain. Private
         // API responses stay same-origin.

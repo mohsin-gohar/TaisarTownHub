@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\BusinessRecord;
 use App\Models\Inquiry;
 use App\Models\Property;
+use App\Support\PlanLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -44,7 +46,7 @@ class InquiryController extends Controller
         }
 
         // Mask CNIC in responses
-        $inquiries = $query->latest()->get();
+        $inquiries = $query->orderByDesc('created_at')->orderBy('id')->get();
         foreach ($inquiries as $inquiry) {
             // Ensure CNIC is masked if present
             if ($inquiry->cnic) {
@@ -91,6 +93,20 @@ class InquiryController extends Controller
             if (!$property) {
                 // Never leak whether a foreign/nonexistent id exists
                 $property = null;
+            }
+        }
+
+        // G-8: plan limit — an agency whose lead quota is exhausted stops
+        // receiving public leads. The public message stays generic (no
+        // internal quota details leak to visitors).
+        if ($property && $property->agency_id) {
+            $leadAgency = Agency::find($property->agency_id);
+            if ($leadAgency && ($block = PlanLimits::block($leadAgency, 'leads'))) {
+                return response()->json([
+                    'success' => false,
+                    'code' => 'plan_limit_reached',
+                    'message' => 'This agency is not accepting new inquiries right now. Please contact them directly.',
+                ], 402);
             }
         }
 

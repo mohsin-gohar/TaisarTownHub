@@ -199,6 +199,44 @@ test('filterProperties never returns soft-deleted listings (H3 regression)', () 
   assert.equal(bySearch.length, 0);
 });
 
+test('filterProperties tolerates null text fields (N-05 regression: keyword search crashed the listing)', () => {
+  // Catalog rows can carry null description/location/sector (e.g. listings
+  // created through the API without those optional fields). filterProperties
+  // used to call .toLowerCase() on them and throw inside Array.filter, which
+  // the ErrorBoundary turned into a blank listing area.
+  const sparse: Property = {
+    id: 'p-9',
+    title: 'WORKFLOW lifecycle listing',
+    description: null as unknown as string,
+    pricePKR: 31000000,
+    formattedPrice: 'PKR 3.1 Crore',
+    location: null as unknown as string,
+    sector: null as unknown as string,
+    sizeSqYards: 240,
+    type: 'Residential Plot',
+    status: 'Available',
+    isFeatured: false,
+    images: [],
+    features: [],
+    possessionReady: false,
+    mdaApproved: false,
+    createdDate: '2026-11-14',
+    contactPerson: 'Probe',
+    contactPhone: '03001112223',
+    contactWhatsApp: '03001112223',
+  };
+
+  const byTitle = filterProperties([sparse], { searchTerm: 'WORKFLOW' });
+  assert.equal(byTitle.length, 1);
+
+  const noMatch = filterProperties([sparse], { searchTerm: 'Sector 70-D' });
+  assert.equal(noMatch.length, 0);
+
+  // Sector facet with a null sector must exclude, not throw.
+  const bySector = filterProperties([sparse], { sector: 'Sector 70-D' });
+  assert.equal(bySector.length, 0);
+});
+
 test('calculateCommission calculates fixed, percentage, and custom rates', () => {
   // Handwritten requirement example: 20,000 fixed
   assert.equal(calculateCommission(3500000, 'Fixed', 20000), 20000);

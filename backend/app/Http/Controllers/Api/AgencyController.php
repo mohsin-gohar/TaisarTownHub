@@ -7,6 +7,7 @@ use App\Models\Agency;
 use App\Models\AgencyMember;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Notifications\VerifyEmailLink;
 use App\Support\Permissions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,7 @@ class AgencyController extends Controller
                     'email' => $request->email,
                     'password' => Hash::make($request->password),
                     'role' => 'dealer', // legacy-scoped non-platform role
+                    'status' => 'active', // login allowed; agency approval gates the workspace
                     'phone' => $request->phone,
                     'last_login_at' => now(),
                 ]);
@@ -89,12 +91,20 @@ class AgencyController extends Controller
                     'status' => 'active',
                 ]);
 
-                return [$user, $agency];
+                $token = $user->createToken('auth-token')->plainTextToken;
+
+                return [$user, $agency, $token];
             });
 
-            [$user, $agency] = $result;
+            [$user, $agency, $token] = $result;
 
-            $token = $user->createToken('auth-token')->plainTextToken;
+            // Email verification link (tracked, not login-blocking; the
+            // agency-approval gate remains the workspace gate).
+            try {
+                $user->notify(VerifyEmailLink::issueFor($user->email));
+            } catch (\Throwable $e) {
+                Log::warning('Verification mail could not be queued', ['error' => $e->getMessage()]);
+            }
 
             $this->writeAudit($request, 'agency.register', 'agency:' . $agency->id, 'Agency self-registered: ' . $agency->name, [
                 'agency_id' => $agency->id,
@@ -110,17 +120,7 @@ class AgencyController extends Controller
                 'success' => true,
                 'token' => $token,
                 'agency' => $agency->only(['id', 'name', 'slug', 'status', 'verification_status']),
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role,
-                    'dealer_id' => null,
-                    'permissions' => \App\Support\RolePermissions::forRole($user->role),
-                    'enterprise_permissions' => $user->permissionsFor($agency->id),
-                    'agencies' => $user->memberAgencies(),
-                    'is_platform' => false,
-                ],
+                'user' => app(AuthController::class)->userPayload($user, $agency->id),
             ], 201);
         } catch (\Throwable $e) {
             Log::error('Agency registration failed', ['error' => $e->getMessage()]);

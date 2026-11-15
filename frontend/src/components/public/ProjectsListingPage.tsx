@@ -47,6 +47,20 @@ export const ProjectsListingPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  /**
+   * Project detail pages are dynamic (excluded from sitemap.xml), so crawlers
+   * reach them only through these listing anchors. Real href + SPA transition
+   * on a plain left-click.
+   */
+  const projectHref = (id: string) => `/projects?project=${encodeURIComponent(id)}`;
+
+  const onProjectLinkClick =
+    (id: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      handleOpenProject(id);
+    };
+
   return (
     <div className="py-12 px-4 sm:px-6 lg:px-8 bg-[#0B1220] min-h-screen space-y-10">
       <div className="max-w-7xl mx-auto space-y-10">
@@ -153,11 +167,14 @@ export const ProjectsListingPage: React.FC = () => {
 
               <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
                 <div className="space-y-2">
-                  <h3
-                    onClick={() => handleOpenProject(project.id)}
-                    className="font-serif-luxury text-xl font-bold text-white group-hover:text-[#C5A46D] transition-colors cursor-pointer line-clamp-1"
-                  >
-                    {project.title}
+                  <h3 className="font-serif-luxury text-xl font-bold text-white group-hover:text-[#C5A46D] transition-colors line-clamp-1">
+                    <a
+                      href={projectHref(project.id)}
+                      onClick={onProjectLinkClick(project.id)}
+                      className="hover:text-[#C5A46D] transition-colors"
+                    >
+                      {project.title}
+                    </a>
                   </h3>
                   <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
                     {project.description}
@@ -191,14 +208,14 @@ export const ProjectsListingPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenProject(project.id)}
+                  <a
+                    href={projectHref(project.id)}
+                    onClick={onProjectLinkClick(project.id)}
                     className="px-4 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow"
                   >
                     <span>View Project</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                  </button>
+                  </a>
                 </div>
               </div>
             </div>

@@ -13,6 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->throttleApi();
+        // G-16: outermost middleware so the correlation ID wraps (and is
+        // echoed on) every response, including error renderers.
+        $middleware->prepend([\App\Http\Middleware\CorrelationId::class]);
+        // Resolve the real client IP from X-Forwarded-For only for configured
+        // trusted proxies (prevents IP spoofing for rate limiting & audit logs).
+        $middleware->append([\App\Http\Middleware\TrustProxies::class]);
         // Baseline security headers on every response (global stack).
         $middleware->append([\App\Http\Middleware\SecurityHeaders::class]);
         // Resolve the acting agency from the authenticated user's OWN

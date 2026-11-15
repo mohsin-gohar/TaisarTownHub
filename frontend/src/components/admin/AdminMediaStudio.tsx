@@ -11,6 +11,7 @@ import {
   Video,
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { useApp } from '../../context/AppContext';
 import {
   EnterpriseBadge,
   EnterpriseButton,
@@ -70,6 +71,7 @@ const MediaPreview: React.FC<{ item: any }> = ({ item }) => {
 };
 
 export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
+  const { confirmAction } = useApp();
   const [media, setMedia] = useState<any[]>([]);
   const [pagination, setPagination] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -201,7 +203,11 @@ export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
   };
 
   const handleDelete = async (item: any) => {
-    if (!window.confirm(`Delete "${item.title}"? This is a soft delete and the file is retained for audit.`)) return;
+    const confirmed = await confirmAction(
+      `Delete "${item.title}"? This is a soft delete and the file is retained for audit.`,
+      { title: 'Soft-delete media', confirmLabel: 'Soft-delete' },
+    );
+    if (!confirmed) return;
     setBusy(`delete-${item.id}`);
     setError('');
     const ok = await api.deleteMediaItem(String(item.id));

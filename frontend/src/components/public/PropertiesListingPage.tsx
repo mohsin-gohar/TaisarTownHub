@@ -105,6 +105,21 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  /**
+   * Property detail pages are excluded from sitemap.xml on purpose (they are
+   * dynamic), so crawlers can only discover them through these listing links.
+   * Real anchors — crawlable, middle-clickable, open-in-new-tab — with an SPA
+   * transition on a plain left-click.
+   */
+  const propertyHref = (id: string) => `/properties?property=${encodeURIComponent(id)}`;
+
+  const onPropertyLinkClick =
+    (id: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      handleOpenProperty({ id });
+    };
+
   return (
     <div className="py-12 px-4 sm:px-6 lg:px-8 bg-[#0B1220] min-h-screen space-y-10">
       <div className="max-w-7xl mx-auto space-y-10">
@@ -365,11 +380,14 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                         <span className="truncate">{prop.location}</span>
                       </div>
 
-                      <h3
-                        onClick={() => handleOpenProperty(prop)}
-                        className="font-serif-luxury text-lg font-bold text-white group-hover:text-[#C5A46D] transition-colors cursor-pointer line-clamp-1"
-                      >
-                        {prop.title}
+                      <h3 className="font-serif-luxury text-lg font-bold text-white group-hover:text-[#C5A46D] transition-colors line-clamp-1">
+                        <a
+                          href={propertyHref(prop.id)}
+                          onClick={onPropertyLinkClick(prop.id)}
+                          className="hover:text-[#C5A46D] transition-colors"
+                        >
+                          {prop.title}
+                        </a>
                       </h3>
 
                       <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
@@ -410,13 +428,14 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                     </div>
 
                     <div className="pt-2">
-                      <button
-                        onClick={() => handleOpenProperty(prop)}
+                      <a
+                        href={propertyHref(prop.id)}
+                        onClick={onPropertyLinkClick(prop.id)}
                         className="w-full py-2.5 px-3 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-[#C5A46D]/20"
                       >
-                        <span>View Details & Dossier</span>
+                        <span>View Details &amp; Dossier</span>
                         <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
+                      </a>
                     </div>
                   </div>
                 </div>

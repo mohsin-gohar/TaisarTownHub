@@ -1,5 +1,117 @@
 # Changelog
 
+## 2.4.0 - Ultimate enterprise browser QA: public catalog fix, role & workflow proofs
+
+### Fixed
+- **N-01 (High) — zero listings sitewide**: `GET /api/catalog` returned `"properties"` as a
+  JSON *object* (keyed by leftover indexes) whenever a legacy row was skipped
+  (draft/private/payload-deleted), because `array_filter` preserves keys. The React boot
+  (`Array.isArray`) then dropped the collection entirely — featured sections, `/properties`,
+  hero search and detail deep-links rendered empty. Fixed in `WorkspaceController::catalog()`
+  with `array_values()` reindexing (comment G-12). Regression:
+  `backend/tests/Feature/CatalogShapeTest.php` (2 tests) + live browser probe (16 listing
+  cards render; type filter 16→1→16; keyword search → 3).
+- **N-02 (Low) — seed inconsistency**: the demo agency was seeded with 4 staff on the
+  Free-Trial plan (staff limit 2), so every staff invite returned 402 out of the box.
+  Upgraded via the real admin API (`PUT /admin/agencies/agency-demo/subscription`,
+  Enterprise plan); no data hand-edits.
+
+### Added - QA tooling (drive the real API/product flows)
+- **`frontend/scripts/role-matrix-e2e.mts`** — staff lifecycle (invite → accept → matrix →
+  revoke → token dead) + a 9-persona authorisation matrix against the live API: **51/51 PASS**.
+- **`frontend/scripts/workflows-e2e.mts`** — four complete business workflows
+  (buyer journey with the onboarding gate, property moderation lifecycle, deal → sell →
+  commission → accountant payment, document share → revoke → 410): **28/28 PASS**.
+
+### Verified
+- Backend **182 passed / 1684 assertions** (incl. the new catalog regression tests);
+  frontend **126 tests**; `tsc` clean; public crawl **41 routes clean** (0 console/page
+  errors, 0 failed requests, 0 dead anchors, 0 broken images after the fix);
+  public interactivity **247 click probes, 0 dead / 0 error**.
+
+## 2.3.0 - Production deployment readiness & independent verification
+
+### Added - verification tooling (all read-only / non-destructive by default)
+- **`frontend/scripts/security-probe.mts`** - live multi-tenant attack suite: creates two real agencies through the public API, approves them and attacks tenant A from tenant B (foreign id, spoofed `X-Agency-Id`, client-supplied `agency_id`, cross-tenant vault download, CNIC exposure, admin surface, unauthenticated access, login throttle, sign-in trail). **21/21 probes pass.**
+- **`frontend/scripts/legacy-visibility-probe.mts`** - measures which records two tenants can both see (proves the legacy JSON store is shared).
+- **`frontend/scripts/concurrency-booking.mts`** - fires N parallel sells of one dealer file; **exactly 1 of 8 succeeds**, the rest are rejected by the `lockForUpdate()` guard.
+- **`frontend/scripts/load-test.mts`** - latency/throughput harness with percentile reporting and a parallel-booking phase.
+- **`frontend/scripts/mail-sink.mts`** + **`frontend/scripts/mail-flow-e2e.mts`** - a local SMTP sink (test harness only, never shipped in the app) plus the complete reset-by-mail flow (**6/6**: register -> request -> delivered -> token used -> rotated -> old password rejected).
+- **`frontend/scripts/perf-snapshot.mts`** - API + page-load timings.
+- **`scripts/backup.sh`** / **`scripts/backup.ps1`** / **`scripts/restore-drill.ps1`** - automated database + private-vault backup with a SHA-256 manifest and a restore drill into a scratch copy. **Drill: PASS** (restored copy identical to live across 11 tables + 53-table count, vault 13 entries).
+- **Artisan commands**: `platform:inventory` (tables/RBAC/routes), `platform:legacy-audit` (per-collection tenancy picture, derivable owners, migration candidates), `platform:legacy-backfill` (dry run by default, additive, refuses `--apply` without a verified backup).
+
+### Fixed
+- **`FRONTEND_URL` pointed at a stale port** (`http://127.0.0.1:3001`) while the dev server runs on **3000** - every password-reset / verification mail carried a dead link. Fixed and verified in a delivered mail.
+- **Content-Security-Policy** added to both nginx references (frontend `script-src 'self'` - the inline service-worker script moved into the bundle so no `unsafe-inline` is needed - and API `default-src 'none'`).
+
+### Documented (evidence, no code change)
+- Legacy `business_records`: 103 rows, **95 without any tenant owner**, 6 with a bogus `agency_id` (a deal id stored in the agency field); a two-tenant probe shows **every legacy row is returned to every tenant**. Options, mapping and the safe backfill path are in `REMAINING_BLOCKERS.md` B-01.
+- **API rate limiting** (60/min per IP) rejected 301 of 428 requests in a 15 s load run - production needs a re-profiled limiter (B-02).
+- Queue workers do **not** reload `.env` (only `artisan serve` does) - restart the worker after an environment change (B-03).
+- Global "MFA required for platform admins" is **not enforced** - it needs a business decision (B-04).
+- Malware scanning and SMS/WhatsApp drivers are **not implemented** (no scanner / no provider credentials) - options and provider contracts documented instead of a fake integration (B-05, B-06).
+
+### Verified
+- Backend **176 passed / 1613 assertions**; frontend **126 tests** + `tsc` clean + build/prerender + bundle guard OK; Playwright **5/5**; MFA browser journey **10/10**; security probes **21/21**; mail flow **6/6**; concurrent double-sell **1 of 8**; load run **428 requests / 0 × 5xx**; production preflight **20 pass / 1 warn / 0 fail**; restore drill **PASS**.
+- New deliverables: `FINAL_PRODUCTION_AUDIT.md`, `PRODUCTION_DEPLOYMENT_CHECKLIST.md`, `SECURITY_VERIFICATION_REPORT.md`, `BACKUP_RESTORE_TEST_REPORT.md`, `LOAD_TEST_REPORT.md`, `REMAINING_BLOCKERS.md`.
+
+## 2.2.0 - Browser-verified audit pass: MFA, 404, deterministic APIs, CSP (Phase 6/9/12/13)
+
+### Added - real multi-factor authentication (Phase 6)
+- **TOTP second factor** implemented in-house (RFC 6238 / RFC 4226, HMAC-SHA1, no new dependency): `App\Support\MfaService` (secret generation, `otpauth://` URI, drift-tolerant verification, single-use recovery codes) plus migration `2026_11_13_000004_add_mfa_and_login_history`.
+- **No token before the second factor**: `POST /api/auth/login` answers `{ mfa_required: true, challenge, expires_in }` and issues **no** Sanctum token; `POST /api/auth/mfa/verify` (challenge + code, 5 attempts, 5-minute TTL, single-use) issues it.
+- **Enrolment / removal**: `GET|POST /api/auth/mfa/status|setup|enable|disable` - activation needs a live code, removal needs the password **and** a code. Secrets are encrypted at rest (`encrypted` / `encrypted:array` casts) and recovery codes are stored hashed.
+- **Login history + suspicious-login monitoring**: every attempt is appended to `login_histories` (IP, device, outcome, MFA usage); a first-time IP or device raises an in-app + mail notification and an audit row.
+- **Password-change notifications**: queued mail + in-app notification on self-service reset and on platform-admin password resets (all sessions revoked at the same time).
+- **Frontend**: `MfaChallengeForm` (shared by the admin modal and the public auth portal), `AdminMfaSettings` inside **Security & Roles** (enrol, recovery codes, disable, sign-in trail), `api.loginFlow/verifyMfa/mfaStatus/mfaSetup/mfaEnable/mfaDisable/loginHistory`, `src/domain/mfa.ts` + unit tests.
+
+### Added - documentation set (Phase 13)
+- `RBAC_MATRIX.md` (62 permissions / 13 roles / 362 grants, generated from the live database), `DATABASE_ERD.md` (53 tables + tenancy model), `API_DOCS.md`, `DEPLOYMENT_GUIDE.md`, `BACKUP_GUIDE.md`, `TEST_RESULTS.md`, `PRODUCTION_READINESS.md`; `CODEBASE_AUDIT.md` and `SECURITY_AUDIT.md` updated with this pass.
+
+### Fixed
+- **Soft 404**: unknown public URLs silently rendered the homepage. They now render a dedicated 404 screen (`NotFoundPage`), are marked `noindex,follow`, and the recovery path ("Back to Home") works - the underlying bug was a stale view after `pushState`, fixed with a derived view key plus a history re-render hook.
+- **Non-deterministic list ordering**: `latest()` ordered by `created_at` only (second precision) and the tiebreaker was a random string id - rows could swap between requests and pages could repeat/skip rows. All list endpoints now use `orderByDesc('created_at')->orderBy('id')` (support tickets, properties, favourites, finance, inquiries, projects, transactions, dealers, dealer files, videos, agencies).
+- **Flaky support-desk test**: the assertion depended on which of two same-second tickets landed on index 0; it is now an order-independent exact set-equality assertion (stronger, not weaker) and the endpoint itself is deterministic.
+- **Admin sidebar overlap**: the pinned footer covered the lower navigation items - the nav is now a proper flex scroll region.
+- **Native `window.confirm`** in the enterprise admin modules replaced with the accessible gold confirmation dialog (document vault, media studio, staff manager).
+- **Clipboard failures** in the media library now fall back to a legacy copy with user feedback instead of an unhandled rejection.
+- **Login throttle message**: 429 now reads "Too many sign-in attempts. Please wait a minute and try again."
+- **Content Security Policy**: strict CSP on the API (`default-src 'none'`, `script-src 'none'`, `frame-ancestors 'none'`) and on the deployed frontend (nginx) - the inline service-worker script moved into the bundle so `script-src 'self'` is enough.
+
+### Verified
+- Backend **176 passed / 1613 assertions**; frontend **126 tests** + `tsc` clean + production build + prerender (29 HTML files, 9 sitemap URLs) + bundle guard OK; Playwright **5/5**; MFA browser journey **10/10**; public interaction audit 240 buttons with 0 dead clicks; admin interaction audit (superadmin + agency roles) with 0 dead clicks and 0 console errors.
+
+## 2.1.0 - Enterprise SaaS transformation (G-gap register: 18 of 20 closed, 1 attempted, 1 partially open)
+
+### Added — Platform modules (G-7/G-10)
+- **Document share links**: `GET/POST /agency/documents/{id}/shares`, `DELETE …/shares/{shareId}` and the public capability URL `GET /api/shares/{token}/download` — SHA-256 hash-only token storage (plain token returned exactly once), expiry/revocation/download-cap enforced under a row lock, mint/revoke gated by `documents.manage_permissions`, sensitive documents require `documents.view_sensitive`, public endpoint throttled 30/min and fully audit-logged.
+- **Support desk (Module 15)**: self-service tickets (`/support/tickets*`) with immutable message threads, first-response metric, staff admin surface (`/admin/support-tickets`, `/admin/support-tickets/{id}/assign`) under `admin.support_tickets`; the agency link is always resolved server-side.
+- **Agency expenses**: `/agency/expenses` ledger (read `finance.view`, write/delete `finance.manage_payments`), soft-delete retention for audit.
+- **Subscription invoices**: admin raise/verify (`/admin/subscription-invoices*`) with sequential `INV-YYYY-NNNNNN` numbers and **immutable paid history**; agency-side read (`/agency/subscription/invoices`) under `agency.view`.
+
+### Added — Enforcement, analytics, platform
+- **Plan-limit enforcement (G-8)**: `App\Support\PlanLimits` — server-side quotas for listings, staff (active members + pending invitations), vault storage bytes and public lead intake. Violations → `402 { code: plan_limit_reached, limit, used }`; limit `0`/absent = unlimited; public-lead messages stay visitor-safe.
+- **Date-filtered reports (G-12)**: `GET /agency/reports?from&to` (`finance.view_reports`) and `GET /admin/reports?from&to` (`admin.view_reports`) — deals incl. voided split, collections, commissions paid/pending, expenses by category, invoice revenue/outstanding, net. Computed from real tables; no hardcoded statistics.
+- **Queue adoption (G-9)**: `VerifyEmailLink` + `ResetPasswordLink` are `ShouldQueue` (contract-guard test included); queue worker documented and running.
+- **API versioning (G-1)**: `/api/v1` served from the shared `routes/api_definitions.php` body — route-for-route parity with legacy proven by test.
+- **Concurrency (G-2)**: `lockForUpdate()` + status re-checks on dealer-file sell, transaction void/approve and payment recording.
+- **Encryption at rest (G-3)**: `Dealer.cnic` encrypted cast + idempotent data migration; masked-only exposure.
+- **Auth completeness (G-4)**: broker-backed password reset (enumeration-safe, revokes all tokens) and SHA-256 email-verification flow (60-min tokens, tracked but not login-blocking).
+- **Cold-load auth pages (G-14)**: `/reset-password` and `/verify-email` render outside the SPA shell via the `App.tsx` bridge, with noindex SEO routes and prerendered shells.
+- **PWA (G-17)**: `manifest.webmanifest` + service worker that caches **public assets only** (hashed bundles cache-first, network-first elsewhere, API/private vault never cached), registered only outside dev.
+- **Dead code removal (G-19)**: `frontend/src/config/firebase.ts` deleted (verified unreferenced).
+- **Docker + CI (G-15)**: backend/frontend Dockerfiles (vault volume outside web root), `docker-compose.yml` (mysql + api + queue + web), `.github/workflows/ci.yml` (backend suite, frontend verify chain, OpenAPI parse).
+- **OpenAPI + correlation IDs (G-16)**: `docs/openapi.yaml` (route-accurate contract) and `X-Request-Id` middleware (echo sane caller ids, generate UUIDs, attach to logs) with its own test suite.
+- **Playwright (G-13, attempted)**: runner + smoke E2E spec for cold-load critical flows; the full 18-journey matrix remains open work.
+
+### Fixed
+- Date-window report math on sqlite (`whereDate` instead of string `whereBetween` for date-cast columns).
+- Finance deal-scoping destructuring bug found by the new report tests.
+
+### Honest status
+The API surface is enterprise-grade and fully tested (154/1506 backend, 117 frontend). Remaining open items are infrastructure choices (vault S3, Redis/Horizon, MFA/SSO, full E2E matrix) and environment provisioning — see `PRODUCTION_READINESS_CHECKLIST.md` and `CODEBASE_AUDIT.md`.
+
 ## 2.0.7 - Close the gaps the previous audit called finished
 
 ### Fixed

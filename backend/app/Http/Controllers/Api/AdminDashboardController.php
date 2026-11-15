@@ -23,6 +23,75 @@ class AdminDashboardController extends Controller
 {
     use AuthorizesApi;
 
+    /**
+     * GET /api/admin/reports?from=&to= — platform-wide, date-filtered report
+     * (G-12): agencies, deals, collections, invoice revenue and marketplace
+     * activity computed from the database for the requested window.
+     * Requires `admin.view_reports` (platform-only).
+     */
+    public function reports(Request $request)
+    {
+        $this->requirePermission($request, 'admin.view_reports');
+
+        $data = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date|after_or_equal:from',
+        ]);
+
+        $from = now()->parse($data['from'] ?? now()->subDays(29)->toDateString())->startOfDay();
+        $to = now()->parse($data['to'] ?? now()->toDateString())->endOfDay();
+
+        $agencies = [
+            'total' => Agency::count(),
+            'verified' => Agency::where('verification_status', 'verified')->count(),
+            'new_in_range' => Agency::whereBetween('created_at', [$from, $to])->count(),
+        ];
+
+        $deals = Transaction::whereBetween('created_at', [$from, $to]);
+        $dealAgreed = (clone $deals)->whereNull('voided_at')->selectRaw('COUNT(*) AS n, COALESCE(SUM(agreementAmountPKR), 0) AS total')->first();
+
+        $collected = DB::table('transaction_payments')
+            ->whereBetween('received_at', [$from, $to])
+            ->selectRaw('COALESCE(SUM(amount), 0) AS total, COUNT(*) AS n')
+            ->first();
+
+        $invoices = [
+            'paid_pkr' => (float) \App\Models\SubscriptionInvoice::where('status', 'paid')
+                ->whereBetween('paid_at', [$from, $to])->sum('total_pkr'),
+            'paid_count' => \App\Models\SubscriptionInvoice::where('status', 'paid')
+                ->whereBetween('paid_at', [$from, $to])->count(),
+            'outstanding_pkr' => (float) \App\Models\SubscriptionInvoice::where('status', 'pending')->sum('total_pkr'),
+        ];
+
+        $listings = [
+            'created_in_range' => Property::whereNull('deleted_at')->whereBetween('created_at', [$from, $to])->count(),
+            'public' => Property::whereNull('deleted_at')->where('approval_status', 'approved')->where('visibility', 'public')->count(),
+        ];
+
+        $leads = Inquiry::whereBetween('created_at', [$from, $to])->count();
+        $expenses = (float) \App\Models\Expense::whereNull('deleted_at')
+            ->whereDate('expense_date', '>=', $from->toDateString())
+            ->whereDate('expense_date', '<=', $to->toDateString())
+            ->sum('amount_pkr');
+
+        return response()->json([
+            'success' => true,
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'agencies' => $agencies,
+            'deals' => [
+                'count' => (int) $dealAgreed->n,
+                'agreed_pkr' => (float) $dealAgreed->total,
+                'voided_count' => (clone $deals)->whereNotNull('voided_at')->count(),
+            ],
+            'collected_pkr' => (float) $collected->total,
+            'payments_count' => (int) $collected->n,
+            'invoices' => $invoices,
+            'listings' => $listings,
+            'leads_in_range' => $leads,
+            'expenses_pkr' => $expenses,
+        ]);
+    }
+
     public function index(Request $request)
     {
         $this->requireAny($request, ['view_reports', 'admin.view_reports', 'properties.view', 'view_properties']);

@@ -122,13 +122,15 @@ export function filterProperties(
       }
     }
 
-    // Search term check
+    // Search term check (null-safe: catalog rows may carry null text fields —
+    // a null here used to throw inside Array.filter and blank the whole
+    // listing area via the ErrorBoundary — N-05).
     if (criteria.searchTerm && criteria.searchTerm.trim() !== '') {
       const term = criteria.searchTerm.toLowerCase();
-      const matchTitle = p.title.toLowerCase().includes(term);
-      const matchDesc = p.description.toLowerCase().includes(term);
-      const matchLocation = p.location.toLowerCase().includes(term);
-      const matchSector = p.sector.toLowerCase().includes(term);
+      const matchTitle = (p.title || '').toLowerCase().includes(term);
+      const matchDesc = (p.description || '').toLowerCase().includes(term);
+      const matchLocation = (p.location || '').toLowerCase().includes(term);
+      const matchSector = (p.sector || '').toLowerCase().includes(term);
       const matchPlot = p.plotNumber ? p.plotNumber.toLowerCase().includes(term) : false;
       const matchFile = p.fileNumber ? p.fileNumber.toLowerCase().includes(term) : false;
       const matchPhase = p.phase ? p.phase.toLowerCase().includes(term) : false;
@@ -142,8 +144,8 @@ export function filterProperties(
       return false;
     }
 
-    // Sector check
-    if (criteria.sector && criteria.sector !== 'All' && !p.sector.includes(criteria.sector)) {
+    // Sector check (null-safe, same reason as above)
+    if (criteria.sector && criteria.sector !== 'All' && !(p.sector || '').includes(criteria.sector)) {
       return false;
     }
 

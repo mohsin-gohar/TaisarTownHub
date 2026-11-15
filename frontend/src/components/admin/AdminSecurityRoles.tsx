@@ -7,6 +7,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { UserRole } from '../../types';
+import { AdminMfaSettings } from './AdminMfaSettings';
 
 export const AdminSecurityRoles: React.FC = () => {
   const { activeRole, switchAuthUser } = useApp();
@@ -225,6 +226,9 @@ export const AdminSecurityRoles: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Phase 6 — account security: two-factor enrolment + sign-in trail */}
+      <AdminMfaSettings />
     </div>
   );
 };

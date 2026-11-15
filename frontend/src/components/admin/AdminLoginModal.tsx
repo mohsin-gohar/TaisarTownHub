@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { getPendingMfaChallenge, clearPendingMfaChallenge } from '../../services/api';
+import { MfaChallengeForm } from '../common/MfaChallengeForm';
 import {
   ArrowRight,
   X,
@@ -8,7 +10,6 @@ import {
   Mail,
   Lock,
   Phone,
-  CreditCard,
   MapPin,
   Eye,
   EyeOff
@@ -17,14 +18,6 @@ import {
 interface AdminLoginModalProps {
   initialTab?: 'signin' | 'register';
 }
-
-/** Progressive CNIC formatter: digits only with standard 5-7-1 dashes. */
-const formatCnicInput = (value: string): string => {
-  const digits = value.replace(/[^0-9]/g, '').slice(0, 13);
-  if (digits.length <= 5) return digits;
-  if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-  return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
-};
 
 export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = 'signin' }) => {
   const {
@@ -40,12 +33,13 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
   const [showPassword, setShowPassword] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [busy, setBusy] = useState(false);
+  // Phase 6: second-factor challenge returned by the sign-in request.
+  const [mfaChallenge, setMfaChallenge] = useState<{ challenge: string; expiresIn: number } | null>(null);
 
   // Registration state
   const [regFullName, setRegFullName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
-  const [regCnic, setRegCnic] = useState('');
   const [regAgency, setRegAgency] = useState('');
   const [regSector, setRegSector] = useState('Sector 63');
   const [regPassword, setRegPassword] = useState('');
@@ -68,10 +62,27 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
       const result = await loginWithCredentials(email, password);
       if (result.success) {
         setCurrentView('admin');
+        return;
+      }
+
+      // The API may have answered with a second-factor challenge instead of a
+      // token — in that case the account is not locked, it just needs a code.
+      const pending = getPendingMfaChallenge();
+      if (pending?.challenge) {
+        setMfaChallenge(pending);
+        return;
       }
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleMfaVerified = () => {
+    clearPendingMfaChallenge();
+    setMfaChallenge(null);
+    // The token is stored by the API layer; a reload lets the app bootstrap
+    // the authenticated workspace from the stored session.
+    window.location.assign('/admin');
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -90,7 +101,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
         email: regEmail,
         password: regPassword,
         phone: regPhone,
-        cnic: regCnic,
         agencyOrBranch: regAgency,
         sectorFocus: regSector,
       });
@@ -153,7 +163,20 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
         </div>
 
         {/* TAB 1: SIGN IN */}
-        {tab === 'signin' && (
+        {tab === 'signin' && mfaChallenge && (
+          <MfaChallengeForm
+            challenge={mfaChallenge.challenge}
+            expiresIn={mfaChallenge.expiresIn}
+            onVerified={handleMfaVerified}
+            onCancel={() => {
+              clearPendingMfaChallenge();
+              setMfaChallenge(null);
+            }}
+            compact
+          />
+        )}
+
+        {tab === 'signin' && !mfaChallenge && (
           <form onSubmit={handleLogin} className="space-y-4 animate-fadeIn">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
@@ -244,32 +267,16 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-300 block mb-1">Email *</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="consultant@agency.pk"
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-semibold text-slate-300 block mb-1">NADRA CNIC</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  maxLength={15}
-                  placeholder="42101-1234567-1"
-                  value={formatCnicInput(regCnic)}
-                  onChange={(e) => setRegCnic(e.target.value.replace(/[^0-9]/g, '').slice(0, 13))}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
-                />
-              </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-300 block mb-1">Email *</label>
+              <input
+                type="email"
+                required
+                placeholder="consultant@agency.pk"
+                value={regEmail}
+                onChange={(e) => setRegEmail(e.target.value)}
+                className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

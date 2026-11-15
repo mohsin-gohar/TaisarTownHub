@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use App\Models\AgencySubscription;
+use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use Illuminate\Http\Request;
 
@@ -101,6 +102,42 @@ class SubscriptionController extends Controller
             'available_plans' => SubscriptionPlan::where('is_active', true)
                 ->orderBy('sort_order')
                 ->get(['id', 'key', 'name', 'price', 'currency', 'interval', 'limits', 'features']),
+        ]);
+    }
+
+    /** GET /api/agency/subscription/invoices — the agency's own billing history. */
+    public function invoices(Request $request)
+    {
+        $agencyId = $this->requireAgency($request);
+        $this->requirePermission($request, 'agency.view');
+
+        $invoices = SubscriptionInvoice::where('agency_id', $agencyId)
+            ->with('plan:id,key,name')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'invoices' => $invoices->map(fn (SubscriptionInvoice $inv) => [
+                'id' => $inv->id,
+                'invoice_number' => $inv->invoice_number,
+                'amount_pkr' => $inv->amount_pkr,
+                'tax_pkr' => $inv->tax_pkr,
+                'total_pkr' => $inv->total_pkr,
+                'currency' => $inv->currency,
+                'period_start' => $inv->period_start?->toDateString(),
+                'period_end' => $inv->period_end?->toDateString(),
+                'status' => $inv->status,
+                'paid_at' => $inv->paid_at?->toIso8601String(),
+                'payment_method' => $inv->payment_method,
+                'plan_name' => $inv->plan?->name,
+                'notes' => $inv->notes,
+                'created_at' => $inv->created_at?->toIso8601String(),
+            ]),
+            'totals' => [
+                'outstanding_pkr' => (int) $invoices->where('status', 'pending')->sum('total_pkr'),
+                'paid_pkr' => (int) $invoices->where('status', 'paid')->sum('total_pkr'),
+            ],
         ]);
     }
 }

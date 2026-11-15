@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\BusinessRecord;
 use App\Models\Dealer;
 use App\Models\Property;
 use App\Models\PropertyStatusHistory;
 use App\Models\PropertyView;
+use App\Support\PlanLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -87,7 +89,10 @@ class PropertyController extends Controller
             });
         }
 
-        $query->latest();
+        // Deterministic ordering: `created_at` only has second precision, so a
+        // stable id tiebreaker is required — otherwise two listings created in
+        // the same second can swap places between pages.
+        $query->orderByDesc('created_at')->orderBy('id');
 
         // Pagination envelope only when explicitly requested — otherwise the
         // legacy raw-array contract is preserved (capped for safety).
@@ -162,6 +167,12 @@ class PropertyController extends Controller
         $this->requireAny($request, ['properties.create', 'create_properties']);
 
         $agencyId = $this->requireAgencyForWrite($request);
+
+        // G-8: plan limit — listings quota is enforced server-side.
+        $agency = Agency::find($agencyId);
+        if ($agency && ($block = PlanLimits::block($agency, 'listings'))) {
+            return PlanLimits::deny('Listing limit reached for your plan. Upgrade to create more listings.', $block);
+        }
 
         $data = $request->validate([
             'title' => 'required|string|max:255',

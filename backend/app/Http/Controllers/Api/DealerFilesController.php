@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Dealer;
 use App\Models\DealerFile;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class DealerFilesController extends Controller
@@ -32,7 +33,7 @@ class DealerFilesController extends Controller
             $query->where('title', 'like', '%' . strip_tags($search) . '%');
         }
 
-        $files = $query->latest()->get();
+        $files = $query->orderByDesc('created_at')->orderBy('id')->get();
 
         return response()->json([
             'success' => true,
@@ -92,22 +93,16 @@ class DealerFilesController extends Controller
 
     /**
      * Mark a file as sold and calculate commission.
+     *
+     * Concurrency guard: the status re-check happens on the LOCKED row
+     * (SELECT … FOR UPDATE inside a transaction), so two dealers racing on
+     * the same file cannot both sell it — the loser commits against the
+     * already-sold row and is rejected.
      */
     public function sell(Request $request, $id)
     {
         $user = $request->user();
         $dealerId = $user->dealer_id ?? $user->id;
-
-        $file = DealerFile::where('id', $id)
-            ->where('dealer_id', $dealerId)
-            ->firstOrFail();
-
-        if ($file->status === 'sold') {
-            return response()->json([
-                'success' => false,
-                'message' => 'This file has already been sold.',
-            ], 400);
-        }
 
         $validated = $request->validate([
             'selling_price_kbr' => 'required|numeric|min:0',
@@ -116,24 +111,53 @@ class DealerFilesController extends Controller
             'buyer_cnic' => 'nullable|string|max:20',
         ]);
 
-        // Calculate profit: selling price - cost price (30% default margin)
-        $costPrice = $file->cost_price_kbr ?? ($validated['selling_price_kbr'] * 0.7);
-        $profit = round($validated['selling_price_kbr'] - $costPrice, 2);
+        $profit = 0.0;
 
-        // Update the file as sold
-        $file->update([
-            'status' => 'sold',
-            'selling_price_kbr' => $validated['selling_price_kbr'],
-            'cost_price_kbr' => $costPrice,
-            'profit_kbr' => $profit,
-            'buyer_name' => strip_tags($validated['buyer_name']),
-            'buyer_phone' => $validated['buyer_phone'],
-            'buyer_cnic' => $validated['buyer_cnic'] ? $this->maskCnic($validated['buyer_cnic']) : null,
-            'sold_by_dealer_id' => $dealerId,
-        ]);
+        $soldFile = DB::transaction(function () use ($request, $id, $dealerId, $validated, &$profit) {
+            $file = DealerFile::where('id', $id)
+                ->where('dealer_id', $dealerId)
+                ->lockForUpdate()
+                ->first();
 
-        // Update dealer's commission statistics
-        $this->updateDealerCommission($dealerId, $profit);
+            if (!$file) {
+                abort(404);
+            }
+
+            if ($file->status === 'sold') {
+                return null; // rejected below (already sold)
+            }
+
+            $costPrice = $file->cost_price_kbr ?? ($validated['selling_price_kbr'] * 0.7);
+            $profit = round($validated['selling_price_kbr'] - $costPrice, 2);
+
+            $file->update([
+                'status' => 'sold',
+                'selling_price_kbr' => $validated['selling_price_kbr'],
+                'cost_price_kbr' => $costPrice,
+                'profit_kbr' => $profit,
+                'buyer_name' => strip_tags($validated['buyer_name']),
+                'buyer_phone' => $validated['buyer_phone'],
+                'buyer_cnic' => isset($validated['buyer_cnic']) && $validated['buyer_cnic'] !== null && $validated['buyer_cnic'] !== ''
+                    ? $this->maskCnic($validated['buyer_cnic'])
+                    : null,
+                'sold_by_dealer_id' => $dealerId,
+            ]);
+
+            // Update dealer's commission statistics (locked within the same
+            // transaction; monetary columns are integer PKR).
+            $this->updateDealerCommission($dealerId, (int) round($profit));
+
+            return $file;
+        });
+
+        if ($soldFile === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This file has already been sold.',
+            ], 400);
+        }
+
+        $file = $soldFile;
 
         // Audit log
         \Log::info('AUDIT', [
@@ -169,7 +193,8 @@ class DealerFilesController extends Controller
 
         $files = DealerFile::where('sold_by_dealer_id', $dealerId)
             ->where('status', 'sold')
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderBy('id')
             ->get();
 
         $totalProfit = $files->sum('profit_kbr');
@@ -215,7 +240,7 @@ class DealerFilesController extends Controller
             $query->where('created_at', '<=', $endDate);
         }
 
-        $files = $query->latest()->get();
+        $files = $query->orderByDesc('created_at')->orderBy('id')->get();
 
         $totalProfit = $files->sum('profit_kbr');
         $totalSold = $files->count();
@@ -240,9 +265,9 @@ class DealerFilesController extends Controller
         ]);
     }
 
-    protected function updateDealerCommission(string $dealerId, float $profit): void
+    protected function updateDealerCommission(string $dealerId, int $profit): void
     {
-        $dealer = Dealer::find($dealerId);
+        $dealer = Dealer::where('id', $dealerId)->lockForUpdate()->first();
         if ($dealer) {
             $dealer->totalEarnedPKR = ($dealer->totalEarnedPKR ?? 0) + $profit;
             $dealer->pendingCommissionPKR = ($dealer->pendingCommissionPKR ?? 0) + $profit;

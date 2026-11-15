@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Copy, Mail, Plus, RefreshCw, Shield, UserMinus, UserPlus, Users } from 'lucide-react';
 import { api } from '../../services/api';
+import { useApp } from '../../context/AppContext';
 import {
   EnterpriseBadge,
   EnterpriseButton,
@@ -27,6 +28,7 @@ const COMMON_PERMISSIONS = [
 ];
 
 export const AdminStaffManager: React.FC<StaffManagerProps> = ({ canManage }) => {
+  const { confirmAction } = useApp();
   const [members, setMembers] = useState<any[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
@@ -125,8 +127,12 @@ export const AdminStaffManager: React.FC<StaffManagerProps> = ({ canManage }) =>
 
   const handleToggleMember = async (member: any) => {
     const nextStatus = member.status === 'active' ? 'deactivated' : 'active';
-    if (nextStatus === 'deactivated' && !window.confirm(`Deactivate ${member.name || member.email}? They will lose agency access immediately.`)) {
-      return;
+    if (nextStatus === 'deactivated') {
+      const confirmed = await confirmAction(
+        `Deactivate ${member.name || member.email}? They will lose agency access immediately.`,
+        { title: 'Deactivate member', confirmLabel: 'Deactivate' },
+      );
+      if (!confirmed) return;
     }
     setBusy(`status-${member.id}`);
     setError('');
@@ -142,7 +148,11 @@ export const AdminStaffManager: React.FC<StaffManagerProps> = ({ canManage }) =>
   };
 
   const handleRevokeInvitation = async (invitation: any) => {
-    if (!window.confirm(`Revoke the invitation for ${invitation.email}?`)) return;
+    const confirmed = await confirmAction(
+      `Revoke the invitation for ${invitation.email}?`,
+      { title: 'Revoke invitation', confirmLabel: 'Revoke invitation' },
+    );
+    if (!confirmed) return;
     setBusy(`invite-${invitation.id}`);
     setNotice('');
     const ok = await api.revokeAgencyInvitation(String(invitation.id));

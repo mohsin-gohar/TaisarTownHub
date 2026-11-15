@@ -51,7 +51,7 @@ trait AuthorizesApi
     protected function can(Request $request, string $permission): bool
     {
         $user = $request->user();
-        if (!$user) {
+        if (!$user || ($request->attributes->get('workspace_access')['allowed'] ?? true) === false) {
             return false;
         }
 

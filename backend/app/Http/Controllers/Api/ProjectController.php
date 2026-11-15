@@ -22,7 +22,7 @@ class ProjectController extends Controller
 
         $query->whereNull('deleted_at');
 
-        return response()->json($query->latest()->get());
+        return response()->json($query->orderByDesc('created_at')->orderBy('id')->get());
     }
 
     /**

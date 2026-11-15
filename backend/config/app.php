@@ -54,6 +54,13 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    /**
+     * Public SPA origin — used to build password-reset and email-verification
+     * links inside notifications (the backend is a token-only API and has no
+     * web auth pages of its own).
+     */
+    'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost')),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

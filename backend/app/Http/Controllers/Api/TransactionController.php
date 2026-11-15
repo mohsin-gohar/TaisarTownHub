@@ -33,7 +33,7 @@ class TransactionController extends Controller
             $query->where('dealStatus', $request->status);
         }
 
-        return response()->json($query->latest()->get());
+        return response()->json($query->orderByDesc('created_at')->orderBy('id')->get());
     }
 
     /**

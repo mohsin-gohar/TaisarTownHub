@@ -1,0 +1,29 @@
+{
+  "name": "TaisarTownHub — Scheme 45 Karachi",
+  "short_name": "TaisarTownHub",
+  "description": "Verified plots, villas and commercial files in Taiser Town (MDA Scheme 45), Karachi — file verification, transfers and advisory.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0B1220",
+  "theme_color": "#0B1220",
+  "lang": "en-PK",
+  "dir": "ltr",
+  "categories": ["business", "shopping"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.jpg",
+      "sizes": "423x472",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}

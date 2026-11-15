@@ -30,6 +30,7 @@
     <!-- seo:head:end -->
     <meta name="theme-color" content="#0B1220" />
     <meta name="author" content="TaisarTownHub" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/logo.jpg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -51,5 +52,7 @@
       </div>
     </noscript>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- G-17: the PWA service worker is registered from the app bundle (src/main.tsx)
+         so the deployed site can run under a strict Content-Security-Policy. -->
   </body>
 </html>

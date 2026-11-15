@@ -35,4 +35,24 @@ return [
         ],
     ],
 
+    'stripe' => [
+        'key' => env('STRIPE_KEY'),
+        'secret' => env('STRIPE_SECRET'),
+        'webhook' => env('STRIPE_WEBHOOK_SECRET'),
+    ],
+
+    'flutterwave' => [
+        'public_key' => env('FLUTTERWAVE_PUBLIC_KEY'),
+        'secret_key' => env('FLUTTERWAVE_SECRET_KEY'),
+        'encryption_key' => env('FLUTTERWAVE_ENCRYPTION_KEY'),
+        'webhook_secret' => env('FLUTTERWAVE_WEBHOOK_SECRET'),
+    ],
+
+    'sentry' => [
+        'dsn' => env('SENTRY_DSN'),
+    ],
+
+    'logrocket' => [
+        'app_id' => env('LOGROCKET_APP_ID'),
+    ],
 ];

@@ -109,9 +109,27 @@ export const AdminMediaLibrary: React.FC = () => {
     deleteMediaItem(item.id);
   };
 
-  const handleCopyUrl = (url: string) => {
-    navigator.clipboard.writeText(url);
-    showToast('success', 'Media asset URL copied to clipboard!');
+  const handleCopyUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('success', 'Media asset URL copied to clipboard!');
+    } catch {
+      // Clipboard API unavailable (non-secure context / permission denied) →
+      // legacy fallback so the operator is never stuck without feedback.
+      try {
+        const textarea = window.document.createElement('textarea');
+        textarea.value = url;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        window.document.body.appendChild(textarea);
+        textarea.select();
+        window.document.execCommand('copy');
+        textarea.remove();
+        showToast('success', 'Media asset URL copied to clipboard!');
+      } catch {
+        showToast('error', 'Copy is unavailable — select the URL and copy it manually.');
+      }
+    }
   };
 
   const openSellModal = (item: MediaItem) => {

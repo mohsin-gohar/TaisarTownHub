@@ -31,8 +31,31 @@ export function setAuthToken(token: string | null): void {
   else sessionStorage.removeItem(TOKEN_KEY);
 }
 
+/**
+ * Pending second-factor challenge (Phase 6).
+ *
+ * The sign-in screen asks the API first; when the account has MFA enabled the
+ * API answers with a short-lived challenge instead of a token. The challenge
+ * is parked here so the screen can render the code prompt without the shared
+ * AppContext having to know about MFA.
+ */
+let pendingMfaChallenge: { challenge: string; expiresIn: number } | null = null;
+
+export function setPendingMfaChallenge(value: { challenge: string; expiresIn: number } | null): void {
+  pendingMfaChallenge = value;
+}
+
+export function getPendingMfaChallenge(): { challenge: string; expiresIn: number } | null {
+  return pendingMfaChallenge;
+}
+
+export function clearPendingMfaChallenge(): void {
+  pendingMfaChallenge = null;
+}
+
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const headers = new Headers(options.headers);
+  headers.set('Accept', 'application/json');
   // FormData bodies must let the browser set the multipart boundary itself.
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   if (!isFormData && !headers.has('Content-Type') && options.body) {
@@ -41,7 +64,16 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   const token = getAuthToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (currentAgencyId) headers.set('X-Agency-Id', currentAgencyId);
-  return fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  if (token && token === getAuthToken() && (response.status === 401 || response.status === 403)) {
+    const body = await response.clone().json().catch(() => null);
+    if (response.status === 401 || body?.workspace_access?.allowed === false) {
+      window.dispatchEvent(new CustomEvent('tth:access-denied', {
+        detail: { expired: response.status === 401, access: body?.workspace_access },
+      }));
+    }
+  }
+  return response;
 }
 
 export interface ApiHealthResponse {
@@ -163,7 +195,7 @@ export const api = {
     }
   },
 
-  async login(email: string, password: string): Promise<{ success: boolean; token?: string; user?: Record<string, unknown>; error?: string }> {
+  async login(email: string, password: string): Promise<{ success: boolean; token?: string; user?: Record<string, unknown>; error?: string; mfa_required?: boolean; challenge?: string; expires_in?: number }> {
     try {
       const res = await apiFetch('/auth/login', {
         method: 'POST',
@@ -171,18 +203,200 @@ export const api = {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const message = body?.errors?.email?.[0] || body?.message || 'Invalid email or password.';
+        // 429 = the login throttle kicked in (5 attempts/minute per IP).
+        const message =
+          res.status === 429
+            ? 'Too many sign-in attempts. Please wait a minute and try again.'
+            : body?.errors?.email?.[0] || body?.message || 'Invalid email or password.';
         return { success: false, error: message };
       }
+      // Second factor required: no token is issued until the code is verified.
+      // The challenge is parked here so the sign-in screen can ask for it.
+      if (body?.mfa_required) {
+        setPendingMfaChallenge({
+          challenge: String(body.challenge || ''),
+          expiresIn: Number(body.expires_in || 300),
+        });
+        return {
+          success: false,
+          error: 'Two-factor verification is required to finish signing in.',
+          mfa_required: true,
+          challenge: String(body.challenge || ''),
+          expires_in: Number(body.expires_in || 300),
+        };
+      }
+      clearPendingMfaChallenge();
       return { success: true, token: body.token, user: body.user };
     } catch {
       return { success: false, error: 'Cannot reach the MySQL API. Start the Laravel server on port 8080.' };
     }
   },
 
+  /**
+   * Sign-in that understands the second factor (Phase 6).
+   *
+   * The backend never issues a token before a second factor is satisfied, so
+   * this returns a discriminated result: `success`, `mfa_required` (with the
+   * short-lived challenge) or `error`. On success the Sanctum token is stored
+   * exactly like a normal sign-in.
+   */
+  async loginFlow(
+    email: string,
+    password: string,
+  ): Promise<
+    | { status: 'success'; token: string; user: Record<string, unknown> }
+    | { status: 'mfa_required'; challenge: string; expiresIn: number }
+    | { status: 'error'; message: string }
+  > {
+    try {
+      const res = await apiFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message =
+          res.status === 429
+            ? 'Too many sign-in attempts. Please wait a minute and try again.'
+            : body?.errors?.email?.[0] || body?.message || 'Invalid email or password.';
+        return { status: 'error', message };
+      }
+      if (body?.mfa_required) {
+        return {
+          status: 'mfa_required',
+          challenge: String(body.challenge || ''),
+          expiresIn: Number(body.expires_in || 300),
+        };
+      }
+      if (!body?.token) {
+        return { status: 'error', message: 'The API did not return a session token.' };
+      }
+      setAuthToken(body.token);
+      return { status: 'success', token: String(body.token), user: body.user ?? {} };
+    } catch {
+      return { status: 'error', message: 'Cannot reach the API. Please check your connection and try again.' };
+    }
+  },
+
+  /** Completes a pending sign-in with an authenticator or recovery code. */
+  async verifyMfa(
+    challenge: string,
+    code: string,
+  ): Promise<{ success: boolean; user?: Record<string, unknown>; error?: string }> {
+    try {
+      const res = await apiFetch('/auth/mfa/verify', {
+        method: 'POST',
+        body: JSON.stringify({ challenge, code }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = body?.message || 'That verification code is not valid.';
+        return { success: false, error: message };
+      }
+      if (body?.token) setAuthToken(String(body.token));
+      return { success: true, user: body.user ?? {} };
+    } catch {
+      return { success: false, error: 'Cannot reach the API. Please try again.' };
+    }
+  },
+
+  /** Whether the signed-in account has a second factor enrolled. */
+  async mfaStatus(): Promise<{ enabled: boolean; recoveryCodesRemaining: number; enabledAt?: string | null }> {
+    try {
+      const res = await apiFetch('/auth/mfa/status');
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { enabled: false, recoveryCodesRemaining: 0 };
+      return {
+        enabled: Boolean(body.enabled),
+        recoveryCodesRemaining: Number(body.recovery_codes_remaining || 0),
+        enabledAt: body.enabled_at ?? null,
+      };
+    } catch {
+      return { enabled: false, recoveryCodesRemaining: 0 };
+    }
+  },
+
+  /** Starts enrolment: returns the secret, the otpauth URI and recovery codes. */
+  async mfaSetup(): Promise<{
+    success: boolean;
+    secret?: string;
+    otpauthUri?: string;
+    recoveryCodes?: string[];
+    error?: string;
+  }> {
+    try {
+      const res = await apiFetch('/auth/mfa/setup', { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, error: body?.message || 'Two-factor enrolment could not be started.' };
+      }
+      return {
+        success: true,
+        secret: body.secret,
+        otpauthUri: body.otpauth_uri,
+        recoveryCodes: Array.isArray(body.recovery_codes) ? body.recovery_codes : [],
+      };
+    } catch {
+      return { success: false, error: 'Cannot reach the API. Please try again.' };
+    }
+  },
+
+  /** Activates the second factor after the user confirms a live code. */
+  async mfaEnable(code: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await apiFetch('/auth/mfa/enable', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.message || 'That code is not valid.' };
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Cannot reach the API. Please try again.' };
+    }
+  },
+
+  /** Removes the second factor (password + valid code required server-side). */
+  async mfaDisable(password: string, code: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await apiFetch('/auth/mfa/disable', {
+        method: 'POST',
+        body: JSON.stringify({ password, code }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.message || 'Two-factor sign-in could not be removed.' };
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Cannot reach the API. Please try again.' };
+    }
+  },
+
+  /** The account owner's own sign-in trail. */
+  async loginHistory(): Promise<
+    Array<{
+      id: number;
+      ip_address: string | null;
+      user_agent: string | null;
+      success: boolean;
+      mfa_used: boolean;
+      suspicious: boolean;
+      reason: string | null;
+      created_at: string | null;
+    }>
+  > {
+    try {
+      const res = await apiFetch('/auth/login-history');
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return [];
+      return Array.isArray(body?.history) ? body.history : [];
+    } catch {
+      return [];
+    }
+  },
+
   async register(payload: Record<string, unknown>): Promise<{ success: boolean; token?: string; user?: Record<string, unknown>; error?: string }> {
     try {
-      const res = await apiFetch('/auth/register', {
+      const res = await apiFetch('/agency/register', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
@@ -533,9 +747,13 @@ export const api = {
     }
   },
 
-  async getAdminAgencies(): Promise<any | null> {
+  async getAdminAgencies(params: { page?: number; search?: string; status?: string } = {}): Promise<any | null> {
     try {
-      const res = await apiFetch('/admin/agencies');
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== '') query.set(key, String(value));
+      }
+      const res = await apiFetch(`/admin/agencies?${query}`);
       if (!res.ok) return null;
       return await res.json();
     } catch {
@@ -543,18 +761,21 @@ export const api = {
     }
   },
 
-  async verifyAdminAgency(id: string): Promise<boolean> {
+  async verifyAdminAgency(id: string, verificationStatus: 'verified' | 'rejected' | 'unverified' = 'verified', notes?: string): Promise<boolean> {
     try {
-      const res = await apiFetch(`/admin/agencies/${id}/verify`, { method: 'PUT' });
+      const res = await apiFetch(`/admin/agencies/${encodeURIComponent(id)}/verify`, {
+        method: 'PUT',
+        body: JSON.stringify({ verification_status: verificationStatus, notes }),
+      });
       return res.ok;
     } catch {
       return false;
     }
   },
 
-  async setAdminAgencyStatus(id: string, status: string): Promise<boolean> {
+  async setAdminAgencyStatus(id: string, status: string, reason?: string): Promise<boolean> {
     try {
-      const res = await apiFetch(`/admin/agencies/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+      const res = await apiFetch(`/admin/agencies/${encodeURIComponent(id)}/status`, { method: 'PUT', body: JSON.stringify({ status, reason }) });
       return res.ok;
     } catch {
       return false;

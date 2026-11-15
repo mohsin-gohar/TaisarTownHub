@@ -8,25 +8,36 @@ const read = (relativePath: string): string =>
 /**
  * Regression guard for the register-dealer payload.
  *
- * `nationalIdKey` is base64-decoded at runtime (`atob('Y25pYw==')`) so the
- * literal token never appears in the bundle, and the raw CNIC is sent to the
- * server (AuthController masks it server-side). Deleting `nationalIdKey`
- * caused TS2304 "Cannot find name 'nationalIdKey'" and broke the build.
+ * Self-registration no longer collects or transmits a national ID: the
+ * backend (`AgencyController::register` via `AuthController::register`) no
+ * longer retains CNIC, and the public form follows the same contract. These
+ * guards ensure a raw CNIC can never silently re-enter the register payload
+ * (which would ship unmasked national IDs into the public bundle).
  */
-test('AppContext declares nationalIdKey before using it in the register payload', () => {
+test('AppContext register payload never carries a raw national ID field', () => {
   const source = read('./AppContext.tsx');
-  const declIdx = source.indexOf("const nationalIdKey = atob('Y25pYw==')");
-  assert.ok(declIdx >= 0, 'nationalIdKey declaration missing');
-  const anyUsage = source.indexOf('[nationalIdKey]');
-  assert.ok(anyUsage >= 0, 'nationalIdKey must be used as a computed property key');
-  assert.ok(declIdx < anyUsage, 'nationalIdKey must be declared before use');
+  assert.equal(
+    /nationalIdKey|atob\('Y25pYw'/.test(source),
+    false,
+    'decoded national-ID key must not reappear in the register flow'
+  );
+  assert.equal(
+    /\bcnic\b/i.test(source),
+    false,
+    'raw CNIC must not be sent by registerDealerAccount (backend discards it)'
+  );
 });
 
-test('AppContext reads the raw national ID through the decoded key (no literal field name)', () => {
+test('AppContext registers through the agency registration endpoint (no legacy national-ID payload)', () => {
   const source = read('./AppContext.tsx');
-  assert.ok(source.includes("String((data as Record<string, unknown>)[nationalIdKey]"), 'national ID must be read via the decoded key');
-  assert.ok(source.includes('validateCnicFormat(nationalIdValue)'), 'CNIC format validation missing');
-  assert.ok(source.includes('[nationalIdKey]: nationalIdValue'), 'raw national ID must be sent under the decoded key');
+  assert.ok(
+    source.includes('agencyOrBranch'),
+    'registerDealerAccount must pass the agency/branch name'
+  );
+  assert.ok(
+    !/\[nationalIdKey\]/.test(source),
+    'computed national-ID key must be absent from the register payload'
+  );
 });
 
 test('AppContext no longer imports the unused maskCnicForStorage helper', () => {

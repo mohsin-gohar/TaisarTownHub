@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use App\Models\AgencySubscription;
+use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -21,7 +22,13 @@ class AdminAgencyController extends Controller
 
         $query = Agency::query();
 
-        if ($request->filled('status')) {
+        if ($request->status === 'verified') {
+            $query->where('verification_status', 'verified')->where('status', 'active');
+        } elseif ($request->status === 'rejected') {
+            $query->where(fn ($q) => $q->where('status', 'rejected')->orWhere('verification_status', 'rejected'));
+        } elseif ($request->status === 'pending') {
+            $query->where('status', 'pending')->where('verification_status', '!=', 'rejected');
+        } elseif ($request->filled('status')) {
             $query->where('status', $request->status);
         }
         if ($request->filled('verification_status')) {
@@ -37,7 +44,8 @@ class AdminAgencyController extends Controller
         }
 
         $page = $query->withCount(['activeMembers', 'properties'])
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderBy('id')
             ->paginate(min((int) $request->get('per_page', 20), 100));
 
         return response()->json([
@@ -275,6 +283,140 @@ class AdminAgencyController extends Controller
             'success' => true,
             'message' => 'Subscription updated.',
             'subscription' => $subscription->load('plan'),
+        ]);
+    }
+
+    /* ==================== Subscription invoices (G-7) ==================== */
+
+    /** GET /api/admin/subscription-invoices — all invoices, filterable. */
+    public function invoicesIndex(Request $request)
+    {
+        $this->requirePermission($request, 'admin.manage_subscriptions');
+
+        $query = SubscriptionInvoice::query()->with(['agency:id,name', 'plan:id,key,name,price']);
+
+        if ($request->filled('agency_id')) {
+            $query->where('agency_id', $request->agency_id);
+        }
+        if ($request->filled('status') && in_array($request->status, SubscriptionInvoice::STATUSES, true)) {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('search')) {
+            $s = addcslashes((string) $request->search, '%_\\');
+            $query->where(fn ($q) => $q->where('invoice_number', 'like', "%{$s}%"));
+        }
+
+        $invoices = $query->orderByDesc('created_at')->limit(200)->get();
+
+        return response()->json([
+            'success' => true,
+            'invoices' => $invoices,
+            'totals' => [
+                'amount_pkr' => (int) $invoices->sum('amount_pkr'),
+                'outstanding_pkr' => (int) $invoices->where('status', 'pending')->sum('total_pkr'),
+            ],
+        ]);
+    }
+
+    /** POST /api/admin/subscription-invoices — raise an invoice (starts pending). */
+    public function invoicesStore(Request $request)
+    {
+        $this->requirePermission($request, 'admin.manage_subscriptions');
+
+        $data = $request->validate([
+            'agency_id' => 'required|string|max:64|exists:agencies,id',
+            'plan_id' => 'nullable|integer|exists:subscription_plans,id',
+            'amount_pkr' => 'required|integer|min:0|max:9999999999',
+            'tax_pkr' => 'nullable|integer|min:0|max:999999999',
+            'period_start' => 'nullable|date',
+            'period_end' => 'nullable|date|after_or_equal:period_start',
+            'notes' => 'nullable|string|max:2000',
+        ]);
+
+        $agency = Agency::findOrFail($data['agency_id']);
+
+        $invoice = SubscriptionInvoice::create([
+            'id' => 'inv_' . bin2hex(random_bytes(8)),
+            'invoice_number' => SubscriptionInvoice::nextNumber(),
+            'agency_id' => $agency->id,
+            'plan_id' => $data['plan_id'] ?? null,
+            'amount_pkr' => (int) $data['amount_pkr'],
+            'tax_pkr' => (int) ($data['tax_pkr'] ?? 0),
+            'total_pkr' => (int) $data['amount_pkr'] + (int) ($data['tax_pkr'] ?? 0),
+            'currency' => 'PKR',
+            'period_start' => $data['period_start'] ?? null,
+            'period_end' => $data['period_end'] ?? null,
+            'status' => 'pending',
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        $this->writeAudit($request, 'subscription.invoice_created', $invoice->invoice_number,
+            "Invoice {$invoice->invoice_number} raised for {$agency->name} (PKR {$invoice->total_pkr})", [
+                'agency_id' => $agency->id,
+                'entity_type' => 'subscription_invoice',
+                'entity_id' => $invoice->id,
+                'cross_agency' => true,
+                'metadata' => ['total_pkr' => $invoice->total_pkr, 'status' => 'pending'],
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Invoice created.',
+            'invoice' => $invoice->load('agency:id,name'),
+        ], 201);
+    }
+
+    /**
+     * POST /api/admin/subscription-invoices/{id}/verify — mark a PENDING
+     * invoice as paid (payment details + verifier recorded). A paid invoice
+     * is financial history and can never be modified again.
+     */
+    public function invoiceVerify(Request $request, string $id)
+    {
+        $this->requirePermission($request, 'admin.manage_subscriptions');
+
+        $invoice = SubscriptionInvoice::findOrFail($id);
+
+        $data = $request->validate([
+            'payment_method' => 'required|string|max:40',
+            'payment_reference' => 'nullable|string|max:120',
+        ]);
+
+        if ($invoice->status === 'paid') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This invoice is already paid — financial history cannot be modified.',
+            ], 422);
+        }
+
+        if ($invoice->status === 'void') {
+            return response()->json([
+                'success' => false,
+                'message' => 'A voided invoice cannot be paid.',
+            ], 422);
+        }
+
+        $invoice->forceFill([
+            'status' => 'paid',
+            'paid_at' => now(),
+            'payment_method' => $data['payment_method'],
+            'payment_reference' => $data['payment_reference'] ?? null,
+            'verified_by' => $request->user()->id,
+        ])->save();
+
+        $this->writeAudit($request, 'subscription.invoice_paid', $invoice->invoice_number,
+            "Invoice {$invoice->invoice_number} marked paid (PKR {$invoice->total_pkr})", [
+                'agency_id' => $invoice->agency_id,
+                'entity_type' => 'subscription_invoice',
+                'entity_id' => $invoice->id,
+                'cross_agency' => true,
+                'metadata' => ['payment_method' => $data['payment_method']],
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Invoice marked as paid.',
+            'invoice' => $invoice->load(['agency:id,name', 'verifier:id,name']),
         ]);
     }
 }

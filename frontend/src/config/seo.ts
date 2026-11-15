@@ -13,7 +13,26 @@
  * (CMSConfig) so no structured data is invented.
  */
 
-export const SITE_URL = 'https://taisartownhub.vercel.app';
+/**
+ * Canonical site origin — single source for canonical URLs, Open Graph, JSON-LD
+ * and sitemap.xml.
+ *
+ * Resolution order: `VITE_SITE_URL` (Vite build-time) → `VITE_SITE_URL` (Node,
+ * used by scripts/prerender.mts) → production domain. The hard production
+ * fallback means a missing variable can never emit localhost/vercel URLs into
+ * canonical tags or the sitemap.
+ */
+const resolveSiteUrl = (): string => {
+  const fromVite =
+    typeof import.meta !== 'undefined' && import.meta.env
+      ? import.meta.env.VITE_SITE_URL
+      : undefined;
+  const fromNode =
+    typeof process !== 'undefined' && process.env ? process.env.VITE_SITE_URL : undefined;
+  return (fromVite || fromNode || 'https://taisartownhub.com').replace(/\/+$/, '');
+};
+
+export const SITE_URL = resolveSiteUrl();
 export const SITE_NAME = 'TaisarTownHub';
 export const SITE_LOCALE = 'en_PK';
 export const OG_IMAGE_PATH = '/og-image.jpg';
@@ -245,6 +264,29 @@ export const SEO_ROUTES: RouteSeo[] = [
     indexable: false,
     inSitemap: false,
     breadcrumb: [],
+  },
+  // G-14: cold-load auth-flow pages. Rendered by the App.tsx bridge outside
+  // the SPA navigation state; intentionally noindex and never in the sitemap
+  // (their URLs are personal, tokenised links from transactional mail).
+  {
+    view: 'reset-password',
+    path: '/reset-password',
+    title: 'Set a New Password | TaisarTownHub',
+    description: 'Choose a new password for your TaisarTownHub account using the secure link from your email.',
+    keywords: '',
+    indexable: false,
+    inSitemap: false,
+    breadcrumb: ['Password Reset'],
+  },
+  {
+    view: 'verify-email',
+    path: '/verify-email',
+    title: 'Verify Your Email | TaisarTownHub',
+    description: 'Confirm your email address for your TaisarTownHub account.',
+    keywords: '',
+    indexable: false,
+    inSitemap: false,
+    breadcrumb: ['Email Verification'],
   },
 ];
 

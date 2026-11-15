@@ -23,7 +23,7 @@ class DealerController extends Controller
             $query->where('status', $request->status);
         }
 
-        $dealers = $query->latest()->get();
+        $dealers = $query->orderByDesc('created_at')->orderBy('id')->get();
 
         return response()->json($dealers);
     }

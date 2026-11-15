@@ -112,19 +112,19 @@ class AuthSecurityTest extends EnterpriseTestCase
         $this->getJson('/api/auth/me', $this->authHeaders($token))->assertStatus(401);
     }
 
-    public function test_login_is_rate_limited_after_five_attempts_per_minute(): void
+    public function test_login_is_rate_limited_after_ten_attempts_per_minute(): void
     {
         $this->makeUser('operator', ['email' => 'ratelimit@example.test']);
 
-        // Five attempts are allowed through the route throttle...
-        for ($i = 0; $i < 5; $i++) {
+        // Ten attempts are allowed through the route throttle (api.auth = 10/min)...
+        for ($i = 0; $i < 10; $i++) {
             $this->postJson('/api/auth/login', [
                 'email' => 'ratelimit@example.test',
                 'password' => 'WrongPassword!',
             ]);
         }
 
-        // ...the sixth must be throttled (429), not processed.
+        // ...the eleventh must be throttled (429), not processed.
         $this->postJson('/api/auth/login', [
             'email' => 'ratelimit@example.test',
             'password' => 'WrongPassword!',

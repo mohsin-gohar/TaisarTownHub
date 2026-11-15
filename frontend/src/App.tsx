@@ -29,6 +29,8 @@ const ProjectsListingPage = lazy(() => import('./components/public/ProjectsListi
 const PropertiesListingPage = lazy(() => import('./components/public/PropertiesListingPage').then((m) => ({ default: m.PropertiesListingPage })));
 const AgenciesSection = lazy(() => import('./components/public/AgenciesSection').then((m) => ({ default: m.AgenciesSection })));
 const AuthPage = lazy(() => import('./components/public/AuthPage').then((m) => ({ default: m.AuthPage })));
+const AgencyAccessPage = lazy(() => import('./components/public/AgencyAccessPage').then((m) => ({ default: m.AgencyAccessPage })));
+const NotFoundPage = lazy(() => import('./components/public/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 // Admin views
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
@@ -78,33 +80,117 @@ const upsertJsonLd = (id: string, data: Record<string, unknown> | null) => {
   if (!existing) document.head.appendChild(el);
 };
 
+/**
+ * Public paths that resolve to a real view (mirrors VIEW_MAP + auth utilities
+ * in AppContext). Anything else renders the 404 screen instead of silently
+ * falling back to the homepage.
+ */
+const KNOWN_PUBLIC_PATHS = new Set([
+  '/',
+  '/home',
+  '/projects',
+  '/properties',
+  '/agencies',
+  '/guide',
+  '/scheme45-guide',
+  '/gallery',
+  '/media-gallery',
+  '/services',
+  '/about',
+  '/contact',
+  '/login',
+  '/auth',
+  '/signin',
+  '/register',
+  '/admin',
+  '/admin-login',
+  '/reset-password',
+  '/verify-email',
+]);
+
+const isKnownPath = (pathname: string): boolean => {
+  const path = pathname.replace(/\/+$/, '') || '/';
+  if (KNOWN_PUBLIC_PATHS.has(path)) return true;
+  // Admin deep links are resolved to their tab by AppContext.
+  return path.startsWith('/admin/');
+};
+
 const MainAppContent: React.FC = () => {
   const {
     currentView,
     isAdminAuthenticated,
+    isSessionLoading,
+    currentUser,
     properties,
     projects,
     selectedPropertyId,
     selectedProjectId,
   } = useApp();
 
+  // Unknown public URL → render the 404 screen (not the homepage).
+  const isNotFoundRoute = !isKnownPath(window.location.pathname);
+  // Derived view so the 404 screen never collides with a legitimate default
+  // view value: navigating "Back to Home" from the 404 must flip the rendered
+  // view even though the underlying state value was already 'home'.
+  const resolvedView = isNotFoundRoute ? 'not-found' : currentView;
+  const [pathTick, setPathTick] = useState(0);
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentView]);
+  }, [resolvedView]);
+
+  // Force a re-render whenever the URL changes through the History API so
+  // route-derived UI (e.g. the 404 screen) can never go stale after pushState.
+  useEffect(() => {
+    const historyAny = window.history as unknown as {
+      pushState: (...args: any[]) => any;
+      replaceState: (...args: any[]) => any;
+    };
+    const originalPush = historyAny.pushState;
+    const originalReplace = historyAny.replaceState;
+    const makeWrapped = (original: (...args: any[]) => any) =>
+      (...args: any[]) => {
+        const result = original.apply(window.history, args);
+        setPathTick((tick) => tick + 1);
+        return result;
+      };
+    historyAny.pushState = makeWrapped(originalPush);
+    historyAny.replaceState = makeWrapped(originalReplace);
+    const handlePopState = () => setPathTick((tick) => tick + 1);
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      historyAny.pushState = originalPush;
+      historyAny.replaceState = originalReplace;
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
 
   // SEO: keeps the crawlable <head> in sync with the active route — title,
   // description, canonical, Open Graph/Twitter cards, robots directive and
   // breadcrumb structured data. Detail pages get a unique title and
   // description derived from the selected record instead of a generic one.
   useEffect(() => {
-    if (currentView.startsWith('admin')) return; // admin ERP sets its own title
+    if (resolvedView.startsWith('admin')) return; // admin ERP sets its own title
 
-    const route = routeSeoForView(currentView);
+    if (isNotFoundRoute) {
+      document.title = 'Page Not Found (404) — TaisarTownHub';
+      upsertMeta('name', 'description', 'The requested page could not be found. Browse live Taiser Town properties, projects and advisory services from TaisarTownHub.');
+      upsertMeta('name', 'robots', 'noindex,follow');
+      upsertMeta('property', 'og:title', 'Page Not Found (404) — TaisarTownHub');
+      upsertMeta('property', 'og:description', 'The requested page could not be found.');
+      upsertMeta('name', 'twitter:title', 'Page Not Found (404) — TaisarTownHub');
+      upsertMeta('name', 'twitter:description', 'The requested page could not be found.');
+      document.head.querySelector('link[rel="canonical"]')?.remove();
+      upsertJsonLd('route-breadcrumb-jsonld', null);
+      return;
+    }
+
+    const route = routeSeoForView(resolvedView);
     let title = route.title;
     let description = route.description;
     let query = '';
 
-    if (currentView === 'property-detail') {
+    if (resolvedView === 'property-detail') {
       const property = properties.find((p) => p.id === selectedPropertyId);
       if (property) {
         query = `?property=${encodeURIComponent(property.id)}`;
@@ -113,7 +199,7 @@ const MainAppContent: React.FC = () => {
           property.sizeSqYards ? ` · ${property.sizeSqYards} Sq. Yd` : ''
         } · ${property.formattedPrice} in ${property.location}. Verified file details, gallery and installment options.`;
       }
-    } else if (currentView === 'project-detail') {
+    } else if (resolvedView === 'project-detail') {
       const project = projects.find((p) => p.id === selectedProjectId);
       if (project) {
         query = `?project=${encodeURIComponent(project.id)}`;
@@ -137,7 +223,7 @@ const MainAppContent: React.FC = () => {
       'route-breadcrumb-jsonld',
       route.breadcrumb.length ? breadcrumbJsonLd(route) : null,
     );
-  }, [currentView, properties, projects, selectedPropertyId, selectedProjectId]);
+  }, [resolvedView, isNotFoundRoute, pathTick, properties, projects, selectedPropertyId, selectedProjectId]);
 
   const [activeFilterCriteria, setActiveFilterCriteria] = useState<{
     type?: PropertyType | 'All';
@@ -158,7 +244,18 @@ const MainAppContent: React.FC = () => {
   };
 
   // If in admin view and authenticated, render full admin dashboard
-  if (currentView === 'admin') {
+  if (resolvedView === 'admin') {
+    if (isSessionLoading) {
+      return <div role="status" className="min-h-screen bg-[#070B14] flex items-center justify-center text-slate-300">Verifying workspace access…</div>;
+    }
+    if (isAdminAuthenticated && currentUser.workspaceAccess?.allowed === false) {
+      return (
+        <Suspense fallback={<div role="status" className="min-h-screen bg-[#070B14] text-slate-300 p-8">Loading approval status…</div>}>
+          <AgencyAccessPage />
+          <ToastContainer />
+        </Suspense>
+      );
+    }
     if (!isAdminAuthenticated) {
       return (
         <Suspense fallback={<div className="min-h-screen bg-[#070B14] flex items-center justify-center text-slate-400">Loading Portal...</div>}>
@@ -199,10 +296,15 @@ const MainAppContent: React.FC = () => {
           <Navbar />
 
           <main id="main-content" className="flex-1 page-surface">
-            {/* CSS-driven page transition (enter animation per view) */}
-            <div key={currentView} className="animate-pageEnter">
+            {isNotFoundRoute ? (
+              <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-slate-400">Loading content...</div>}>
+                <NotFoundPage />
+              </Suspense>
+            ) : (
+            /* CSS-driven page transition (enter animation per view) */
+            <div key={`${resolvedView}-${window.location.pathname}${window.location.search}`} className="animate-pageEnter">
             <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-slate-400">Loading content...</div>}>
-              {currentView === 'home' && (
+              {resolvedView === 'home' && (
                 <>
                   <HeroSection onSearch={handleHeroSearch} />
                   <FeaturedProjects />
@@ -217,26 +319,27 @@ const MainAppContent: React.FC = () => {
                 </>
               )}
 
-              {currentView === 'projects' && <ProjectsListingPage />}
-              {currentView === 'project-detail' && <ProjectDetailPage />}
-              {currentView === 'properties' && (
+              {resolvedView === 'projects' && <ProjectsListingPage />}
+              {resolvedView === 'project-detail' && <ProjectDetailPage />}
+              {resolvedView === 'properties' && (
                 <PropertiesListingPage initialFilter={activeFilterCriteria} />
               )}
-              {currentView === 'property-detail' && <PropertyDetailPage />}
-              {currentView === 'agencies' && (
+              {resolvedView === 'property-detail' && <PropertyDetailPage />}
+              {resolvedView === 'agencies' && (
                 <div className="py-6">
                   <AgenciesSection />
                 </div>
               )}
-              {currentView === 'guide' && <Scheme45Guide />}
-              {currentView === 'gallery' && <MediaGallerySection />}
-              {currentView === 'services' && <ServicesSection />}
-              {currentView === 'about' && <AboutSection />}
-              {currentView === 'contact' && <ContactSection />}
-              {currentView === 'login' && <AuthPage initialTab="signin" />}
-              {currentView === 'register' && <AuthPage initialTab="register" />}
+              {resolvedView === 'guide' && <Scheme45Guide />}
+              {resolvedView === 'gallery' && <MediaGallerySection />}
+              {resolvedView === 'services' && <ServicesSection />}
+              {resolvedView === 'about' && <AboutSection />}
+              {resolvedView === 'contact' && <ContactSection />}
+              {resolvedView === 'login' && <AuthPage initialTab="signin" />}
+              {resolvedView === 'register' && <AuthPage initialTab="register" />}
             </Suspense>
             </div>
+            )}
           </main>
 
           <Footer />
@@ -250,7 +353,7 @@ const MainAppContent: React.FC = () => {
       <ConfirmDialogHost />
 
       {/* Login modal popup if requested */}
-      {currentView === 'admin-login' && (
+      {resolvedView === 'admin-login' && (
         <Suspense fallback={null}>
           <AdminLoginModal />
         </Suspense>
@@ -259,12 +362,52 @@ const MainAppContent: React.FC = () => {
   );
 };
 
-export default function App() {
+// G-14: cold-load pages for backend token-based mail links. They are lazy
+// imports so the main bundle never pays for them, and they are rendered
+// INSTEAD of the SPA shell (these URLs are outside the app's navigation
+// state, so AppProvider never mounts for them).
+const ResetPasswordPage = lazy(() =>
+  import('./pages/AuthFlowPages').then((m) => ({ default: m.ResetPasswordPage })),
+);
+const VerifyEmailPage = lazy(() =>
+  import('./pages/AuthFlowPages').then((m) => ({ default: m.VerifyEmailPage })),
+);
+
+const AUTH_FLOW_PATHS = new Set(['/reset-password', '/verify-email']);
+
+/**
+ * Renders the matching auth-flow page for /reset-password and /verify-email,
+ * bypassing the entire SPA shell (AppProvider, Navbar, …). Every other path
+ * mounts the normal application.
+ */
+const AuthFlowGate: React.FC = () => {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  if (!AUTH_FLOW_PATHS.has(path)) {
+    return (
+      <ErrorBoundary>
+        <AppProvider>
+          <MainAppContent />
+        </AppProvider>
+      </ErrorBoundary>
+    );
+  }
+
+  const Page = path === '/reset-password' ? ResetPasswordPage : VerifyEmailPage;
   return (
     <ErrorBoundary>
-      <AppProvider>
-        <MainAppContent />
-      </AppProvider>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-[#070B14] flex items-center justify-center text-slate-400">
+            Loading…
+          </div>
+        }
+      >
+        <Page />
+      </Suspense>
     </ErrorBoundary>
   );
+};
+
+export default function App() {
+  return <AuthFlowGate />;
 }

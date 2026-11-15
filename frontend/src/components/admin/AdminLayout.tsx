@@ -42,6 +42,7 @@ const AdminPlotLocator = lazy(() => import('./AdminPlotLocator').then((m) => ({ 
 const AdminSecurityRoles = lazy(() => import('./AdminSecurityRoles').then((m) => ({ default: m.AdminSecurityRoles })));
 const AdminAudit = lazy(() => import('./AdminAudit').then((m) => ({ default: m.AdminAudit })));
 const AdminAgencyDashboard = lazy(() => import('./AdminAgencyDashboard').then((m) => ({ default: m.AdminAgencyDashboard })));
+const AdminAgencyApprovals = lazy(() => import('./AdminAgencyApprovals').then((m) => ({ default: m.AdminAgencyApprovals })));
 const AdminStaffManager = lazy(() => import('./AdminStaffManager').then((m) => ({ default: m.AdminStaffManager })));
 const AdminDocumentVault = lazy(() => import('./AdminDocumentVault').then((m) => ({ default: m.AdminDocumentVault })));
 const AdminModerationDesk = lazy(() => import('./AdminModerationDesk').then((m) => ({ default: m.AdminModerationDesk })));
@@ -113,6 +114,7 @@ export const AdminLayout: React.FC = () => {
   }, []);
 
   const hasEnterprise = (permission: string) => enterprisePermissions.includes(permission);
+  const canManageAgencies = hasEnterprise('admin.manage_agencies');
   const hasAgencyContext = agencyMemberships.length > 0 || Boolean(agencyContextId);
   const canApproveListings = hasEnterprise('properties.approve');
   const canManageStaff = hasEnterprise('agency.manage_staff');
@@ -172,12 +174,19 @@ export const AdminLayout: React.FC = () => {
     { id: 'cms', label: 'Website CMS & Builder', icon: Settings, permission: 'edit_cms' },
     { id: 'security', label: 'Security & Roles', icon: Shield, permission: 'manage_users' },
     { id: 'audit', label: 'Audit & Recycle Bin', icon: Shield, permission: 'manage_users' },
+    ...(canManageAgencies
+      ? [{ id: 'agency_approvals', label: 'Agency approvals', icon: ShieldCheck }]
+      : []),
     ...(hasAgencyContext && hasEnterprise('agency.view')
       ? [
           { id: 'agency_dashboard', label: 'Agency Dashboard', icon: Building2 },
-          { id: 'staff', label: 'Staff & Roles', icon: Users },
+          ...(hasEnterprise('agency.manage_staff') || hasEnterprise('staff.view')
+            ? [{ id: 'staff', label: 'Staff & Roles', icon: Users }]
+            : []),
           { id: 'documents', label: 'Document Vault', icon: FileText },
-          { id: 'crm', label: 'CRM Pipeline', icon: Inbox },
+          ...(hasEnterprise('crm.view')
+            ? [{ id: 'crm', label: 'CRM Pipeline', icon: Inbox }]
+            : []),
           { id: 'media_studio', label: 'Media Studio', icon: Image },
           { id: 'subscription', label: 'Subscription & Usage', icon: Settings },
         ]
@@ -255,7 +264,7 @@ export const AdminLayout: React.FC = () => {
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
-        <div className="overflow-y-auto max-h-[calc(100vh-140px)]">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain sidebar-scroll">
           {/* Brand header */}
           <div className="p-5 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -422,6 +431,7 @@ export const AdminLayout: React.FC = () => {
             {adminTab === 'cms' && <AdminCMS />}
             {adminTab === 'security' && <AdminSecurityRoles />}
             {adminTab === 'audit' && <AdminAudit />}
+            {adminTab === 'agency_approvals' && canManageAgencies && <AdminAgencyApprovals />}
             {adminTab === 'agency_dashboard' && <AdminAgencyDashboard onNavigate={handleSelectTab} />}
             {adminTab === 'staff' && <AdminStaffManager canManage={canManageStaff} />}
             {adminTab === 'documents' && (

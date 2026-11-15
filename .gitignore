@@ -13,6 +13,11 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+# Browser-audit artefacts (screenshots + reports) — regenerate with
+# `npx tsx scripts/browser-audit.mts`; they are large and machine-specific.
+frontend/audit/
+frontend/test-results/
+frontend/playwright-report/
 
 # Backend
 backend/vendor/
@@ -22,3 +27,14 @@ backend/.env.backup
 backend/.env.production
 backend/storage/*.key
 backend/storage/logs/*.log
+
+# Generated route dump (regenerate with `php artisan route:list --json`)
+backend/routes.json
+
+# Notebook / conda artifacts (machine-specific absolute paths)
+.conda/
+environment.yml
+
+# OS / editor scratch files
+Thumbs.db
+*.bak

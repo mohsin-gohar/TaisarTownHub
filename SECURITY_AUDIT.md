@@ -173,3 +173,61 @@ accountNumber, DEMO_ACCOUNTS (passwords).
   build ~4s, `check:bundle` OK (no private ERP tokens or demo passwords in public
   chunks).
 - Backend: 5/5 PHPUnit tests (RolePermissions matrix + auth scoping), 17+ migrations.
+
+---
+
+## Phase 13 pass - controls added on 2026-11-13
+
+### Multi-factor authentication (real, not simulated)
+- TOTP (RFC 6238) implemented in-house on `hash_hmac` - **no new dependency**, no fake provider.
+- **Deny by default**: `POST /api/auth/login` returns *no* token when a second factor is enrolled;
+  the token is only issued by `POST /api/auth/mfa/verify` after the code is verified server-side
+  against the encrypted secret.
+- Challenges are single-use, expire after 5 minutes and die after 5 wrong codes.
+- Recovery codes are single-use, stored **hashed**, and consumed atomically.
+- Removing the second factor requires the password **and** a valid code.
+- MFA secrets and recovery codes are encrypted at rest (`encrypted`, `encrypted:array` casts);
+  they are hidden from serialization.
+- Proof: `MfaTest` (9 tests / 40 assertions) + a real browser journey (10/10 checks) that enrols
+  the factor, signs out, completes the challenge with an independently computed TOTP, rejects an
+  invalid code and removes the factor again.
+
+### Login history & suspicious-login monitoring
+- `login_histories` is append-only: every attempt records IP, user agent, outcome, MFA usage and
+  a reason code. Unknown accounts are recorded **without** a user id and without disclosing
+  whether the account exists.
+- A successful sign-in from an IP address or device never seen before is flagged, raises an
+  in-app + mail notification for the owner and writes an audit row.
+- The owner can read their own trail (`GET /api/auth/login-history`); nobody else can.
+
+### Password-change notifications
+- Self-service reset and platform-admin password resets now send a queued mail + in-app
+  notification to the account owner and revoke every other session.
+
+### Content Security Policy
+- API responses now carry `default-src 'none'; script-src 'none'; frame-ancestors 'none';
+  object-src 'none'; base-uri 'none'; form-action 'none'` - the API must never render or run
+  anything.
+- The deployed frontend (nginx) carries a strict CSP; the inline service-worker script was moved
+  into the bundle so `script-src 'self'` suffices (no `unsafe-inline` for scripts).
+- Proof: `SecurityHeadersTest` (4 tests / 20 assertions).
+
+### Deterministic, non-leaky list APIs
+- Every list endpoint orders by `created_at DESC, id ASC`. Row order is now stable, pagination
+  cannot repeat or skip rows, and two records created in the same second can no longer swap
+  places between requests (this was a real, intermittently failing test).
+
+### 404 correctness
+- Unknown public URLs render a dedicated 404 screen instead of the homepage, are marked
+  `noindex,follow`, drop the canonical link, and offer a working recovery path.
+
+### Confirmations & clipboard
+- No native `window.confirm` remains in the admin modules; the accessible gold dialog (focus
+  trap, Escape, backdrop cancel) is used instead.
+- Clipboard writes fall back to a legacy copy path with explicit user feedback.
+
+### Outstanding (environment, not code)
+- SMTP credentials, TLS termination, `CORS_ALLOWED_ORIGINS`, backup scheduling and the queue
+  worker/scheduler are deployment obligations - see `DEPLOYMENT_GUIDE.md` and `BACKUP_GUIDE.md`.
+- No SMS/WhatsApp driver and no malware scanner were added: without provider credentials or a
+  scanner these would be simulated integrations.

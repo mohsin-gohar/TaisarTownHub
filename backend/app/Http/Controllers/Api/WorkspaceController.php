@@ -92,12 +92,21 @@ class WorkspaceController extends Controller
 
     public function catalog()
     {
+        // array_filter preserves keys; without reindexing the JSON would
+        // degrade into an object whenever a row is skipped (draft/private/
+        // payload-deleted), which the frontend (Array.isArray) then drops —
+        // the public site would silently show zero listings. G-12.
+        $listed = array_values(array_filter(
+            $this->publicRows('properties'),
+            fn ($row) => $this->publiclyListed($row)
+        ));
+
         return response()->json([
             'projects' => $this->publicRows('projects'),
-            'properties' => array_map(
+            'properties' => array_values(array_map(
                 fn ($row) => $this->onlyKeys($row, self::PUBLIC_PROPERTY_KEYS),
-                array_filter($this->publicRows('properties'), fn ($row) => $this->publiclyListed($row))
-            ),
+                $listed
+            )),
             'dealers' => array_map(fn ($row) => $this->publicDealer($row), $this->publicRows('dealers')),
             'videos' => $this->publicRows('videos'),
             'plots' => $this->publicRows('plots'),

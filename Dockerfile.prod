@@ -1,0 +1,63 @@
+# ====================================================================
+# TaisarTownHub Backend — Production Dockerfile
+# Multi-tenant SaaS Laravel 12 API with Sanctum
+# ====================================================================
+FROM php:8.2-fpm-alpine AS backend-base
+
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
+    git \
+    curl \
+    libpng-dev \
+    libxml2-dev \
+    zip \
+    unzip \
+    sqlite \
+    mysql-client \
+    rabbitmq-c-dev \
+    && docker-php-ext-install pdo pdo_mysql bcmath gd xml
+
+WORKDIR /var/www/html
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+COPY backend/ .
+
+RUN composer install --no-dev --optimize-autoloader
+
+# Generate application key
+RUN php artisan key:generate --no-interaction || true
+
+# Optimize for production
+RUN php artisan config:cache \
+    && php artisan route:cache \
+    && php artisan view:cache
+
+EXPOSE 8080
+
+COPY docker/backend/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/backend/nginx.conf /etc/nginx/nginx.conf
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
+# ====================================================================
+# Multi-stage build for frontend (Nginx-served production build)
+# ====================================================================
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=frontend-builder /app/dist /usr/share/nginx/html
+COPY docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
