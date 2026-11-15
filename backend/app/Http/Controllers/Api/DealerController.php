@@ -11,7 +11,7 @@ class DealerController extends Controller
     use AuthorizesApi;
 
     /**
-     * List dealers. CNIC is never serialized — the Dealer model declares
+     * List dealers. CNIC is never serialized â€” the Dealer model declares
      * `protected $hidden = ['cnic']`, so the full number never leaves the
      * server regardless of who calls this endpoint.
      */
@@ -25,7 +25,21 @@ class DealerController extends Controller
 
         $dealers = $query->orderByDesc('created_at')->orderBy('id')->get();
 
-        return response()->json($dealers);
+        // Public endpoint: strip financial/PII fields. Only expose safe display
+        // fields to unauthenticated visitors.
+        $safe = $dealers->map(fn (Dealer $d) => [
+            'id' => $d->id,
+            'fullName' => $d->fullName,
+            'agencyAffiliation' => $d->agencyAffiliation,
+            'agencyOrBranch' => $d->agencyOrBranch,
+            'role' => $d->role,
+            'status' => $d->status,
+            'avatar' => $d->avatar,
+            'assignedPropertiesCount' => $d->assignedPropertiesCount,
+            'completedDealsCount' => $d->completedDealsCount,
+        ]);
+
+        return response()->json($safe);
     }
 
     /**
@@ -35,7 +49,18 @@ class DealerController extends Controller
     {
         $dealer = Dealer::findOrFail($id);
 
-        return response()->json($dealer);
+        // Public endpoint: strip financial/PII fields.
+        return response()->json([
+            'id' => $dealer->id,
+            'fullName' => $dealer->fullName,
+            'agencyAffiliation' => $dealer->agencyAffiliation,
+            'agencyOrBranch' => $dealer->agencyOrBranch,
+            'role' => $dealer->role,
+            'status' => $dealer->status,
+            'avatar' => $dealer->avatar,
+            'assignedPropertiesCount' => $dealer->assignedPropertiesCount,
+            'completedDealsCount' => $dealer->completedDealsCount,
+        ]);
     }
 
     /**
@@ -61,7 +86,7 @@ class DealerController extends Controller
         ]);
 
         // Persist the masked copy for display, but NEVER overwrite the raw CNIC
-        // column with its own masked form — that permanently destroys the
+        // column with its own masked form â€” that permanently destroys the
         // national ID and makes later re-masking impossible. The raw value is
         // what the ERP needs; the masked value is what UI surfaces show.
         if (!empty($data['cnic'])) {
@@ -132,3 +157,4 @@ class DealerController extends Controller
         return substr($clean, 0, 5) . str_repeat('*', strlen($clean) - 9) . substr($clean, -4);
     }
 }
+

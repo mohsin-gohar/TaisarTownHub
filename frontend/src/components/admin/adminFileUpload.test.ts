@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -52,7 +52,7 @@ test('document deletion is a restorable soft delete', () => {
   assert.equal(context.includes('restorePropertyFile'), true);
   assert.equal(context.includes('Document moved to trash'), true);
 
-  const audit = read('./adminAudit.tsx');
+  const audit = read('./AdminAudit.tsx');
   assert.equal(audit.includes('Property Documents'), true);
   assert.equal(audit.includes('restorePropertyFile'), true);
 

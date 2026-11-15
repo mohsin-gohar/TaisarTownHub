@@ -1,10 +1,10 @@
-# TaisarTownHub — Database Seeders & Realistic Factories (Pillar 5)
+﻿# TaisarTownHub â€” Database Seeders & Realistic Factories (Pillar 5)
 
-**Version:** 2.0.0 · **Last updated:** 2026-11-08
+**Version:** 2.0.0 Â· **Last updated:** 2026-11-08
 
 ## 1. Seed Data Source
 
-Primary seed: `backend/database/seed-data/workspace.json` (65KB) — a single JSON document containing all collections:
+Primary seed: `backend/database/seed-data/workspace.json` (65KB) â€” a single JSON document containing all collections:
 - `properties` (35 rows), `projects` (4), `dealers` (15), `sellers` (3), `buyers` (3), `transactions` (3), `media` (7), `videos` (6), `inquiries` (2), `subscribers` (1), `testimonials` (2), `plots` (8), `cms` (1 default).
 
 Loaded by the seeder into `business_records` (collection + record_id + payload) and into typed tables (`properties`, `dealers`, `transactions`, `projects`, `inquiries`, `agency_videos`, `video_comments`).
@@ -29,7 +29,7 @@ Property::factory()->count(35)->create([
 ```php
 // DatabaseSeeder::run()
 1. Create users (super_admin, admin, manager, dealer, operator) with hashed passwords.
-2. Load workspace.json → sync each collection via BusinessRecord::put().
+2. Load workspace.json â†’ sync each collection via BusinessRecord::put().
 3. Hydrate typed tables (properties, dealers, transactions, projects, inquiries, agency_videos, video_comments).
 4. Create audit_log entries for seed actions.
 5. Assign dealer_id to dealer-role users.
@@ -38,8 +38,8 @@ Property::factory()->count(35)->create([
 ## 4. Realistic Data Characteristics
 
 - **PKR pricing:** Lacs/Crores formatted (e.g., PKR 78 Lacs, PKR 1.90 Crore).
-- **Sectors:** Real MDA Scheme 45 sectors (70-D, 63, 78, 80, 84, 50, 30-A, …).
-- **Names:** Pakistani names (Muhammad, Chaudhry, Sheikh, Haji, Dr., …).
+- **Sectors:** Real MDA Scheme 45 sectors (70-D, 63, 78, 80, 84, 50, 30-A, â€¦).
+- **Names:** Pakistani names (Muhammad, Chaudhry, Sheikh, Haji, Dr., â€¦).
 - **Phone:** +92 3XX XXXXXXX format.
 - **CNIC:** 13-digit masked in public payloads; unmasked only for super_admin.
 - **Commissions:** percentage or fixed, per dealer.
@@ -49,11 +49,11 @@ Property::factory()->count(35)->create([
 
 | Role | Email | Password |
 |---|---|---|
-| Super Admin | superadmin@taisartownhub.com | Super@Admin2026! |
-| Agency Admin | admin@taisartownhub.com | Admin@Taisar2026 |
-| Branch Manager | manager@taisartownhub.com | Manager@2026 |
-| Property Dealer | dealer@taisartownhub.com | Dealer@2026 |
-| Data Entry Operator | operator@taisartownhub.com | Operator@2026 |
+| Super Admin | superadmin@taisartownhub.com | [REDACTED] |
+| Agency Admin | admin@taisartownhub.com | [REDACTED] |
+| Branch Manager | manager@taisartownhub.com | [REDACTED] |
+| Property Dealer | dealer@taisartownhub.com | [REDACTED] |
+| Data Entry Operator | operator@taisartownhub.com | [REDACTED] |
 
 > Demo-only credentials; rotate before production.
 

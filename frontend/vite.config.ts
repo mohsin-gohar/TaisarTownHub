@@ -1,26 +1,25 @@
-import tailwindcss from '@tailwindcss/vite';
+﻿import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const isProduction = process.env.VITE_APP_MODE === 'production' || process.env.VITE_APP_MODE === 'public';
+  const alias: Record<string, string> = {
+    '@': path.resolve(import.meta.dirname, '.'),
+  };
+  if (isProduction) {
+    // Alias erpSeed to an empty module so no demo credentials/CNICs ship.
+    alias['../data/erpSeed'] = path.resolve(import.meta.dirname, 'src/data/erpSeed.empty.ts');
+  }
   return {
     plugins: [react(), tailwindcss()],
-    resolve: {
-      alias: {
-        '@': path.resolve(import.meta.dirname, '.'),
-      },
-    },
+    resolve: { alias },
     build: {
-      // Use esbuild for CSS minification to avoid a hard dependency on the
-      // lightningcss native binary in environments where it is unavailable.
       cssMinify: 'esbuild' as const,
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };

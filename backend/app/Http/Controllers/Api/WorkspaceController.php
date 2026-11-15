@@ -8,14 +8,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Legacy workspace sync (JSON store) — HARDENED.
+ * Legacy workspace sync (JSON store) Ã¢â‚¬â€ HARDENED.
  *
  * Security rules enforced here (Phase 3):
- *  1. Reads: per-collection view permissions + agency scoping — an agency
+ *  1. Reads: per-collection view permissions + agency scoping Ã¢â‚¬â€ an agency
  *     member never receives another agency's rows.
  *  2. Writes: entry requires an actual WRITE permission (the old gate was
  *     `view_properties`, i.e. any viewer could overwrite everything).
- *  3. `agency_id` / `created_by` / `updated_by` are always server-derived —
+ *  3. `agency_id` / `created_by` / `updated_by` are always server-derived Ã¢â‚¬â€
  *     client-supplied tenancy fields are stripped from every row.
  *  4. Default sync is MERGE (upsert only, never touches rows the client did
  *     not send). Destructive wipe only happens with an explicit
@@ -42,7 +42,7 @@ class WorkspaceController extends Controller
         'inquiries',
     ];
 
-    /** Collections holding money — every sync on them is audit-logged. */
+    /** Collections holding money Ã¢â‚¬â€ every sync on them is audit-logged. */
     private const FINANCIAL = ['transactions', 'payments', 'commissions'];
 
     /** Money-ish keys coerced/validated on financial rows. */
@@ -94,7 +94,7 @@ class WorkspaceController extends Controller
     {
         // array_filter preserves keys; without reindexing the JSON would
         // degrade into an object whenever a row is skipped (draft/private/
-        // payload-deleted), which the frontend (Array.isArray) then drops —
+        // payload-deleted), which the frontend (Array.isArray) then drops Ã¢â‚¬â€
         // the public site would silently show zero listings. G-12.
         $listed = array_values(array_filter(
             $this->publicRows('properties'),
@@ -108,8 +108,8 @@ class WorkspaceController extends Controller
                 $listed
             )),
             'dealers' => array_map(fn ($row) => $this->publicDealer($row), $this->publicRows('dealers')),
-            'videos' => $this->publicRows('videos'),
-            'plots' => $this->publicRows('plots'),
+            'videos' => array_map(fn ($row) => $this->publicVideo($row), $this->publicRows('videos')),
+            'plots' => array_map(fn ($row) => $this->publicPlot($row), $this->publicRows('plots')),
             'media' => $this->publicRows('media'),
             'testimonials' => $this->publicRows('testimonials'),
             'cms' => $this->cmsPayload(),
@@ -147,7 +147,7 @@ class WorkspaceController extends Controller
     /**
      * Save workspace collections.
      *
-     * `mode` (optional): 'merge' (default — upsert only) or 'replace'
+     * `mode` (optional): 'merge' (default Ã¢â‚¬â€ upsert only) or 'replace'
      * (explicit destructive sync, requires delete-level permission and is
      * scoped to the writer's agency).
      */
@@ -286,7 +286,7 @@ class WorkspaceController extends Controller
             return null;
         }
 
-        // Server-owned tenancy/ownership keys are stripped — the business_records
+        // Server-owned tenancy/ownership keys are stripped Ã¢â‚¬â€ the business_records
         // `agency_id` COLUMN is the single source of truth for scoping (set in
         // syncList), never a key inside the payload.
         foreach (self::RESERVED_KEYS as $key) {
@@ -331,7 +331,7 @@ class WorkspaceController extends Controller
     private function filterValue($value, int $depth)
     {
         if ($depth > 8) {
-            return null; // too deep — reject the branch
+            return null; // too deep Ã¢â‚¬â€ reject the branch
         }
 
         if (is_array($value)) {
@@ -372,11 +372,11 @@ class WorkspaceController extends Controller
     /* ================================================================ */
 
     /**
-     * MERGE (default): upsert the given rows only — rows absent from the
+     * MERGE (default): upsert the given rows only Ã¢â‚¬â€ rows absent from the
      * payload are never touched (no cross-collection wipes).
      *
      * REPLACE (explicit + elevated): upsert, then soft-delete rows that are
-     * absent — scoped to the writer's agency for members, platform-wide for
+     * absent Ã¢â‚¬â€ scoped to the writer's agency for members, platform-wide for
      * platform users (requires delete-level permission, audited).
      *
      * OWNERSHIP (enforced on every row):
@@ -410,7 +410,7 @@ class WorkspaceController extends Controller
 
             // ---- row-level ownership enforcement ----
             if ($scoped && $agencyId !== null && $existing && $owner !== null && $owner !== $agencyId) {
-                $blocked++; // another agency's row — never touch
+                $blocked++; // another agency's row Ã¢â‚¬â€ never touch
                 continue;
             }
 
@@ -439,14 +439,14 @@ class WorkspaceController extends Controller
             $deletedDiffers = ($oldDeletedAt === null) !== ($deletedAt === null);
 
             if (!$payloadDiffers && !$deletedDiffers) {
-                continue; // nothing changed — skip write
+                continue; // nothing changed Ã¢â‚¬â€ skip write
             }
 
             BusinessRecord::put($collection, $recordId, $row);
             $changed[] = $recordId;
 
             // Stamp tenancy COLUMN for new rows and rows already owned by the
-            // writer. Shared legacy rows (NULL) stay NULL — never hijacked.
+            // writer. Shared legacy rows (NULL) stay NULL Ã¢â‚¬â€ never hijacked.
             if ($scoped && $agencyId !== null && ($existing === null || $owner === $agencyId)) {
                 BusinessRecord::where('collection', $collection)
                     ->where('record_id', $recordId)
@@ -513,7 +513,7 @@ class WorkspaceController extends Controller
     /**
      * Server-side audit trail for media sales: every asset that transitions
      * to "sold" through the workspace sync is recorded in audit_logs with the
-     * seller, buyer attribution and profit — append-only, never deleted.
+     * seller, buyer attribution and profit Ã¢â‚¬â€ append-only, never deleted.
      */
     private function auditNewMediaSales(Request $request, array $rows): void
     {
@@ -602,7 +602,7 @@ class WorkspaceController extends Controller
     /** Public catalog only lists approved + public properties. */
     private function publiclyListed(array $row): bool
     {
-        $approval = $row['approval_status'] ?? 'approved'; // legacy rows predate the workflow
+        $approval = $row['approval_status'] ?? 'pending'; // require explicit approval
         $visibility = $row['visibility'] ?? 'public';
         return $approval === 'approved' && $visibility === 'public';
     }
@@ -611,7 +611,7 @@ class WorkspaceController extends Controller
      * Agency-scoped full read for the legacy workspace contract.
      *
      * Agency members receive their OWN rows plus shared legacy platform rows
-     * (agency_id NULL — pre-enterprise demo data that belongs to no agency).
+     * (agency_id NULL Ã¢â‚¬â€ pre-enterprise demo data that belongs to no agency).
      * Rows tagged with ANOTHER agency are never returned. Platform users (no
      * membership) see everything.
      */
@@ -654,7 +654,31 @@ class WorkspaceController extends Controller
 
     private function publicDealer(array $row): array
     {
-        unset($row['cnic'], $row['cnicMasked'], $row['CNIC']);
+        // Public catalog: strip all PII and financial fields.
+        unset(
+            $row['cnic'], $row['cnicMasked'], $row['CNIC'],
+            $row['phone'], $row['whatsApp'], $row['email'],
+            $row['totalEarnedPKR'], $row['pendingCommissionPKR'],
+            $row['commissionRate'], $row['commissionType'],
+            $row['commissionValue'], $row['accountNumber'],
+            $row['internalNotes'], $row['notes']
+        );
+        return $row;
+    }
+
+    private function publicVideo(array $row): array
+    {
+        // Strip internal user ids and sensitive fields from public videos.
+        unset($row['likedBy'], $row['liked_by'], $row['authorId'], $row['author_id'],
+            $row['internalNotes'], $row['notes']);
+        return $row;
+    }
+
+    private function publicPlot(array $row): array
+    {
+        // Strip owner names and sensitive fields from public plots.
+        unset($row['markerLabel'], $row['marker_label'], $row['ownerName'],
+            $row['owner_name'], $row['internalNotes'], $row['notes']);
         return $row;
     }
 
@@ -681,7 +705,7 @@ class WorkspaceController extends Controller
     /** Read gate per collection (agency-scoped keys checked when scoped). */
     private function canRead(Request $request, $user, string $collection, ?string $agencyId): bool
     {
-        // `view_properties` is the legacy universal read gate — kept as the
+        // `view_properties` is the legacy universal read gate Ã¢â‚¬â€ kept as the
         // fallback so existing staff screens keep working; agency scoping
         // (allRows) is what actually isolates tenants on reads.
         $gates = [
@@ -770,3 +794,7 @@ class WorkspaceController extends Controller
         return false;
     }
 }
+
+
+
+

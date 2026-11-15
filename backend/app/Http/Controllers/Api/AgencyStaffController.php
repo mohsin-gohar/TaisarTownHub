@@ -139,7 +139,7 @@ class AgencyStaffController extends Controller
         return response()->json(['success' => true, 'invitations' => $invitations]);
     }
 
-    /** DELETE /api/agency/invitations/{id} — revoke */
+    /** DELETE /api/agency/invitations/{id} â€” revoke */
     public function revokeInvitation(Request $request, int $id)
     {
         $agencyId = $this->requireAgency($request);
@@ -156,7 +156,7 @@ class AgencyStaffController extends Controller
     }
 
     /**
-     * POST /api/agency/invitations/accept — accept an invite.
+     * POST /api/agency/invitations/accept â€” accept an invite.
      * Authenticated users join directly; new users may register through the
      * invite by supplying name + password with the token.
      */
@@ -186,7 +186,14 @@ class AgencyStaffController extends Controller
             ], 422);
         }
 
-        $user = $request->user();
+        $user = null;
+        if ($request->bearerToken()) {
+            try {
+                $user = auth('sanctum')->user();
+            } catch (\Throwable $e) {
+                $user = null;
+            }
+        }
 
         if (!$user) {
             // Register through invitation
@@ -198,15 +205,26 @@ class AgencyStaffController extends Controller
             if (User::where('email', $invitation->email)->exists()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'An account with this email already exists — please sign in first.',
+                    'message' => 'An account with this email already exists â€” please sign in first.',
                 ], 422);
             }
 
+            $inviteRole = Role::find($invitation->role_id);
+            $mappedRole = 'operator';
+            if ($inviteRole) {
+                $key = $inviteRole->key ?? '';
+                $mappedRole = match (true) {
+                    str_contains($key, 'owner') => 'admin',
+                    str_contains($key, 'manager') => 'manager',
+                    str_contains($key, 'agent') || str_contains($key, 'dealer') => 'dealer',
+                    default => 'operator',
+                };
+            }
             $user = User::create([
                 'name' => $request->name,
                 'email' => $invitation->email,
                 'password' => Hash::make($request->password),
-                'role' => 'dealer',
+                'role' => $mappedRole,
                 'last_login_at' => now(),
             ]);
         } elseif (strtolower($user->email) !== strtolower($invitation->email)) {
@@ -259,7 +277,7 @@ class AgencyStaffController extends Controller
     }
 
     /**
-     * PATCH /api/agency/members/{id} — change role / extra permissions / status.
+     * PATCH /api/agency/members/{id} â€” change role / extra permissions / status.
      */
     public function updateMember(Request $request, int $id)
     {
@@ -279,6 +297,20 @@ class AgencyStaffController extends Controller
 
         if ($request->has('role_id')) {
             $role = $this->resolveAgencyRole($agencyId, $request->role_id);
+            // Privilege escalation guard: only an existing owner may promote to
+            // or demote from the owner role.
+            $requesterIsOwner = AgencyMember::where('agency_id', $agencyId)
+                ->where('user_id', $request->user()->id)
+                ->where('role_id', 'role_agency_owner')
+                ->where('status', 'active')
+                ->exists();
+            if (($role->id === 'role_agency_owner' || $member->role_id === 'role_agency_owner')
+                && !$requesterIsOwner) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only an agency owner may change owner membership.',
+                ], 403);
+            }
             // Never demote the last active owner
             if ($member->role_id === 'role_agency_owner' && $role->id !== 'role_agency_owner'
                 && $this->activeOwnerCount($agencyId) <= 1) {
@@ -325,7 +357,7 @@ class AgencyStaffController extends Controller
         return response()->json(['success' => true, 'message' => 'Member updated.']);
     }
 
-    /** DELETE /api/agency/members/{id} — deactivate (never hard-delete). */
+    /** DELETE /api/agency/members/{id} â€” deactivate (never hard-delete). */
     public function removeMember(Request $request, int $id)
     {
         $agencyId = $this->requireAgency($request);
@@ -353,7 +385,7 @@ class AgencyStaffController extends Controller
 
     /* ================= Roles ================= */
 
-    /** GET /api/agency/roles — system + custom roles for this agency. */
+    /** GET /api/agency/roles â€” system + custom roles for this agency. */
     public function roles(Request $request)
     {
         $agencyId = $this->requireAgency($request);
@@ -381,7 +413,7 @@ class AgencyStaffController extends Controller
         ]);
     }
 
-    /** POST /api/agency/roles — create a custom agency role. */
+    /** POST /api/agency/roles â€” create a custom agency role. */
     public function storeRole(Request $request)
     {
         $agencyId = $this->requireAgency($request);
@@ -437,7 +469,7 @@ class AgencyStaffController extends Controller
         ], 201);
     }
 
-    /** PUT /api/agency/roles/{id} — update a custom role. */
+    /** PUT /api/agency/roles/{id} â€” update a custom role. */
     public function updateRole(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);
@@ -478,7 +510,7 @@ class AgencyStaffController extends Controller
         return response()->json(['success' => true, 'message' => 'Role updated.']);
     }
 
-    /** DELETE /api/agency/roles/{id} — delete an unused custom role. */
+    /** DELETE /api/agency/roles/{id} â€” delete an unused custom role. */
     public function destroyRole(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);
@@ -538,3 +570,6 @@ class AgencyStaffController extends Controller
             ->count();
     }
 }
+
+
+

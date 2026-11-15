@@ -15,7 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Real dashboard analytics — replaces the hard-coded chart/metrics that the
+ * Real dashboard analytics â€” replaces the hard-coded chart/metrics that the
  * Phase 1 audit found in AdminOverview.tsx. All numbers are computed from the
  * database for the requested period.
  */
@@ -24,7 +24,7 @@ class AdminDashboardController extends Controller
     use AuthorizesApi;
 
     /**
-     * GET /api/admin/reports?from=&to= — platform-wide, date-filtered report
+     * GET /api/admin/reports?from=&to= â€” platform-wide, date-filtered report
      * (G-12): agencies, deals, collections, invoice revenue and marketplace
      * activity computed from the database for the requested window.
      * Requires `admin.view_reports` (platform-only).
@@ -94,7 +94,7 @@ class AdminDashboardController extends Controller
 
     public function index(Request $request)
     {
-        $this->requireAny($request, ['view_reports', 'admin.view_reports', 'properties.view', 'view_properties']);
+        $this->requireAny($request, ['view_reports', 'admin.view_reports', 'properties.view', 'view_properties', 'finance.view']);
 
         $user = $request->user();
         $agencyId = $this->agencyId($request);
@@ -136,6 +136,7 @@ class AdminDashboardController extends Controller
         ];
 
         /* -------- money (real ledger) -------- */
+        $canSeeFinance = $user->hasPermission('finance.view', $agencyId) || $user->hasPermission('view_reports', $agencyId) || $user->hasPermission('admin.view_reports', null);
         $paymentScope = DB::table('transaction_payments');
         $commissionScope = DB::table('commissions');
         if ($agencyId !== null) {
@@ -143,7 +144,7 @@ class AdminDashboardController extends Controller
             $commissionScope->where('agency_id', $agencyId);
         }
 
-        $finance = [
+        $finance = $canSeeFinance ? [
             'collected_total' => (float) (clone $paymentScope)->sum('amount'),
             'collected_' . $days . 'd' => (float) (clone $paymentScope)->where('received_at', '>=', $since)->sum('amount'),
             'commission_pending' => (float) (clone $commissionScope)->whereIn('status', ['pending', 'accrued'])->sum('amount'),
@@ -151,7 +152,7 @@ class AdminDashboardController extends Controller
             'active_deals' => (clone $txnQuery)->whereNull('voided_at')->count(),
             'voided_deals' => (clone $txnQuery)->whereNotNull('voided_at')->count(),
             'deal_value' => (float) (clone $txnQuery)->whereNull('voided_at')->sum('agreementAmountPKR'),
-        ];
+        ] : [];
 
         /* -------- conversions -------- */
         $approvedListings = max(1, $listings['public']);
@@ -231,3 +232,5 @@ class AdminDashboardController extends Controller
         return array_values($range);
     }
 }
+
+
