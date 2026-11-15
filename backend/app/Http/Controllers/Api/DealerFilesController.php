@@ -95,8 +95,8 @@ class DealerFilesController extends Controller
      * Mark a file as sold and calculate commission.
      *
      * Concurrency guard: the status re-check happens on the LOCKED row
-     * (SELECT … FOR UPDATE inside a transaction), so two dealers racing on
-     * the same file cannot both sell it — the loser commits against the
+     * (SELECT â€¦ FOR UPDATE inside a transaction), so two dealers racing on
+     * the same file cannot both sell it â€” the loser commits against the
      * already-sold row and is rejected.
      */
     public function sell(Request $request, $id)
@@ -105,7 +105,7 @@ class DealerFilesController extends Controller
         $dealerId = $user->dealer_id ?? $user->id;
 
         $validated = $request->validate([
-            'selling_price_kbr' => 'required|numeric|min:0',
+            'selling_price_kbr' => 'required|numeric|min:0|max:9999999999',
             'buyer_name' => 'required|string|max:255',
             'buyer_phone' => 'required|string|max:50',
             'buyer_cnic' => 'nullable|string|max:20',

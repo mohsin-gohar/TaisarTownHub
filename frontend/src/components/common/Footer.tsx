@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
 import {
@@ -112,8 +112,7 @@ export const Footer: React.FC = () => {
                 <a
                   key={label}
                   href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  target="_blank" rel="noopener noreferrer"
                   aria-label={`${currentTheme.agencyName} on ${label}`}
                   title={label}
                   className="w-9 h-9 rounded-lg bg-[#101C2C] border border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#C5A46D] hover:border-[#C5A46D]/50 hover:shadow-[0_0_12px_rgba(197,164,109,0.35)] hover:-translate-y-0.5 transition-all cursor-pointer"
@@ -122,7 +121,7 @@ export const Footer: React.FC = () => {
                 </a>
               ))}
             </div>
-            {/* Quick Demo Controls — demo build only (public/production visitors never see it) */}
+            {/* Quick Demo Controls â€” demo build only (public/production visitors never see it) */}
             {APP_MODE === 'demo' && (
               <div className="pt-2">
                 <button
@@ -256,21 +255,21 @@ export const Footer: React.FC = () => {
               >
                 Scheme 45 Master Plan
               </button>
-              <span>•</span>
+              <span>â€¢</span>
               <button
                 onClick={() => setCurrentView('contact')}
                 className="hover:text-slate-300"
               >
                 Office Location
               </button>
-              <span>•</span>
+              <span>â€¢</span>
               <button
                 onClick={() => setCurrentView('login')}
                 className="text-[#C5A46D] hover:underline"
               >
                 Portal Sign In
               </button>
-              <span>•</span>
+              <span>â€¢</span>
               <button
                 onClick={() => setCurrentView('register')}
                 className="text-slate-400 hover:text-[#C5A46D]"
@@ -296,3 +295,7 @@ export const Footer: React.FC = () => {
     </footer>
   );
 };
+
+
+
+

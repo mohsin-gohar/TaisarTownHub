@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+﻿import React, { useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   FileCheck,
@@ -31,7 +31,7 @@ export const AdminFileManagement: React.FC = () => {
   const { propertyFiles, verifyPropertyFile, addPropertyFile, deletePropertyFile, properties, showToast, currentUser, confirmAction } = useApp();
 
   // P0-4: verify/reject are verifier actions. Operators (upload-only role) get
-  // the upload path but never the decision buttons — and the context action
+  // the upload path but never the decision buttons â€” and the context action
   // gates enforce this regardless of what the UI renders.
   const canVerify = hasPermission(currentUser.role, 'verify_documents');
 
@@ -497,7 +497,7 @@ export const AdminFileManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Verify Note Modal — mandatory reviewer note, no auto-generated text */}
+      {/* Verify Note Modal â€” mandatory reviewer note, no auto-generated text */}
       {verifyModalDocId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
@@ -510,7 +510,7 @@ export const AdminFileManagement: React.FC = () => {
               Verify Document
             </h3>
             <p className="text-xs text-slate-400 mb-4">
-              Add a short review note — what was checked against the MDA record. This note is stored with the audit trail and shown to the uploading team.
+              Add a short review note â€” what was checked against the MDA record. This note is stored with the audit trail and shown to the uploading team.
             </p>
 
             <textarea
@@ -559,7 +559,7 @@ export const AdminFileManagement: React.FC = () => {
               {selectedDocPreview.title}
             </h3>
             <span className="text-xs font-mono text-[#C5A46D]">
-              {selectedDocPreview.category} • File: {selectedDocPreview.fileNumber}
+              {selectedDocPreview.category} â€¢ File: {selectedDocPreview.fileNumber}
             </span>
 
             <div className="my-4 rounded-xl overflow-hidden border border-slate-800 bg-[#0B1220]">
@@ -588,8 +588,7 @@ export const AdminFileManagement: React.FC = () => {
             {previewHasFile && (
               <a
                 href={previewDocUrl}
-                target="_blank"
-                rel="noreferrer"
+                target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C5A46D] hover:text-[#D4AF37]"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -607,7 +606,7 @@ export const AdminFileManagement: React.FC = () => {
                   <span className="text-slate-400">Attached File:</span>
                   <span className="font-semibold text-white uppercase">
                     {selectedDocPreview.fileType}
-                    {selectedDocPreview.fileSize ? ` · ${selectedDocPreview.fileSize}` : ''}
+                    {selectedDocPreview.fileSize ? ` Â· ${selectedDocPreview.fileSize}` : ''}
                   </span>
                 </div>
               )}
@@ -707,7 +706,7 @@ export const AdminFileManagement: React.FC = () => {
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">
-                  Document Scan — PDF / JPG / PNG / WebP, max 5 MB *
+                  Document Scan â€” PDF / JPG / PNG / WebP, max 5 MB *
                 </label>
                 <input
                   ref={documentInputRef}
@@ -730,7 +729,7 @@ export const AdminFileManagement: React.FC = () => {
                     </span>
                     <span className="block text-[11px] text-slate-400 truncate">
                       {documentFileName
-                        ? `${documentFileSize} · ready to upload`
+                        ? `${documentFileSize} Â· ready to upload`
                         : 'PDF allotment orders, transfer deeds, or a clear phone scan'}
                     </span>
                   </span>
@@ -809,3 +808,6 @@ export const AdminFileManagement: React.FC = () => {
     </div>
   );
 };
+
+
+

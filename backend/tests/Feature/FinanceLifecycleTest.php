@@ -16,7 +16,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'finance.view', 'view_transactions', 'finance.create_transaction',
             'create_transactions', 'finance.update_transaction', 'update_transactions',
             'finance.manage_payments', 'manage_payments', 'finance.view_commissions',
-            'view_commissions', 'void_transactions',
+            'view_commissions', 'void_transactions', 'manage_deals',
         ];
     }
 
@@ -106,7 +106,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
 
         $this->patchStatus($user, $deal['id'], 'Negotiation')
             ->assertStatus(422)
-            ->assertJsonFragment(['message' => 'Deal is cancelled — the record is read-only for bookkeeping.']);
+            ->assertJsonFragment(['message' => 'Deal is cancelled â€” the record is read-only for bookkeeping.']);
     }
 
     public function test_agency_cannot_read_another_agencys_deal(): void
@@ -197,3 +197,4 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             ->assertJsonValidationErrors('amount');
     }
 }
+

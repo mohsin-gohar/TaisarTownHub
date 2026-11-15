@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { MessageCircle } from 'lucide-react';
 import { generateWhatsAppLink } from '../../utils/logic';
@@ -15,8 +15,7 @@ export const WhatsAppFloatingBtn: React.FC = () => {
     <aside aria-label="Contact via WhatsApp" className="fixed bottom-6 left-6 z-40">
       <a
         href={whatsAppLink}
-        target="_blank"
-        rel="noreferrer"
+        target="_blank" rel="noopener noreferrer"
         className="group flex items-center gap-2.5 bg-emerald-600 hover:bg-emerald-500 text-white pl-3.5 pr-4 py-3 rounded-full shadow-xl shadow-emerald-950/60 transition-all hover:scale-105 border border-emerald-400/40 cursor-pointer"
         title="Chat with TaisarTownHub Agent on WhatsApp"
       >
@@ -32,3 +31,6 @@ export const WhatsAppFloatingBtn: React.FC = () => {
     </aside>
   );
 };
+
+
+

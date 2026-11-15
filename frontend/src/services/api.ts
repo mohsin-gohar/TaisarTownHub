@@ -1,8 +1,12 @@
-/**
+﻿/**
  * TaisarTownHub Backend API Service
  * Connects the React luxury frontend to the Laravel + MySQL API backend.
  */
 
+// Require VITE_API_URL in production; localhost fallback ONLY in development
+if (!import.meta.env.VITE_API_URL && import.meta.env.PROD) {
+  throw new Error('VITE_API_URL is required in production. Set it in your build environment.');
+}
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080/api';
 
 const TOKEN_KEY = 'tth_token';
@@ -1151,7 +1155,7 @@ export const api = {
   // ------------------------------------------------------------------
   // Enterprise UI support (Phase 7): identity, private vault, media
   // uploads, location structures. All file transfers use multipart and
-  // authenticated blob reads — private bytes are never public URLs.
+  // authenticated blob reads â€” private bytes are never public URLs.
   // ------------------------------------------------------------------
 
   async getMe(): Promise<any | null> {
@@ -1296,3 +1300,5 @@ export const api = {
     }
   }
 };
+
+

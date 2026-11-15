@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Inbox,
@@ -174,8 +174,8 @@ export const AdminInquiries: React.FC = () => {
                       </h4>
                       <div className="flex items-center gap-3 text-xs text-slate-400">
                         <span className="text-[#C5A46D] font-mono">{inq.phone}</span>
-                        {inq.email && <span>• {inq.email}</span>}
-                        <span className="hidden sm:inline">• {inq.submittedAt}</span>
+                        {inq.email && <span>â€¢ {inq.email}</span>}
+                        <span className="hidden sm:inline">â€¢ {inq.submittedAt}</span>
                       </div>
                     </div>
                   </div>
@@ -268,8 +268,7 @@ export const AdminInquiries: React.FC = () => {
                     {/* Quick WhatsApp Action Button */}
                     <a
                       href={whatsAppReply}
-                      target="_blank"
-                      rel="noreferrer"
+                      target="_blank" rel="noopener noreferrer"
                       className="w-full py-2 px-3 rounded-lg bg-[#C5A46D]/15 hover:bg-[#C5A46D] text-[#F9E7BA] hover:text-[#101C2C] transition-colors border border-[#C5A46D]/40 font-bold text-xs flex items-center justify-center gap-2"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
@@ -285,3 +284,6 @@ export const AdminInquiries: React.FC = () => {
     </div>
   );
 };
+
+
+

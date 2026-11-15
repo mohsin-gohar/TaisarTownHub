@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Play, Maximize2, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -80,8 +80,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, title, 
               <p className="text-sm">This video could not be loaded. It may be unavailable or blocked by your network.</p>
               <a
                 href={videoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                target="_blank" rel="noopener noreferrer"
                 className="text-[#C5A46D] underline text-xs hover:text-[#D4AF37]"
               >
                 Open video in a new tab
@@ -116,3 +115,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, title, 
     document.body
   );
 };
+
+
+
+

@@ -15,7 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Real dashboard analytics â€” replaces the hard-coded chart/metrics that the
+ * Real dashboard analytics — replaces the hard-coded chart/metrics that the
  * Phase 1 audit found in AdminOverview.tsx. All numbers are computed from the
  * database for the requested period.
  */
@@ -24,7 +24,7 @@ class AdminDashboardController extends Controller
     use AuthorizesApi;
 
     /**
-     * GET /api/admin/reports?from=&to= â€” platform-wide, date-filtered report
+     * GET /api/admin/reports?from=&to= — platform-wide, date-filtered report
      * (G-12): agencies, deals, collections, invoice revenue and marketplace
      * activity computed from the database for the requested window.
      * Requires `admin.view_reports` (platform-only).
@@ -158,10 +158,11 @@ class AdminDashboardController extends Controller
         $approvedListings = max(1, $listings['public']);
         $convertedLeads = $leads['converted'];
         $completedDeals = (clone $txnQuery)->where('dealStatus', 'Completed')->count();
+        $activeDeals = $canSeeFinance ? (clone $txnQuery)->whereNull('voided_at')->count() : 0;
 
         $metrics = [
             'lead_conversion_pct' => round(($convertedLeads / max(1, $leads['total'])) * 100, 1),
-            'deal_close_pct' => round(($completedDeals / max(1, $finance['active_deals'])) * 100, 1),
+            'deal_close_pct' => round(($completedDeals / max(1, $activeDeals)) * 100, 1),
             'pending_approval_pct' => round(($listings['pending'] / max(1, $listings['total'])) * 100, 1),
             'listings_per_lead' => round($approvedListings / max(1, $leads['total']), 2),
         ];
@@ -232,5 +233,3 @@ class AdminDashboardController extends Controller
         return array_values($range);
     }
 }
-
-
