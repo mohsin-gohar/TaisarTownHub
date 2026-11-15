@@ -612,19 +612,18 @@ class WorkspaceController extends Controller
     /**
      * Agency-scoped full read for the legacy workspace contract.
      *
-     * Agency members receive their OWN rows plus shared legacy platform rows
-     * (agency_id NULL Ã¢â‚¬â€ pre-enterprise demo data that belongs to no agency).
-     * Rows tagged with ANOTHER agency are never returned. Platform users (no
-     * membership) see everything.
+     * Agency members receive only their OWN rows. Legacy unowned/platform rows
+     * (agency_id NULL — pre-enterprise data with no explicit owner) are hidden
+     * from agency workspaces to prevent cross-tenant exposure until an explicit
+     * ownership decision is applied. Rows tagged with ANOTHER agency are never
+     * returned. Platform users (no agency membership scope) see everything.
      */
     private function allRows(string $collection, ?string $agencyId): array
     {
         $query = BusinessRecord::where('collection', $collection);
 
         if (in_array($collection, self::AGENCY_SCOPED, true) && $agencyId !== null) {
-            $query->where(function ($q) use ($agencyId) {
-                $q->where('agency_id', $agencyId)->orWhereNull('agency_id');
-            });
+            $query->where('agency_id', $agencyId);
         }
 
         return $query
