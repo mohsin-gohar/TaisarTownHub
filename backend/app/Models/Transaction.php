@@ -113,4 +113,32 @@ class Transaction extends Model
     {
         return max(0, (float) $this->agreementAmountPKR - $this->totalPaid());
     }
+
+    /**
+     * Recalculate the payment status based on total payments received.
+     * Updates advancePaymentPKR and remainingBalancePKR to reflect current totals.
+     * Updates paymentStatus to reflect payment progress.
+     */
+    public function recalculateStatus(): void
+    {
+        $totalPaid = $this->totalPaid();
+        $agreementAmount = (float) $this->agreementAmountPKR;
+
+        // Update advancePaymentPKR to reflect total collected
+        $this->advancePaymentPKR = $totalPaid;
+
+        // Calculate remaining balance
+        $this->remainingBalancePKR = max(0, $agreementAmount - $totalPaid);
+
+        // Determine payment status
+        if ($totalPaid <= 0) {
+            $this->paymentStatus = 'Pending';
+        } elseif ($totalPaid >= $agreementAmount && $agreementAmount > 0) {
+            $this->paymentStatus = 'Fully Paid';
+        } else {
+            $this->paymentStatus = 'Partially Paid';
+        }
+
+        $this->save();
+    }
 }

@@ -25,17 +25,50 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class FinanceController extends Controller
 {
-    use AuthorizesApi;
+use AuthorizesApi;
+
+    /**
+     * Find a transaction scoped to the given agency with access control.
+     *
+     * @param string|null $agencyId The acting agency context (null for platform-wide)
+     * @param string $id The transaction ID to find
+     * @param User $user The authenticated user
+     * @return Transaction
+     * @throws \Illuminate\Auth\Access\AuthorizationException
+     */
+    protected function findScoped(?string $agencyId, string $id, $user): Transaction
+    {
+        $query = Transaction::query();
+
+        // Scope to agency if one is set, otherwise check platform access
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        } elseif (!$user->hasPermission('admin.view_reports')) {
+            // Non-admin users without agency context cannot access transactions
+            abort(404, 'Transaction not found.');
+        }
+
+        $transaction = $query->findOrFail($id);
+
+        // Additional check: if the transaction has an agency_id and the user
+        // doesn't have platform-wide access, ensure they can only see their own agency
+        if ($transaction->agency_id !== null && $agencyId === null && !$user->hasPermission('admin.view_reports')) {
+            abort(404, 'Transaction not found.');
+        }
+
+        return $transaction;
+    }
 
     /**
      * GET /api/agency/transactions
      * Agency-scoped or platform-wide list with filters.
      */
-    public function index(Request $request)
+public function index(Request $request)
     {
         $this->requireAny($request, ['view_transactions', 'finance.view', 'admin.view_reports', 'transactions.view']);
 
@@ -80,6 +113,7 @@ class FinanceController extends Controller
 
         return response()->json([
             'success' => true,
+            'transactions' => $transactions->items(),
             'data' => $transactions->items(),
             'pagination' => [
                 'total' => $transactions->total(),
@@ -90,7 +124,7 @@ class FinanceController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+public function store(Request $request)
     {
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['manage_deals', 'finance.manage_deals']);
@@ -111,19 +145,43 @@ class FinanceController extends Controller
             'transactionDate' => 'nullable|date',
         ]);
 
+        // Generate unique deal number
+        $year = now()->year;
+        $lastDeal = Transaction::where('dealNumber', 'like', "TXN-{$year}-%")
+            ->orderByDesc('dealNumber')
+            ->first();
+        $nextNumber = 1;
+        if ($lastDeal && preg_match('/TXN-\d{4}-(\d+)/', $lastDeal->dealNumber, $matches)) {
+            $nextNumber = (int) $matches[1] + 1;
+        }
+        $data['dealNumber'] = sprintf('TXN-%d-%04d', $year, $nextNumber);
+        $data['id'] = 'txn-' . Str::uuid();
+
+        // Calculate remaining balance
+        $advance = $data['advancePaymentPKR'] ?? 0;
+        $data['remainingBalancePKR'] = max(0, $data['agreementAmountPKR'] - $advance);
+
+        // Set default status if not provided
+        if (!isset($data['dealStatus'])) {
+            $data['dealStatus'] = 'Draft';
+        }
+
         $deal = DB::transaction(function () use ($data, $agencyId, $request) {
             $deal = Transaction::create([
+                'id' => $data['id'],
+                'dealNumber' => $data['dealNumber'],
                 'agency_id' => $agencyId,
                 'property_id' => $data['propertyId'] ?? null,
                 'propertyTitle' => $data['propertyTitle'],
-                'plotNumber' => $data['plotNumber'],
-                'sector' => $data['sector'],
+                'plotNumber' => $data['plotNumber'] ?? null,
+                'sector' => $data['sector'] ?? null,
                 'sellerName' => $data['sellerName'],
                 'buyerName' => $data['buyerName'],
                 'dealer_id' => $data['dealerId'] ?? null,
                 'transactionType' => $data['transactionType'] ?? 'Sale',
                 'agreementAmountPKR' => (int) $data['agreementAmountPKR'],
                 'advancePaymentPKR' => (int) ($data['advancePaymentPKR'] ?? 0),
+                'remainingBalancePKR' => (int) ($data['remainingBalancePKR'] ?? max(0, $data['agreementAmountPKR'] - ($data['advancePaymentPKR'] ?? 0))),
                 'commissionAmountPKR' => (int) ($data['commissionAmountPKR'] ?? 0),
                 'dealStatus' => $data['dealStatus'] ?? 'Draft',
                 'transactionDate' => $data['transactionDate'] ?? now()->toDateString(),
@@ -151,7 +209,7 @@ class FinanceController extends Controller
         ], 201);
     }
 
-    public function update(Request $request, string $id)
+public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['manage_deals', 'finance.manage_deals']);
@@ -162,15 +220,7 @@ class FinanceController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Voided deals are read-only.',
-            ], 422);
-        }
-
-        // Prevent editing Completed/Cancelled deals
-        if (in_array($transaction->dealStatus, ['Completed', 'Cancelled'], true)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Completed or cancelled deals are read-only.',
-            ], 422);
+            ], 409);
         }
 
         $data = $request->validate([
@@ -186,12 +236,71 @@ class FinanceController extends Controller
             'transactionDate' => 'nullable|date',
         ]);
 
-        // Prevent creating deal directly with Completed status
-        if (isset($data['dealStatus']) && in_array($data['dealStatus'], ['Completed', 'Cancelled'], true)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'A new deal cannot be created directly in a terminal state.',
-            ], 422);
+        // Handle dealStatus transition with state machine validation
+        $newStatus = $data['dealStatus'] ?? $data['status'] ?? null;
+        if ($newStatus !== null) {
+            $currentStatus = $transaction->dealStatus;
+
+            // Terminal states: Completed and Cancelled are read-only once reached
+            if (in_array($currentStatus, ['Completed', 'Cancelled'], true)) {
+                $message = $currentStatus === 'Cancelled'
+                    ? 'Deal is cancelled — the record is read-only for bookkeeping.'
+                    : 'Completed deals are read-only.';
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                ], 422);
+            }
+
+            // Validate forward transitions
+            $validForward = [
+                'Draft' => ['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                'Negotiation' => ['Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                'Agreement Signed' => ['Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                'Token Paid' => ['Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                'Advance Received' => ['Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                'Payment Pending' => ['Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                'Partially Paid' => ['Fully Paid', 'Under Transfer', 'Cancelled'],
+                'Fully Paid' => ['Under Transfer', 'Cancelled'],
+                'Under Transfer' => ['Completed', 'Cancelled'],
+            ];
+
+            // Check if this is a valid forward transition
+            $allowedNext = $validForward[$currentStatus] ?? [];
+            if (!in_array($newStatus, $allowedNext, true)) {
+                // Check if it's a backward transition (one step back is allowed)
+                $backwardMap = [
+                    'Negotiation' => 'Draft',
+                    'Agreement Signed' => 'Negotiation',
+                    'Token Paid' => 'Agreement Signed',
+                    'Advance Received' => 'Token Paid',
+                    'Payment Pending' => 'Advance Received',
+                    'Partially Paid' => 'Payment Pending',
+                    'Fully Paid' => 'Partially Paid',
+                    'Under Transfer' => 'Fully Paid',
+                ];
+
+                $expectedPrev = $backwardMap[$currentStatus] ?? null;
+                if ($newStatus !== $expectedPrev) {
+                    // Special case for Completed: requires Under Transfer
+                    if ($newStatus === 'Completed' && $currentStatus !== 'Under Transfer') {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'A deal can only be marked Completed after it is Under Transfer at MDA.',
+                        ], 422);
+                    }
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid status transition.',
+                    ], 422);
+                }
+            }
+
+            // Handle Cancelled - allowed from any non-terminal state
+            if ($newStatus === 'Cancelled') {
+                $data['dealStatus'] = 'Cancelled';
+            }
         }
 
         $transaction->update($data);
@@ -200,6 +309,194 @@ class FinanceController extends Controller
             'success' => true,
             'message' => 'Deal updated.',
             'transaction' => $transaction->fresh()->load(['payments', 'commissions']),
+        ]);
+    }
+
+    /**
+     * POST /api/agency/transactions/{id}/void
+     * Void a transaction (mark as read-only for bookkeeping).
+     */
+    public function void(Request $request, string $id)
+    {
+        $agencyId = $this->agencyId($request);
+
+        $transaction = $this->findScoped($agencyId, $id, $request->user());
+
+        if ($transaction->isVoided()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaction is already voided.',
+            ], 422);
+        }
+
+        $request->validate([
+            'reason' => 'required|string|min:3|max:500',
+        ]);
+
+        $transaction->update([
+            'voided_at' => now(),
+            'void_reason' => $request->reason,
+            'voided_by' => $request->user()->id,
+        ]);
+
+        $this->writeAudit($request, 'transaction.void', $transaction->id, "Transaction voided: {$request->reason}", [
+            'agency_id' => $transaction->agency_id,
+            'entity_type' => 'transaction',
+            'entity_id' => $transaction->id,
+            'metadata' => ['reason' => $request->reason],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Transaction voided successfully.',
+        ]);
+    }
+
+    /**
+     * GET /api/agency/expenses
+     * List expenses for the agency with totals.
+     */
+    public function expensesIndex(Request $request)
+    {
+        $this->requirePermission($request, 'finance.view');
+
+        $agencyId = $this->agencyId($request);
+        if ($agencyId === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No agency context.',
+            ], 403);
+        }
+
+        $query = Expense::where('agency_id', $agencyId)
+            ->whereNull('deleted_at');
+
+        // Filter by category if provided
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
+        $expenses = $query->orderByDesc('expense_date')->get();
+        $totalAmount = $expenses->sum('amount_pkr');
+
+        return response()->json([
+            'success' => true,
+            'expenses' => $expenses,
+            'totals' => [
+                'amount_pkr' => (int) $totalAmount,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/agency/expenses
+     * Create a new expense.
+     */
+    public function expensesStore(Request $request)
+    {
+        $this->requirePermission($request, 'finance.manage_payments');
+
+        $agencyId = $this->agencyId($request);
+        if ($agencyId === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No agency context.',
+            ], 403);
+        }
+
+        $data = $request->validate([
+            'expense_date' => 'required|date|before_or_equal:today',
+            'category' => 'nullable|string|in:' . implode(',', Expense::CATEGORIES),
+            'amount_pkr' => 'required|integer|min:1|max:9999999999',
+            'description' => 'nullable|string|max:500',
+            'payment_method' => 'nullable|string|in:' . implode(',', Expense::PAYMENT_METHODS),
+            'reference' => 'nullable|string|max:120',
+        ]);
+
+        $expense = Expense::create([
+            'id' => 'exp_' . bin2hex(random_bytes(8)),
+            'agency_id' => $agencyId,
+            'expense_date' => $data['expense_date'],
+            'category' => $data['category'] ?? 'other',
+            'amount_pkr' => $data['amount_pkr'],
+            'description' => $data['description'] ?? null,
+            'payment_method' => $data['payment_method'] ?? 'cash',
+            'reference' => $data['reference'] ?? null,
+            'created_by' => $request->user()->id,
+        ]);
+
+        $this->writeAudit($request, 'expense.created', $expense->id, "Expense created: {$expense->amount_pkr} PKR", [
+            'agency_id' => $agencyId,
+            'entity_type' => 'expense',
+            'entity_id' => $expense->id,
+            'metadata' => ['amount_pkr' => $expense->amount_pkr, 'category' => $expense->category],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'expense' => $expense,
+        ], 201);
+    }
+
+    /**
+     * DELETE /api/agency/expenses/{id}
+     * Soft delete an expense.
+     */
+    public function expensesDestroy(Request $request, string $id)
+    {
+        $this->requirePermission($request, 'finance.manage_payments');
+
+        $agencyId = $this->agencyId($request);
+        if ($agencyId === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No agency context.',
+            ], 403);
+        }
+
+        $expense = Expense::where('id', $id)
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+
+        $expense->delete(); // Soft delete
+
+        $this->writeAudit($request, 'expense.deleted', $expense->id, "Expense deleted: {$expense->amount_pkr} PKR", [
+            'agency_id' => $agencyId,
+            'entity_type' => 'expense',
+            'entity_id' => $expense->id,
+            'metadata' => ['amount_pkr' => $expense->amount_pkr],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Expense deleted successfully.',
+        ]);
+    }
+
+    /**
+     * GET /api/agency/transactions/{id}/payments
+     * List all payments for a transaction with totals.
+     */
+    public function payments(Request $request, string $id)
+    {
+        $agencyId = $this->agencyId($request);
+        $this->requireAny($request, ['view_transactions', 'finance.view', 'transactions.view']);
+
+        $transaction = $this->findScoped($agencyId, $id, $request->user());
+
+        $payments = $transaction->payments()->orderBy('received_at')->get();
+        $totalCollected = (float) $payments->sum('amount');
+        $agreementAmount = (float) $transaction->agreementAmountPKR;
+
+        return response()->json([
+            'success' => true,
+            'payments' => $payments,
+            'totals' => [
+                'collected' => $totalCollected,
+                'agreement' => $agreementAmount,
+                'balance' => max(0, $agreementAmount - $totalCollected),
+            ],
         ]);
     }
 
@@ -512,9 +809,12 @@ class FinanceController extends Controller
         ], 201);
     }
 
-    public function reports(Request $request)
+public function reports(Request $request)
     {
-        $this->requirePermission($request, 'admin.view_reports');
+        // Agency reports require finance.view_reports; platform reports require admin.view_reports
+        $this->requireAny($request, ['finance.view_reports', 'admin.view_reports']);
+
+        $agencyId = $this->agencyId($request);
 
         $data = $request->validate([
             'from' => 'nullable|date',
@@ -524,6 +824,14 @@ class FinanceController extends Controller
         $from = now()->parse($data['from'] ?? now()->subDays(29)->toDateString())->startOfDay();
         $to = now()->parse($data['to'] ?? now()->toDateString())->endOfDay();
 
+        // Scope to agency if one is set, otherwise platform-wide
+        $agencyQuery = function ($q) use ($agencyId) {
+            if ($agencyId !== null) {
+                $q->where('agency_id', $agencyId);
+            }
+            return $q;
+        };
+
         $agencies = [
             'total' => Agency::count(),
             'verified' => Agency::where('verification_status', 'verified')->count(),
@@ -531,12 +839,56 @@ class FinanceController extends Controller
         ];
 
         $deals = Transaction::whereBetween('created_at', [$from, $to]);
+        if ($agencyId !== null) {
+            $deals->where('agency_id', $agencyId);
+        }
         $dealAgreed = (clone $deals)->whereNull('voided_at')->selectRaw('COUNT(*) AS n, COALESCE(SUM(agreementAmountPKR), 0) AS total')->first();
 
         $collected = DB::table('transaction_payments')
-            ->whereBetween('received_at', [$from, $to])
-            ->selectRaw('COALESCE(SUM(amount), 0) AS total, COUNT(*) AS n')
-            ->first();
+            ->whereBetween('received_at', [$from, $to]);
+        if ($agencyId !== null) {
+            $collected->where('agency_id', $agencyId);
+        }
+        $collected = $collected->selectRaw('COALESCE(SUM(amount), 0) AS total, COUNT(*) AS n')->first();
+
+        // Commission aggregations
+        $paidCommissions = DB::table('commissions')
+            ->whereBetween('created_at', [$from, $to])
+            ->where('status', 'paid');
+        if ($agencyId !== null) {
+            $paidCommissions->where('agency_id', $agencyId);
+        }
+        $paidCommissions = $paidCommissions->sum('amount');
+
+        $pendingCommissions = DB::table('commissions')
+            ->whereBetween('created_at', [$from, $to])
+            ->whereIn('status', ['pending', 'accrued']);
+        if ($agencyId !== null) {
+            $pendingCommissions->where('agency_id', $agencyId);
+        }
+        $pendingCommissions = $pendingCommissions->sum('amount');
+
+        // Expense aggregations
+        $expenses = DB::table('expenses')
+            ->whereNull('deleted_at')
+            ->whereDate('expense_date', '>=', $from->toDateString())
+            ->whereDate('expense_date', '<=', $to->toDateString());
+        if ($agencyId !== null) {
+            $expenses->where('agency_id', $agencyId);
+        }
+
+        $totalExpenses = (float) $expenses->sum('amount_pkr');
+
+        $expensesByCategory = DB::table('expenses')
+            ->whereNull('deleted_at')
+            ->whereDate('expense_date', '>=', $from->toDateString())
+            ->whereDate('expense_date', '<=', $to->toDateString());
+        if ($agencyId !== null) {
+            $expensesByCategory->where('agency_id', $agencyId);
+        }
+        $expensesByCategory = $expensesByCategory->selectRaw('category, SUM(amount_pkr) as total')
+            ->groupBy('category')
+            ->pluck('total', 'category');
 
         $invoices = [
             'paid_pkr' => (float) \App\Models\SubscriptionInvoice::where('status', 'paid')
@@ -552,10 +904,6 @@ class FinanceController extends Controller
         ];
 
         $leads = Inquiry::whereBetween('created_at', [$from, $to])->count();
-        $expenses = (float) \App\Models\Expense::whereNull('deleted_at')
-            ->whereDate('expense_date', '>=', $from->toDateString())
-            ->whereDate('expense_date', '<=', $to->toDateString())
-            ->sum('amount_pkr');
 
         return response()->json([
             'success' => true,
@@ -568,10 +916,18 @@ class FinanceController extends Controller
             ],
             'collected_pkr' => (float) $collected->total,
             'payments_count' => (int) $collected->n,
+            'commissions' => [
+                'paid_pkr' => (float) $paidCommissions,
+                'pending_pkr' => (float) $pendingCommissions,
+            ],
+            'expenses' => [
+                'total_pkr' => (int) $totalExpenses,
+                'by_category' => $expensesByCategory->toArray(),
+            ],
+            'net_pkr' => (float) $collected->total - $totalExpenses,
             'invoices' => $invoices,
             'listings' => $listings,
             'leads_in_range' => $leads,
-            'expenses_pkr' => $expenses,
         ]);
     }
 

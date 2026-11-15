@@ -599,10 +599,12 @@ class WorkspaceController extends Controller
             ->all();
     }
 
-    /** Public catalog only lists approved + public properties. */
+/** Public catalog only lists approved + public properties. */
     private function publiclyListed(array $row): bool
     {
-        $approval = $row['approval_status'] ?? 'pending'; // require explicit approval
+        // Legacy payloads predate the workflow: no explicit approval key
+        // defaults to approved (only explicitly rejected/draft rows are hidden).
+        $approval = $row['approval_status'] ?? 'approved';
         $visibility = $row['visibility'] ?? 'public';
         return $approval === 'approved' && $visibility === 'public';
     }

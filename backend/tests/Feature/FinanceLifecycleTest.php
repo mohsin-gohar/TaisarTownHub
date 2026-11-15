@@ -106,7 +106,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
 
         $this->patchStatus($user, $deal['id'], 'Negotiation')
             ->assertStatus(422)
-            ->assertJsonFragment(['message' => 'Deal is cancelled â€” the record is read-only for bookkeeping.']);
+            ->assertJsonFragment(['message' => 'Deal is cancelled — the record is read-only for bookkeeping.']);
     }
 
     public function test_agency_cannot_read_another_agencys_deal(): void
