@@ -2,12 +2,83 @@
  * TaisarTownHub Backend API Service
  * Connects the React luxury frontend to the Laravel + MySQL API backend.
  */
+import {
+  initialCMSConfig,
+  initialMedia,
+  initialPlotMarkers,
+  initialProjects,
+  initialProperties,
+  initialTestimonials,
+} from '../data/publicSeed';
+import { initialAgencyVideos } from '../data/agencyVideosSeed';
 
-// Require VITE_API_URL in production; localhost fallback ONLY in development
-if (!import.meta.env.VITE_API_URL && import.meta.env.PROD) {
-  throw new Error('VITE_API_URL is required in production. Set it in your build environment.');
+// Production builds should set VITE_API_URL. If it is missing, fall back to the
+// same-origin `/api` reverse-proxy layout (the default in Dockerfile.prod) and
+// log the misconfiguration instead of throwing: a module-evaluation throw here
+// aborts the whole SPA before React mounts and leaves a blank page.
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+if (!configuredApiUrl && import.meta.env.PROD) {
+  console.error('VITE_API_URL is not set for this production build; using the bundled public catalog.');
 }
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8080/api';
+export const API_BASE_URL = configuredApiUrl || (import.meta.env.PROD ? '/api' : 'http://127.0.0.1:8080/api');
+
+/**
+ * Public-safe catalog used by static deployments that have no API origin.
+ *
+ * Vercel serves the frontend alone. Without a catalogue the marketing pages
+ * would mount but show empty agency/property/video grids. Everything here is
+ * already shipped in the public bundle (publicSeed/agencyVideosSeed); agency
+ * cards are derived from the public video partners so no dealer/ERP records
+ * (CNIC, private commissions, inquiries) enter the public chunk.
+ */
+function buildStaticPublicCatalog(): Record<string, unknown> {
+  const agencies = new Map<string, { id: string; name: string; dealer: string; avatar: string }>();
+  for (const video of initialAgencyVideos) {
+    if (!agencies.has(video.agencyId)) {
+      agencies.set(video.agencyId, {
+        id: video.agencyId,
+        name: video.agencyName,
+        dealer: video.dealerName,
+        avatar: video.dealerAvatar,
+      });
+    }
+  }
+
+  const dealers = Array.from(agencies.values()).map((agency) => {
+    const contact = initialProperties.find((p) => p.contactPerson === agency.dealer);
+    const assigned = initialProperties.filter((p) => p.contactPerson === agency.dealer).length;
+    return {
+      id: agency.id,
+      fullName: agency.dealer,
+      cnicMasked: '',
+      phone: contact?.contactPhone || '',
+      whatsApp: contact?.contactWhatsApp,
+      agencyOrBranch: agency.name,
+      agencyAffiliation: agency.name,
+      role: 'Verified Property Consultant',
+      commissionType: 'Percentage' as const,
+      status: 'Active' as const,
+      avatar: agency.avatar,
+      totalEarnedPKR: 0,
+      totalCommissionPaidPKR: 0,
+      pendingCommissionPKR: 0,
+      assignedPropertiesCount: assigned,
+      dealsClosed: 0,
+      completedDealsCount: 0,
+    };
+  });
+
+  return {
+    projects: initialProjects,
+    properties: initialProperties,
+    dealers,
+    videos: initialAgencyVideos,
+    plots: initialPlotMarkers,
+    media: initialMedia,
+    testimonials: initialTestimonials,
+    cms: initialCMSConfig,
+  };
+}
 
 const TOKEN_KEY = 'tth_token';
 
@@ -168,6 +239,7 @@ export const api = {
   },
 
   async getCatalog(): Promise<Record<string, unknown> | null> {
+    if (!configuredApiUrl) return buildStaticPublicCatalog();
     try {
       const res = await apiFetch('/catalog');
       if (!res.ok) return null;
