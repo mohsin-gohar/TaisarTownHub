@@ -3,6 +3,15 @@
 #   docker compose up -d          # Start all services
 #   docker compose down           # Stop all services
 #   docker compose logs -f        # View logs
+#
+# Services: mysql, redis, clamav, backend, frontend, nginx, worker
+#
+# Build contexts match the per-service Dockerfiles:
+#   backend/Dockerfile.prod   (context ./backend)
+#   frontend/Dockerfile.prod  (context ./frontend)
+#
+# Secrets are NEVER baked into images: APP_KEY, DB passwords and API keys are
+# supplied as runtime environment variables (see .env / deployment runbook).
 
 services:
   # ------------------------------------------------------------
@@ -51,7 +60,28 @@ services:
       - taisartownhub-network
 
   # ------------------------------------------------------------
-  # 3. Laravel Backend (API + Sanctum)
+  # 3. ClamAV — malware scanner for uploaded documents
+  #    The API talks to the daemon over the INSTREAM protocol
+  #    (CLAMD_SOCKET=clamav:3310). Uploads fail closed when the
+  #    scanner is unreachable.
+  # ------------------------------------------------------------
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: taisartownhub-clamav
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    networks:
+      - taisartownhub-network
+
+  # ------------------------------------------------------------
+  # 4. Laravel Backend (API + Sanctum)
   # ------------------------------------------------------------
   backend:
     build:
@@ -64,6 +94,7 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY}
       APP_URL: https://api.taisartownhub.com
       DB_CONNECTION: mysql
       DB_HOST: mysql
@@ -94,40 +125,50 @@ services:
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@taisartownhub.com}
+      # Malware scanning — real ClamAV daemon (see the `clamav` service).
+      # Fail closed: an upload is rejected when no scan could be performed.
+      MALWARE_SCAN_ENABLED: "true"
+      MALWARE_SCANNER: clamav
+      CLAMD_SOCKET: clamav:3310
+      CLAMD_TIMEOUT: "30"
+      MALWARE_SCAN_FAIL_CLOSED: "true"
+      MALWARE_SCAN_LOG_SKIPPED: "true"
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
+      clamav:
+        condition: service_healthy
     networks:
       - taisartownhub-network
-    command: ["/usr/local/bin/docker-php-entrypoint", "php", "artisan", "serve", "--host=0.0.0.0", "--port=8080"]
+    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8080"]
 
   # ------------------------------------------------------------
-  # 4. Frontend — React 19 + Vite (production build served via Nginx)
+  # 5. Frontend — React 19 + Vite (production build served via Nginx)
   # ------------------------------------------------------------
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+      args:
+        VITE_API_URL: https://api.taisartownhub.com/api
+        VITE_APP_MODE: production
+        VITE_STRIPE_PUBLIC_KEY: ${STRIPE_KEY}
+        VITE_SENTRY_DSN: ${SENTRY_DSN}
+        VITE_GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID}
+        VITE_LOGROCKET_APP_ID: ${LOGROCKET_APP_ID}
     container_name: taisartownhub-frontend
     restart: unless-stopped
     ports:
       - "3000:80"
-    environment:
-      VITE_API_URL: https://api.taisartownhub.com/api
-      VITE_APP_MODE: production
-      VITE_STRIPE_PUBLIC_KEY: ${STRIPE_KEY}
-      VITE_SENTRY_DSN: ${SENTRY_DSN}
-      VITE_GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID}
-      VITE_LOGROCKET_APP_ID: ${LOGROCKET_APP_ID}
     depends_on:
       - backend
     networks:
       - taisartownhub-network
 
   # ------------------------------------------------------------
-  # 5. Nginx — Reverse proxy, SSL termination, load balancing
+  # 6. Nginx — Reverse proxy, SSL termination, load balancing
   # ------------------------------------------------------------
   nginx:
     image: nginx:alpine
@@ -146,7 +187,9 @@ services:
       - taisartownhub-network
 
   # ------------------------------------------------------------
-  # 6. Worker — Queue processing (payments, emails, reports)
+  # 7. Worker — Queue processing (payments, emails, reports)
+  #    The entrypoint honours the command below and does NOT run
+  #    migrations on worker restarts (RUN_MIGRATIONS=false).
   # ------------------------------------------------------------
   worker:
     build:
@@ -156,6 +199,7 @@ services:
     restart: unless-stopped
     environment:
       APP_ENV: production
+      APP_KEY: ${APP_KEY}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
@@ -166,10 +210,19 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redispassword}
       QUEUE_CONNECTION: redis
+      RUN_MIGRATIONS: "false"
+      MALWARE_SCAN_ENABLED: "true"
+      MALWARE_SCANNER: clamav
+      CLAMD_SOCKET: clamav:3310
+      CLAMD_TIMEOUT: "30"
+      MALWARE_SCAN_FAIL_CLOSED: "true"
+      MALWARE_SCAN_LOG_SKIPPED: "true"
     depends_on:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      clamav:
         condition: service_healthy
     command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=90"]
     networks:
@@ -182,3 +235,4 @@ networks:
 volumes:
   mysql_data:
   redis_data:
+  clamav_data:

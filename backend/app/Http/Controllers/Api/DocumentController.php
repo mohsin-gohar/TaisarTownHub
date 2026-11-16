@@ -243,12 +243,24 @@ class DocumentController extends Controller
             ], 422);
         }
 
-        // Malware scan (provider-agnostic; clamscan/clamad). Files are stored
+        // Malware scan (provider-agnostic; clamscan/clamd). Files are stored
         // on the private disk and only served through authenticated endpoints,
         // so they are never publicly accessible before or after scanning.
+        //
+        // A file is NEVER reported as clean unless a real scan ran and the
+        // scanner said so. When no verdict could be obtained the upload is
+        // rejected in fail-closed mode and logged (never silently "clean").
         $scan = $scanner->scan($file->getRealPath());
-        if ($scan->skipped) {
+        $scannerUnavailable = in_array('scan_unavailable', $scan->threats, true);
+
+        if ($scan->skipped || $scannerUnavailable) {
             if (config('malware.fail_closed', false)) {
+                Log::warning('Upload rejected: malware scanner unavailable (fail-closed)', [
+                    'file' => $file->getClientOriginalName(),
+                    'agency_id' => $agencyId,
+                    'reason' => $scan->skipReason ?? 'scan_unavailable',
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Malware scanner unavailable; upload rejected.',
@@ -258,10 +270,16 @@ class DocumentController extends Controller
                 Log::warning('Upload accepted without malware scan', [
                     'file' => $file->getClientOriginalName(),
                     'agency_id' => $agencyId,
-                    'reason' => $scan->skipReason,
+                    'reason' => $scan->skipReason ?? 'scan_unavailable',
                 ]);
             }
         } elseif (!$scan->isClean) {
+            Log::warning('Upload rejected: malware detected', [
+                'file' => $file->getClientOriginalName(),
+                'agency_id' => $agencyId,
+                'threats' => $scan->threats,
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'File failed malware scan and was rejected.',

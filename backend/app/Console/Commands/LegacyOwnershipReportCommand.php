@@ -124,7 +124,7 @@ class LegacyOwnershipReportCommand extends Command
             $reason = null;
 
             if (count($candidates) === 1) {
-                $status = 'evidence_confirmed';
+                $status = 'confirmed';
                 $resolvedOwner = $candidates[0];
             } elseif (count($candidates) > 1) {
                 $status = 'ambiguous';

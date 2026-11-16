@@ -1,0 +1,33 @@
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿
+   FAIL  Tests\Feature\FinanceIsolationTest
+  ✓ agency cannot read or mutate another agencys deal                                                            0.82s  
+  ✓ agency cannot read or mutate another agencys payment                                                         0.07s  
+  ✓ agency cannot read or mutate another agencys commission or expense                                           0.10s  
+  ✓ restored approve endpoint works and is audited                                                               0.06s  
+  ✓ restored schedules endpoint stamps the agency                                                                0.06s  
+  ⨯ restored commissions endpoint creates and lists commissions                                                  0.05s  
+  ✓ commission status change is denied without permission                                                        0.08s  
+  ✓ deal numbers are unique and sequential                                                                       0.09s  
+  ✓ database rejects a duplicate deal number                                                                     0.04s  
+  ✓ payment cannot push the ledger past the agreement amount                                                     0.07s  
+  ✓ voided deal rejects further payments and schedules                                                           0.08s  
+  ✓ commission rows are agency scoped                                                                            0.05s  
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  
+   FAILED  Tests\Feature\FinanceIsolationTest > restored commissions endpoint creates and lists commissio…  TypeError   
+  Illuminate\Foundation\Testing\TestCase::postJson(): Argument #3 ($headers) must be of type array, Closure given, called in F:\react\TaisarTownHub\backend\tests\Feature\FinanceIsolationTest.php on line 197
+
+  at tests\Feature\FinanceIsolationTest.php:197
+    193▕         [$user] = $this->agencyUser($this->financePermissions());
+    194▕         $headers = fn () => $this->authHeaders($this->tokenFor($user));
+    195▕         $deal = $this->createDeal($user);
+    196▕ 
+  ➜ 197▕         $commission = $this->postJson(
+    198▕             "/api/agency/transactions/{$deal['id']}/commissions",
+    199▕             ['amount' => 250000, 'rate' => 2.5, 'beneficiary_type' => 'dealer'],
+    200▕             $headers
+    201▕         )->assertStatus(201)->json('commission');
+
+
+  Tests:    1 failed, 11 passed (64 assertions)
+  Duration: 1.81s
+

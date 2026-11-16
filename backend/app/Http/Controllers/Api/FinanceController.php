@@ -377,6 +377,51 @@ public function update(Request $request, string $id)
      * GET /api/agency/expenses
      * List expenses for the agency with totals.
      */
+/**
+     * POST /api/agency/transactions/{id}/approve
+     * Approve a deal (bookkeeping sign-off).
+     *
+     * The row is locked for the duration of the check so two concurrent
+     * approvals cannot both pass the voided-deal guard.
+     */
+    public function approve(Request $request, string $id)
+    {
+        $agencyId = $this->agencyId($request);
+        $this->requireAny($request, ['approve_transactions', 'finance.update_transaction', 'update_transactions']);
+
+        $transaction = $this->findScoped($agencyId, $id, $request->user());
+
+        $approved = DB::transaction(function () use ($transaction, $request): ?Transaction {
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
+
+            if (!$locked || $locked->isVoided()) {
+                return null;
+            }
+
+            $locked->approved_at = now();
+            $locked->approved_by = $request->user()->id;
+            $locked->save();
+
+            return $locked;
+        });
+
+        if ($approved === null) {
+            return response()->json(['success' => false, 'message' => 'Voided deals cannot be approved.'], 422);
+        }
+
+        $this->writeAudit($request, 'transaction.approve', $approved->id, "Deal approved: {$approved->dealNumber}", [
+            'agency_id' => $approved->agency_id,
+            'entity_type' => 'transaction',
+            'entity_id' => $approved->id,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Deal approved.',
+            'transaction' => $approved->fresh()->load(['payments', 'commissions']),
+        ]);
+    }
+
     public function expensesIndex(Request $request)
     {
         $this->requirePermission($request, 'finance.view');
@@ -604,7 +649,12 @@ public function update(Request $request, string $id)
             $existingCollected = (float) $locked->totalPaid();
             $agreementAmount = (float) $locked->agreementAmountPKR;
             if ($existingCollected + $amount > $agreementAmount) {
-                return [null, ['overpayment' => true, 'collected' => $existingCollected, 'agreement' => $agreementAmount]];
+                return [null, [
+                    'overpayment' => true,
+                    'collected' => $existingCollected,
+                    'agreement' => $agreementAmount,
+                    'amount' => $amount,
+                ]];
             }
 
             $payment = TransactionPayment::create([
@@ -630,7 +680,7 @@ public function update(Request $request, string $id)
             $over = $result[1];
             return response()->json([
                 'success' => false,
-                'message' => 'Overpayment: collected (' . number_format($over['collected'], 2) . ') plus amount (' . number_format($amount, 2) . ') exceeds agreement (' . number_format($over['agreement'], 2) . ').',
+                'message' => 'Overpayment: collected (' . number_format($over['collected'], 2) . ') plus amount (' . number_format($over['amount'], 2) . ') exceeds agreement (' . number_format($over['agreement'], 2) . ').',
             ], 422);
         }
 
@@ -686,7 +736,14 @@ public function update(Request $request, string $id)
         return response()->json(['success' => true, 'message' => 'Payment voided.']);
     }
 
-    public function createSchedule(Request $request, string $transactionId)
+    /**
+     * POST /api/agency/transactions/{id}/schedules
+     * Create/replace the installment schedule of a deal.
+     *
+     * `payment_schedules.agency_id` is NOT NULL - the schedule rows are always
+     * stamped with the owning agency so tenant scoping holds.
+     */
+    public function storeSchedules(Request $request, string $transactionId)
     {
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments']);
@@ -713,6 +770,7 @@ public function update(Request $request, string $id)
                     'installment_no' => $row['installment_no'],
                 ],
                 [
+                    'agency_id' => $transaction->agency_id,
                     'due_date' => $row['due_date'],
                     'amount' => $row['amount'],
                     'notes' => $row['notes'] ?? null,
@@ -720,16 +778,98 @@ public function update(Request $request, string $id)
             );
         }
 
+        // Mark overdue installments (same agency scope).
+        PaymentSchedule::where('agency_id', $transaction->agency_id)
+            ->where('transaction_id', $transaction->id)
+            ->where('status', 'pending')
+            ->where('due_date', '<', now()->toDateString())
+            ->update(['status' => 'overdue']);
+
+        $this->writeAudit($request, 'schedule.save', $transaction->id, "Installment schedule saved for {$transaction->dealNumber}", [
+            'agency_id' => $transaction->agency_id,
+            'entity_type' => 'transaction',
+            'entity_id' => $transaction->id,
+            'metadata' => ['installments' => count($data['schedules'])],
+        ]);
+
         return response()->json([
             'success' => true,
             'schedules' => $schedules,
         ], 201);
     }
 
-    public function createCommission(Request $request, string $transactionId)
+    /**
+     * Backwards-compatible alias for the previous internal method name.
+     */
+    public function createSchedule(Request $request, string $transactionId)
+    {
+        return $this->storeSchedules($request, $transactionId);
+    }
+
+    /**
+     * GET /api/agency/commissions
+     * Agency-scoped commission ledger.
+     *
+     * The Commission model has no `forAgency` scope (the previous
+     * implementation called one and would have thrown), so the agency filter
+     * is applied explicitly here. Dealers without the full view permission
+     * only ever see their own commissions.
+     */
+    public function commissions(Request $request)
     {
         $agencyId = $this->agencyId($request);
-        $this->requireAny($request, ['finance.manage_commissions', 'manage_commissions']);
+        $this->requireAny($request, ['finance.view', 'view_commissions', 'view_my_commission']);
+
+        $query = Commission::query()->with(['transaction:id,dealNumber,propertyTitle', 'dealer:id,fullName']);
+
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        }
+
+        $user = $request->user();
+        $canSeeAll = $this->can($request, 'finance.view') || $this->can($request, 'view_commissions');
+        if (!$canSeeAll) {
+            if ($user->dealer_id === null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No commission scope for this account.',
+                ], 403);
+            }
+            $query->where('dealer_id', $user->dealer_id);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $page = $query->orderByDesc('created_at')->orderBy('id')
+            ->paginate(min((int) $request->get('per_page', 25), 100));
+
+        return response()->json([
+            'success' => true,
+            'commissions' => $page->items(),
+            'pagination' => [
+                'current_page' => $page->currentPage(),
+                'per_page' => $page->perPage(),
+                'total' => $page->total(),
+                'last_page' => $page->lastPage(),
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/agency/transactions/{id}/commissions
+     * Accrue a commission entry against a deal.
+     *
+     * Gate note: `finance.manage_commissions` / `manage_commissions` are NOT
+     * defined in the RBAC catalogue, so the previous gate could never pass.
+     * The effective grants are `finance.manage_payments` (admin/manager) and
+     * the legacy `manage_payments` / `pay_commissions` keys.
+     */
+    public function storeCommission(Request $request, string $transactionId)
+    {
+        $agencyId = $this->agencyId($request);
+        $this->requireAny($request, ['finance.manage_payments', 'manage_payments', 'pay_commissions']);
 
         $transaction = $this->findScoped($agencyId, $transactionId, $request->user());
 
@@ -754,16 +894,32 @@ public function update(Request $request, string $id)
             'notes' => $data['notes'] ?? null,
         ]);
 
+        $this->writeAudit($request, 'commission.create', $commission->id, "Commission accrued on {$transaction->dealNumber}", [
+            'agency_id' => $transaction->agency_id,
+            'entity_type' => 'commission',
+            'entity_id' => (string) $commission->id,
+            'metadata' => ['amount' => $commission->amount, 'rate' => $commission->rate],
+        ]);
+
         return response()->json([
             'success' => true,
+            'message' => 'Commission entry created.',
             'commission' => $commission,
         ], 201);
+    }
+
+    /**
+     * Backwards-compatible alias for the previous internal method name.
+     */
+    public function createCommission(Request $request, string $transactionId)
+    {
+        return $this->storeCommission($request, $transactionId);
     }
 
     public function updateCommission(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        $this->requireAny($request, ['finance.manage_commissions', 'manage_commissions']);
+        $this->requireAny($request, ['finance.manage_payments', 'manage_payments', 'pay_commissions']);
 
         $commission = Commission::where('id', $id)
             ->where('agency_id', $agencyId)
@@ -798,36 +954,18 @@ public function update(Request $request, string $id)
         ]);
     }
 
+    /**
+     * Backwards-compatible alias for the previous internal method name.
+     *
+     * The previous implementation had its own copy of the insert logic, gated
+     * on permissions that are not defined in the RBAC catalogue
+     * (`finance.manage_expenses` / `manage_expenses`) and without the
+     * null-agency guard or the audit trail. It now delegates to the routed
+     * implementation so both paths behave identically.
+     */
     public function createExpense(Request $request)
     {
-        $agencyId = $this->agencyId($request);
-        $this->requireAny($request, ['finance.manage_expenses', 'manage_expenses']);
-
-        $data = $request->validate([
-            'expense_date' => 'required|date|before_or_equal:today',
-            'category' => 'nullable|string|in:' . implode(',', Expense::CATEGORIES),
-            'amount_pkr' => 'required|integer|min:1|max:9999999999',
-            'description' => 'nullable|string|max:500',
-            'payment_method' => 'nullable|string|in:' . implode(',', Expense::PAYMENT_METHODS),
-            'reference' => 'nullable|string|max:120',
-        ]);
-
-        $expense = Expense::create([
-            'id' => 'exp_' . bin2hex(random_bytes(8)),
-            'agency_id' => $agencyId,
-            'expense_date' => $data['expense_date'],
-            'category' => $data['category'] ?? null,
-            'amount_pkr' => $data['amount_pkr'],
-            'description' => $data['description'] ?? null,
-            'payment_method' => $data['payment_method'] ?? null,
-            'reference' => $data['reference'] ?? null,
-            'created_by' => $request->user()->id,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'expense' => $expense,
-        ], 201);
+        return $this->expensesStore($request);
     }
 
 public function reports(Request $request)

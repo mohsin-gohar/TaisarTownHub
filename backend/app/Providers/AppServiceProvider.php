@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\ClamAVScanner;
+use App\Services\DisabledMalwareScanner;
 use App\Services\MalwareScanner;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -17,11 +18,19 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(MalwareScanner::class, function ($app) {
+            // Master switch: when scanning is disabled no scan is attempted and
+            // nothing is ever reported as "clean" (DisabledMalwareScanner).
+            if (!config('malware.enabled', false)) {
+                return new DisabledMalwareScanner();
+            }
+
             $config = config('malware.clamav', []);
+
             return new ClamAVScanner(
                 $config['command'] ?? 'clamscan',
                 $config['socket'] ?? null,
-                (bool) ($config['fail_closed'] ?? false),
+                (bool) config('malware.fail_closed', false),
+                (int) ($config['timeout'] ?? 30),
             );
         });
     }

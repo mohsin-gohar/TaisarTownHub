@@ -1,6 +1,19 @@
 #!/bin/sh
 # G-15 — API container entrypoint.
-# Fails fast when required secrets are absent (no silent defaults).
+#
+# Responsibilities:
+#   1. fail fast when required secrets are absent (no silent defaults)
+#   2. cache config + routes
+#   3. run migrations ONLY for the web entrypoint (see RUN_MIGRATIONS)
+#   4. hand over to the command Docker Compose passed in (CMD/command),
+#      so the queue-worker service really runs `php artisan queue:work`
+#      instead of booting a second web server.
+#
+# Env:
+#   APP_KEY           (required) - Laravel application key
+#   DB_HOST           (required unless DB_CONNECTION=sqlite)
+#   RUN_MIGRATIONS    'true' (default) | 'false'  - set 'false' for workers
+#   APP_PORT          (optional) - port for the default web command
 
 set -e
 
@@ -16,8 +29,16 @@ fi
 
 php artisan config:cache
 php artisan route:cache
-php artisan migrate --force
 
-# Queue worker is a separate compose service (same image); this entrypoint
-# only serves HTTP so a web crash cannot take the queue down with it.
-exec php artisan serve --host=0.0.0.0 --port=8080
+# Migrations are executed by the web container (and by an explicit migration
+# job). A queue worker restarting must NOT run migrations again.
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+  php artisan migrate --force
+fi
+
+# Respect the command supplied by docker-compose (`command:`) / the image CMD.
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
+exec php artisan serve --host=0.0.0.0 --port="${APP_PORT:-8080}"
