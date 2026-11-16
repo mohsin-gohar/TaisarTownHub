@@ -1,22 +1,39 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Search,
-  Filter,
   MapPin,
   Maximize2,
-  CheckCircle2,
   Flame,
   ArrowRight,
-  Home,
   RotateCcw,
-  Sparkles
+  Sparkles,
+  Scale,
+  Check,
 } from 'lucide-react';
 import { Property, PropertyType, PublicProperty } from '../../types';
 import { filterProperties, toPublicProperty } from '../../utils/logic';
 import { EmptyState } from '../common/EmptyState';
 import { FavoriteHeart } from '../common/FavoriteHeart';
 import { ImageWithFallback } from '../common/ImageWithFallback';
+import { api } from '../../services/api';
+import {
+  MAX_COMPARE_ITEMS,
+  buildCompareShareUrl,
+  parseCompareIdsFromSearch,
+  readCompareIds,
+  toggleCompareId,
+  writeCompareIds,
+} from '../../utils/propertyCompare';
+import {
+  describeListingFilters,
+  listingStateFromSavedSearch,
+  savedSearchFiltersFromState,
+} from '../../utils/savedSearchFilters';
+import { CompareModal } from './CompareModal';
+import { CompareTray } from './CompareTray';
+import { SaveSearchModal } from './SaveSearchModal';
+import { SavedSearchPanel, SavedSearchRecord } from './SavedSearchPanel';
 
 interface PropertiesListingPageProps {
   initialFilter?: {
@@ -29,7 +46,14 @@ interface PropertiesListingPageProps {
 }
 
 export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ initialFilter }) => {
-  const { properties, setSelectedPropertyId, setCurrentView, cmsConfig } = useApp();
+  const {
+    properties,
+    setSelectedPropertyId,
+    setCurrentView,
+    isAdminAuthenticated,
+    showToast,
+    confirmAction,
+  } = useApp();
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,6 +65,47 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
   const [selectedSize, setSelectedSize] = useState<string>(initialFilter?.size || 'All');
   const [possessionOnly, setPossessionOnly] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
+
+  // Saved searches / alerts
+  const [savedSearches, setSavedSearches] = useState<SavedSearchRecord[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const [savedBusyId, setSavedBusyId] = useState<string | null>(null);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [saveSaving, setSaveSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Comparison shortlist (URL param wins so shared links work, then storage)
+  const [compareIds, setCompareIds] = useState<string[]>(() => {
+    const fromUrl = typeof window !== 'undefined' ? parseCompareIdsFromSearch(window.location.search) : [];
+    return fromUrl.length > 0 ? fromUrl : readCompareIds();
+  });
+  const [compareOpen, setCompareOpen] = useState(false);
+
+  useEffect(() => {
+    writeCompareIds(compareIds);
+  }, [compareIds]);
+
+  useEffect(() => {
+    if (!isAdminAuthenticated) {
+      setSavedSearches([]);
+      return;
+    }
+    let active = true;
+    setSavedLoading(true);
+    void api.getSavedSearches().then((items) => {
+      if (!active) return;
+      setSavedSearches(Array.isArray(items) ? (items as SavedSearchRecord[]) : []);
+      setSavedLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [isAdminAuthenticated]);
+
+  const reloadSavedSearches = async () => {
+    const items = await api.getSavedSearches();
+    setSavedSearches(Array.isArray(items) ? (items as SavedSearchRecord[]) : []);
+  };
 
   // Convert budget helper
   let minPrice = 0;
@@ -120,8 +185,122 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
       handleOpenProperty({ id });
     };
 
+  const compareItems: PublicProperty[] = compareIds
+    .map((id) => properties.find((property) => property.id === id))
+    .filter((property): property is Property => Boolean(property))
+    .map(toPublicProperty);
+
+  const handleToggleCompare = (property: { id: string; title: string }) => {
+    const result = toggleCompareId(compareIds, property.id);
+    if (result.limitReached) {
+      showToast('info', `You can compare up to ${MAX_COMPARE_ITEMS} properties. Remove one from the shortlist first.`);
+      return;
+    }
+    setCompareIds(result.ids);
+    showToast('success', result.added ? `Added “${property.title}” to the comparison shortlist.` : `Removed “${property.title}” from the shortlist.`);
+  };
+
+  const handleShareShortlist = async () => {
+    const url = buildCompareShareUrl(`${window.location.origin}/properties`, compareIds);
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('success', 'Shortlist link copied. Share it with your buyer or team.');
+    } catch {
+      showToast('info', `Shortlist link: ${url}`);
+    }
+  };
+
+  const currentFilterState = {
+    searchTerm,
+    type: selectedType,
+    phase: selectedPhase,
+    sector: selectedSector,
+    sizeSqYards: selectedSize,
+    possessionOnly,
+    minPrice: priceRange.min,
+    maxPrice: priceRange.max,
+  };
+  const currentFilterSummary = describeListingFilters(currentFilterState);
+  const currentFiltersPayload = savedSearchFiltersFromState(currentFilterState);
+
+  const handleOpenSaveSearch = () => {
+    if (!isAdminAuthenticated) {
+      showToast('info', 'Sign in to save this search and receive email alerts.');
+      setCurrentView('login');
+      return;
+    }
+    setSaveError(null);
+    setSaveModalOpen(true);
+  };
+
+  const handleCreateSavedSearch = async (payload: {
+    name: string;
+    frequency: 'instant' | 'daily' | 'weekly';
+    alerts_enabled: boolean;
+  }) => {
+    setSaveSaving(true);
+    setSaveError(null);
+    const result = await api.createSavedSearch({
+      name: payload.name,
+      filters: currentFiltersPayload,
+      frequency: payload.frequency,
+      alerts_enabled: payload.alerts_enabled,
+    });
+    setSaveSaving(false);
+    if (!result.ok) {
+      setSaveError(result.error || 'Could not save this search.');
+      return;
+    }
+    setSaveModalOpen(false);
+    showToast('success', payload.alerts_enabled ? 'Search saved. We will email you when a new match is published.' : 'Search saved. Email alerts are paused.');
+    await reloadSavedSearches();
+  };
+
+  const handleApplySavedSearch = (search: SavedSearchRecord) => {
+    const state = listingStateFromSavedSearch(search.filters);
+    setSearchTerm(state.searchTerm);
+    setSelectedType(state.type as PropertyType | 'All');
+    setSelectedPhase(state.phase as 'Phase 1' | 'Phase 2' | 'Phase 3' | 'All');
+    setSelectedSector(state.sector);
+    setSelectedSize(state.sizeSqYards);
+    setPossessionOnly(state.possessionOnly);
+    setPriceRange({ min: state.minPrice, max: state.maxPrice });
+    showToast('success', `Applied saved search “${search.name}”.`);
+    document.getElementById('listing-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleToggleSavedSearchAlerts = async (search: SavedSearchRecord) => {
+    setSavedBusyId(search.id);
+    const result = await api.updateSavedSearch(search.id, { alerts_enabled: !search.alerts_enabled });
+    setSavedBusyId(null);
+    if (!result.ok) {
+      showToast('error', result.error || 'Could not update alerts for this search.');
+      return;
+    }
+    showToast('success', search.alerts_enabled ? 'Email alerts paused for this search.' : 'Email alerts resumed.');
+    await reloadSavedSearches();
+  };
+
+  const handleDeleteSavedSearch = async (search: SavedSearchRecord) => {
+    const confirmed = await confirmAction(`Delete “${search.name}”? Email alerts for this search will stop.`, {
+      title: 'Delete saved search',
+      confirmLabel: 'Delete search',
+    });
+    if (!confirmed) return;
+
+    setSavedBusyId(search.id);
+    const ok = await api.deleteSavedSearch(search.id);
+    setSavedBusyId(null);
+    if (!ok) {
+      showToast('error', 'Could not delete this saved search.');
+      return;
+    }
+    showToast('success', 'Saved search deleted.');
+    await reloadSavedSearches();
+  };
+
   return (
-    <div className="py-12 px-4 sm:px-6 lg:px-8 bg-[#0B1220] min-h-screen space-y-10">
+    <div className={`py-12 px-4 sm:px-6 lg:px-8 bg-[#0B1220] min-h-screen space-y-10 ${compareIds.length > 0 ? 'pb-40' : ''}`}>
       <div className="max-w-7xl mx-auto space-y-10">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto space-y-3">
@@ -302,6 +481,18 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
           </div>
         </div>
 
+        {/* Saved searches + email alerts */}
+        <SavedSearchPanel
+          searches={savedSearches}
+          loading={savedLoading}
+          authenticated={isAdminAuthenticated}
+          onSaveCurrent={handleOpenSaveSearch}
+          onApply={handleApplySavedSearch}
+          onToggleAlerts={handleToggleSavedSearchAlerts}
+          onDelete={handleDeleteSavedSearch}
+          busyId={savedBusyId}
+        />
+
         {/* Property Grid or Empty State */}
         {sortedProperties.length === 0 ? (
           <EmptyState
@@ -313,7 +504,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
             onAction={resetAllFilters}
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div id="listing-results" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {sortedProperties.map((prop) => {
               return (
                 <div
@@ -371,6 +562,29 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                         PKR {Math.round(prop.pricePKR / Math.max(prop.sizeSqYards, 1)).toLocaleString()} / Sq. Yd
                       </span>
                     </div>
+
+                    {/* Comparison shortlist toggle */}
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleToggleCompare(prop);
+                      }}
+                      aria-pressed={compareIds.includes(prop.id)}
+                      aria-label={
+                        compareIds.includes(prop.id)
+                          ? `Remove ${prop.title} from comparison`
+                          : `Add ${prop.title} to comparison`
+                      }
+                      className={`absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold backdrop-blur-md transition ${
+                        compareIds.includes(prop.id)
+                          ? 'border-[#C5A46D] bg-[#C5A46D] text-[#101C2C]'
+                          : 'border-white/20 bg-black/65 text-slate-200 hover:border-[#C5A46D]/70 hover:text-[#F9E7BA]'
+                      }`}
+                    >
+                      {compareIds.includes(prop.id) ? <Check className="h-3 w-3" /> : <Scale className="h-3 w-3" />}
+                      {compareIds.includes(prop.id) ? 'Comparing' : 'Compare'}
+                    </button>
                   </div>
 
                   <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
@@ -444,6 +658,46 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
           </div>
         )}
       </div>
+
+      <CompareTray
+        items={compareItems}
+        onRemove={(id) => setCompareIds(toggleCompareId(compareIds, id).ids)}
+        onClear={() => setCompareIds([])}
+        onCompare={() => {
+          if (compareItems.length < 2) {
+            showToast('info', 'Select at least two properties to compare.');
+            return;
+          }
+          setCompareOpen(true);
+        }}
+        onShare={handleShareShortlist}
+      />
+
+      {compareOpen && compareItems.length >= 2 && (
+        <CompareModal
+          items={compareItems}
+          onClose={() => setCompareOpen(false)}
+          onRemove={(id) => {
+            const next = toggleCompareId(compareIds, id).ids;
+            setCompareIds(next);
+            if (next.length < 2) setCompareOpen(false);
+          }}
+          onOpenProperty={(property) => {
+            setCompareOpen(false);
+            handleOpenProperty(property);
+          }}
+        />
+      )}
+
+      <SaveSearchModal
+        open={saveModalOpen}
+        summary={currentFilterSummary}
+        defaultName={currentFilterSummary === 'All published listings' ? 'All Scheme 45 listings' : currentFilterSummary.slice(0, 110)}
+        saving={saveSaving}
+        error={saveError}
+        onClose={() => setSaveModalOpen(false)}
+        onCreate={handleCreateSavedSearch}
+      />
     </div>
   );
 };

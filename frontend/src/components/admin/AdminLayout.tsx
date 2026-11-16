@@ -24,7 +24,8 @@ import {
   FileCheck,
   Shield,
   Menu,
-  X
+  X,
+  LifeBuoy
 } from 'lucide-react';
 
 const AdminOverview = lazy(() => import('./AdminOverview').then((m) => ({ default: m.AdminOverview })));
@@ -48,6 +49,7 @@ const AdminDocumentVault = lazy(() => import('./AdminDocumentVault').then((m) =>
 const AdminModerationDesk = lazy(() => import('./AdminModerationDesk').then((m) => ({ default: m.AdminModerationDesk })));
 const AdminCrmPipeline = lazy(() => import('./AdminCrmPipeline').then((m) => ({ default: m.AdminCrmPipeline })));
 const AdminNotifications = lazy(() => import('./AdminNotifications').then((m) => ({ default: m.AdminNotifications })));
+const AdminSupportDesk = lazy(() => import('./AdminSupportDesk').then((m) => ({ default: m.AdminSupportDesk })));
 const AdminSubscription = lazy(() => import('./AdminSubscription').then((m) => ({ default: m.AdminSubscription })));
 const AdminLocations = lazy(() => import('./AdminLocations').then((m) => ({ default: m.AdminLocations })));
 const AdminMediaStudio = lazy(() => import('./AdminMediaStudio').then((m) => ({ default: m.AdminMediaStudio })));
@@ -124,6 +126,7 @@ export const AdminLayout: React.FC = () => {
   const canEditLeads = hasEnterprise('crm.update_lead') || hasEnterprise('crm.manage_lead');
   const canCreateLeads = hasEnterprise('crm.create_lead');
   const canUploadMedia = hasEnterprise('upload_media') || hasEnterprise('manage_media');
+  const canManageSupport = hasEnterprise('admin.support_tickets');
   const agencyOptions = agencyMemberships.length > 0
     ? agencyMemberships.map((membership) => ({
         id: String(membership.agency_id ?? membership.id ?? ''),
@@ -198,6 +201,7 @@ export const AdminLayout: React.FC = () => {
         ]
       : []),
     { id: 'notifications', label: 'Notifications', icon: Inbox },
+    { id: 'support', label: 'Support Center', icon: LifeBuoy },
   ];
 
   // Sidebar visibility is enforced here AND in context actions (requirePermission) —
@@ -445,6 +449,7 @@ export const AdminLayout: React.FC = () => {
             {adminTab === 'subscription' && <AdminSubscription />}
             {adminTab === 'locations' && <AdminLocations canManage={canApproveListings} />}
             {adminTab === 'notifications' && <AdminNotifications />}
+            {adminTab === 'support' && <AdminSupportDesk canManage={canManageSupport} />}
           </Suspense>
         </div>
       </main>

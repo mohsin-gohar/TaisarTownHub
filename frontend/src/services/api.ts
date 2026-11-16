@@ -1096,6 +1096,198 @@ export const api = {
     }
   },
 
+  // ------------------------------------------------------------------
+  // Saved searches + email alerts (per-account)
+  // ------------------------------------------------------------------
+
+  async getSavedSearches(): Promise<any[] | null> {
+    try {
+      const res = await apiFetch('/saved-searches');
+      if (!res.ok) return null;
+      const body = await res.json().catch(() => ({}));
+      return Array.isArray(body?.saved_searches) ? body.saved_searches : [];
+    } catch {
+      return null;
+    }
+  },
+
+  async createSavedSearch(payload: {
+    name: string;
+    filters: Record<string, unknown>;
+    frequency?: 'instant' | 'daily' | 'weekly';
+    alerts_enabled?: boolean;
+  }): Promise<{ ok: boolean; savedSearch?: any; error?: string }> {
+    try {
+      const res = await apiFetch('/saved-searches', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const first = body?.errors ? Object.values(body.errors)[0] : null;
+        const message = Array.isArray(first) ? first[0] : first;
+        return { ok: false, error: String(message || body?.message || 'Could not save this search.') };
+      }
+      return { ok: true, savedSearch: body?.saved_search };
+    } catch {
+      return { ok: false, error: 'Could not save this search.' };
+    }
+  },
+
+  async updateSavedSearch(
+    id: string,
+    payload: Partial<{ name: string; filters: Record<string, unknown>; frequency: string; alerts_enabled: boolean }>
+  ): Promise<{ ok: boolean; savedSearch?: any; error?: string }> {
+    try {
+      const res = await apiFetch(`/saved-searches/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: String(body?.message || 'Could not update this search.') };
+      return { ok: true, savedSearch: body?.saved_search };
+    } catch {
+      return { ok: false, error: 'Could not update this search.' };
+    }
+  },
+
+  async deleteSavedSearch(id: string): Promise<boolean> {
+    try {
+      const res = await apiFetch(`/saved-searches/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Support desk (self-service + platform staff)
+  // ------------------------------------------------------------------
+
+  async getSupportTickets(params: { status?: string; category?: string; search?: string } = {}): Promise<any[] | null> {
+    try {
+      const query = new URLSearchParams();
+      if (params.status && params.status !== 'all') query.set('status', params.status);
+      if (params.category && params.category !== 'all') query.set('category', params.category);
+      if (params.search) query.set('search', params.search);
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const res = await apiFetch(`/support/tickets${suffix}`);
+      if (!res.ok) return null;
+      const body = await res.json().catch(() => ({}));
+      return Array.isArray(body?.tickets) ? body.tickets : [];
+    } catch {
+      return null;
+    }
+  },
+
+  async getSupportTicket(id: string): Promise<{ ticket: any; messages: any[] } | null> {
+    try {
+      const res = await apiFetch(`/support/tickets/${encodeURIComponent(id)}`);
+      if (!res.ok) return null;
+      const body = await res.json().catch(() => ({}));
+      return {
+        ticket: body?.ticket ?? null,
+        messages: Array.isArray(body?.messages) ? body.messages : [],
+      };
+    } catch {
+      return null;
+    }
+  },
+
+  async createSupportTicket(payload: {
+    subject: string;
+    body: string;
+    category?: string;
+    priority?: string;
+  }): Promise<{ ok: boolean; ticket?: any; error?: string }> {
+    try {
+      const res = await apiFetch('/support/tickets', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const first = body?.errors ? Object.values(body.errors)[0] : null;
+        const message = Array.isArray(first) ? first[0] : first;
+        return { ok: false, error: String(message || body?.message || 'Could not create the ticket.') };
+      }
+      return { ok: true, ticket: body?.ticket };
+    } catch {
+      return { ok: false, error: 'Could not create the ticket.' };
+    }
+  },
+
+  async addSupportTicketMessage(id: string, body: string): Promise<{ ok: boolean; message?: any; error?: string }> {
+    try {
+      const res = await apiFetch(`/support/tickets/${encodeURIComponent(id)}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: String(payload?.message || 'Could not add the message.') };
+      return { ok: true, message: payload?.message_entry };
+    } catch {
+      return { ok: false, error: 'Could not add the message.' };
+    }
+  },
+
+  async updateSupportTicketStatus(id: string, status: string): Promise<{ ok: boolean; ticket?: any; error?: string }> {
+    try {
+      const res = await apiFetch(`/support/tickets/${encodeURIComponent(id)}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: String(body?.message || 'Could not update the ticket.') };
+      return { ok: true, ticket: body?.ticket };
+    } catch {
+      return { ok: false, error: 'Could not update the ticket.' };
+    }
+  },
+
+  async getAdminSupportTickets(
+    params: { status?: string; category?: string; priority?: string; search?: string } = {}
+  ): Promise<any[] | null> {
+    try {
+      const query = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value && value !== 'all') query.set(key, value);
+      });
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const res = await apiFetch(`/admin/support-tickets${suffix}`);
+      if (!res.ok) return null;
+      const body = await res.json().catch(() => ({}));
+      return Array.isArray(body?.tickets) ? body.tickets : [];
+    } catch {
+      return null;
+    }
+  },
+
+  async getSupportAssignableStaff(): Promise<any[] | null> {
+    try {
+      const res = await apiFetch('/admin/support-tickets/assignable-staff');
+      if (!res.ok) return null;
+      const body = await res.json().catch(() => ({}));
+      return Array.isArray(body?.staff) ? body.staff : [];
+    } catch {
+      return null;
+    }
+  },
+
+  async assignSupportTicket(id: string, assignedTo: number): Promise<{ ok: boolean; ticket?: any; error?: string }> {
+    try {
+      const res = await apiFetch(`/admin/support-tickets/${encodeURIComponent(id)}/assign`, {
+        method: 'POST',
+        body: JSON.stringify({ assigned_to: assignedTo }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: String(body?.message || 'Could not assign the ticket.') };
+      return { ok: true, ticket: body?.ticket };
+    } catch {
+      return { ok: false, error: 'Could not assign the ticket.' };
+    }
+  },
+
   async getInquiries(status?: string): Promise<any[] | null> {
     try {
       const query = status && status !== 'All' ? `?status=${encodeURIComponent(status)}` : '';
