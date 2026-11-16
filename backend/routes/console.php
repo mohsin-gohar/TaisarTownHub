@@ -14,3 +14,7 @@ Schedule::command('sanctum:prune-expired --hours=48')->daily();
 
 // Keep failed_jobs bounded when no queue dashboard is installed.
 Schedule::command('queue:prune-failed --hours=168')->weekly();
+
+// Marketplace saved-search email alerts. Every search carries its own window
+// (instant/daily/weekly), so an hourly sweep is enough for all cadences.
+Schedule::command('saved-searches:send-alerts')->hourly()->withoutOverlapping();

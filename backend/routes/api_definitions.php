@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\PropertyController;
+use App\Http\Controllers\Api\SavedSearchController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\SupportController;
 use App\Http\Controllers\Api\TransactionController;
@@ -228,6 +229,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
     Route::post('/favorites/{propertyId}', [FavoriteController::class, 'toggle'])->middleware('auth:sanctum');
     Route::delete('/favorites/{propertyId}', [FavoriteController::class, 'destroy'])->middleware('auth:sanctum');
 
+    /* ---------- Saved searches + email alerts (per-account) ---------- */
+    Route::get('/saved-searches', [SavedSearchController::class, 'index'])->middleware('auth:sanctum');
+    Route::post('/saved-searches', [SavedSearchController::class, 'store'])->middleware('auth:sanctum', 'throttle:30,1');
+    Route::match(['put', 'patch'], '/saved-searches/{id}', [SavedSearchController::class, 'update'])->middleware('auth:sanctum', 'throttle:30,1');
+    Route::delete('/saved-searches/{id}', [SavedSearchController::class, 'destroy'])->middleware('auth:sanctum');
+
     /* ---------- Locations & categories (reads public above) ---------- */
     Route::post('/locations/sectors', [LocationController::class, 'storeSector']);
     Route::post('/locations/blocks', [LocationController::class, 'storeBlock']);
@@ -279,6 +286,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
 
     /* ---------- Admin: support desk (auth required) ---------- */
     Route::get('/admin/support-tickets', [SupportController::class, 'adminIndex'])->middleware('auth:sanctum');
+    Route::get('/admin/support-tickets/assignable-staff', [SupportController::class, 'assignableStaff'])->middleware('auth:sanctum');
     Route::post('/admin/support-tickets/{id}/assign', [SupportController::class, 'adminAssign'])->middleware('auth:sanctum');
 
     /* ---------- Admin: users & roles (auth required) ---------- */

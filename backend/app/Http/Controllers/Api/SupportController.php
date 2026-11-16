@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\SupportMessage;
 use App\Models\SupportTicket;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 /**
@@ -252,6 +253,27 @@ class SupportController extends Controller
                 $this->present($t),
                 ['agency_name' => $t->agency?->name]
             )),
+        ]);
+    }
+
+    /**
+     * GET /api/admin/support-tickets/assignable-staff — the platform-side
+     * accounts a ticket may be assigned to. Only names/emails/roles are
+     * exposed, never password hashes, tokens or MFA material.
+     */
+    public function assignableStaff(Request $request)
+    {
+        $this->requirePermission($request, 'admin.support_tickets');
+
+        $staff = User::query()
+            ->where('status', 'active')
+            ->whereIn('role', ['super_admin', 'admin', 'support', 'operator', 'manager'])
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'role']);
+
+        return response()->json([
+            'success' => true,
+            'staff' => $staff,
         ]);
     }
 
