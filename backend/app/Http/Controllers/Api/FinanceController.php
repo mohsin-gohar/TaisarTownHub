@@ -629,7 +629,7 @@ public function update(Request $request, string $id)
         ]);
 
         // Ledger integrity: the payment insert and the derived status update
-        // are one transaction on the locked deal row â€” concurrent payments
+        // are one transaction on the locked deal row — concurrent payments
         // cannot overshoot the agreement amount silently.
         $result = DB::transaction(function () use ($transaction, $request): array {
             $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
@@ -702,7 +702,7 @@ public function update(Request $request, string $id)
         ], 201);
     }
 
-    /** DELETE /api/agency/payments/{id} â€” correction, heavily audited. */
+    /** DELETE /api/agency/payments/{id} — correction, heavily audited. */
     public function destroyPayment(Request $request, int $id)
     {
         $agencyId = $this->agencyId($request);

@@ -272,7 +272,7 @@ class DatabaseSeeder extends Seeder
                 'id' => 'prop-r66',
                 'plotNumber' => 'R-66',
                 'fileNumber' => 'MDA-63-R66-45',
-                'title' => 'Plot R-66 (120 Sq. Yds) â€” 100ft Road Facing, Sector 63',
+                'title' => 'Plot R-66 (120 Sq. Yds) — 100ft Road Facing, Sector 63',
                 'description' => 'Prime 120 square yard residential plot based on verified handwritten record specifications. Features 24-foot street frontage by 45-foot depth, directly facing the prestigious 100ft arterial boulevard in Sector 63.',
                 'pricePKR' => 3500000,
                 'formattedPrice' => 'PKR 35 Lacs',
@@ -407,7 +407,7 @@ class DatabaseSeeder extends Seeder
             ],
             [
                 'id' => 'vid-2',
-                'title' => 'Main 150ft Commercial Boulevard â€” Sector 50 High-Rise Arcade Opportunities',
+                'title' => 'Main 150ft Commercial Boulevard — Sector 50 High-Rise Arcade Opportunities',
                 'description' => 'Kamran Haider explores prime commercial plots on the 150ft wide central boulevard of Sector 50.',
                 'videoUrl' => '/sample-video.mp4',
                 'thumbnailUrl' => 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1000&q=80',
@@ -424,7 +424,7 @@ class DatabaseSeeder extends Seeder
             ],
             [
                 'id' => 'vid-3',
-                'title' => 'Phase 2 Ground Reality â€” Balloted Sectors 78 & 80 Development Progress',
+                'title' => 'Phase 2 Ground Reality — Balloted Sectors 78 & 80 Development Progress',
                 'description' => 'Bilal Farooqui from Bismillah Associates visits Sector 78 and Sector 80 in Phase 2.',
                 'videoUrl' => '/sample-video.mp4',
                 'thumbnailUrl' => 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',

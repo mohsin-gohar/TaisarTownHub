@@ -174,8 +174,8 @@ export const AdminInquiries: React.FC = () => {
                       </h4>
                       <div className="flex items-center gap-3 text-xs text-slate-400">
                         <span className="text-[#C5A46D] font-mono">{inq.phone}</span>
-                        {inq.email && <span>â€¢ {inq.email}</span>}
-                        <span className="hidden sm:inline">â€¢ {inq.submittedAt}</span>
+                        {inq.email && <span>• {inq.email}</span>}
+                        <span className="hidden sm:inline">• {inq.submittedAt}</span>
                       </div>
                     </div>
                   </div>

@@ -8,14 +8,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Legacy workspace sync (JSON store) Ã¢â‚¬â€ HARDENED.
+ * Legacy workspace sync (JSON store) — HARDENED.
  *
  * Security rules enforced here (Phase 3):
- *  1. Reads: per-collection view permissions + agency scoping Ã¢â‚¬â€ an agency
+ *  1. Reads: per-collection view permissions + agency scoping — an agency
  *     member never receives another agency's rows.
  *  2. Writes: entry requires an actual WRITE permission (the old gate was
  *     `view_properties`, i.e. any viewer could overwrite everything).
- *  3. `agency_id` / `created_by` / `updated_by` are always server-derived Ã¢â‚¬â€
+ *  3. `agency_id` / `created_by` / `updated_by` are always server-derived —
  *     client-supplied tenancy fields are stripped from every row.
  *  4. Default sync is MERGE (upsert only, never touches rows the client did
  *     not send). Destructive wipe only happens with an explicit
@@ -42,7 +42,7 @@ class WorkspaceController extends Controller
         'inquiries',
     ];
 
-    /** Collections holding money Ã¢â‚¬â€ every sync on them is audit-logged. */
+    /** Collections holding money — every sync on them is audit-logged. */
     private const FINANCIAL = ['transactions', 'payments', 'commissions'];
 
     /** Money-ish keys coerced/validated on financial rows. */
@@ -94,7 +94,7 @@ class WorkspaceController extends Controller
     {
         // array_filter preserves keys; without reindexing the JSON would
         // degrade into an object whenever a row is skipped (draft/private/
-        // payload-deleted), which the frontend (Array.isArray) then drops Ã¢â‚¬â€
+        // payload-deleted), which the frontend (Array.isArray) then drops —
         // the public site would silently show zero listings. G-12.
         $listed = array_values(array_filter(
             $this->publicRows('properties'),
@@ -147,7 +147,7 @@ class WorkspaceController extends Controller
     /**
      * Save workspace collections.
      *
-     * `mode` (optional): 'merge' (default Ã¢â‚¬â€ upsert only) or 'replace'
+     * `mode` (optional): 'merge' (default — upsert only) or 'replace'
      * (explicit destructive sync, requires delete-level permission and is
      * scoped to the writer's agency).
      */
@@ -286,7 +286,7 @@ class WorkspaceController extends Controller
             return null;
         }
 
-        // Server-owned tenancy/ownership keys are stripped Ã¢â‚¬â€ the business_records
+        // Server-owned tenancy/ownership keys are stripped — the business_records
         // `agency_id` COLUMN is the single source of truth for scoping (set in
         // syncList), never a key inside the payload.
         foreach (self::RESERVED_KEYS as $key) {
@@ -331,7 +331,7 @@ class WorkspaceController extends Controller
     private function filterValue($value, int $depth)
     {
         if ($depth > 8) {
-            return null; // too deep Ã¢â‚¬â€ reject the branch
+            return null; // too deep — reject the branch
         }
 
         if (is_array($value)) {
@@ -372,11 +372,11 @@ class WorkspaceController extends Controller
     /* ================================================================ */
 
     /**
-     * MERGE (default): upsert the given rows only Ã¢â‚¬â€ rows absent from the
+     * MERGE (default): upsert the given rows only — rows absent from the
      * payload are never touched (no cross-collection wipes).
      *
      * REPLACE (explicit + elevated): upsert, then soft-delete rows that are
-     * absent Ã¢â‚¬â€ scoped to the writer's agency for members, platform-wide for
+     * absent — scoped to the writer's agency for members, platform-wide for
      * platform users (requires delete-level permission, audited).
      *
      * OWNERSHIP (enforced on every row):
@@ -410,7 +410,7 @@ class WorkspaceController extends Controller
 
             // ---- row-level ownership enforcement ----
             if ($scoped && $agencyId !== null && $existing && $owner !== null && $owner !== $agencyId) {
-                $blocked++; // another agency's row Ã¢â‚¬â€ never touch
+                $blocked++; // another agency's row — never touch
                 continue;
             }
 
@@ -439,14 +439,14 @@ class WorkspaceController extends Controller
             $deletedDiffers = ($oldDeletedAt === null) !== ($deletedAt === null);
 
             if (!$payloadDiffers && !$deletedDiffers) {
-                continue; // nothing changed Ã¢â‚¬â€ skip write
+                continue; // nothing changed — skip write
             }
 
             BusinessRecord::put($collection, $recordId, $row);
             $changed[] = $recordId;
 
             // Stamp tenancy COLUMN for new rows and rows already owned by the
-            // writer. Shared legacy rows (NULL) stay NULL Ã¢â‚¬â€ never hijacked.
+            // writer. Shared legacy rows (NULL) stay NULL — never hijacked.
             if ($scoped && $agencyId !== null && ($existing === null || $owner === $agencyId)) {
                 BusinessRecord::where('collection', $collection)
                     ->where('record_id', $recordId)
@@ -513,7 +513,7 @@ class WorkspaceController extends Controller
     /**
      * Server-side audit trail for media sales: every asset that transitions
      * to "sold" through the workspace sync is recorded in audit_logs with the
-     * seller, buyer attribution and profit Ã¢â‚¬â€ append-only, never deleted.
+     * seller, buyer attribution and profit — append-only, never deleted.
      */
     private function auditNewMediaSales(Request $request, array $rows): void
     {
@@ -706,7 +706,7 @@ class WorkspaceController extends Controller
     /** Read gate per collection (agency-scoped keys checked when scoped). */
     private function canRead(Request $request, $user, string $collection, ?string $agencyId): bool
     {
-        // `view_properties` is the legacy universal read gate Ã¢â‚¬â€ kept as the
+        // `view_properties` is the legacy universal read gate — kept as the
         // fallback so existing staff screens keep working; agency scoping
         // (allRows) is what actually isolates tenants on reads.
         $gates = [

@@ -9,7 +9,7 @@ use App\Models\Document;
 use Illuminate\Http\JsonResponse;
 
 /**
- * G-8 â€” server-side plan-limit enforcement.
+ * G-8 — server-side plan-limit enforcement.
  *
  * Usage counters mirror SubscriptionController::current exactly (staff is
  * displayed as `members`), so the API can never accept an action the usage

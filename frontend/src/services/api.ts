@@ -1419,7 +1419,7 @@ export const api = {
   // ------------------------------------------------------------------
   // Enterprise UI support (Phase 7): identity, private vault, media
   // uploads, location structures. All file transfers use multipart and
-  // authenticated blob reads â€” private bytes are never public URLs.
+  // authenticated blob reads — private bytes are never public URLs.
   // ------------------------------------------------------------------
 
   async getMe(): Promise<any | null> {

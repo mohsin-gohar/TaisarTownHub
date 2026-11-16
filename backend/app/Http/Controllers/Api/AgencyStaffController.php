@@ -139,7 +139,7 @@ class AgencyStaffController extends Controller
         return response()->json(['success' => true, 'invitations' => $invitations]);
     }
 
-    /** DELETE /api/agency/invitations/{id} â€” revoke */
+    /** DELETE /api/agency/invitations/{id} — revoke */
     public function revokeInvitation(Request $request, int $id)
     {
         $agencyId = $this->requireAgency($request);
@@ -156,7 +156,7 @@ class AgencyStaffController extends Controller
     }
 
     /**
-     * POST /api/agency/invitations/accept â€” accept an invite.
+     * POST /api/agency/invitations/accept — accept an invite.
      * Authenticated users join directly; new users may register through the
      * invite by supplying name + password with the token.
      */
@@ -205,7 +205,7 @@ class AgencyStaffController extends Controller
             if (User::where('email', $invitation->email)->exists()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'An account with this email already exists â€” please sign in first.',
+                    'message' => 'An account with this email already exists — please sign in first.',
                 ], 422);
             }
 
@@ -277,7 +277,7 @@ class AgencyStaffController extends Controller
     }
 
     /**
-     * PATCH /api/agency/members/{id} â€” change role / extra permissions / status.
+     * PATCH /api/agency/members/{id} — change role / extra permissions / status.
      */
     public function updateMember(Request $request, int $id)
     {
@@ -357,7 +357,7 @@ class AgencyStaffController extends Controller
         return response()->json(['success' => true, 'message' => 'Member updated.']);
     }
 
-    /** DELETE /api/agency/members/{id} â€” deactivate (never hard-delete). */
+    /** DELETE /api/agency/members/{id} — deactivate (never hard-delete). */
     public function removeMember(Request $request, int $id)
     {
         $agencyId = $this->requireAgency($request);
@@ -385,7 +385,7 @@ class AgencyStaffController extends Controller
 
     /* ================= Roles ================= */
 
-    /** GET /api/agency/roles â€” system + custom roles for this agency. */
+    /** GET /api/agency/roles — system + custom roles for this agency. */
     public function roles(Request $request)
     {
         $agencyId = $this->requireAgency($request);
@@ -413,7 +413,7 @@ class AgencyStaffController extends Controller
         ]);
     }
 
-    /** POST /api/agency/roles â€” create a custom agency role. */
+    /** POST /api/agency/roles — create a custom agency role. */
     public function storeRole(Request $request)
     {
         $agencyId = $this->requireAgency($request);
@@ -469,7 +469,7 @@ class AgencyStaffController extends Controller
         ], 201);
     }
 
-    /** PUT /api/agency/roles/{id} â€” update a custom role. */
+    /** PUT /api/agency/roles/{id} — update a custom role. */
     public function updateRole(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);
@@ -510,7 +510,7 @@ class AgencyStaffController extends Controller
         return response()->json(['success' => true, 'message' => 'Role updated.']);
     }
 
-    /** DELETE /api/agency/roles/{id} â€” delete an unused custom role. */
+    /** DELETE /api/agency/roles/{id} — delete an unused custom role. */
     public function destroyRole(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);

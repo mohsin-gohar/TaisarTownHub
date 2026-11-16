@@ -121,7 +121,7 @@ export const Footer: React.FC = () => {
                 </a>
               ))}
             </div>
-            {/* Quick Demo Controls â€” demo build only (public/production visitors never see it) */}
+            {/* Quick Demo Controls — demo build only (public/production visitors never see it) */}
             {APP_MODE === 'demo' && (
               <div className="pt-2">
                 <button
@@ -255,21 +255,21 @@ export const Footer: React.FC = () => {
               >
                 Scheme 45 Master Plan
               </button>
-              <span>â€¢</span>
+              <span>•</span>
               <button
                 onClick={() => setCurrentView('contact')}
                 className="hover:text-slate-300"
               >
                 Office Location
               </button>
-              <span>â€¢</span>
+              <span>•</span>
               <button
                 onClick={() => setCurrentView('login')}
                 className="text-[#C5A46D] hover:underline"
               >
                 Portal Sign In
               </button>
-              <span>â€¢</span>
+              <span>•</span>
               <button
                 onClick={() => setCurrentView('register')}
                 className="text-slate-400 hover:text-[#C5A46D]"
