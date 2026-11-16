@@ -27,7 +27,7 @@
 | 6 | PHP syntax | ✅ PASS | `php -l` on 10 modified/test files |
 | 7 | Git whitespace | ✅ PASS | `git diff --check` — exit 0 |
 | 8 | Source pushed | ✅ PASS | `origin/main` at `a8d217e` |
-| 9 | Vercel redeploy | ✅ PASS | New asset `index-CJYz7gLM.js` served |
+| 9 | Vercel redeploy | ✅ PASS | New bundle hashes served; final check `index-D3Qzp6m-.js` |
 | 10 | Deployed public routes render | ✅ PASS | `/`, `/gallery`, `/agencies`, `/properties` — real Chromium |
 | 11 | Gallery video playback | ✅ PASS | `readyState 4`, `currentTime 1.46`, `error null` |
 | 12 | Broken images on deployed routes | ✅ PASS | 0 broken of 41/14/8/24 images |

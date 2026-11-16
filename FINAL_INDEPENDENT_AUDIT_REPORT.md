@@ -68,7 +68,7 @@ Screenshot: `C:\Users\mohsi\AppData\Local\Temp\opencode\qa-shots\deployed-galler
 | `/agencies` | 2,075 | 3,491 | 8 | 0 | 0 / 6 / 0 |
 | `/properties` | 5,836 | 13,267 | 24 | 0 | 0 / 22 / 44 |
 
-- Deployed bundle after redeploy: `/assets/index-CJYz7gLM.js` (previously `index-30f5dMp-.js`), CSS `/assets/index-ABOJN43V.css`.
+- Deployed bundle after redeploy: `/assets/index-CJYz7gLM.js` (previously `index-30f5dMp-.js`), CSS `/assets/index-ABOJN43V.css`. Vercel rotates asset hashes on each rebuild; the final verification deployment served `/assets/index-D3Qzp6m-.js` with identical results.
 - Page errors: **0** on all four routes.
 - Console: only the expected `VITE_API_URL is not set ... using the bundled public catalog.` diagnostic.
 - Gallery video: modal opens, `/sample-video.mp4` plays (`readyState 4`, `duration 10.03`, `currentTime 1.46`, `paused false`, `error null`).

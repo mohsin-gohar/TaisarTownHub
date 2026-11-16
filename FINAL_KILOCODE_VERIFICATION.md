@@ -10,7 +10,7 @@
 
 - Deployed SPA is **no longer blank**. The production failure was an uncaught module-evaluation throw when `VITE_API_URL` was missing on Vercel.
 - The missing-env guard now logs a diagnostic and falls back to same-origin `/api`; static deployments receive a public-safe bundled catalog when no API origin exists.
-- Commit `a8d217e` is pushed to `origin/main` and was redeployed by Vercel (`index-CJYz7gLM.js`).
+- Commit `a8d217e` is pushed to `origin/main` and was redeployed by Vercel. Bundle hashes rotate per build; the final verification deployment served `/assets/index-D3Qzp6m-.js` with identical rendered results.
 - Public Vercel routes render in real Chromium with images and working gallery video playback.
 - Docker, real ClamAV, live backend/API, custom domain, and live browser security checks remain unexecuted. No production-ready claim is made.
 

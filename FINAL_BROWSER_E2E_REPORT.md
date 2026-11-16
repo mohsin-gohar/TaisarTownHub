@@ -23,7 +23,7 @@ Error: VITE_API_URL is required in production. Set it in your build environment.
 
 ## 2. Production Verification (after redeploy)
 
-Deployed bundle: `/assets/index-CJYz7gLM.js`; CSS `/assets/index-ABOJN43V.css`.
+Deployed bundle: `/assets/index-CJYz7gLM.js` on the first fixed redeploy; the final verification deployment served `/assets/index-D3Qzp6m-.js` (Vercel rotates hashes per build) with identical results. CSS: `/assets/index-ABOJN43V.css`.
 
 | Route | Body height | Text length | Images | Broken | Video cards | Agency cards | Property links | Page errors |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
