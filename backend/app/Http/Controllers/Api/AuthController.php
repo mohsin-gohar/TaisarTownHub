@@ -452,6 +452,14 @@ class AuthController extends Controller
 
         $user->forceFill(['mfa_enabled_at' => now()])->save();
 
+        // The current session just proved possession of the second factor.
+        // Stamp THIS token so the very next request is not rejected by the
+        // middleware (no logout/login round-trip required).
+        $token = $request->user()->currentAccessToken();
+        if ($token) {
+            MfaVerification::stamp((int) $user->id, (int) $token->id);
+        }
+
         $this->writeAudit($request, 'auth.mfa_enabled', (string) $user->id, 'Two-factor sign-in activated.', [
             'entity_type' => 'user',
             'entity_id' => (string) $user->id,

@@ -91,6 +91,17 @@ class EnsureMfaVerified
             return false;
         }
 
-        return in_array($user->role, ['super_admin', 'admin', 'manager'], true);
+        if (in_array($user->role, ['super_admin', 'admin', 'manager'], true)) {
+            return true;
+        }
+
+        // Agency authority lives in active memberships, NOT users.role.
+        // An agency owner created via self-registration has the base role
+        // 'dealer', so the legacy whitelist alone would exempt them from a
+        // global admin-MFA policy.
+        return $user->memberships()
+            ->where('status', 'active')
+            ->whereHas('role', fn ($q) => $q->whereIn('key', ['agency_owner', 'agency_manager']))
+            ->exists();
     }
 }

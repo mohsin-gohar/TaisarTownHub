@@ -510,7 +510,7 @@ paths:
       parameters: [ { $ref: '#/components/parameters/PathId' } ]
       responses:
         '200':
-          description: File stream (Content-Disposition: attachment)
+          description: "File stream (Content-Disposition: attachment)"
         '403': { $ref: '#/components/responses/Error403' }
         '410': { description: Trashed or missing }
   /agency/documents/{id}/preview:

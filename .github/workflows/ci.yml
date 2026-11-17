@@ -64,4 +64,5 @@ jobs:
       - name: Install YAML parser
         run: python3 -m pip install --quiet pyyaml
       - name: Validate YAML syntax
-        run: python3 -c "import yaml; yaml.safe_load(open('docs/openapi.yaml', encoding='utf-8')); print('openapi.yaml: YAML OK')"
+        run: >-
+          python3 -c "import yaml; yaml.safe_load(open('docs/openapi.yaml', encoding='utf-8')); print('openapi.yaml YAML OK')"

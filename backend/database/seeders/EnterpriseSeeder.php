@@ -111,6 +111,7 @@ class EnterpriseSeeder extends Seeder
             ['listing.default_expiry_days', 90, 'listings', 'Days before an approved listing expires'],
             ['security.login_max_attempts', 5, 'security', 'Failed logins before temporary lockout'],
             ['security.login_lockout_minutes', 15, 'security', 'Lockout duration in minutes'],
+            ['security.mfa_required_for_admins', false, 'security', 'Require MFA for platform admins and agency owners/managers'],
             ['notifications.email_enabled', false, 'integrations', 'Email notifications (requires mail credentials)'],
             ['notifications.sms_enabled', false, 'integrations', 'SMS notifications (requires provider credentials)'],
             ['notifications.whatsapp_enabled', false, 'integrations', 'WhatsApp notifications (requires provider credentials)'],

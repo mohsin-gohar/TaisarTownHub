@@ -90,6 +90,52 @@ class MfaEnforcementTest extends EnterpriseTestCase
         $this->assertFalse(MfaVerification::isVerified((int) $user->id, $tokenAId));
     }
 
+    public function test_enabling_mfa_keeps_the_current_session_working(): void
+    {
+        $user = $this->makeUser('operator');
+        $token = $this->tokenFor($user);
+        $service = app(MfaService::class);
+
+        $secret = $this->postJson('/api/auth/mfa/setup', [], $this->authHeaders($token))
+            ->assertOk()->json('secret');
+        $this->postJson('/api/auth/mfa/enable', [
+            'code' => $service->currentCode($secret),
+        ], $this->authHeaders($token))->assertOk();
+
+        $this->asGuest();
+        $this->getJson('/api/auth/me', $this->authHeaders($token))
+            ->assertOk()
+            ->assertJsonPath('success', true);
+    }
+
+    public function test_global_mfa_policy_uses_active_agency_role(): void
+    {
+        \Illuminate\Support\Facades\DB::table('system_settings')->updateOrInsert(
+            ['key' => 'security.mfa_required_for_admins'],
+            [
+                'value' => json_encode(true),
+                'group' => 'security',
+                'description' => 'test',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        [$owner] = $this->agencyUser(['agency.view'], 'agency_owner');
+        [$manager] = $this->agencyUser(['agency.view'], 'agency_manager');
+        [$viewer] = $this->agencyUser(['agency.view'], 'viewer');
+
+        foreach ([$owner, $manager] as $privileged) {
+            $this->asGuest();
+            $this->getJson('/api/auth/me', $this->authHeaders($this->tokenFor($privileged)))
+                ->assertForbidden()
+                ->assertJsonPath('mfa_required', true);
+        }
+
+        $this->asGuest();
+        $this->getJson('/api/auth/me', $this->authHeaders($this->tokenFor($viewer)))->assertOk();
+    }
+
     public function test_disabling_mfa_clears_every_verification_stamp(): void
     {
         $user = $this->makeUser('operator');

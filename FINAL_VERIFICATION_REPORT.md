@@ -11,8 +11,20 @@
 
 ## 2. Exact commits
 
-- `a2a5068` — `fix(security): close invitation escalation, tenant leaks, dealer-file and MFA gaps` (source fixes + 23 regression tests + 12 reports).
-- Final report commit: see `git log -1` on the repair branch (this file).
+- `a2a5068` — first security repair batch.
+- `b99ba74` — first final report.
+- Follow-up commit (re-audit round): fixes CI YAML syntax (`ci.yml`, `docs/openapi.yaml`), global MFA policy for agency owner/manager memberships, `mfaEnable()` current-token stamp, seeds the MFA policy setting, and adds 2 regression tests. See `git log` for the exact SHA.
+
+## 2b. CI failure investigation (updated)
+
+GitHub Actions run `44028855599` on `b99ba74` failed with the annotation **"Invalid workflow file: `.github/workflows/ci.yml#L67` — You have an error in your yaml syntax on line 67"** (confirmed from the public run page's Annotations section; API jobs/logs endpoints returned zero items anonymously).
+
+Root causes and fixes:
+1. The workflow `run:` value contained `: ` (inside `print('openapi.yaml: YAML OK')`) in an unquoted plain scalar → converted to a folded block scalar (`run: >-`) and removed the colon from the message. Local `yaml.safe_load` now parses the workflow with jobs `backend`, `frontend`, `contract`.
+2. `docs/openapi.yaml` line 513 had the same `: ` problem in `description: File stream (Content-Disposition: attachment)` → quoted the value. Local parse now succeeds (94 paths).
+3. Added `pip install pyyaml` to the contract job so its validation step has the parser.
+
+A new run is triggered by the push to the repair branch/main; its result must be read from GitHub, not assumed.
 
 ## 3. Files changed (source)
 
@@ -30,9 +42,11 @@ Full register: `BUG_REGISTER_AND_FIXES.md`. No test was deleted, skipped or weak
 
 | Gate | Result |
 |---|---|
-| Backend full suite (`php artisan test`) | **239 passed / 1,955 assertions** |
+| Backend full suite (`php artisan test`) | **241 passed / 1,964 assertions** |
 | Frontend `npm run verify` (lint → tests → build/prerender → bundle guard) | **green** — 133 tests, 29 HTML, 9-URL sitemap, 10 public chunks, no private data |
-| Targeted suites | AdminStaff 12, FinanceIsolation 16, LegacyTransaction 5, DealerFiles 7, Mfa 13, BookingConcurrency 5 — all pass |
+| PHP lint (all changed PHP files) | **0 failures** |
+| YAML parse (`ci.yml` + `openapi.yaml`) | **OK** |
+| Targeted suites | AdminStaff 12, FinanceIsolation 16, LegacyTransaction 5, DealerFiles 7, MfaEnforcement 6, BookingConcurrency 5 — all pass |
 
 ## 6. Browser routes/workflows actually tested
 
@@ -57,4 +71,4 @@ No **new** browser pass was completed in this increment: the desktop browser tab
 
 ## 9. Verdict
 
-**Not 100% complete.** All confirmed Critical/High code defects were fixed and covered by passing regression tests, but acceptance criteria that depend on Docker, real infrastructure, browser/Lighthouse measurement and a green GitHub Actions run remain open. No production claim is made.
+**Not 100% complete.** All confirmed Critical/High code defects were fixed and covered by passing regression tests; the CI YAML failures were reproduced from GitHub's annotations and fixed locally. Acceptance criteria that depend on Docker, real MySQL concurrency, real infrastructure, browser/Lighthouse measurement and an observed green GitHub Actions run remain open. No production claim is made.
