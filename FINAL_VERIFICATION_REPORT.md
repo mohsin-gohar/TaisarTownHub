@@ -42,7 +42,9 @@ Full register: `BUG_REGISTER_AND_FIXES.md`. No test was deleted, skipped or weak
 
 | Gate | Result |
 |---|---|
-| Backend full suite (`php artisan test`) | **241 passed / 1,964 assertions** |
+| Backend full suite — SQLite (`php artisan test`) | **243 passed / 1,974 assertions** |
+| Backend full suite — real MySQL 8.4.9 | **243 passed / 1,974 assertions** |
+| Two-process MySQL concurrency (invitations + deal numbers) | **2 tests / 10 assertions — PASS** |
 | Frontend `npm run verify` (lint → tests → build/prerender → bundle guard) | **green** — 133 tests, 29 HTML, 9-URL sitemap, 10 public chunks, no private data |
 | PHP lint (all changed PHP files) | **0 failures** |
 | YAML parse (`ci.yml` + `openapi.yaml`) | **OK** |
@@ -66,7 +68,7 @@ No **new** browser pass was completed in this increment: the desktop browser tab
 5. Lighthouse/responsive/WCAG matrix not executed; screenshots unavailable.
 6. MFA global-policy key unseeded and role whitelist inconsistent (Medium, needs product decision).
 7. Dealer deal-visibility policy differs across legacy and finance APIs (needs decision).
-8. True multi-process concurrency under MySQL not executed (SQLite in tests).
+8. ~~True multi-process concurrency under MySQL not executed~~ **RESOLVED**: real MySQL 8.4.9 two-process tests added and passing (see `MYSQL_PRIMARY_DATABASE.md`). Remaining: MySQL 8.0 CI service result must be observed from GitHub Actions; Docker/ClamAV/SMTP and browser/Lighthouse still unverified.
 9. Legacy ownership mapping (110 unowned rows) untouched pending business approval and backup.
 
 ## 9. Verdict

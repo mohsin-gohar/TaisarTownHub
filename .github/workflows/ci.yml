@@ -34,6 +34,53 @@ jobs:
       - name: Run feature suite
         run: php artisan test
 
+  integration-mysql:
+    name: Backend suite on MySQL 8 (integration)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-only-password
+          MYSQL_DATABASE: taisartownhub_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ptest-only-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: taisartownhub_test
+      DB_USERNAME: root
+      DB_PASSWORD: test-only-password
+      DB_ROOT_PASSWORD: test-only-password
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, pdo_sqlite, bcmath, intl, zip, gd
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Wait for MySQL
+        run: >-
+          php -r "$pdo = new PDO('mysql:host=127.0.0.1;port=3306;dbname=taisartownhub_test', 'root', 'test-only-password'); echo $pdo->query('SELECT 1')->fetchColumn();"
+
+      - name: Run full suite against MySQL 8
+        run: php artisan test
+
   frontend:
     name: Frontend verify (Node 20)
     runs-on: ubuntu-latest
