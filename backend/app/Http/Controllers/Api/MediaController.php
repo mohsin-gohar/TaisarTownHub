@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\MediaFile;
 use App\Models\Property;
 use App\Models\SystemSetting;
+use App\Services\MalwareScanner;
+use App\Services\SecureFileStore;
+use App\Support\PlanLimits;
+use App\Support\UploadSecurity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -16,8 +21,8 @@ use Illuminate\Support\Str;
  *
  * Uploaded bytes live on the private `documents` disk; delivery happens only
  * through controller endpoints that check the `visibility` flag:
- *  - public media  → GET /api/media/{id}/file (no auth, public media only)
- *  - private media → GET /api/agency/media/{id}/file (auth + agency scope)
+ *  - public media  â†’ GET /api/media/{id}/file (no auth, public media only)
+ *  - private media â†’ GET /api/agency/media/{id}/file (auth + agency scope)
  */
 class MediaController extends Controller
 {
@@ -84,8 +89,14 @@ class MediaController extends Controller
     /**
      * POST /api/agency/media — upload a file or register an external URL.
      * Multipart `file` OR json `url`.
+     *
+     * Uploaded bytes run the SAME content-security pipeline as the vault
+     * (extension allowlist, sniffed MIME, magic bytes, malware scan) and are
+     * written encrypted-at-rest through the SecureFileStore. External URLs
+     * must be HTTPS public hosts — `deliver()` refuses to redirect to
+     * anything else.
      */
-    public function store(Request $request)
+    public function store(Request $request, MalwareScanner $scanner)
     {
         $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['manage_media', 'upload_media']);
@@ -94,7 +105,14 @@ class MediaController extends Controller
 
         $request->validate([
             'file' => 'nullable|file|max:' . ($maxMb * 1024),
-            'url' => 'nullable|url|max:2048',
+            'url' => [
+                'nullable', 'string', 'max:2048',
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (is_string($value) && $value !== '' && !UploadSecurity::isAllowedExternalUrl($value)) {
+                        $fail('Only HTTPS links to public hosts are allowed.');
+                    }
+                },
+            ],
             'title' => 'required|string|max:255',
             'folder' => 'nullable|string|max:60',
             'type' => 'nullable|in:image,video,document,banner,brochure,floor_plan',
@@ -124,6 +142,8 @@ class MediaController extends Controller
         $mimeType = null;
         $size = 0;
         $dimensions = null;
+        $scanStatus = null;
+        $scannedAt = null;
 
         if ($request->hasFile('file')) {
             $file = $request->file('file');
@@ -137,18 +157,63 @@ class MediaController extends Controller
                 ], 422);
             }
 
+            // Content security: sniffed MIME blocklist + magic bytes — the
+            // same gates the document vault applies. The browser-declared
+            // type is never trusted.
+            $check = UploadSecurity::evaluate($file, $allExt);
+            if ($check['error'] !== null) {
+                return $check['error'];
+            }
+
+            $scan = $scanner->scan($file->getRealPath());
+            $scannerUnavailable = $scan->skipped || in_array('scan_unavailable', $scan->threats, true);
+
+            if ($scannerUnavailable && config('malware.fail_closed', false)) {
+                $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats);
+                Log::warning('Media upload rejected: malware scanner unavailable (fail-closed)', [
+                    'file' => $file->getClientOriginalName(),
+                    'agency_id' => $agencyId,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Malware scanner unavailable; upload rejected.',
+                ], 422);
+            }
+
+            if (!$scannerUnavailable && !$scan->isClean && !$scan->skipped) {
+                $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'infected', $scan->threats);
+                Log::warning('Media upload rejected: malware detected', [
+                    'file' => $file->getClientOriginalName(),
+                    'agency_id' => $agencyId,
+                    'threats' => $scan->threats,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File failed malware scan and was rejected.',
+                ], 422);
+            }
+
             $type = $type ?: (in_array($ext, self::VIDEO_EXT, true) ? 'video'
                 : (in_array($ext, self::IMAGE_EXT, true) ? 'image' : 'document'));
 
             $storedPath = 'media/' . $agencyId . '/' . now()->format('Y/m') . '/' . $mediaId . '.' . $ext;
-            $stored = $file->storeAs(dirname($storedPath), basename($storedPath), 'documents');
-            if (!$stored) {
-                return response()->json(['success' => false, 'message' => 'Upload failed. Please retry.'], 500);
+
+            // G-8: media bytes count against the same storage quota the
+            // vault enforces (they live on the same private disk).
+            $agency = Agency::findOrFail($agencyId);
+            if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
+                return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded media or upgrade your plan.', $block);
             }
-            $storedPath = $stored;
-            $originalName = $file->getClientOriginalName();
-            $mimeType = $file->getClientMimeType();
-            $size = $file->getSize();
+
+            SecureFileStore::storeUpload('documents', $storedPath, $file);
+
+            $originalName = UploadSecurity::sanitizeOriginalName($file->getClientOriginalName());
+            $mimeType = $check['mime'] ?: 'application/octet-stream';
+            $size = (int) $file->getSize();
+            $scanStatus = $scan->isClean ? 'scanned_clean' : 'skipped';
+            $scannedAt = $scan->isClean ? now() : null;
 
             if (str_starts_with((string) $mimeType, 'image/')) {
                 $dims = @getimagesize($file->getRealPath());
@@ -178,6 +243,9 @@ class MediaController extends Controller
             'dimensions' => $dimensions,
             'visibility' => $visibility,
             'tags' => $request->tags,
+            'status' => 'available',
+            'scan_status' => $scanStatus,
+            'scan_completed_at' => $scannedAt,
             'uploaded_by' => $request->user()->id,
         ]);
 
@@ -367,22 +435,85 @@ class MediaController extends Controller
     private function deliver(MediaFile $media)
     {
         if ($media->disk_path) {
-            if (!Storage::disk('documents')->exists($media->disk_path)) {
-                abort(410, 'File is no longer available.');
+            // Lifecycle gate: media that has not cleared malware verification
+            // (fail-open hold / infected holdover) never leaves the private
+            // disk — neither privately nor publicly. Legacy rows recorded
+            // before the scan lifecycle existed (scan_status = NULL) keep
+            // streaming so historical content does not vanish.
+            if ($media->scan_status !== null && $media->scan_status !== 'scanned_clean') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This media has not cleared malware verification yet.',
+                ], 423);
             }
-            // Inline delivery lets public marketing pages embed the asset
-            // directly; private consumers still require authentication.
-            return Storage::disk('documents')->response(
+
+            // Authorised streaming through the SecureFileStore (decrypts
+            // encrypted-at-rest bytes; header-safe disposition; nosniff).
+            return SecureFileStore::response(
+                'documents',
                 $media->disk_path,
                 $media->original_name ?: basename($media->disk_path),
-                ['Content-Type' => $media->mime_type ?: 'application/octet-stream', 'X-Content-Type-Options' => 'nosniff']
+                $media->mime_type ?: 'application/octet-stream',
+                'inline'
             );
         }
 
         if ($media->url) {
+            // The stored URL was validated at registration, but re-check on
+            // every delivery (defence in depth): only HTTPS public hosts.
+            if (!UploadSecurity::isAllowedExternalUrl($media->url)) {
+                abort(410, 'External media URL is not allowed.');
+            }
+
             return redirect()->away($media->url);
         }
 
         abort(410, 'File is no longer available.');
+    }
+
+    /**
+     * Isolate a rejected media upload (infected / scanner-unavailable) on the
+     * quarantine disk + visibility row, mirroring the vault behaviour.
+     */
+    private function quarantineRejected(
+        Request $request,
+        string $agencyId,
+        $file,
+        string $ext,
+        string $reason,
+        array $threats
+    ): void {
+        try {
+            $qId = 'qtn_' . bin2hex(random_bytes(8));
+            $qPath = $agencyId . '/' . now()->format('Y/m') . '/' . $qId . '.' . $ext;
+
+            SecureFileStore::storeUpload('quarantine', $qPath, $file);
+
+            \App\Models\DocumentQuarantine::create([
+                'id' => $qId,
+                'agency_id' => $agencyId,
+                'document_id' => null,
+                'original_name' => UploadSecurity::sanitizeOriginalName($file->getClientOriginalName()),
+                'stored_name' => basename($qPath),
+                'disk_path' => $qPath,
+                'mime_type' => @mime_content_type($file->getRealPath()) ?: 'application/octet-stream',
+                'size_bytes' => (int) $file->getSize(),
+                'checksum' => hash_file('sha256', $file->getRealPath()) ?: null,
+                'reason' => $reason,
+                'threats' => $threats,
+                'uploaded_by' => $request->user()?->id,
+                'created_at' => now(),
+            ]);
+
+            $this->writeAudit($request, 'media.quarantined', $qId,
+                'Media upload quarantined (' . $reason . ')', [
+                    'agency_id' => $agencyId,
+                    'entity_type' => 'document_quarantine',
+                    'entity_id' => $qId,
+                    'metadata' => ['reason' => $reason, 'threats' => $threats],
+                ]);
+        } catch (\Throwable $e) {
+            Log::warning('Media quarantine write failed', ['error' => $e->getMessage()]);
+        }
     }
 }

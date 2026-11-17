@@ -23,8 +23,9 @@ class Document extends Model
 
     protected $fillable = [
         'id', 'agency_id', 'folder_id', 'property_id', 'category', 'title', 'original_name',
-        'stored_name', 'disk_path', 'mime_type', 'size_bytes', 'checksum',
-        'is_sensitive', 'version', 'status', 'tags', 'uploaded_by', 'deleted_by',
+        'stored_name', 'disk_path', 'storage_disk', 'mime_type', 'size_bytes', 'checksum',
+        'is_sensitive', 'version', 'status', 'scan_status', 'scan_threats', 'scan_completed_at',
+        'scanner', 'tags', 'uploaded_by', 'deleted_by',
     ];
 
     protected $hidden = [
@@ -38,6 +39,8 @@ class Document extends Model
             'tags' => 'array',
             'size_bytes' => 'integer',
             'version' => 'integer',
+            'scan_threats' => 'array',
+            'scan_completed_at' => 'datetime',
         ];
     }
 

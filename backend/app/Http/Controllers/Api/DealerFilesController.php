@@ -8,6 +8,7 @@ use App\Models\Dealer;
 use App\Models\DealerFile;
 use App\Models\User;
 use App\Support\PlanLimits;
+use App\Support\UploadSecurity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -56,7 +57,17 @@ class DealerFilesController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'type' => 'required|in:image,video,pdf',
-            'url' => 'required|url|max:2048',
+            'url' => [
+                'required', 'string', 'max:2048',
+                // Registration-side guard: only HTTPS public hosts. The legacy
+                // renderer points <img>/<video> at these URLs, so a non-HTTPS
+                // or private-network target must never be accepted.
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (is_string($value) && $value !== '' && !UploadSecurity::isAllowedExternalUrl($value)) {
+                        $fail('Only HTTPS links to public hosts are allowed.');
+                    }
+                },
+            ],
             'folder' => 'required|in:Projects,Properties,Videos,Documents,Banners',
             'file_size_kb' => 'required|numeric|min:0|max:51200',
             'dimensions' => 'nullable|string|max:50',

@@ -7,6 +7,7 @@ use App\Models\Agency;
 use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
+use App\Support\PlanLimits;
 use Illuminate\Http\Request;
 
 /**
@@ -54,13 +55,10 @@ class SubscriptionController extends Controller
 
         $limits = $agency->limits();
 
-        $usage = [
-            'members' => $agency->activeMembers()->count(),
-            'listings' => $agency->properties()->whereNull('deleted_at')->count(),
-            'storage_bytes' => (int) \App\Models\Document::where('agency_id', $agencyId)
-                ->where('status', 'active')->sum('size_bytes'),
-            'leads' => $agency->inquiries()->count(),
-        ];
+        // Mirror PlanLimits::usage exactly (documents incl. trashed + archived
+        // versions + media bytes) so the usage panel can never claim the API
+        // is accepting more storage than it actually is.
+        $usage = PlanLimits::usage($agency);
 
         $remaining = [];
         foreach (['staff', 'listings', 'leads'] as $key) {

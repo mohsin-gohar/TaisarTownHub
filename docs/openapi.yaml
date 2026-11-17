@@ -506,13 +506,17 @@ paths:
     get:
       tags: [Document Vault]
       summary: Authenticated download (streams from the private disk)
-      description: Requires `documents.download` (+ `documents.view_sensitive` for sensitive docs). Trashed/missing files → 410.
+      description: >-
+        Requires `documents.download` (+ `documents.view_sensitive` for sensitive docs).
+        Files that have not cleared malware verification are blocked with 423
+        until an administrator rescan clears them. Trashed/missing files → 410.
       parameters: [ { $ref: '#/components/parameters/PathId' } ]
       responses:
         '200':
           description: "File stream (Content-Disposition: attachment)"
         '403': { $ref: '#/components/responses/Error403' }
         '410': { description: Trashed or missing }
+        '423': { description: Malware verification not cleared (quarantined hold) }
   /agency/documents/{id}/preview:
     get:
       tags: [Document Vault]
@@ -541,6 +545,80 @@ paths:
       parameters: [ { $ref: '#/components/parameters/PathId' } ]
       responses:
         '200': { description: Access log entries }
+  /agency/documents-quarantine:
+    get:
+      tags: [Document Vault]
+      summary: Quarantine visibility (needs `documents.manage_permissions`)
+      description: >-
+        Lists vault documents held in quarantine (fail-open uploads that never
+        cleared malware verification) and rejected uploads isolated on the
+        quarantine disk (infected / scanner unavailable). Disk paths are never
+        exposed.
+      responses:
+        '200':
+          description: Quarantined + rejected uploads
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, quarantined, rejected]
+                properties:
+                  success: { type: boolean, const: true }
+                  quarantined:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        title: { type: string }
+                        scan_status: { type: string }
+                        scan_threats: { type: array, items: { type: string }, nullable: true }
+                        size_bytes: { type: integer }
+                        status: { type: string }
+                  rejected:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        title: { type: string }
+                        reason: { type: string, enum: [infected, scan_unavailable] }
+                        scan_threats: { type: array, items: { type: string }, nullable: true }
+                        size_bytes: { type: integer }
+                        created_at: { type: string, format: date-time }
+        '403': { $ref: '#/components/responses/Error403' }
+  /agency/documents/{id}/rescan:
+    post:
+      tags: [Document Vault]
+      summary: Rerun the malware scan (needs `documents.manage_permissions`)
+      description: >-
+        Clean verdict promotes the document back to active (bytes move off the
+        quarantine disk when needed); infected stays quarantined with the
+        recorded threats; an unavailable scanner keeps the hold (fail-closed).
+      parameters: [ { $ref: '#/components/parameters/PathId' } ]
+      responses:
+        '200': { description: Rescan verdict applied }
+        '422': { description: No pending verdict or scanner unavailable }
+  /agency/documents/storage-usage:
+    get:
+      tags: [Document Vault]
+      summary: Server-enforced storage usage for the agency
+      description: >-
+        Mirrors the quota gate: documents (incl. trashed) + archived versions +
+        media bytes. The UI can never drift from what the API enforces.
+      responses:
+        '200':
+          description: Usage counters
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, storage_bytes, unlimited]
+                properties:
+                  success: { type: boolean, const: true }
+                  storage_bytes: { type: integer }
+                  storage_mb_limit: { type: integer, nullable: true }
+                  unlimited: { type: boolean }
   /agency/documents/{id}/shares:
     get:
       tags: [Document Shares]

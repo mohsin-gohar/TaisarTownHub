@@ -25,7 +25,8 @@ RUN composer dump-autoload --optimize \
 
 # The private document vault must stay OUTSIDE anything web-served; the
 # volume mount point is prepared here and configured via DOCUMENTS disk env.
-RUN mkdir -p storage/app/private/documents storage/app/public storage/logs storage/framework/cache storage/framework/sessions storage/framework/views \
+# The quarantine disk (rejected/suspicious uploads) is equally private.
+RUN mkdir -p storage/app/private/documents storage/app/private/quarantine storage/app/public storage/logs storage/framework/cache storage/framework/sessions storage/framework/views \
     && chown -R www-data:www-data storage
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh

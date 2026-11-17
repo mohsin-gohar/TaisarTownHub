@@ -61,6 +61,20 @@ return [
             'report' => false,
         ],
 
+        /*
+        | Quarantine — isolated holding disk for uploads that FAILED or
+        | could not complete malware scanning. Same guarantees as the vault
+        | disk: outside the web root, never symlinked, never web-served.
+        */
+        'quarantine' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/quarantine'),
+            'serve' => false,
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

@@ -6,6 +6,8 @@ use App\Models\Agency;
 use App\Models\AgencyInvitation;
 use App\Models\AgencyMember;
 use App\Models\Document;
+use App\Models\DocumentVersion;
+use App\Models\MediaFile;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -24,11 +26,27 @@ class PlanLimits
     /** @return array<string, int> current usage for the agency. */
     public static function usage(Agency $agency): array
     {
+        // Storage accounting must cover EVERY byte the agency keeps on the
+        // private disks: live + trashed vault documents (trashed bytes are
+        // retained for audit until permanent delete), every archived
+        // version, and the media studio files. Counting only `active`
+        // documents let an agency bypass the quota via trash or media.
+        $documentBytes = (int) Document::withTrashed()
+            ->where('agency_id', $agency->id)
+            ->sum('size_bytes');
+
+        $versionBytes = (int) DocumentVersion::query()
+            ->whereIn('document_id', Document::withTrashed()->where('agency_id', $agency->id)->select('id'))
+            ->sum('size_bytes');
+
+        $mediaBytes = (int) MediaFile::withTrashed()
+            ->where('agency_id', $agency->id)
+            ->sum('size_bytes');
+
         return [
             'listings' => $agency->properties()->whereNull('deleted_at')->count(),
             'members' => $agency->activeMembers()->count(),
-            'storage_bytes' => (int) Document::where('agency_id', $agency->id)
-                ->where('status', 'active')->sum('size_bytes'),
+            'storage_bytes' => $documentBytes + $versionBytes + $mediaBytes,
             'leads' => $agency->inquiries()->count(),
         ];
     }

@@ -9,7 +9,7 @@ class DocumentVersion extends Model
 {
     public $timestamps = false;
     protected $fillable = [
-        'document_id', 'version', 'stored_name', 'disk_path', 'mime_type',
+        'document_id', 'version', 'stored_name', 'disk_path', 'storage_disk', 'mime_type',
         'size_bytes', 'checksum', 'uploaded_by', 'note', 'created_at',
     ];
 

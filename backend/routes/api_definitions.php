@@ -173,10 +173,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
 
     /* ---------- Document vault (private disk streaming, auth required) ---------- */
     Route::get('/agency/documents', [DocumentController::class, 'index'])->middleware('auth:sanctum');
-    Route::post('/agency/documents', [DocumentController::class, 'store'])->middleware('auth:sanctum');
+    // Upload endpoints get their own limiter so bulk-abusive clients cannot
+    // ride the general 60/min API budget (quota is still enforced per plan).
+    Route::post('/agency/documents', [DocumentController::class, 'store'])->middleware('auth:sanctum', 'throttle:20,1');
     Route::match(['put', 'patch'], '/agency/documents/{id}', [DocumentController::class, 'update'])->middleware('auth:sanctum');
     Route::delete('/agency/documents/{id}', [DocumentController::class, 'destroy'])->middleware('auth:sanctum');
-    Route::post('/agency/documents/{id}/versions', [DocumentController::class, 'storeVersion'])->middleware('auth:sanctum');
+    Route::post('/agency/documents/{id}/versions', [DocumentController::class, 'storeVersion'])->middleware('auth:sanctum', 'throttle:20,1');
     Route::get('/agency/documents/{id}/versions', [DocumentController::class, 'versions'])->middleware('auth:sanctum');
     Route::get('/agency/documents/{id}/download', [DocumentController::class, 'download'])->middleware('auth:sanctum');
     Route::get('/agency/documents/{id}/preview', [DocumentController::class, 'preview'])->middleware('auth:sanctum');
@@ -186,6 +188,10 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
     Route::post('/agency/documents/{id}/restore', [DocumentController::class, 'restore'])->middleware('auth:sanctum');
     Route::delete('/agency/documents/{id}/permanent', [DocumentController::class, 'forceDestroy'])->middleware('auth:sanctum');
     Route::get('/agency/documents/{id}/access-logs', [DocumentController::class, 'accessLogs'])->middleware('auth:sanctum');
+    // Scan lifecycle: quarantine visibility + rescan + storage usage.
+    Route::get('/agency/documents-quarantine', [DocumentController::class, 'quarantineIndex'])->middleware('auth:sanctum');
+    Route::post('/agency/documents/{id}/rescan', [DocumentController::class, 'rescan'])->middleware('auth:sanctum');
+    Route::get('/agency/documents/storage-usage', [DocumentController::class, 'usage'])->middleware('auth:sanctum');
     Route::get('/agency/documents-activity', [DocumentController::class, 'activity'])->middleware('auth:sanctum');
     Route::get('/agency/document-folders', [DocumentController::class, 'folders'])->middleware('auth:sanctum');
     Route::post('/agency/document-folders', [DocumentController::class, 'storeFolder'])->middleware('auth:sanctum');
@@ -193,7 +199,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
 
     /* ---------- Media studio (auth required) ---------- */
     Route::get('/agency/media', [MediaController::class, 'index'])->middleware('auth:sanctum');
-    Route::post('/agency/media', [MediaController::class, 'store'])->middleware('auth:sanctum');
+    Route::post('/agency/media', [MediaController::class, 'store'])->middleware('auth:sanctum', 'throttle:20,1');
     Route::match(['put', 'patch'], '/agency/media/{id}', [MediaController::class, 'update'])->middleware('auth:sanctum');
     Route::delete('/agency/media/{id}', [MediaController::class, 'destroy'])->middleware('auth:sanctum');
     Route::post('/agency/media/{id}/sell', [MediaController::class, 'sell'])->middleware('auth:sanctum');

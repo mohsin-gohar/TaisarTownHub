@@ -16,6 +16,25 @@ class StorageSecurityTest extends EnterpriseTestCase
     {
         parent::setUp();
         Storage::fake('documents');
+        Storage::fake('quarantine');
+        // Deterministic clean verdicts so the storage/privacy flows under
+        // test are independent of whether a local ClamAV binary exists.
+        // (Verdict-dependent behaviour has its own suite in
+        // MalwareUploadEnforcementTest / MalwareScanningTest.)
+        $this->app->instance(
+            \App\Services\MalwareScanner::class,
+            new class implements \App\Services\MalwareScanner {
+                public function scan(string $filePath): \App\Support\MalwareScanResult
+                {
+                    return \App\Support\MalwareScanResult::clean('clamav');
+                }
+
+                public function isAvailable(): bool
+                {
+                    return true;
+                }
+            }
+        );
     }
 
     private function documentPermissions(bool $sensitive = false): array

@@ -18,3 +18,7 @@ Schedule::command('queue:prune-failed --hours=168')->weekly();
 // Marketplace saved-search email alerts. Every search carries its own window
 // (instant/daily/weekly), so an hourly sweep is enough for all cadences.
 Schedule::command('saved-searches:send-alerts')->hourly()->withoutOverlapping();
+
+// Vault hygiene: rejected/quarantined uploads leave the isolated quarantine
+// disk once their retention window (vault.quarantine.retention_days) passes.
+Schedule::command('vault:purge-quarantine')->daily();

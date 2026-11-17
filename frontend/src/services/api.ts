@@ -1497,6 +1497,39 @@ export const api = {
     }
   },
 
+  /** Vault scan lifecycle: held documents + rejected uploads (manage_permissions). */
+  async getAgencyDocumentQuarantine(): Promise<any | null> {
+    try {
+      const res = await apiFetch('/agency/documents-quarantine');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  /** Rerun the malware scan for a held document; clean verdicts promote it. */
+  async rescanAgencyDocument(id: string): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch(`/agency/documents/${id}/rescan`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
+    }
+  },
+
+  /** Server-enforced storage usage (documents + versions + media bytes). */
+  async getAgencyDocumentStorageUsage(): Promise<any | null> {
+    try {
+      const res = await apiFetch('/agency/documents/storage-usage');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
   /** Authenticated blob read; returns the server-provided filename when present. */
   async downloadAgencyDocument(id: string): Promise<{ blob: Blob; filename: string } | null> {
     return this.readAgencyBlob(`/agency/documents/${id}/download`);

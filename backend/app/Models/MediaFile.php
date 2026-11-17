@@ -19,7 +19,7 @@ class MediaFile extends Model
         'id', 'agency_id', 'property_id', 'folder', 'title', 'description', 'type',
         'original_name', 'stored_name', 'disk_path', 'url', 'mime_type',
         'size_bytes', 'thumbnail_url', 'dimensions', 'visibility', 'tags',
-        'status', 'sold_at', 'sold_price_pk', 'cost_price_pk', 'profit_pk',
+        'status', 'scan_status', 'scan_completed_at', 'sold_at', 'sold_price_pk', 'cost_price_pk', 'profit_pk',
         'buyer_name', 'buyer_phone', 'buyer_national_id_masked', 'sold_by',
         'uploaded_by',
     ];
@@ -35,6 +35,7 @@ class MediaFile extends Model
             'cost_price_pk' => 'float',
             'profit_pk' => 'float',
             'sold_at' => 'datetime',
+            'scan_completed_at' => 'datetime',
         ];
     }
 

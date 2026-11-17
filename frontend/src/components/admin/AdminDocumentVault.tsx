@@ -50,6 +50,8 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
   const [categoryFilter, setCategoryFilter] = useState('');
   const [search, setSearch] = useState('');
 
+  const [quarantine, setQuarantine] = useState<any | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -67,7 +69,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
-    const [documentsBody, foldersBody] = await Promise.all([
+    const [documentsBody, foldersBody, quarantineBody] = await Promise.all([
       api.getAgencyDocuments({
         page,
         folder_id: folderFilter || undefined,
@@ -75,6 +77,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
         search: search.trim() || undefined,
       }),
       api.getDocumentFolders(),
+      api.getAgencyDocumentQuarantine(),
     ]);
 
     if (!documentsBody || documentsBody.success === false) {
@@ -88,6 +91,9 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
       setCanSeeSensitive(Boolean(documentsBody.can_see_sensitive));
     }
     setFolders(Array.isArray(foldersBody) ? foldersBody : []);
+    // Null = no manage_permissions clearance (403) — the quarantine panel is
+    // simply not rendered for plain users.
+    setQuarantine(quarantineBody && quarantineBody.success !== false ? quarantineBody : null);
     setLoading(false);
   }, [page, folderFilter, categoryFilter, search, canUpload]);
 
@@ -122,7 +128,21 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
     setTitle('');
     setTags('');
     if (fileInputRef.current) fileInputRef.current.value = '';
-    setNotice('Document stored in the private vault. Bytes are only streamed to authorised users.');
+    setNotice(result.body?.message || 'Document stored in the private vault. Bytes are only streamed to authorised users.');
+    await load();
+  };
+
+  /** Rescan a held document; a clean verdict promotes it back to active. */
+  const handleRescan = async (item: any) => {
+    setBusy(`rescan-${item.id}`);
+    setError('');
+    const result = await api.rescanAgencyDocument(String(item.id));
+    setBusy('');
+    if (!result.ok) {
+      setError(result.body?.message || 'Rescan could not be completed. The document stays in quarantine.');
+      return;
+    }
+    setNotice(result.body?.message || 'Rescan complete.');
     await load();
   };
 
@@ -364,6 +384,51 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
               </div>
             )}
           </EnterpriseCard>
+
+          {quarantine && (
+            ((Array.isArray(quarantine.quarantined) && quarantine.quarantined.length > 0) ||
+              (Array.isArray(quarantine.rejected) && quarantine.rejected.length > 0)) && (
+            <EnterpriseCard
+              title="Quarantine"
+              subtitle="Uploads that did not clear malware verification — bytes stay isolated and never downloadable"
+            >
+              <div className="space-y-2">
+                {(quarantine.quarantined ?? []).map((item: any) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg bg-[#0B1220] border border-amber-900/40">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-semibold text-white truncate">{item.title}</div>
+                      <div className="text-[9px] text-amber-300/90">
+                        Held · {item.reason || item.scan_status} · {formatBytes(item.size_bytes)}
+                      </div>
+                    </div>
+                    <EnterpriseButton
+                      variant="secondary"
+                      disabled={busy === `rescan-${item.id}`}
+                      onClick={() => void handleRescan(item)}
+                      title="Rerun the malware scan; a clean verdict releases the file"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${busy === `rescan-${item.id}` ? 'animate-spin' : ''}`} /> Rescan
+                    </EnterpriseButton>
+                  </div>
+                ))}
+                {(quarantine.rejected ?? []).map((item: any) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg bg-[#0B1220] border border-rose-900/40">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-semibold text-white truncate">{item.title}</div>
+                      <div className="text-[9px] text-rose-300/90">
+                        Rejected · {item.reason} · {formatBytes(item.size_bytes)} · {formatDate(item.created_at)}
+                      </div>
+                    </div>
+                    <EnterpriseBadge tone="red">Blocked</EnterpriseBadge>
+                  </div>
+                ))}
+                <EnterpriseNote tone="info">
+                  Rejected uploads are erased automatically after the quarantine retention window.
+                </EnterpriseNote>
+              </div>
+            </EnterpriseCard>
+            )
+          )}
         </div>
 
         <div className="xl:col-span-4 space-y-6">
