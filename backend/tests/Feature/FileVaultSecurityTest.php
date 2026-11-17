@@ -627,4 +627,35 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertStringNotContainsString('"bad', $disposition);
         $this->assertStringContainsString('attachment', $disposition);
     }
+
+    public function test_client_filenames_can_never_shape_storage_paths(): void
+    {
+        [$user, $agency] = $this->agencyUser([
+            'documents.view', 'documents.upload', 'documents.download',
+        ], 'document_manager');
+
+        // Path-traversal / control payloads in the client filename must never
+        // influence where bytes land: disk paths are built exclusively from
+        // server-resolved agency scope, server-generated ids and dates.
+        $documentId = $this->uploadBytes(
+            $user,
+            "../../%00evil\r\nname<script>.pdf",
+            'TRAVERSAL-BYTES-' . bin2hex(random_bytes(8))
+        )->assertStatus(201)->json('document.id');
+
+        $row = Document::findOrFail($documentId);
+
+        $this->assertStringNotContainsString('..', $row->disk_path);
+        $this->assertStringNotContainsString('..', $row->stored_name);
+        $this->assertStringNotContainsString('/', $row->stored_name);
+        $this->assertStringNotContainsString('\\', $row->stored_name);
+        $this->assertStringNotContainsString('<', $row->original_name);
+        $this->assertStringNotContainsString("\r", $row->original_name);
+        $this->assertMatchesRegularExpression(
+            '/^' . preg_quote($agency->id, '/') . '\/20\d{2}\/\d{2}\/doc_[0-9a-f]{16}\.pdf$/',
+            $row->disk_path
+        );
+
+        Storage::disk('documents')->assertExists($row->disk_path);
+    }
 }
