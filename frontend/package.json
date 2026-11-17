@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true})\"",
     "lint": "tsc --noEmit",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "node scripts/run-tests.mjs",
     "check:bundle": "node scripts/check-bundle.mjs",
     "e2e": "playwright test",
     "verify": "npm run lint && npm run test && npm run build && npm run check:bundle"

@@ -71,6 +71,38 @@ No **new** browser pass was completed in this increment: the desktop browser tab
 8. ~~True multi-process concurrency under MySQL not executed~~ **RESOLVED**: real MySQL 8.4.9 two-process tests added and passing (see `MYSQL_PRIMARY_DATABASE.md`). Remaining: MySQL 8.0 CI service result must be observed from GitHub Actions; Docker/ClamAV/SMTP and browser/Lighthouse still unverified.
 9. Legacy ownership mapping (110 unowned rows) untouched pending business approval and backup.
 
-## 9. Verdict
+## 9. Second CI failure investigation (run 44059650335)
 
-**Not 100% complete.** All confirmed Critical/High code defects were fixed and covered by passing regression tests; the CI YAML failures were reproduced from GitHub's annotations and fixed locally. Acceptance criteria that depend on Docker, real MySQL concurrency, real infrastructure, browser/Lighthouse measurement and an observed green GitHub Actions run remain open. No production claim is made.
+Jobs API confirmed: `Backend suite (PHP 8.3)` **success**, `OpenAPI spec parses` **success**,
+`Backend suite on MySQL 8 (integration)` **failure** at step **"Wait for MySQL"** (exit 255;
+the test step was skipped), `Frontend verify (Node 20)` **failure** at step
+**"Verify chain"** (~1s).
+
+### Root cause 1 — MySQL job
+`php -r "$pdo = new PDO(...)"` — the `$pdo` token is expanded by the shell before PHP sees it.
+Replaced with a dedicated `backend/scripts/wait-for-db.php` that reads all credentials from
+`DB_*` environment variables, retries 30×, and exits non-zero with a clear error. Added
+`backend/scripts/assert-db-driver.php` as a CI step so a silent SQLite fallback fails the job
+(verified locally: `DB_CONNECTION=mysql`, `DB_DATABASE=tth_audit`, `MYSQL_VERSION=8.4.9`).
+
+### Root cause 2 — Frontend job
+Two independent defects, both reproduced on a fresh `git clone` + `npm ci`:
+1. `tsx --test "src/**/*.test.ts"` — the quoted glob is passed literally on some shells and
+   fails with `Could not find src/**/*.test.ts`. Replaced with cross-platform
+   `frontend/scripts/run-tests.mjs` which discovers `*.test.ts` via `fs.readdirSync` and
+   spawns tsx with explicit paths. Fresh-checkout `npm test`: **133 passed / 9 suites**.
+2. `check:bundle` then failed with `jsx-runtime-*.js contains "cnicMasked"` because the
+   public-safe catalog in `frontend/src/services/api.ts` emitted an empty `cnicMasked: ''`
+   placeholder. Removed that private ERP field from the public catalog (it was unused by
+   public components). Fresh-checkout `npm run verify` on Node 22: **green** (bundle OK).
+
+CI also pins `node-version: '22'` (Vite 8 / rolldown 1.2 require `^20.19 || >=22.12`) and the
+job was renamed `Frontend verify (Node 22)`.
+
+## 10. Verdict
+
+**Not 100% complete.** All confirmed Critical/High code defects were fixed and covered by
+passing regression tests; both CI failure root causes were reproduced locally and repaired.
+Acceptance criteria that depend on an observed green GitHub Actions run, Docker, real ClamAV,
+SMTP, browser/Lighthouse measurement and external infrastructure remain open. No production
+claim is made.

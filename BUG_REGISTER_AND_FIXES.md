@@ -18,9 +18,18 @@
 | L | Medium | `EnsureMfaVerified::mfaRequiredFor` | Global MFA policy key unseeded, role whitelist ignores agency roles | Documented, not changed | — | OPEN (policy decision) |
 | M | Low | Legacy vs finance deal visibility | Divergent dealer self-scope | Documented, not changed | — | OPEN (policy decision) |
 
+## Second-round CI repairs (run 44059650335)
+
+| ID | Severity | File / method | Root cause | Fix | Result |
+|---|---|---|---|---|---|
+| N | High | `.github/workflows/ci.yml` "Wait for MySQL" | `php -r "$pdo = ..."` — shell expands `$pdo` → step exit 255, suite skipped | `backend/scripts/wait-for-db.php` (env credentials, 30 retries) + `assert-db-driver.php` guard | PASS locally (MySQL 8.4.9) |
+| O | High | `frontend/package.json` test script | Quoted `"src/**/*.test.ts"` glob not expanded on fresh checkout/CI → `Could not find` | `frontend/scripts/run-tests.mjs` discovers files with `fs` and runs tsx with explicit paths | 133 tests pass on fresh clone |
+| P | High | `frontend/src/services/api.ts` public catalog | Empty `cnicMasked: ''` placeholder in public-safe catalog flagged by bundle guard (`cnicMasked` private token) | Removed the unused private ERP field from public catalog | `check:bundle` OK on fresh clone |
+| Q | Medium | `.github/workflows/ci.yml` frontend job | Node 20 pinned while Vite 8/rolldown need `^20.19 || >=22.12` | Pinned `node-version: '22'`, renamed job | Local Node 22 verify green |
+
 ## Test-count progression
 
-Baseline 216 / 1,866 assertions → **239 / 1,955 assertions** after fixes.
+Baseline 216 / 1,866 assertions → **243 / 1,974 assertions** after all fixes (both MySQL 8.4.9 and SQLite).
 New backend test files: `LegacyTransactionIsolationTest`, `DealerFilesAuthorizationTest`, `MfaEnforcementTest`; added cases to `AdminStaffSubscriptionTest`, `FinanceIsolationTest`.
 
 ## Test integrity

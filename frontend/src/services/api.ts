@@ -50,7 +50,8 @@ function buildStaticPublicCatalog(): Record<string, unknown> {
     return {
       id: agency.id,
       fullName: agency.dealer,
-      cnicMasked: '',
+      // Do not emit the ERP-private `cnicMasked` field in the public catalog,
+      // even as an empty placeholder — the bundle guard treats it as private.
       phone: contact?.contactPhone || '',
       whatsApp: contact?.contactWhatsApp,
       agencyOrBranch: agency.name,

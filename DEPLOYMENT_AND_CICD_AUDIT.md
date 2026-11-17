@@ -9,9 +9,12 @@
 - **Fix:** tracked `backend/storage/app/private/documents/.gitignore` (`*` / `!.gitignore`) and unignored the directory in the parent `.gitignore`.
 - Secondary fix: contract job now installs PyYAML explicitly instead of relying on the runner image.
 
-## CI is not rerun here
+## CI failures reproduced from real runs
 
-No authenticated `gh` CLI/token is available, so a new GitHub Actions run on the repair branch could not be triggered. The CI result link for the original failure is `https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/43888730317`. Local equivalent of the CI chain is green: backend 239 tests / 1,955 assertions; `npm run verify` green; `python3` YAML validation can be run locally if PyYAML is present (not assumed).
+- Run `43888730317`: invalid workflow YAML at `ci.yml#L67` (colon in an unquoted `run:` scalar) — fixed with a folded block scalar; `docs/openapi.yaml` had the same defect and was fixed too.
+- Run `44059650335` (after push of `6f56306`): jobs API shows backend SQLite **success**, OpenAPI **success**, MySQL integration **failure** at "Wait for MySQL" (exit 255; test step skipped), frontend **failure** at "Verify chain" (~1s). Root causes: shell expansion of `$pdo` in `php -r`; quoted test glob `"src/**/*.test.ts"` not expanded on a fresh checkout; `check:bundle` flagged the empty `cnicMasked: ''` field in the public catalog. All four repaired as described in `FINAL_VERIFICATION_REPORT.md` §9.
+
+A new run is triggered by the push containing these fixes; read its conclusion from the Actions page rather than assuming.
 
 ## Deployment architecture findings
 
