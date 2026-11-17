@@ -141,15 +141,39 @@ class AgencyController extends Controller
             ->where('verification_status', 'verified');
 
         if ($request->filled('search')) {
-            $s = $this->escapeLike($request->search);
+            $s = $this->escapeLike((string) $request->search);
             $query->where(function ($q) use ($s) {
                 $q->where('name', 'like', "%{$s}%")
-                    ->orWhere('city', 'like', "%{$s}%");
+                    ->orWhere('city', 'like', "%{$s}%")
+                    ->orWhere('description', 'like', "%{$s}%");
             });
         }
 
-        $perPage = min((int) $request->get('per_page', 12), 50);
-        $agencies = $query->orderBy('name')->paginate($perPage);
+        if ($request->filled('city')) {
+            $city = $this->escapeLike((string) $request->city);
+            $query->where('city', 'like', "%{$city}%");
+        }
+
+        // Optional: only agencies that currently have public listings.
+        if ($request->boolean('has_listings')) {
+            $query->whereHas('properties', function ($q) {
+                $q->publiclyVisible();
+            });
+        }
+
+        $sort = (string) $request->get('sort', 'name');
+        if ($sort === 'newest') {
+            $query->orderByDesc('created_at');
+        } elseif ($sort === 'listings') {
+            $query->withCount(['properties as public_listings_count' => function ($q) {
+                $q->publiclyVisible();
+            }])->orderByDesc('public_listings_count')->orderBy('name');
+        } else {
+            $query->orderBy('name');
+        }
+
+        $perPage = min(max((int) $request->get('per_page', 12), 1), 50);
+        $agencies = $query->paginate($perPage);
 
         $agencies->getCollection()->transform(function (Agency $agency) {
             return $this->publicAgencyPayload($agency);
@@ -162,32 +186,69 @@ class AgencyController extends Controller
     }
 
     /**
-     * GET /api/agencies/{id} — public profile + approved listings.
+     * GET /api/agencies/{id|slug} — public profile + approved listings.
      */
     public function show(Request $request, string $id)
     {
-        $agency = Agency::where('id', $id)
+        $agency = Agency::query()
             ->where('status', 'active')
             ->where('verification_status', 'verified')
+            ->where(function ($q) use ($id) {
+                $q->where('id', $id)->orWhere('slug', $id);
+            })
             ->firstOrFail();
 
         $payload = $this->publicAgencyPayload($agency);
 
-        $payload['listings'] = $agency->properties()
-            ->publiclyVisible()
+        $listingsQuery = $agency->properties()->publiclyVisible();
+
+        if ($request->filled('purpose') && in_array($request->purpose, ['sale', 'rent'], true)) {
+            $listingsQuery->where('listing_purpose', $request->purpose);
+        }
+
+        if ($request->filled('type')) {
+            $listingsQuery->where('type', $request->type);
+        }
+
+        $payload['stats'] = [
+            'public_listings' => $agency->properties()->publiclyVisible()->count(),
+            'sale_listings' => $agency->properties()->publiclyVisible()->where('listing_purpose', 'sale')->count(),
+            'rent_listings' => $agency->properties()->publiclyVisible()->where('listing_purpose', 'rent')->count(),
+            'team_members' => $agency->activeMembers()->count(),
+        ];
+
+        $payload['listings'] = $listingsQuery
+            ->orderByDesc('isFeatured')
             ->orderByDesc('published_at')
-            ->paginate((int) $request->get('per_page', 12))
-            ->through(fn ($p) => $p->only([
-                'id', 'title', 'pricePKR', 'formattedPrice', 'location', 'phase',
-                'sector', 'block', 'sizeSqYards', 'type', 'status', 'images',
-                'isFeatured', 'bedrooms', 'bathrooms', 'possessionReady',
-                'mdaApproved', 'plotNumber', 'listing_purpose', 'published_at',
-            ]));
+            ->orderBy('id')
+            ->paginate(min(max((int) $request->get('per_page', 12), 1), 50))
+            ->through(fn ($p) => $this->publicListingPayload($p));
 
         return response()->json([
             'success' => true,
             'agency' => $payload,
         ]);
+    }
+
+    private function publicListingPayload(\App\Models\Property $property): array
+    {
+        $property->makeHidden(['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes', 'deletedBy', 'sellerId', 'buyerId', 'created_by', 'updated_by']);
+
+        $payload = $property->only([
+            'id', 'title', 'description', 'pricePKR', 'formattedPrice', 'location', 'phase',
+            'sector', 'block', 'sizeSqYards', 'roadWidthFeet', 'type', 'status', 'images',
+            'isFeatured', 'bedrooms', 'bathrooms', 'possessionReady', 'mdaApproved',
+            'plotNumber', 'fileNumber', 'listing_purpose', 'published_at', 'slug',
+            'videoUrl', 'features', 'westOpen', 'cornerPlot', 'parkFacing', 'mainBoulevard',
+            'streetNumber', 'frontFeet', 'depthFeet',
+            'contactPerson', 'contactPhone', 'contactWhatsApp', 'agencyName', 'agency_id',
+        ]);
+
+        $payload['agency'] = $property->relationLoaded('agency') && $property->agency
+            ? $property->agency->only(['id', 'name', 'slug'])
+            : null;
+
+        return $payload;
     }
 
     /**
@@ -282,6 +343,8 @@ class AgencyController extends Controller
 
     private function publicAgencyPayload(Agency $agency): array
     {
+        $publicListings = $agency->properties()->publiclyVisible();
+
         return [
             'id' => $agency->id,
             'name' => $agency->name,
@@ -289,15 +352,20 @@ class AgencyController extends Controller
             'logo_url' => $agency->logo_url,
             'cover_url' => $agency->cover_url,
             'description' => $agency->description,
+            'email' => $agency->email,
             'phone' => $agency->phone,
             'whatsapp' => $agency->whatsapp,
             'city' => $agency->city,
             'office_address' => $agency->office_address,
             'website' => $agency->website,
             'verification_status' => $agency->verification_status,
+            'status' => $agency->status,
             'member_count' => $agency->activeMembers()->count(),
-            'listing_count' => $agency->properties()->publiclyVisible()->count(),
+            'listing_count' => (clone $publicListings)->count(),
+            'sale_listing_count' => (clone $publicListings)->where('listing_purpose', 'sale')->count(),
+            'rent_listing_count' => (clone $publicListings)->where('listing_purpose', 'rent')->count(),
             'since' => optional($agency->created_at)->format('Y'),
+            'created_at' => optional($agency->created_at)?->toIso8601String(),
         ];
     }
 

@@ -131,6 +131,17 @@ class DealerFilesController extends Controller
         $user = $request->user();
         $dealerId = $this->actingDealerId($request);
 
+        // Commerce gate: suspended agencies are already blocked by the
+        // AgencyContext middleware; this additionally blocks agencies whose
+        // subscription is past_due/cancelled or whose paid term has expired.
+        $agencyId = $this->agencyId($request);
+        if ($agencyId !== null) {
+            $agency = Agency::find($agencyId);
+            if ($agency !== null && !PlanLimits::subscriptionActive($agency)) {
+                return PlanLimits::subscriptionDenied();
+            }
+        }
+
         $validated = $request->validate([
             'selling_price_kbr' => 'required|numeric|min:0|max:9999999999',
             'buyer_name' => 'required|string|max:255',

@@ -138,6 +138,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
     Route::post('properties/{id}/approve', [PropertyController::class, 'approve'])->middleware('auth:sanctum');
     Route::post('properties/{id}/reject', [PropertyController::class, 'reject'])->middleware('auth:sanctum');
     Route::post('properties/{id}/feature', [PropertyController::class, 'feature'])->middleware('auth:sanctum');
+    Route::post('properties/{id}/visibility', [PropertyController::class, 'setMarketplaceVisibility'])->middleware('auth:sanctum');
     Route::get('/moderation/queue', [PropertyController::class, 'moderationQueue'])->middleware('auth:sanctum');
 
     /* ---------- Dealers (legacy CRUD, auth required) ---------- */

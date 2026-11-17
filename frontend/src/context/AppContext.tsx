@@ -319,6 +319,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'properties': '/properties',
     'property-detail': '/properties',
     'agencies': '/agencies',
+    'agency-profile': '/agencies',
     'guide': '/guide',
     'gallery': '/gallery',
     'services': '/services',
@@ -332,6 +333,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const viewFromPath = React.useCallback((path: string): string => {
     if (path === '/admin-login') return 'admin-login';
     if (path.startsWith('/admin')) return 'admin';
+    if (path.startsWith('/agencies/') && path !== '/agencies/') return 'agency-profile';
     return VIEW_MAP[path] || 'home';
   }, []);
 
@@ -344,6 +346,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       path = `/properties?property=${encodeURIComponent(selectedPropertyIdRef.current)}`;
     } else if (view === 'project-detail' && selectedProjectIdRef.current) {
       path = `/projects?project=${encodeURIComponent(selectedProjectIdRef.current)}`;
+    } else if (view === 'agency-profile') {
+      const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
+      path = currentPath.startsWith('/agencies/') && currentPath !== '/agencies' ? currentPath : '/agencies';
     } else if (view === 'admin') {
       const tab = adminTabRef.current;
       path = tab && tab !== 'overview' ? `/admin/${tab}` : '/admin';

@@ -180,14 +180,64 @@ export const api = {
     }
   },
 
-  async getProperties(params?: { phase?: string; type?: string; dealerId?: string }): Promise<any[] | null> {
+  async getProperties(params?: Record<string, string | number | boolean | undefined>): Promise<any[] | null> {
     try {
-      const query = new URLSearchParams(params as any).toString();
-      const res = await fetch(`${API_BASE_URL}/properties?${query}`);
+      const query = new URLSearchParams();
+      if (params) {
+        for (const [key, value] of Object.entries(params)) {
+          if (value !== undefined && value !== '' && value !== false) query.set(key, String(value));
+        }
+      }
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      // Use apiFetch so authenticated agency contexts (X-Agency-Id, scope=agency) work.
+      const res = await apiFetch(`/properties${suffix}`);
       if (!res.ok) return null;
       return await res.json();
     } catch {
       return null;
+    }
+  },
+
+  async getPublicAgencies(params: Record<string, string | number | boolean | undefined> = {}): Promise<any | null> {
+    try {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== '' && value !== false) query.set(key, String(value));
+      }
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const res = await fetch(`${API_BASE_URL}/agencies${suffix}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getPublicAgency(idOrSlug: string, params: Record<string, string | number | undefined> = {}): Promise<any | null> {
+    try {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== '') query.set(key, String(value));
+      }
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const res = await fetch(`${API_BASE_URL}/agencies/${encodeURIComponent(idOrSlug)}${suffix}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async setPropertyMarketplaceVisibility(id: string, visibility: 'public' | 'private'): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch(`/properties/${encodeURIComponent(id)}/visibility`, {
+        method: 'POST',
+        body: JSON.stringify({ visibility }),
+      });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
     }
   },
 

@@ -194,6 +194,39 @@ class PropertyLifecycleTest extends EnterpriseTestCase
             ->assertStatus(422);
     }
 
+    public function test_denying_a_feature_request_clears_the_featured_flag(): void
+    {
+        $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
+        [$agent] = $this->agencyUser($agentPerms);
+        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
+
+        $id = $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Feature Denied Plot',
+            'submit' => true,
+        ]), $this->authHeaders($this->tokenFor($agent)))->assertStatus(201)->json('id');
+
+        $this->postJson("/api/properties/{$id}/approve", [], $this->authHeaders($this->tokenFor($moderator)))
+            ->assertStatus(200);
+
+        // Agency requests featuring; the platform grants it.
+        $this->postJson("/api/properties/{$id}/feature", [], $this->authHeaders($this->tokenFor($agent)))
+            ->assertStatus(200)
+            ->assertJsonPath('property.featured_status', 'requested');
+
+        $this->postJson("/api/properties/{$id}/feature", ['status' => 'granted'], $this->authHeaders($this->tokenFor($moderator)))
+            ->assertStatus(200)
+            ->assertJsonPath('property.featured_status', 'granted')
+            ->assertJsonPath('property.isFeatured', true);
+
+        // A later denial must remove the listing from the featured set.
+        $this->postJson("/api/properties/{$id}/feature", ['status' => 'denied'], $this->authHeaders($this->tokenFor($moderator)))
+            ->assertStatus(200)
+            ->assertJsonPath('property.featured_status', 'denied')
+            ->assertJsonPath('property.isFeatured', false);
+
+        $this->assertDatabaseHas('properties', ['id' => $id, 'isFeatured' => false]);
+    }
+
     public function test_public_listing_detail_hides_private_internal_fields(): void
     {
         [$agent] = $this->agencyUser($this->agentPermissions());

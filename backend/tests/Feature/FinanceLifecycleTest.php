@@ -78,6 +78,36 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             ->assertJsonFragment(['message' => 'A deal can only be marked Completed after it is Under Transfer at MDA.']);
     }
 
+    public function test_deal_cannot_be_created_in_a_terminal_state(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+
+        foreach (['Completed', 'Cancelled'] as $terminal) {
+            $this->postJson('/api/agency/transactions', [
+                'propertyTitle' => 'Terminal State Plot',
+                'sellerName' => 'Seller Khan',
+                'buyerName' => 'Buyer Ali',
+                'agreementAmountPKR' => 10000000,
+                'transactionType' => 'Sale',
+                'dealStatus' => $terminal,
+            ], $this->authHeaders($this->tokenFor($user)))
+                ->assertStatus(422)
+                ->assertJsonFragment(['message' => 'A new deal cannot be created directly in a terminal state.']);
+        }
+
+        // Non-terminal creation still works.
+        $this->postJson('/api/agency/transactions', [
+            'propertyTitle' => 'Draft Plot',
+            'sellerName' => 'Seller Khan',
+            'buyerName' => 'Buyer Ali',
+            'agreementAmountPKR' => 5000000,
+            'transactionType' => 'Sale',
+            'dealStatus' => 'Draft',
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(201)
+            ->assertJsonPath('transaction.dealStatus', 'Draft');
+    }
+
     public function test_backward_transition_is_only_one_stage(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());

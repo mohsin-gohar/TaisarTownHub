@@ -154,4 +154,85 @@ class DealerFilesAuthorizationTest extends EnterpriseTestCase
             ->assertStatus(402)
             ->assertJsonPath('code', 'plan_limit_reached');
     }
+
+    private function makeSellableFile(Dealer $dealer): DealerFile
+    {
+        return DealerFile::create([
+            'title' => 'Subscription Gate File', 'type' => 'image', 'url' => 'https://example.test/g.jpg',
+            'folder' => 'Properties', 'file_size_kb' => 100,
+            'dealer_id' => $dealer->id, 'uploaded_by' => $dealer->id, 'status' => 'available',
+        ]);
+    }
+
+    private function sellRequest($user, DealerFile $file)
+    {
+        return $this->postJson("/api/dealer-files/{$file->id}/sell", [
+            'selling_price_kbr' => 9000, 'buyer_name' => 'Gate Buyer', 'buyer_phone' => '0300-2',
+        ], $this->authHeaders($this->tokenFor($user)));
+    }
+
+    public function test_past_due_subscription_blocks_dealer_file_sales(): void
+    {
+        $dealer = $this->makeDealer('Past Due Dealer');
+        [$user, $agency] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $plan = SubscriptionPlan::create([
+            'key' => 'pastdue-' . Str::random(6), 'name' => 'Past Due', 'description' => 'test',
+            'price' => 1000, 'currency' => 'PKR', 'interval' => 'month',
+            'limits' => [], 'features' => [], 'is_active' => true, 'is_default' => false, 'sort_order' => 1,
+        ]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id, 'plan_id' => $plan->id, 'status' => 'past_due',
+            'starts_at' => now()->subMonth(),
+        ]);
+        $file = $this->makeSellableFile($dealer);
+
+        $this->sellRequest($user, $file)
+            ->assertForbidden()
+            ->assertJsonPath('code', 'subscription_inactive');
+
+        // The file must remain unsold.
+        $this->assertSame('available', $file->fresh()->status);
+    }
+
+    public function test_expired_subscription_blocks_dealer_file_sales(): void
+    {
+        $dealer = $this->makeDealer('Expired Dealer');
+        [$user, $agency] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $plan = SubscriptionPlan::create([
+            'key' => 'expired-' . Str::random(6), 'name' => 'Expired', 'description' => 'test',
+            'price' => 1000, 'currency' => 'PKR', 'interval' => 'month',
+            'limits' => [], 'features' => [], 'is_active' => true, 'is_default' => false, 'sort_order' => 1,
+        ]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id, 'plan_id' => $plan->id, 'status' => 'active',
+            'starts_at' => now()->subMonths(2), 'ends_at' => now()->subDay(),
+        ]);
+        $file = $this->makeSellableFile($dealer);
+
+        $this->sellRequest($user, $file)
+            ->assertForbidden()
+            ->assertJsonPath('code', 'subscription_inactive');
+
+        $this->assertSame('available', $file->fresh()->status);
+    }
+
+    public function test_active_subscription_allows_dealer_file_sales(): void
+    {
+        $dealer = $this->makeDealer('Active Dealer');
+        [$user, $agency] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $plan = SubscriptionPlan::create([
+            'key' => 'active-' . Str::random(6), 'name' => 'Active', 'description' => 'test',
+            'price' => 1000, 'currency' => 'PKR', 'interval' => 'month',
+            'limits' => [], 'features' => [], 'is_active' => true, 'is_default' => false, 'sort_order' => 1,
+        ]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id, 'plan_id' => $plan->id, 'status' => 'active',
+            'starts_at' => now()->subDay(), 'ends_at' => now()->addMonth(),
+        ]);
+        $file = $this->makeSellableFile($dealer);
+
+        $this->sellRequest($user, $file)->assertOk();
+
+        $this->assertSame('sold', $file->fresh()->status);
+    }
 }

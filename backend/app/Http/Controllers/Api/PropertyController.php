@@ -64,6 +64,18 @@ class PropertyController extends Controller
             $query->publiclyVisible();
         }
 
+        if ($request->filled('agency_id') && $scope === 'public') {
+            $query->where('agency_id', $request->agency_id);
+        }
+
+        $purpose = $request->get('purpose') ?? $request->get('listing_purpose');
+        if ($purpose === 'buy') {
+            $purpose = 'sale';
+        }
+        if (in_array($purpose, ['sale', 'rent'], true)) {
+            $query->where('listing_purpose', $purpose);
+        }
+
         if ($request->filled('phase') && $request->phase !== 'All') {
             $query->where('phase', $request->phase);
         }
@@ -587,6 +599,65 @@ class PropertyController extends Controller
         return response()->json(['success' => true, 'message' => 'Listing rejected.', 'property' => $property]);
     }
 
+    /**
+     * POST /api/properties/{id}/visibility — agency toggles marketplace visibility.
+     * Never bypasses approval: only approved listings can be made public.
+     */
+    public function setMarketplaceVisibility(Request $request, $id)
+    {
+        $this->requireAny($request, ['properties.update', 'properties.publish', 'edit_properties']);
+
+        $request->validate([
+            'visibility' => 'required|in:public,private',
+        ]);
+
+        $property = Property::whereNull('deleted_at')->findOrFail($id);
+        $agencyId = $this->agencyId($request);
+        $this->assertCanManage($request, $property, $agencyId);
+
+        $target = $request->input('visibility');
+
+        if ($target === 'public') {
+            if ($property->approval_status !== 'approved') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only approved listings can be published to the marketplace.',
+                ], 422);
+            }
+            if ($property->expires_at && $property->expires_at->isPast()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This listing has expired and cannot be published.',
+                ], 422);
+            }
+            $property->visibility = 'public';
+            if ($property->published_at === null) {
+                $property->published_at = now();
+            }
+        } else {
+            $property->visibility = 'private';
+        }
+
+        $property->updated_by = $request->user()->id;
+        $property->save();
+
+        $this->mirrorToLegacyStore($property, 'update');
+        $this->writeAudit($request, 'property.visibility', $property->id, "Property visibility set to {$target}: {$property->title}", [
+            'agency_id' => $property->agency_id,
+            'entity_type' => 'property',
+            'entity_id' => $property->id,
+            'metadata' => ['visibility' => $target, 'approval_status' => $property->approval_status],
+        ]);
+
+        $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes']);
+
+        return response()->json([
+            'success' => true,
+            'message' => $target === 'public' ? 'Listing is now visible on your public profile.' : 'Listing is now hidden from the public marketplace.',
+            'property' => $property,
+        ]);
+    }
+
     /** POST /api/properties/{id}/feature — agency requests, platform grants. */
     public function feature(Request $request, $id)
     {
@@ -602,6 +673,9 @@ class PropertyController extends Controller
             $property->featured_status = $request->status;
             if ($request->status === 'granted') {
                 $property->isFeatured = true;
+            } else {
+                // Denied: the listing must never remain publicly featured.
+                $property->isFeatured = false;
             }
             $property->save();
 

@@ -1,722 +1,222 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Eye, EyeOff, RefreshCw, ExternalLink, ShieldCheck, AlertCircle, Home } from 'lucide-react';
+import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
-import {
-  Home,
-  Plus,
-  Edit2,
-  Trash2,
-  Check,
-  X,
-  MapPin,
-  Maximize2,
-  Star,
-  ExternalLink,
-  Flame
-} from 'lucide-react';
-import { Property, PropertyType, PropertyStatus } from '../../types';
-import { formatPKRCurrency, isDuplicatePlot, hasPermission } from '../../utils/logic';
-import { ImageWithFallback } from '../common/ImageWithFallback';
+
+type Listing = {
+  id: string;
+  title?: string;
+  location?: string;
+  sector?: string;
+  block?: string;
+  pricePKR?: number;
+  formattedPrice?: string;
+  type?: string;
+  listing_purpose?: string;
+  approval_status?: string;
+  visibility?: string;
+  isFeatured?: boolean;
+  status?: string;
+  published_at?: string | null;
+  expires_at?: string | null;
+  images?: string[];
+};
+
+const formatPrice = (p?: number, formatted?: string) => {
+  if (formatted) return formatted;
+  if (!p) return '—';
+  if (p >= 10000000) return `PKR ${(p / 10000000).toFixed(2)} Crore`;
+  if (p >= 100000) return `PKR ${(p / 100000).toFixed(2)} Lac`;
+  return `PKR ${p.toLocaleString()}`;
+};
 
 export const AdminProperties: React.FC = () => {
-  const {
-    properties,
-    addProperty,
-    updateProperty,
-    deleteProperty,
-    sellers,
-    dealers,
-    setSelectedPropertyId,
-    setCurrentView,
-    showToast,
-    activeRole,
-    confirmAction
-  } = useApp();
+  const { showToast, confirmAction } = useApp();
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingPropId, setEditingPropId] = useState<string | null>(null);
-
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    pricePKR: 3500000,
-    privatePurchasePricePKR: 3000000,
-    location: 'Sector 63, Taiser Town Scheme 45, Karachi',
-    sector: 'Sector 63',
-    block: 'Block A',
-    plotNumber: 'R-66',
-    fileNumber: 'TT-63-A-066',
-    sizeSqYards: 120,
-    frontMeasurementFt: 24,
-    depthMeasurementFt: 45,
-    roadWidthFt: 100,
-    is100ftRoadFacing: true,
-    type: 'Residential Plot' as PropertyType,
-    status: 'Available' as PropertyStatus,
-    isFeatured: true,
-    possessionReady: true,
-    westOpen: true,
-    cornerPlot: false,
-    parkFacing: false,
-    sellerId: sellers?.[0]?.id || '',
-    assignedDealerId: dealers?.[0]?.id || '',
-    image: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
-    features: 'West Open, 100ft Main Boulevard, 24x45 Dimension, MDA Verified File, Ready for Possession'
-  });
-
-  const handleOpenAdd = () => {
-    setEditingPropId(null);
-    setFormData({
-      title: '',
-      description: '',
-      pricePKR: 3800000,
-      privatePurchasePricePKR: 3200000,
-      location: 'Sector 63, Taiser Town Scheme 45, Karachi',
-      sector: 'Sector 63',
-      block: 'Block A',
-      plotNumber: '',
-      fileNumber: '',
-      sizeSqYards: 120,
-      frontMeasurementFt: 24,
-      depthMeasurementFt: 45,
-      roadWidthFt: 100,
-      is100ftRoadFacing: false,
-      type: 'Residential Plot',
-      status: 'Available',
-      isFeatured: true,
-      possessionReady: true,
-      westOpen: true,
-      cornerPlot: false,
-      parkFacing: false,
-      sellerId: sellers?.[0]?.id || '',
-      assignedDealerId: dealers?.[0]?.id || '',
-      image: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=80',
-      features: 'West Open, 100ft Main Boulevard, MDA Verified File, Ready for Construction'
-    });
-    setIsModalOpen(true);
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    const data = await api.getProperties({ scope: 'agency', per_page: 200 });
+    setLoading(false);
+    if (!Array.isArray(data)) {
+      setListings([]);
+      setError('Could not load your agency listings. Make sure you are signed in with an approved agency account and have permission to view properties.');
+      return;
+    }
+    setListings(data as Listing[]);
   };
 
-  const handleOpenEdit = (prop: Property) => {
-    setEditingPropId(prop.id);
-    setFormData({
-      title: prop.title,
-      description: prop.description,
-      pricePKR: prop.pricePKR,
-      privatePurchasePricePKR: prop.privatePurchasePricePKR || 0,
-      location: prop.location,
-      sector: prop.sector,
-      block: prop.block || 'Block A',
-      plotNumber: prop.plotNumber || '',
-      fileNumber: prop.fileNumber || '',
-      sizeSqYards: prop.sizeSqYards,
-      frontMeasurementFt: prop.frontMeasurementFt || 24,
-      depthMeasurementFt: prop.depthMeasurementFt || 45,
-      roadWidthFt: prop.roadWidthFt || 40,
-      is100ftRoadFacing: !!prop.is100ftRoadFacing,
-      type: prop.type,
-      status: prop.status,
-      isFeatured: prop.isFeatured,
-      possessionReady: prop.possessionReady,
-      westOpen: !!prop.westOpen,
-      cornerPlot: !!prop.cornerPlot,
-      parkFacing: !!prop.parkFacing,
-      sellerId: prop.sellerId || '',
-      assignedDealerId: prop.assignedDealerId || '',
-      image: (prop.images && prop.images.length ? prop.images[0] : '') || '',
-      features: (prop.features || []).join(', ')
-    });
-    setIsModalOpen(true);
-  };
+  useEffect(() => { void load(); }, []);
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.title.trim()) {
-      showToast('error', 'Please enter property title.');
+  const stats = useMemo(() => {
+    const approved = listings.filter((l) => l.approval_status === 'approved').length;
+    const publicVisible = listings.filter((l) => l.approval_status === 'approved' && l.visibility === 'public').length;
+    const hidden = listings.filter((l) => l.approval_status === 'approved' && l.visibility !== 'public').length;
+    const pending = listings.filter((l) => l.approval_status === 'pending').length;
+    return { total: listings.length, approved, publicVisible, hidden, pending };
+  }, [listings]);
+
+  const canPublish = (l: Listing) => l.approval_status === 'approved' && (!l.expires_at || new Date(l.expires_at).getTime() > Date.now());
+
+  const toggleVisibility = async (listing: Listing) => {
+    const next = listing.visibility === 'public' ? 'private' : 'public';
+    if (next === 'public' && !canPublish(listing)) {
+      showToast('error', 'Only approved, unexpired listings can be made public.');
       return;
     }
 
-    // Check duplicate plot in same sector
-    if (formData.plotNumber) {
-      const isDuplicate = isDuplicatePlot(
-        properties,
-        formData.plotNumber,
-        formData.sector,
-        formData.block,
-        editingPropId || undefined
-      );
-      if (isDuplicate) {
-        showToast('error', `Duplicate Plot: Plot ${formData.plotNumber} already registered in ${formData.sector}.`);
-        return;
-      }
-    }
-
-    const featureList = formData.features.split(',').map((f) => f.trim()).filter(Boolean);
-    const formattedPrice = formatPKRCurrency(Number(formData.pricePKR));
-
-    const selectedDealer = dealers.find((d) => d.id === formData.assignedDealerId);
-    const assignedContactPerson = selectedDealer?.fullName || 'Authorized Consultant';
-    const assignedContactPhone = selectedDealer?.phone || '+92 321 8292831';
-    const assignedContactWhatsApp = selectedDealer?.whatsApp || selectedDealer?.phone || '+92 321 8292831';
-    const assignedAgencyName = selectedDealer?.agencyOrBranch || selectedDealer?.agencyAffiliation || 'TaisarTownHub Premier Advisory';
-
-    if (editingPropId) {
-      const result = updateProperty(editingPropId, {
-        title: formData.title,
-        description: formData.description,
-        pricePKR: Number(formData.pricePKR),
-        privatePurchasePricePKR: Number(formData.privatePurchasePricePKR),
-        formattedPrice,
-        location: formData.location,
-        sector: formData.sector,
-        block: formData.block,
-        plotNumber: formData.plotNumber,
-        fileNumber: formData.fileNumber,
-        sizeSqYards: Number(formData.sizeSqYards),
-        frontMeasurementFt: Number(formData.frontMeasurementFt),
-        depthMeasurementFt: Number(formData.depthMeasurementFt),
-        roadWidthFt: Number(formData.roadWidthFt),
-        is100ftRoadFacing: formData.is100ftRoadFacing,
-        type: formData.type,
-        status: formData.status,
-        isFeatured: formData.isFeatured,
-        possessionReady: formData.possessionReady,
-        westOpen: formData.westOpen,
-        cornerPlot: formData.cornerPlot,
-        parkFacing: formData.parkFacing,
-        sellerId: formData.sellerId,
-        assignedDealerId: formData.assignedDealerId,
-        contactPerson: assignedContactPerson,
-        contactPhone: assignedContactPhone,
-        contactWhatsApp: assignedContactWhatsApp,
-        agencyName: assignedAgencyName,
-        images: [formData.image],
-        features: featureList,
-      });
-      if (!result.success) {
-        // updateProperty already surfaced the specific error (duplicate / permission)
-        return;
-      }
-      showToast('success', 'Property listing updated.');
-    } else {
-      const result = addProperty({
-        title: formData.title,
-        description: formData.description,
-        pricePKR: Number(formData.pricePKR),
-        privatePurchasePricePKR: Number(formData.privatePurchasePricePKR),
-        formattedPrice,
-        location: formData.location,
-        sector: formData.sector,
-        block: formData.block,
-        plotNumber: formData.plotNumber,
-        fileNumber: formData.fileNumber,
-        sizeSqYards: Number(formData.sizeSqYards),
-        frontMeasurementFt: Number(formData.frontMeasurementFt),
-        depthMeasurementFt: Number(formData.depthMeasurementFt),
-        roadWidthFt: Number(formData.roadWidthFt),
-        is100ftRoadFacing: formData.is100ftRoadFacing,
-        type: formData.type,
-        status: formData.status,
-        isFeatured: formData.isFeatured,
-        possessionReady: formData.possessionReady,
-        westOpen: formData.westOpen,
-        cornerPlot: formData.cornerPlot,
-        parkFacing: formData.parkFacing,
-        sellerId: formData.sellerId,
-        assignedDealerId: formData.assignedDealerId,
-        agencyName: assignedAgencyName,
-        images: [formData.image],
-        features: featureList,
-        mdaApproved: true,
-        contactPerson: assignedContactPerson,
-        contactPhone: assignedContactPhone,
-        contactWhatsApp: assignedContactWhatsApp
-      });
-      if (!result.success) {
-        // addProperty already surfaced the specific error (duplicate / permission)
-        return;
-      }
-      showToast('success', 'New property registered in agency inventory.');
-    }
-
-    setIsModalOpen(false);
-  };
-
-  const handleDelete = async (id: string, title: string) => {
-    const ok = await confirmAction(`Are you sure you want to delete listing "${title}"?`, {
-      title: 'Delete listing',
-      confirmLabel: 'Delete'
+    const actionText = next === 'public' ? 'make this listing visible on the public marketplace' : 'hide this listing from the public marketplace';
+    const confirmed = await confirmAction(`Do you want to ${actionText}?`, {
+      title: next === 'public' ? 'Publish listing' : 'Hide listing',
+      confirmLabel: next === 'public' ? 'Publish' : 'Hide',
     });
-    if (ok) {
-      deleteProperty(id);
+    if (!confirmed) return;
+
+    setBusyId(listing.id);
+    const res = await api.setPropertyMarketplaceVisibility(listing.id, next);
+    setBusyId(null);
+    if (!res.ok) {
+      showToast('error', res.body?.message || 'Could not update listing visibility.');
+      return;
     }
+    const updated = res.body?.property || {};
+    setListings((prev) => prev.map((item) => item.id === listing.id ? { ...item, ...updated, visibility: next } : item));
+    showToast('success', res.body?.message || (next === 'public' ? 'Listing is now public.' : 'Listing is now hidden.'));
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-[#101C2C] border border-slate-800 shadow-xl">
-        <div>
-          <h2 className="font-serif-luxury text-2xl font-bold text-white">
-            Property Listings Management
-          </h2>
-          <p className="text-xs text-slate-400">
-            Full control over plot allotments, commercial avenues, duplex villas, and pricing.
-          </p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="font-serif-luxury text-2xl font-bold text-white">Public Listings & Marketplace Visibility</h2>
+          <p className="text-sm text-slate-400">Control which of your approved listings appear on the public website and your agency profile. Approval and moderation rules are enforced by the backend.</p>
         </div>
-        <button
-          onClick={handleOpenAdd}
-          className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Property Listing</span>
-        </button>
-      </div>
-
-      {/* Table */}
-      <div className="bg-[#101C2C] rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="py-3 px-4">Plot & Listing</th>
-                <th className="py-3 px-4">Sector & Block</th>
-                <th className="py-3 px-4">Dimensions</th>
-                <th className="py-3 px-4">List Price (PKR)</th>
-                <th className="py-3 px-4">Road / Features</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Featured</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {properties.filter((p) => !p.deletedAt).map((prop) => (
-                <tr key={prop.id} className="hover:bg-slate-800/40 transition-colors">
-                  <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-3">
-                      <ImageWithFallback
-                        src={prop.images?.[0]}
-                        alt={prop.title}
-                        className="w-12 h-10 rounded-lg object-cover border border-slate-700"
-                      />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white text-sm">
-                            {prop.plotNumber ? `Plot ${prop.plotNumber}` : prop.title}
-                          </span>
-                          {prop.plotNumber === 'R-66' && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#C5A46D] text-[#101C2C]">
-                              Handwritten
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-[#C5A46D] block">
-                          {prop.fileNumber ? `File: ${prop.fileNumber}` : prop.type}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-300">
-                    <span className="font-medium text-white block">{prop.sector}</span>
-                    <span className="text-[10px] text-slate-400">{prop.block || 'Scheme 45'}</span>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-300">
-                    <span className="font-bold text-white block">{prop.sizeSqYards} Sq. Yd</span>
-                    {prop.frontMeasurementFt && prop.depthMeasurementFt && (
-                      <span className="text-[10px] text-[#C5A46D] font-mono">
-                        {prop.frontMeasurementFt}&apos; × {prop.depthMeasurementFt}&apos;
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4 font-serif-luxury font-bold text-[#F9E7BA]">
-                    <div>{prop.formattedPrice}</div>
-                    {hasPermission(activeRole, 'view_sensitive_cnic') && prop.privatePurchasePricePKR && (
-                      <div className="text-[10px] text-amber-400/80 font-mono font-normal">
-                        Cost: {formatPKRCurrency(prop.privatePurchasePricePKR)}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex flex-wrap gap-1">
-                      {prop.is100ftRoadFacing && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                          100ft Road
-                        </span>
-                      )}
-                      {prop.westOpen && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-300">
-                          West Open
-                        </span>
-                      )}
-                      {prop.cornerPlot && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-[#C5A46D]/10 text-[#E0C79A]">
-                          Corner
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                      prop.status === 'Available' ? 'bg-[#C5A46D]/15 text-[#F9E7BA] border-[#C5A46D]/30' :
-                      prop.status === 'Under Deal' ? 'bg-[#C5A46D]/15 text-[#F9E7BA] border-[#C5A46D]/30' :
-                      'bg-slate-800 text-slate-300 border-slate-700'
-                    }`}>
-                      {prop.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <button
-                      onClick={() => updateProperty(prop.id, { isFeatured: !prop.isFeatured })}
-                      className={`p-1.5 rounded-lg text-xs cursor-pointer ${
-                        prop.isFeatured ? 'text-[#C5A46D]' : 'text-slate-600'
-                      }`}
-                      title="Toggle Featured"
-                    >
-                      <Star className={`w-4 h-4 ${prop.isFeatured ? 'fill-current' : ''}`} />
-                    </button>
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          setSelectedPropertyId(prop.id);
-                          setCurrentView('property-detail');
-                        }}
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
-                        title="View Public Page"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleOpenEdit(prop)}
-                        className="p-1.5 rounded-lg bg-[#C5A46D]/20 hover:bg-[#C5A46D] text-[#C5A46D] hover:text-[#101C2C] transition-colors"
-                        title="Edit Listing"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(prop.id, prop.title)}
-                        className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
-                        title="Delete Listing"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-[#101C2C] text-slate-200 hover:text-white text-sm">
+            <ExternalLink className="w-4 h-4" /> View agencies
+          </button>
+          <button onClick={() => void load()} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-semibold text-sm">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          </button>
         </div>
       </div>
 
-      {/* Add / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="relative w-full max-w-2xl bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <h3 className="font-serif-luxury text-xl font-bold text-white">
-                {editingPropId ? 'Edit Property Listing' : 'Add New Property Listing'}
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Property Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    placeholder="e.g. 120 Sq. Yd. Corner Plot Sector 71"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Property Type</label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value as PropertyType })}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
-                  >
-                    <option value="Residential Plot">Residential Plot</option>
-                    <option value="Commercial Plot">Commercial Plot</option>
-                    <option value="House / Villa">House / Villa</option>
-                    <option value="Commercial Shop">Commercial Shop</option>
-                    <option value="Apartment">Apartment</option>
-                    <option value="Farmhouse">Farmhouse</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Plot, File, and Block Identification */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3.5 rounded-xl bg-[#0B1220] border border-slate-800">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[#C5A46D]">Plot Number *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.plotNumber}
-                    onChange={(e) => setFormData({ ...formData, plotNumber: e.target.value })}
-                    placeholder="e.g. R-66"
-                    className="w-full bg-slate-900 text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-bold font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">File Number</label>
-                  <input
-                    type="text"
-                    value={formData.fileNumber}
-                    onChange={(e) => setFormData({ ...formData, fileNumber: e.target.value })}
-                    placeholder="e.g. TT-63-A-066"
-                    className="w-full bg-slate-900 text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Sector Block</label>
-                  <input
-                    type="text"
-                    value={formData.block}
-                    onChange={(e) => setFormData({ ...formData, block: e.target.value })}
-                    placeholder="e.g. Block A"
-                    className="w-full bg-slate-900 text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Dimensions & Road Width (Handwritten Note Specifics) */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-[#0B1220] border border-slate-800">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Front (Feet)</label>
-                  <input
-                    type="number"
-                    value={formData.frontMeasurementFt}
-                    onChange={(e) => setFormData({ ...formData, frontMeasurementFt: Number(e.target.value) })}
-                    placeholder="24"
-                    className="w-full bg-slate-900 text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Depth (Feet)</label>
-                  <input
-                    type="number"
-                    value={formData.depthMeasurementFt}
-                    onChange={(e) => setFormData({ ...formData, depthMeasurementFt: Number(e.target.value) })}
-                    placeholder="45"
-                    className="w-full bg-slate-900 text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Road Width (Ft)</label>
-                  <input
-                    type="number"
-                    value={formData.roadWidthFt}
-                    onChange={(e) => setFormData({ ...formData, roadWidthFt: Number(e.target.value) })}
-                    placeholder="100"
-                    className="w-full bg-slate-900 text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Plot Area (Sq Yd)</label>
-                  <input
-                    type="number"
-                    required
-                    value={formData.sizeSqYards}
-                    onChange={(e) => setFormData({ ...formData, sizeSqYards: Number(e.target.value) })}
-                    placeholder="120"
-                    className="w-full bg-slate-900 text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Pricing (Public vs Private ERP) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[#C5A46D]">Public Sale Price (PKR) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={formData.pricePKR}
-                    onChange={(e) => setFormData({ ...formData, pricePKR: Number(e.target.value) })}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono font-bold"
-                  />
-                </div>
-
-                {hasPermission(activeRole, 'view_sensitive_cnic') && (
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-amber-400">Private Buy Price (PKR)</label>
-                    <input
-                      type="number"
-                      value={formData.privatePurchasePricePKR}
-                      onChange={(e) => setFormData({ ...formData, privatePurchasePricePKR: Number(e.target.value) })}
-                      className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
-                    />
-                  </div>
-                )}
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Sector</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.sector}
-                    onChange={(e) => setFormData({ ...formData, sector: e.target.value })}
-                    placeholder="Sector 63"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Assigned Seller and Dealer */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Assigned Seller / Owner</label>
-                  <select
-                    value={formData.sellerId}
-                    onChange={(e) => setFormData({ ...formData, sellerId: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                  >
-                    <option value="">None / Agency Stock</option>
-                    {(sellers || []).map((s) => (
-                      <option key={s.id} value={s.id}>{s.fullName} ({s.cnic})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Assigned Dealer / Agent</label>
-                  <select
-                    value={formData.assignedDealerId}
-                    onChange={(e) => setFormData({ ...formData, assignedDealerId: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                  >
-                    <option value="">Direct Agency Desk</option>
-                    {(dealers || []).map((d) => (
-                      <option key={d.id} value={d.id}>{d.fullName} ({d.agencyOrBranch})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">Full Location Address</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="Street 14, Sector 70-D, Taiser Town Scheme 45, Karachi"
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">Main Image URL</label>
-                <input
-                  type="url"
-                  required
-                  value={formData.image}
-                  onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.possessionReady}
-                    onChange={(e) => setFormData({ ...formData, possessionReady: e.target.checked })}
-                    className="accent-[#C5A46D]"
-                  />
-                  <span>Possession Ready</span>
-                </label>
-
-                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.westOpen}
-                    onChange={(e) => setFormData({ ...formData, westOpen: e.target.checked })}
-                    className="accent-[#C5A46D]"
-                  />
-                  <span>West Open</span>
-                </label>
-
-                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.cornerPlot}
-                    onChange={(e) => setFormData({ ...formData, cornerPlot: e.target.checked })}
-                    className="accent-[#C5A46D]"
-                  />
-                  <span>Corner Plot</span>
-                </label>
-
-                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.parkFacing}
-                    onChange={(e) => setFormData({ ...formData, parkFacing: e.target.checked })}
-                    className="accent-[#C5A46D]"
-                  />
-                  <span>Park Facing</span>
-                </label>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">Features & Amenities (comma-separated)</label>
-                <input
-                  type="text"
-                  value={formData.features}
-                  onChange={(e) => setFormData({ ...formData, features: e.target.value })}
-                  placeholder="West Open, 40ft Carpeted Street, Boundary Walled"
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">Property Description</label>
-                <textarea
-                  rows={3}
-                  required
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Detail allotment status, construction readiness, street dimensions..."
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg p-3 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold shadow"
-                >
-                  {editingPropId ? 'Update Listing' : 'Add Listing'}
-                </button>
-              </div>
-            </form>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          { label: 'Total listings', value: stats.total },
+          { label: 'Approved', value: stats.approved },
+          { label: 'Public now', value: stats.publicVisible },
+          { label: 'Hidden', value: stats.hidden },
+          { label: 'Pending approval', value: stats.pending },
+        ].map((item) => (
+          <div key={item.label} className="rounded-xl border border-slate-800 bg-[#101C2C] p-4">
+            <div className="text-xl font-bold text-white">{item.value}</div>
+            <div className="text-[11px] uppercase tracking-wide text-slate-400 mt-1">{item.label}</div>
           </div>
+        ))}
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200 flex gap-2">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> <span>{error}</span>
         </div>
       )}
+
+      <div className="rounded-2xl border border-slate-800 bg-[#101C2C] overflow-hidden">
+        <div className="px-4 sm:px-5 py-4 border-b border-slate-800 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-slate-300 text-sm">
+            <ShieldCheck className="w-4 h-4 text-[#C5A46D]" /> Visibility changes apply immediately to public API/pages for eligible listings.
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-slate-400">Loading agency listings...</div>
+        ) : listings.length === 0 ? (
+          <div className="p-10 text-center space-y-2">
+            <Home className="w-10 h-10 text-slate-600 mx-auto" />
+            <h3 className="text-white font-semibold">No agency listings found</h3>
+            <p className="text-slate-400 text-sm">Create or assign listings to this agency. Once approved, you can control their public visibility here.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#0B1220] text-slate-400 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-3">Listing</th>
+                  <th className="px-4 py-3">Type / Purpose</th>
+                  <th className="px-4 py-3">Price</th>
+                  <th className="px-4 py-3">Approval</th>
+                  <th className="px-4 py-3">Marketplace</th>
+                  <th className="px-4 py-3">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {listings.map((listing) => {
+                  const isPublic = listing.visibility === 'public' && listing.approval_status === 'approved';
+                  const eligible = canPublish(listing);
+                  const busy = busyId === listing.id;
+                  return (
+                    <tr key={listing.id} className="hover:bg-white/[0.02]">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3 min-w-[240px]">
+                          <div className="w-14 h-14 rounded-lg overflow-hidden bg-[#0B1220] border border-slate-800 shrink-0 flex items-center justify-center">
+                            {listing.images?.[0] ? <img src={listing.images[0]} alt="" className="w-full h-full object-cover" /> : <Home className="w-5 h-5 text-slate-600" />}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-white truncate max-w-[280px]">{listing.title || 'Untitled listing'}</div>
+                            <div className="text-xs text-slate-400 truncate max-w-[280px]">{[listing.location, listing.sector, listing.block].filter(Boolean).join(' · ') || 'Location not set'}</div>
+                            {listing.isFeatured ? <span className="inline-flex mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">Featured</span> : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-slate-300">
+                        <div>{listing.type || '—'}</div>
+                        <div className="text-xs text-slate-500 capitalize">{listing.listing_purpose || 'sale'}</div>
+                      </td>
+                      <td className="px-4 py-4 text-[#F9E7BA] font-semibold whitespace-nowrap">{formatPrice(listing.pricePKR, listing.formattedPrice)}</td>
+                      <td className="px-4 py-4">
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold border ${
+                          listing.approval_status === 'approved' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
+                          listing.approval_status === 'pending' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
+                          listing.approval_status === 'rejected' ? 'bg-rose-500/15 text-rose-300 border-rose-500/30' :
+                          'bg-slate-700/40 text-slate-300 border-slate-600'
+                        }`}>
+                          {listing.approval_status || 'draft'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-col gap-1.5">
+                          <span className={`inline-flex w-fit px-2.5 py-1 rounded-full text-xs font-bold border ${isPublic ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-slate-700/40 text-slate-300 border-slate-600'}`}>
+                            {isPublic ? 'Public' : 'Hidden'}
+                          </span>
+                          {!eligible && listing.approval_status === 'approved' && <span className="text-[11px] text-amber-300">Expired/unavailable</span>}
+                          {listing.approval_status !== 'approved' && <span className="text-[11px] text-slate-400">Must be approved to publish</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <button
+                          onClick={() => void toggleVisibility(listing)}
+                          disabled={busy || (!eligible && !isPublic)}
+                          className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                            isPublic ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C]'
+                          }`}
+                        >
+                          {busy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : isPublic ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          {isPublic ? 'Hide' : 'Publish'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

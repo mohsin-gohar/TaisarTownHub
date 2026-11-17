@@ -311,6 +311,12 @@ class MediaController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['manage_media']);
 
+        // Commerce gate: block sales while the subscription is inactive/expired.
+        $agency = Agency::find($agencyId);
+        if ($agency !== null && !PlanLimits::subscriptionActive($agency)) {
+            return PlanLimits::subscriptionDenied();
+        }
+
         $request->validate([
             'selling_price_pk' => 'required|numeric|min:0',
             'cost_price_pk' => 'nullable|numeric|min:0',

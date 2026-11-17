@@ -105,6 +105,42 @@ class PlanLimits
         ], 402);
     }
 
+    /**
+     * Commercial gate: an agency may only record sales (dealer files, media)
+     * while its subscription is genuinely active. Agencies without a
+     * subscription row keep working (legacy/default plans), but a
+     * past-due/cancelled or time-expired subscription blocks the sell paths
+     * even when the agency account itself is still marked active.
+     */
+    public static function subscriptionActive(Agency $agency): bool
+    {
+        $subscription = $agency->subscription;
+
+        if ($subscription === null) {
+            return true; // no subscription row — legacy/default access
+        }
+
+        if ($subscription->status !== 'active') {
+            return false; // past_due, cancelled, ...
+        }
+
+        if ($subscription->ends_at !== null && $subscription->ends_at->isPast()) {
+            return false; // paid term ended
+        }
+
+        return true;
+    }
+
+    /** Standardised 403 response for subscription-blocked commerce actions. */
+    public static function subscriptionDenied(): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'code' => 'subscription_inactive',
+            'message' => 'Your agency subscription is inactive or expired. Renew your plan to record sales.',
+        ], 403);
+    }
+
     /** Staff counter for the invite flow: active members + pending invitations. */
     public static function staffUsed(string $agencyId): int
     {

@@ -148,9 +148,18 @@ public function store(Request $request)
             'agreementAmountPKR' => 'required|numeric|min:0|max:999999999999',
             'advancePaymentPKR' => 'nullable|numeric|min:0|max:999999999999',
             'commissionAmountPKR' => 'nullable|numeric|min:0|max:999999999999',
-            'dealStatus' => 'nullable|in:Draft,Negotiation,Agreed,Completed,Cancelled',
+            'dealStatus' => 'nullable|string|in:Draft,Negotiation,Agreed,Completed,Cancelled',
             'transactionDate' => 'nullable|date',
         ]);
+
+        // Terminal states (Completed/Cancelled) must be reached through the
+        // update state machine — never at creation time.
+        if (isset($data['dealStatus']) && in_array($data['dealStatus'], ['Completed', 'Cancelled'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A new deal cannot be created directly in a terminal state.',
+            ], 422);
+        }
 
         // A dealer must belong to the acting agency. Dealer ownership is
         // derived from active memberships (dealers has no agency_id column).

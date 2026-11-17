@@ -1,28 +1,20 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import {
-  LayoutDashboard,
-  Menu,
-  X,
-  ChevronRight
-} from 'lucide-react';
+import { LayoutDashboard, Menu, X, ChevronRight, Building2, LogOut, UserCircle2 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const {
-    currentView,
-    setCurrentView,
     setSelectedProjectId,
     setSelectedPropertyId,
-    currentTheme,
     isAdminAuthenticated,
     cmsConfig,
+    currentUser,
+    logoutAdmin,
   } = useApp();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
-  // Scroll-aware navbar: denser glass + shadow after the user scrolls.
-  // NOTE: height stays constant (no layout jump) — only surface changes.
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
@@ -30,260 +22,165 @@ export const Navbar: React.FC = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Body scroll lock while the drawer is open
   useEffect(() => {
     if (!drawerOpen) return;
-    const prevOverflow = document.body.style.overflow;
+    const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDrawerOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', onKey);
-    };
+    return () => { document.body.style.overflow = prev; };
   }, [drawerOpen]);
 
-  // Close the drawer if the viewport grows into desktop territory
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1280px)');
-    const onChange = (e: MediaQueryListEvent) => {
-      if (e.matches) setDrawerOpen(false);
-    };
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawerOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerOpen]);
 
-  const navigateTo = (view: string) => {
-    setSelectedProjectId(null);
-    setSelectedPropertyId(null);
-    setCurrentView(view);
-    setDrawerOpen(false);
+  const navTo = (path: string) => {
+    if (typeof window === 'undefined') return;
+    window.history.pushState({}, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate'));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const navLinks = [
-    { id: 'home', label: 'Home', path: '/' },
-    { id: 'projects', label: 'Projects', path: '/projects' },
-    { id: 'properties', label: 'Properties', path: '/properties' },
-    { id: 'agencies', label: 'Agencies', path: '/agencies' },
-    { id: 'guide', label: 'Scheme 45 Guide', path: '/guide' },
-    { id: 'gallery', label: 'Media Gallery', path: '/gallery' },
-    { id: 'services', label: 'Services', path: '/services' },
-    { id: 'about', label: 'About Us', path: '/about' },
-    { id: 'contact', label: 'Contact', path: '/contact' },
+  const handleNavClick = (path: string) => {
+    setSelectedProjectId(null);
+    setSelectedPropertyId(null);
+    navTo(path);
+    setDrawerOpen(false);
+  };
+
+  const navItems = [
+    { label: 'Home', path: '/' },
+    { label: 'Agencies', path: '/agencies' },
+    { label: 'Buy', path: '/properties?purpose=sale' },
+    { label: 'Rent', path: '/properties?purpose=rent' },
+    { label: 'Properties', path: '/properties' },
+    { label: 'Services', path: '/services' },
+    { label: 'About', path: '/about' },
+    { label: 'Contact', path: '/contact' },
   ];
 
-  // Real anchors (not buttons) keep internal pages crawlable and allow
-  // middle-click / open-in-new-tab, while onClick keeps the SPA transition.
-  const linkProps = (view: string, path: string) => ({
-    href: path,
-    onClick: (e: React.MouseEvent<HTMLAnchorElement>) => {
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-      e.preventDefault();
-      navigateTo(view);
-    },
-  });
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
+  const currentSearch = typeof window !== 'undefined' ? window.location.search : '';
+  const isActive = (path: string) => {
+    const [p, q] = path.split('?');
+    if (p === '/') return currentPath === '/' || currentPath === '/home';
+    if (p === '/properties' && q) return currentPath === '/properties' && currentSearch.includes((q.split('=')[1] || ''));
+    if (p === '/properties' && !q) return currentPath === '/properties' && !currentSearch.includes('purpose=sale') && !currentSearch.includes('purpose=rent');
+    return currentPath === p || currentPath.startsWith(p + '/');
+  };
 
-  const goAdmin = () => navigateTo(isAdminAuthenticated ? 'admin' : 'admin-login');
-  const isAdminActive = currentView.startsWith('admin');
+  const hasDashboardAccess = isAdminAuthenticated && !!currentUser?.workspaceAccess?.allowed;
 
   return (
     <>
-      {/* Main Glass Navbar — constant height, scroll-aware surface */}
-      <header
-        className={`sticky top-0 z-40 backdrop-blur-md border-b transition-all duration-300 ${
-          scrolled
-            ? 'bg-[#101C2C]/95 border-[#C5A46D]/25 shadow-lg shadow-black/25'
-            : 'bg-[#101C2C]/75 border-[#C5A46D]/10'
-        }`}
-      >
-        <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8">
-          {/* Height: 64px mobile / 80px desktop — constant per breakpoint */}
-          <div className="flex items-center justify-between h-16 lg:h-20 gap-2">
-            {/* Logo */}
-            <a
-              {...linkProps('home', '/')}
-              className="flex items-center gap-2 sm:gap-3 cursor-pointer group min-w-0"
-              aria-label={`${currentTheme.agencyName} — go to homepage`}
-            >
-              <img
-                src="/logo.jpg"
-                alt={`${currentTheme.agencyName} logo`}
-                className="w-10 h-10 lg:w-11 lg:h-11 shrink-0 rounded-lg object-contain group-hover:scale-105 transition-transform"
-              />
-              <div className="min-w-0 text-left">
-                <span className="font-serif-luxury text-sm sm:text-lg lg:text-2xl font-bold tracking-tight text-white group-hover:text-[#C5A46D] transition-colors truncate block max-w-[140px] sm:max-w-none leading-tight">
-                  {currentTheme.agencyName}
-                </span>
-                <span
-                  lang="ur"
-                  dir="rtl"
-                  className="font-urdu block text-[10px] sm:text-[11px] lg:text-[13px] leading-[1.7] text-[#C5A46D] font-semibold truncate max-w-[150px] sm:max-w-none"
-                >
-                  مضبوط بنیاد، پائیدار ترقی
-                </span>
+      <nav className={`fixed w-full top-0 z-50 transition-all duration-300 border-b ${
+        scrolled ? 'glass-panel-strong border-[#C5A46D]/25 shadow-xl shadow-black/20' : 'glass-panel border-[#C5A46D]/20'
+      }`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-20 items-center gap-4">
+            <button type="button" onClick={() => handleNavClick('/')} className="flex-shrink-0 flex items-center gap-3 cursor-pointer group" aria-label="Go to home">
+              <div className="w-11 h-11 rounded-full border-2 border-[#C5A46D]/60 bg-[#101C2C] flex items-center justify-center shadow-md shadow-[#C5A46D]/20 group-hover:border-[#F9E7BA] transition-colors shrink-0">
+                <span className="font-serif-luxury font-bold text-[#C5A46D] text-lg">TT</span>
               </div>
-            </a>
+              <div className="text-left leading-tight hidden sm:block">
+                <h1 className="font-serif-luxury font-bold text-base lg:text-lg text-white tracking-wide whitespace-nowrap">{cmsConfig.agencyName || 'TaisarTownHub'}</h1>
+                <p className="text-[11px] text-[#C5A46D]">Agency-first property marketplace</p>
+              </div>
+            </button>
 
-            {/* Desktop Navigation (only when 9 links fit comfortably) */}
-            <nav
-              className="hidden xl:flex items-center space-x-0.5"
-              aria-label="Primary navigation"
-            >
-              {navLinks.map((link) => {
-                const isActive = currentView === link.id || (link.id === 'home' && isAdminActive === false && currentView === 'home');
-                return (
-                  <a
-                    key={link.id}
-                    {...linkProps(link.id, link.path)}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={`relative inline-block px-2.5 py-2 text-[13px] font-medium rounded-md transition-all duration-200 cursor-pointer group ${
-                      isActive
-                        ? 'text-[#C5A46D] font-semibold'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    {link.label}
-                    {/* Active underline animation */}
-                    <span
-                      aria-hidden="true"
-                      className={`absolute inset-x-2.5 -bottom-0.5 h-0.5 rounded-full gold-gradient-bg transition-all duration-300 ${
-                        isActive
-                          ? 'opacity-100 scale-x-100'
-                          : 'opacity-0 scale-x-0 group-hover:opacity-60 group-hover:scale-x-75'
-                      }`}
-                    />
-                  </a>
-                );
-              })}
-            </nav>
-
-            {/* Action Cluster */}
-            <div className="flex items-center gap-2 shrink-0">
-              {/* Admin & Auth Actions */}
-              {!isAdminAuthenticated ? (
-                <div className="flex items-center gap-1.5">
-                  <a
-                    {...linkProps('login', '/login')}
-                    aria-label="Open portal sign in"
-                    className="flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700 hover:border-[#C5A46D]/60 hover:text-white transition-all cursor-pointer"
-                  >
-                    <LayoutDashboard className="w-3.5 h-3.5 text-[#C5A46D] shrink-0" />
-                    <span className="hidden sm:inline">Sign In</span>
-                  </a>
-                  <a
-                    {...linkProps('register', '/register')}
-                    aria-label="Register as property dealer"
-                    className="hidden lg:flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] transition-all shadow-md shadow-[#C5A46D]/20 cursor-pointer"
-                  >
-                    <span>Register Dealer</span>
-                  </a>
-                </div>
-              ) : (
+            <div className="hidden xl:flex items-center gap-1">
+              {navItems.map((item) => (
                 <button
-                  onClick={goAdmin}
-                  aria-label="Open admin dashboard"
-                  className={`flex items-center justify-center lg:justify-start gap-2 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
-                    isAdminActive
-                      ? 'bg-[#C5A46D] text-[#101C2C] border-[#C5A46D] shadow-md'
-                      : 'bg-slate-800 text-slate-200 border-slate-700 hover:border-slate-500 hover:text-white'
+                  key={item.label + item.path}
+                  type="button"
+                  onClick={() => handleNavClick(item.path)}
+                  className={`nav-underline px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
+                    isActive(item.path) ? 'text-[#C5A46D] bg-[#C5A46D]/10 is-active' : 'text-slate-300 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  <LayoutDashboard className="w-3.5 h-3.5 text-[#C5A46D] shrink-0" />
-                  <span className="hidden lg:inline">Dashboard</span>
+                  {item.label}
                 </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              {hasDashboardAccess ? (
+                <div className="hidden md:flex items-center gap-2">
+                  <button type="button" onClick={() => handleNavClick('/admin')} className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold border transition-colors cursor-pointer ${isActive('/admin') ? 'bg-[#C5A46D] text-[#101C2C] border-[#C5A46D]' : 'bg-transparent text-[#C5A46D] border-[#C5A46D]/50 hover:bg-[#C5A46D]/10'}`}>
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span>Dashboard</span>
+                  </button>
+                  <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-slate-700/70 text-xs text-slate-300">
+                    <UserCircle2 className="w-4 h-4 text-[#C5A46D]" />
+                    <span className="max-w-[120px] truncate">{currentUser?.name || currentUser?.email || 'Account'}</span>
+                  </div>
+                  <button type="button" onClick={() => { logoutAdmin(); handleNavClick('/'); }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/5" title="Sign out">
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="hidden md:flex items-center gap-2">
+                  <button type="button" onClick={() => handleNavClick('/login')} className="text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer px-3 py-2">Log in</button>
+                  <button type="button" onClick={() => handleNavClick('/register')} className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-sm font-bold transition-colors cursor-pointer">
+                    <Building2 className="w-4 h-4" /> Register agency
+                  </button>
+                </div>
               )}
 
-              {/* Drawer Toggle — all screens below xl */}
-              <button
-                onClick={() => setDrawerOpen(!drawerOpen)}
-                className="xl:hidden p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
-                aria-label={drawerOpen ? 'Close navigation menu' : 'Open navigation menu'}
-                aria-expanded={drawerOpen}
-                aria-controls="primary-drawer"
-              >
-                {drawerOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              <button type="button" onClick={() => setDrawerOpen(true)} className="xl:hidden inline-flex items-center justify-center p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/10 focus:outline-none cursor-pointer" aria-label="Open navigation menu" aria-expanded={drawerOpen} aria-controls="mobile-nav-drawer">
+                <Menu className="w-6 h-6" />
               </button>
             </div>
           </div>
         </div>
+      </nav>
 
-        {/* Slide-down Drawer — below xl only */}
-        {drawerOpen && (
-          <>
-            {/* Backdrop */}
-            <button
-              aria-hidden="true"
-              tabIndex={-1}
-              onClick={() => setDrawerOpen(false)}
-              className="xl:hidden fixed inset-0 top-16 lg:top-20 -z-10 bg-black/55 backdrop-blur-sm animate-fadeIn cursor-default"
-            />
-            <nav
-              id="primary-drawer"
-              role="menu"
-              aria-label="Primary navigation"
-              className="xl:hidden fixed top-16 lg:top-20 inset-x-0 z-40 bg-[#0B1220]/97 backdrop-blur-xl border-b border-[#C5A46D]/20 px-4 pt-3 pb-6 max-h-[calc(100dvh-4rem)] overflow-y-auto animate-dropIn shadow-2xl"
-            >
-              {/* Links */}
-              <div className="space-y-1" role="none">
-                {navLinks.map((link) => {
-                  const isActive = currentView === link.id;
-                  return (
-                    <a
-                      key={link.id}
-                      role="menuitem"
-                      {...linkProps(link.id, link.path)}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium flex items-center justify-between transition-colors ${
-                        isActive
-                          ? 'text-[#C5A46D] bg-[#C5A46D]/10 font-semibold border-l-2 border-[#C5A46D]'
-                          : 'text-slate-300 hover:bg-white/5 hover:pl-4'
-                      }`}
-                    >
-                      <span>{link.label}</span>
-                      <ChevronRight className={`w-4 h-4 ${isActive ? 'text-[#C5A46D]' : 'text-slate-600'}`} />
-                    </a>
-                  );
-                })}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-[60] xl:hidden">
+          <button type="button" aria-label="Close navigation" className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fadeIn" onClick={() => setDrawerOpen(false)} />
+          <div id="mobile-nav-drawer" role="dialog" aria-modal="true" aria-label="Navigation menu" className="absolute right-0 top-0 h-full w-[86%] max-w-sm bg-[#101C2C] border-l border-[#C5A46D]/30 shadow-2xl flex flex-col animate-slideInRight">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full border border-[#C5A46D]/50 bg-[#101C2C] flex items-center justify-center">
+                  <span className="font-serif-luxury font-bold text-[#C5A46D] text-sm">TT</span>
+                </div>
+                <span className="font-serif-luxury font-bold text-white text-sm">{cmsConfig.agencyName || 'TaisarTownHub'}</span>
               </div>
+              <button type="button" onClick={() => setDrawerOpen(false)} className="p-2 rounded-md text-slate-400 hover:text-white hover:bg-white/10 cursor-pointer" aria-label="Close menu"><X className="w-5 h-5" /></button>
+            </div>
 
-              {/* Calls to Action */}
-              <div className="pt-4 mt-2 border-t border-slate-800 flex flex-col gap-2">
-                {!isAdminAuthenticated ? (
-                  <>
-                    <a
-                      role="menuitem"
-                      {...linkProps('login', '/login')}
-                      className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 bg-[#101C2C] border border-[#C5A46D]/40 text-[#C5A46D] hover:bg-[#C5A46D]/15 transition-all"
-                    >
-                      <LayoutDashboard className="w-4 h-4 text-[#C5A46D]" />
-                      <span>Portal Sign In</span>
-                    </a>
-                    <a
-                      role="menuitem"
-                      {...linkProps('register', '/register')}
-                      className="w-full py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] transition-all shadow-md"
-                    >
-                      <span>Register as Property Dealer</span>
-                    </a>
-                  </>
-                ) : (
-                  <button
-                    role="menuitem"
-                    onClick={goAdmin}
-                    className="w-full py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-[#C5A46D] text-[#101C2C] transition-all"
-                  >
-                    <LayoutDashboard className="w-4 h-4" />
-                    <span>Open Admin Dashboard</span>
+            <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+              {navItems.map((item) => {
+                const active = isActive(item.path);
+                return (
+                  <button key={item.label + item.path} type="button" onClick={() => handleNavClick(item.path)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors cursor-pointer ${active ? 'text-[#C5A46D] bg-[#C5A46D]/10 border border-[#C5A46D]/30' : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'}`}>
+                    <span>{item.label}</span>
+                    {active && <ChevronRight className="w-4 h-4" />}
                   </button>
-                )}
-              </div>
-            </nav>
-          </>
-        )}
-      </header>
+                );
+              })}
+            </div>
+
+            <div className="p-4 border-t border-slate-800 space-y-2">
+              {hasDashboardAccess ? (
+                <>
+                  <button type="button" onClick={() => handleNavClick('/admin')} className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#C5A46D] text-[#101C2C] font-bold text-sm cursor-pointer hover:bg-[#D4AF37] transition-colors"><LayoutDashboard className="w-4 h-4" /><span>Open dashboard</span></button>
+                  <button type="button" onClick={() => { logoutAdmin(); handleNavClick('/'); }} className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl border border-slate-700 text-slate-200 font-semibold text-sm cursor-pointer hover:bg-white/5"><LogOut className="w-4 h-4" /> Sign out</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => handleNavClick('/login')} className="w-full flex items-center justify-center py-3 px-4 rounded-xl border border-[#C5A46D]/40 text-[#C5A46D] font-semibold text-sm cursor-pointer hover:bg-[#C5A46D]/10 transition-colors">Log in</button>
+                  <button type="button" onClick={() => handleNavClick('/register')} className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#C5A46D] text-[#101C2C] font-bold text-sm cursor-pointer hover:bg-[#D4AF37] transition-colors"><Building2 className="w-4 h-4" /> Register agency</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="h-20" />
     </>
   );
 };

@@ -13,8 +13,6 @@ import { APP_MODE } from './config/appMode';
 
 // Public views
 import { HeroSection } from './components/public/HeroSection';
-import { FeaturedProjects } from './components/public/FeaturedProjects';
-import { FeaturedProperties } from './components/public/FeaturedProperties';
 import { Scheme45Guide } from './components/public/Scheme45Guide';
 import { ServicesSection } from './components/public/ServicesSection';
 import { MediaGallerySection } from './components/public/MediaGallerySection';
@@ -27,7 +25,8 @@ const ProjectDetailPage = lazy(() => import('./components/public/ProjectDetailPa
 const PropertyDetailPage = lazy(() => import('./components/public/PropertyDetailPage').then((m) => ({ default: m.PropertyDetailPage })));
 const ProjectsListingPage = lazy(() => import('./components/public/ProjectsListingPage').then((m) => ({ default: m.ProjectsListingPage })));
 const PropertiesListingPage = lazy(() => import('./components/public/PropertiesListingPage').then((m) => ({ default: m.PropertiesListingPage })));
-const AgenciesSection = lazy(() => import('./components/public/AgenciesSection').then((m) => ({ default: m.AgenciesSection })));
+const AgenciesDirectoryPage = lazy(() => import('./components/public/AgenciesDirectoryPage').then((m) => ({ default: m.AgenciesDirectoryPage })));
+const AgencyProfilePage = lazy(() => import('./components/public/AgencyProfilePage').then((m) => ({ default: m.AgencyProfilePage })));
 const AuthPage = lazy(() => import('./components/public/AuthPage').then((m) => ({ default: m.AuthPage })));
 const AgencyAccessPage = lazy(() => import('./components/public/AgencyAccessPage').then((m) => ({ default: m.AgencyAccessPage })));
 const NotFoundPage = lazy(() => import('./components/public/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
@@ -111,6 +110,8 @@ const KNOWN_PUBLIC_PATHS = new Set([
 const isKnownPath = (pathname: string): boolean => {
   const path = pathname.replace(/\/+$/, '') || '/';
   if (KNOWN_PUBLIC_PATHS.has(path)) return true;
+  // Dynamic public agency profile routes: /agencies/:slug
+  if (path.startsWith('/agencies/')) return true;
   // Admin deep links are resolved to their tab by AppContext.
   return path.startsWith('/admin/');
 };
@@ -307,11 +308,37 @@ const MainAppContent: React.FC = () => {
               {resolvedView === 'home' && (
                 <>
                   <HeroSection onSearch={handleHeroSearch} />
-                  <FeaturedProjects />
-                  <FeaturedProperties />
-                  <AgenciesSection />
-                  <Scheme45Guide />
+                  <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8 bg-[#0B1220] border-t border-[#C5A46D]/10">
+                    <div className="max-w-7xl mx-auto space-y-8">
+                      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                        <div className="space-y-2 max-w-2xl">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">Agency-first marketplace</span>
+                          <h2 className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white">Discover verified agencies and their listings</h2>
+                          <p className="text-slate-400 text-sm sm:text-base">Browse trusted real estate agencies, explore approved public properties, and connect with the right team for buying or renting.</p>
+                        </div>
+                        <button onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="self-start sm:self-auto px-5 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm">Explore all agencies</button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <button onClick={() => { window.history.pushState({}, '', '/properties?purpose=sale'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="rounded-2xl border border-slate-800 bg-[#101C2C] p-5 text-left hover:border-[#C5A46D]/50 transition">
+                          <div className="text-[#C5A46D] font-semibold text-sm mb-1">Buy</div>
+                          <div className="text-white font-serif-luxury text-xl font-bold">Properties for sale</div>
+                          <div className="text-slate-400 text-sm mt-1">Browse approved listings from verified agencies.</div>
+                        </button>
+                        <button onClick={() => { window.history.pushState({}, '', '/properties?purpose=rent'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="rounded-2xl border border-slate-800 bg-[#101C2C] p-5 text-left hover:border-[#C5A46D]/50 transition">
+                          <div className="text-[#C5A46D] font-semibold text-sm mb-1">Rent</div>
+                          <div className="text-white font-serif-luxury text-xl font-bold">Properties for rent</div>
+                          <div className="text-slate-400 text-sm mt-1">Find rental options managed by agencies.</div>
+                        </button>
+                        <button onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="rounded-2xl border border-slate-800 bg-[#101C2C] p-5 text-left hover:border-[#C5A46D]/50 transition">
+                          <div className="text-[#C5A46D] font-semibold text-sm mb-1">Agencies</div>
+                          <div className="text-white font-serif-luxury text-xl font-bold">Agency directory</div>
+                          <div className="text-slate-400 text-sm mt-1">View profiles, stock, and contact details.</div>
+                        </button>
+                      </div>
+                    </div>
+                  </section>
                   <ServicesSection />
+                  <Scheme45Guide />
                   <MediaGallerySection />
                   <AboutSection />
                   <TestimonialsSection />
@@ -325,10 +352,9 @@ const MainAppContent: React.FC = () => {
                 <PropertiesListingPage initialFilter={activeFilterCriteria} />
               )}
               {resolvedView === 'property-detail' && <PropertyDetailPage />}
-              {resolvedView === 'agencies' && (
-                <div className="py-6">
-                  <AgenciesSection />
-                </div>
+              {resolvedView === 'agencies' && <AgenciesDirectoryPage />}
+              {resolvedView === 'agency-profile' && (
+                <AgencyProfilePage slug={decodeURIComponent(window.location.pathname.replace(/^\/agencies\//, '').replace(/\/+$/, ''))} />
               )}
               {resolvedView === 'guide' && <Scheme45Guide />}
               {resolvedView === 'gallery' && <MediaGallerySection />}
