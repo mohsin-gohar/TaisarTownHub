@@ -29,7 +29,8 @@ class BookingConcurrencyTest extends EnterpriseTestCase
 
         $user = $this->makeUser('agent', ['dealer_id' => $dealer->id]);
         $agency = $this->makeAgency('Conc Agency');
-        $role = $this->makeRole('agency', 'agent', []);
+        // Dealer-file sale now requires an explicit transaction permission.
+        $role = $this->makeRole('agency', 'agent', ['finance.create_transaction', 'documents.view']);
         $this->makeMember($user, $agency, $role);
 
         return [$user, $dealer, $agency];

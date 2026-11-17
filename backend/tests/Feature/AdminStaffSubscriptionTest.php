@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AgencySubscription;
+use App\Models\Role;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -228,6 +229,98 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->getJson('/api/auth/me', $this->authHeaders($accepted['token']))
             ->assertStatus(200)
             ->assertJsonPath('user.email', 'invitee@example.test');
+    }
+
+    public function test_owner_invitation_does_not_grant_platform_privileges(): void
+    {
+        // Production seeds a platform 'admin' role row that grants
+        // admin.manage_agencies. Without it a buggy role mapping can pass
+        // silently in tests while escalating in production.
+        $this->seedPlatformRole('admin');
+        $ownerRole = $this->makeRole('agency', 'agency_owner', array_merge(
+            $this->staffPermissions(),
+            ['agency.view', 'agency.manage_staff']
+        ));
+        $ownerRole->forceFill(['id' => 'role_agency_owner'])->save();
+
+        [$owner, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $owner->memberships()->where('agency_id', $agency->id)->firstOrFail()
+            ->update(['role_id' => $ownerRole->id]);
+
+        $invite = $this->postJson('/api/agency/members/invite', [
+            'email' => 'invited-owner@example.test',
+            'role_id' => 'role_agency_owner',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(201)
+            ->json('invitation');
+        $this->assertNotEmpty($invite['invite_token']);
+
+        $this->asGuest();
+        $accepted = $this->postJson('/api/agency/invitations/accept', [
+            'token' => $invite['invite_token'],
+            'name' => 'Invited Owner',
+            'password' => 'OwnerPass123!',
+        ])->assertStatus(200)->json();
+
+        $invitee = User::where('email', 'invited-owner@example.test')->firstOrFail();
+        $this->assertSame('dealer', $invitee->role, 'agency roles must never write a platform role');
+        $this->assertFalse($invitee->isPlatformUser());
+        $this->assertFalse($accepted['user']['is_platform']);
+        $this->assertSame('agency_owner', $invitee->memberships()->first()->role->key);
+
+        $headers = $this->authHeaders($accepted['token']);
+        $this->getJson('/api/admin/agencies', $headers)->assertForbidden();
+        $this->getJson('/api/admin/plans', $headers)->assertForbidden();
+        $this->getJson('/api/admin/audit-logs', $headers)->assertForbidden();
+        $this->getJson('/api/agency/members', $headers)->assertOk();
+    }
+
+    public function test_agency_manager_cannot_invite_another_owner(): void
+    {
+        $ownerRole = $this->makeRole('agency', 'agency_owner', $this->staffPermissions());
+        $ownerRole->forceFill(['id' => 'role_agency_owner'])->save();
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'owner-by-manager@example.test',
+            'role_id' => 'role_agency_owner',
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(403)
+            ->assertJsonPath('success', false);
+
+        $this->assertDatabaseMissing('agency_invitations', ['email' => 'owner-by-manager@example.test']);
+    }
+
+    public function test_invitation_token_cannot_be_accepted_twice(): void
+    {
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $role = $this->makeRole('agency', 'single_use', ['properties.view']);
+
+        $invite = $this->postJson('/api/agency/members/invite', [
+            'email' => 'single-use@example.test',
+            'role_id' => $role->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(201)
+            ->json('invitation');
+
+        $this->asGuest();
+        $this->postJson('/api/agency/invitations/accept', [
+            'token' => $invite['invite_token'],
+            'name' => 'Single Use',
+            'password' => 'SinglePass123!',
+        ])->assertStatus(200);
+
+        $this->asGuest();
+        $this->postJson('/api/agency/invitations/accept', [
+            'token' => $invite['invite_token'],
+            'name' => 'Single Use Two',
+            'password' => 'SinglePass123!',
+        ])->assertStatus(422)->assertJsonPath('success', false);
+
+        $this->assertSame(1, DB::table('agency_invitations')
+            ->where('email', 'single-use@example.test')
+            ->where('status', 'accepted')
+            ->count());
     }
 
     public function test_invitations_respect_the_subscription_staff_limit(): void

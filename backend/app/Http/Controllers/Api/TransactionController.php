@@ -4,8 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Transaction;
+use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class TransactionController extends Controller
 {
@@ -13,19 +18,36 @@ class TransactionController extends Controller
 
     /**
      * List transactions with filtering.
+     *
+     * SECURITY: the legacy surface used to return every deal in the database.
+     * It now honours the agency resolved by AgencyContext (never a client
+     * header/body value) and falls back to dealer-self scoping for members
+     * without a platform-wide view permission.
      */
     public function index(Request $request)
     {
         $this->requireAny($request, ['view_transactions', 'view_my_deals']);
 
-        $query = Transaction::query();
+        $agencyId = $this->agencyId($request);
+        $platformView = $this->can($request, 'view_transactions');
 
-        $user = $request->user();
-        if (!$user->hasPermission('view_transactions')) {
-            $query->where('dealerId', $user->dealer_id);
+        $query = Transaction::query();
+        if ($agencyId !== null && $agencyId !== '') {
+            // Explicit agency context: only that agency's rows.
+            $query->where('agency_id', $agencyId);
+        } elseif (!$platformView) {
+            // No agency and no explicit platform grant: fail closed.
+            $query->whereNull('agency_id');
         }
 
-        if ($request->filled('dealerId')) {
+        if (!$platformView) {
+            $query->where('dealerId', $request->user()->dealer_id);
+        }
+
+        // A client-supplied dealer filter is only honoured for a platform-wide
+        // viewer with no agency context; it must never enumerate another
+        // agency's dealers.
+        if ($request->filled('dealerId') && ($agencyId === null || $agencyId === '') && $platformView) {
             $query->where('dealerId', $request->dealerId);
         }
 
@@ -42,9 +64,15 @@ class TransactionController extends Controller
     public function store(Request $request)
     {
         $this->requireAny($request, ['create_transactions']);
+        $agencyId = $this->requireAgency($request);
 
         $data = $request->validate([
-            'propertyId' => 'required|string|exists:properties,id',
+            'propertyId' => [
+                'required', 'string',
+                Rule::exists('properties', 'id')->where(function ($q) use ($agencyId) {
+                    $q->where('agency_id', $agencyId);
+                }),
+            ],
             'propertyTitle' => 'required|string|max:255',
             'plotNumber' => 'nullable|string|max:50',
             'sector' => 'nullable|string|max:100',
@@ -60,35 +88,68 @@ class TransactionController extends Controller
             'dealStatus' => 'nullable|string|in:Draft,Negotiation,Agreement Signed,Token Paid,Advance Received,Payment Pending,Partially Paid,Fully Paid,Under Transfer,Completed,Cancelled',
         ]);
 
-        // Generate unique deal number
-        $year = now()->year;
-        $lastDeal = Transaction::where('dealNumber', 'like', "TXN-{$year}-%")
-            ->orderByDesc('dealNumber')
-            ->first();
-        $nextNumber = 1;
-        if ($lastDeal && preg_match('/TXN-\d{4}-(\d+)/', $lastDeal->dealNumber, $matches)) {
-            $nextNumber = (int) $matches[1] + 1;
+        // Dealers have no agency_id column; ownership is derived from active
+        // memberships. Never accept a dealer from a different agency.
+        if (!empty($data['dealerId']) && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
+            throw ValidationException::withMessages([
+                'dealerId' => ['Dealer does not belong to the acting agency.'],
+            ]);
         }
-        $data['dealNumber'] = sprintf('TXN-%d-%04d', $year, $nextNumber);
-        $data['id'] = 'txn-' . Str::uuid();
 
-        // Calculate remaining balance
         $advance = $data['advancePaymentPKR'] ?? 0;
         $data['remainingBalancePKR'] = max(0, $data['agreementAmountPKR'] - $advance);
+        $data['dealStatus'] ??= 'Draft';
+        $data['commissionStatus'] ??= 'Pending Accrual';
+        // Tenant ownership is bound server-side; body agency_id is ignored.
+        $data['agency_id'] = $agencyId;
+        $data['created_by'] = $request->user()->id;
+        $data['id'] = 'txn-' . Str::uuid();
 
-        // Set default status if not provided
-        if (!isset($data['dealStatus'])) {
-            $data['dealStatus'] = 'Draft';
+        $year = now()->year;
+        $transaction = null;
+
+        // Deal numbers must be unique under concurrent requests. The locked
+        // read + unique index + bounded retry mirrors FinanceController::store.
+        for ($attempt = 0; $attempt < 3 && $transaction === null; $attempt++) {
+            try {
+                $transaction = DB::transaction(function () use ($data, $year) {
+                    $lastDeal = Transaction::where('dealNumber', 'like', "TXN-{$year}-%")
+                        ->lockForUpdate()
+                        ->orderByDesc('dealNumber')
+                        ->first();
+                    $nextNumber = 1;
+                    if ($lastDeal && preg_match('/TXN-\d{4}-(\d+)/', $lastDeal->dealNumber, $matches)) {
+                        $nextNumber = (int) $matches[1] + 1;
+                    }
+                    $data['dealNumber'] = sprintf('TXN-%d-%04d', $year, $nextNumber);
+
+                    return Transaction::create($data);
+                }, 3);
+            } catch (QueryException $e) {
+                if (!str_contains(strtolower($e->getMessage()), 'duplicate') && $e->getCode() !== '23000') {
+                    throw $e;
+                }
+            }
         }
-        if (!isset($data['commissionStatus'])) {
-            $data['commissionStatus'] = 'Pending Accrual';
+
+        if ($transaction === null) {
+            throw ValidationException::withMessages([
+                'dealNumber' => ['Could not allocate a unique deal number. Please retry.'],
+            ]);
         }
 
-        $transaction = Transaction::create($data);
-
-        // Audit log
-        $this->writeAudit($request, 'transaction_created', $transaction->id, "Deal {$transaction->dealNumber} created");
+        $this->writeAudit($request, 'transaction_created', $transaction->id, "Deal {$transaction->dealNumber} created", [
+            'agency_id' => $agencyId,
+        ]);
 
         return response()->json($transaction, 201);
+    }
+
+    /** Dealer ids are valid here only when linked to an active member of the agency. */
+    private function dealerBelongsToAgency(string $dealerId, string $agencyId): bool
+    {
+        return User::where('dealer_id', $dealerId)
+            ->whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
+            ->exists();
     }
 }

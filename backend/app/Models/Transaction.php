@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Transaction extends Model
@@ -33,6 +34,18 @@ class Transaction extends Model
     ];
 
     /* ---------------- Relationships ---------------- */
+
+    /**
+     * Legacy mirrored record in the generic business_records table.
+     * FinanceController eager-loads this on list/detail; the relation was
+     * referenced but never defined, so any agency with at least one deal got
+     * a 500 (empty-list tests could not catch it).
+     */
+    public function businessRecord(): HasOne
+    {
+        return $this->hasOne(BusinessRecord::class, 'record_id', 'id')
+            ->where('collection', 'transactions');
+    }
 
     public function property(): BelongsTo
     {

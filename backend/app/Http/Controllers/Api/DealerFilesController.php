@@ -3,31 +3,33 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\Dealer;
 use App\Models\DealerFile;
+use App\Models\User;
+use App\Support\PlanLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class DealerFilesController extends Controller
 {
+    use AuthorizesApi;
+
     /**
-     * List all files for the authenticated dealer.
+     * List files for the acting dealer only (agency-bound).
      */
     public function index(Request $request)
     {
-        $user = $request->user();
-        $dealerId = $user->dealer_id ?? $user->id;
+        $this->requirePermission($request, 'documents.view');
+        $dealerId = $this->actingDealerId($request);
 
         $query = DealerFile::where('dealer_id', $dealerId);
 
-        // Filter by status
         $status = $request->query('status');
         if ($status && $status !== 'all') {
             $query->where('status', $status);
         }
 
-        // Search by title
         $search = $request->query('search');
         if ($search) {
             $query->where('title', 'like', '%' . strip_tags($search) . '%');
@@ -43,14 +45,12 @@ class DealerFilesController extends Controller
     }
 
     /**
-     * Upload a new file to dealer's account.
+     * Register a file for the acting dealer, enforcing permissions and quota.
      */
     public function store(Request $request)
     {
-        $user = $request->user();
-        $dealerId = $user->dealer_id ?? $user->id;
-
-        // Verify dealer exists
+        $this->requirePermission($request, 'documents.upload');
+        $dealerId = $this->actingDealerId($request);
         $dealer = Dealer::findOrFail($dealerId);
 
         $validated = $request->validate([
@@ -61,6 +61,26 @@ class DealerFilesController extends Controller
             'file_size_kb' => 'required|numeric|min:0|max:51200',
             'dimensions' => 'nullable|string|max:50',
         ]);
+
+        // Legacy dealer files are URL registrations. Enforce the plan's file
+        // count AND count the declared bytes against the storage quota so the
+        // legacy endpoint cannot bypass the vault's storage_mb limit.
+        $agencyId = $this->agencyId($request);
+        if ($agencyId !== null) {
+            $agency = Agency::findOrFail($agencyId);
+            $used = fn () => DealerFile::whereIn(
+                'dealer_id',
+                User::whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
+                    ->whereNotNull('dealer_id')->pluck('dealer_id')
+            )->count();
+            if ($block = PlanLimits::block($agency, 'dealer_files', $used)) {
+                return PlanLimits::deny('Dealer file limit reached for your subscription plan.', $block);
+            }
+            $incomingBytes = (int) round((float) $validated['file_size_kb'] * 1024);
+            if ($block = PlanLimits::storageBlock($agency, $incomingBytes)) {
+                return PlanLimits::deny('Storage limit reached for your subscription plan.', $block);
+            }
+        }
 
         $file = DealerFile::create([
             'title' => strip_tags($validated['title']),
@@ -74,15 +94,12 @@ class DealerFilesController extends Controller
             'status' => 'available',
         ]);
 
-        // Audit log
-        \Log::info('AUDIT', [
-            'actor' => $user->name,
-            'role' => $user->role,
-            'action' => 'file_uploaded',
-            'target' => $file->id,
-            'detail' => "File {$file->title} uploaded to dealer {$dealer->fullName}",
-            'timestamp' => now()->toIso8601String(),
-        ]);
+        $this->writeAudit($request, 'dealer_file.upload', (string) $file->id,
+            "File {$file->title} uploaded to dealer {$dealer->fullName}", [
+                'agency_id' => $agencyId,
+                'entity_type' => 'dealer_file',
+                'entity_id' => (string) $file->id,
+            ]);
 
         return response()->json([
             'success' => true,
@@ -94,15 +111,14 @@ class DealerFilesController extends Controller
     /**
      * Mark a file as sold and calculate commission.
      *
-     * Concurrency guard: the status re-check happens on the LOCKED row
-     * (SELECT … FOR UPDATE inside a transaction), so two dealers racing on
-     * the same file cannot both sell it — the loser commits against the
-     * already-sold row and is rejected.
+     * The status re-check runs on the LOCKED row, so two dealers racing on the
+     * same file cannot both sell it.
      */
     public function sell(Request $request, $id)
     {
+        $this->requireAny($request, ['finance.create_transaction', 'manage_deals']);
         $user = $request->user();
-        $dealerId = $user->dealer_id ?? $user->id;
+        $dealerId = $this->actingDealerId($request);
 
         $validated = $request->validate([
             'selling_price_kbr' => 'required|numeric|min:0|max:9999999999',
@@ -113,7 +129,7 @@ class DealerFilesController extends Controller
 
         $profit = 0.0;
 
-        $soldFile = DB::transaction(function () use ($request, $id, $dealerId, $validated, &$profit) {
+        $soldFile = DB::transaction(function () use ($id, $dealerId, $validated, &$profit) {
             $file = DealerFile::where('id', $id)
                 ->where('dealer_id', $dealerId)
                 ->lockForUpdate()
@@ -124,7 +140,7 @@ class DealerFilesController extends Controller
             }
 
             if ($file->status === 'sold') {
-                return null; // rejected below (already sold)
+                return null;
             }
 
             $costPrice = $file->cost_price_kbr ?? ($validated['selling_price_kbr'] * 0.7);
@@ -137,14 +153,12 @@ class DealerFilesController extends Controller
                 'profit_kbr' => $profit,
                 'buyer_name' => strip_tags($validated['buyer_name']),
                 'buyer_phone' => $validated['buyer_phone'],
-                'buyer_cnic' => isset($validated['buyer_cnic']) && $validated['buyer_cnic'] !== null && $validated['buyer_cnic'] !== ''
+                'buyer_cnic' => isset($validated['buyer_cnic']) && $validated['buyer_cnic'] !== ''
                     ? $this->maskCnic($validated['buyer_cnic'])
                     : null,
                 'sold_by_dealer_id' => $dealerId,
             ]);
 
-            // Update dealer's commission statistics (locked within the same
-            // transaction; monetary columns are integer PKR).
             $this->updateDealerCommission($dealerId, (int) round($profit));
 
             return $file;
@@ -157,112 +171,151 @@ class DealerFilesController extends Controller
             ], 400);
         }
 
-        $file = $soldFile;
-
-        // Audit log
-        \Log::info('AUDIT', [
-            'actor' => $user->name,
-            'role' => $user->role,
-            'action' => 'file_sold',
-            'target' => $file->id,
-            'detail' => "File {$file->title} sold for PKR {$validated['selling_price_kbr']}, profit: PKR {$profit}",
-            'timestamp' => now()->toIso8601String(),
-        ]);
+        $this->writeAudit($request, 'dealer_file.sold', (string) $soldFile->id,
+            "File {$soldFile->title} sold for PKR {$validated['selling_price_kbr']}, profit: PKR {$profit}", [
+                'agency_id' => $this->agencyId($request),
+                'entity_type' => 'dealer_file',
+                'entity_id' => (string) $soldFile->id,
+            ]);
 
         return response()->json([
             'success' => true,
-            'data' => $file,
+            'data' => $soldFile,
             'message' => 'File marked as sold. Commission calculated and updated.',
             'profit' => $profit,
         ]);
     }
 
     /**
-     * Get sales attribution report for a specific dealer.
+     * Sales attribution for one dealer: self, or another dealer in the same
+     * agency with finance.view / view_commissions. Platform-wide needs an
+     * explicit platform report permission.
      */
     public function salesReport(Request $request, $dealerId)
     {
-        $user = $request->user();
+        $this->requirePermission($request, 'documents.view');
+        $dealerId = (string) $dealerId;
+        $isSelf = (string) $request->user()->dealer_id === $dealerId;
 
-        $canViewAll = $user->hasPermission('view_commissions');
-        if (!$canViewAll && (string) $user->dealer_id !== (string) $dealerId) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+        if (!$isSelf) {
+            $this->requireAny($request, ['finance.view', 'view_commissions', 'admin.view_reports']);
+        }
+
+        $agencyId = $this->agencyId($request);
+        if ($agencyId !== null && !$this->dealerInAgency($dealerId, $agencyId)) {
+            abort(403, 'Dealer does not belong to the acting agency.');
         }
 
         $dealer = Dealer::findOrFail($dealerId);
-
         $files = DealerFile::where('sold_by_dealer_id', $dealerId)
             ->where('status', 'sold')
-            ->orderByDesc('created_at')
-            ->orderBy('id')
-            ->get();
+            ->orderByDesc('created_at')->orderBy('id')->get();
 
-        $totalProfit = $files->sum('profit_kbr');
-        $totalSold = $files->count();
+        $withPii = $this->can($request, 'documents.view_sensitive');
 
         return response()->json([
             'success' => true,
             'data' => [
                 'dealer' => $dealer,
-                'total_files_sold' => $totalSold,
-                'total_profit_kbr' => round($totalProfit, 2),
-                'files' => $files,
+                'total_files_sold' => $files->count(),
+                'total_profit_kbr' => round($files->sum('profit_kbr'), 2),
+                'files' => $files->map(fn ($f) => $this->presentFile($f, $withPii)),
             ],
         ]);
     }
 
     /**
-     * Get all sales across the system (super admin only).
+     * Platform-wide sales report. Requires an explicit platform permission;
+     * agency members can never reach another agency's sales this way.
      */
     public function allSalesReport(Request $request)
     {
-        $user = $request->user();
+        $this->requirePermission($request, 'admin.view_reports');
 
-        if (!$user->hasPermission('view_commissions')) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
+        $validated = $request->validate([
+            'dealer_id' => 'nullable|string|max:64',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+        ]);
 
         $query = DealerFile::where('status', 'sold');
-
-        // Filter by dealer if specified
-        $dealerId = $request->query('dealer_id');
-        if ($dealerId) {
-            $query->where('sold_by_dealer_id', $dealerId);
+        if (!empty($validated['dealer_id'])) {
+            $query->where('sold_by_dealer_id', $validated['dealer_id']);
         }
-
-        // Filter by date range
-        $startDate = $request->query('start_date');
-        $endDate = $request->query('end_date');
-        if ($startDate) {
-            $query->where('created_at', '>=', $startDate);
+        if (!empty($validated['start_date'])) {
+            $query->where('created_at', '>=', $validated['start_date']);
         }
-        if ($endDate) {
-            $query->where('created_at', '<=', $endDate);
+        if (!empty($validated['end_date'])) {
+            $query->where('created_at', '<=', $validated['end_date']);
         }
 
         $files = $query->orderByDesc('created_at')->orderBy('id')->get();
-
-        $totalProfit = $files->sum('profit_kbr');
-        $totalSold = $files->count();
-
-        $byDealer = $files->groupBy('dealer_id');
+        $withPii = $this->can($request, 'documents.view_sensitive');
 
         return response()->json([
             'success' => true,
             'data' => [
-                'total_files_sold' => $totalSold,
-                'total_profit_kbr' => round($totalProfit, 2),
-                'files' => $files,
-                'by_dealer' => $byDealer->map(function ($files, $dealerId) {
+                'total_files_sold' => $files->count(),
+                'total_profit_kbr' => round($files->sum('profit_kbr'), 2),
+                'files' => $files->map(fn ($f) => $this->presentFile($f, $withPii)),
+                'by_dealer' => $files->groupBy('dealer_id')->map(function ($group, $dealerId) {
                     $dealer = Dealer::find($dealerId);
                     return [
                         'dealer' => $dealer ? $dealer->fullName : 'Unknown',
-                        'files_sold' => $files->count(),
-                        'profit' => round($files->sum('profit_kbr'), 2),
+                        'files_sold' => $group->count(),
+                        'profit' => round($group->sum('profit_kbr'), 2),
                     ];
                 })->values()->toArray(),
             ],
         ]);
+    }
+
+    /** Resolve the acting dealer strictly from the authenticated account. */
+    private function actingDealerId(Request $request): string
+    {
+        $dealerId = $request->user()->dealer_id;
+        if (!$dealerId) {
+            abort(403, 'This account has no dealer identity.');
+        }
+        $agencyId = $this->agencyId($request);
+        if ($agencyId !== null && !$this->dealerInAgency((string) $dealerId, $agencyId)) {
+            abort(403, 'Dealer does not belong to the acting agency.');
+        }
+
+        return (string) $dealerId;
+    }
+
+    /** Dealer ownership is derived from active agency memberships. */
+    private function dealerInAgency(string $dealerId, string $agencyId): bool
+    {
+        return User::where('dealer_id', $dealerId)
+            ->whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
+            ->exists();
+    }
+
+    /** Never expose buyer PII to callers without the sensitive-document grant. */
+    private function presentFile(DealerFile $file, bool $withPii): array
+    {
+        $data = [
+            'id' => $file->id,
+            'title' => $file->title,
+            'type' => $file->type,
+            'status' => $file->status,
+            'folder' => $file->folder,
+            'dealer_id' => $file->dealer_id,
+            'sold_by_dealer_id' => $file->sold_by_dealer_id,
+            'buyer_cnic' => $file->buyer_cnic, // already masked before storage
+            'selling_price_kbr' => $file->selling_price_kbr,
+            'cost_price_kbr' => $file->cost_price_kbr,
+            'profit_kbr' => $file->profit_kbr,
+            'created_at' => $file->created_at,
+        ];
+        if ($withPii) {
+            $data['buyer_name'] = $file->buyer_name;
+            $data['buyer_phone'] = $file->buyer_phone;
+        }
+
+        return $data;
     }
 
     protected function updateDealerCommission(string $dealerId, int $profit): void
@@ -282,6 +335,7 @@ class DealerFilesController extends Controller
         if (strlen($clean) < 7) {
             return str_repeat('*', strlen($clean));
         }
+
         return substr($clean, 0, 5) . str_repeat('*', strlen($clean) - 9) . substr($clean, -4);
     }
 }

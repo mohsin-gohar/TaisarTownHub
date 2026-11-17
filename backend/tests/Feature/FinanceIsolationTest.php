@@ -48,6 +48,89 @@ class FinanceIsolationTest extends EnterpriseTestCase
             ->json('transaction');
     }
 
+    public function test_finance_update_rejects_a_foreign_agency_dealer(): void
+    {
+        [$adminA] = $this->agencyUser($this->financePermissions(), 'manager');
+        [$adminB, $agencyB] = $this->agencyUser($this->financePermissions(), 'manager');
+        $deal = $this->createDeal($adminA);
+
+        $foreignDealer = \App\Models\Dealer::create([
+            'id' => 'dlr_' . \Illuminate\Support\Str::random(8),
+            'fullName' => 'Foreign Dealer',
+            'phone' => '0300-2222222',
+        ]);
+        $foreignUser = $this->makeUser('agent', ['dealer_id' => $foreignDealer->id]);
+        $this->makeMember($foreignUser, $agencyB, $this->makeRole('agency', 'agent', []));
+
+        $this->patchJson("/api/agency/transactions/{$deal['id']}", [
+            'dealerId' => $foreignDealer->id,
+        ], $this->authHeaders($this->tokenFor($adminA)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('dealerId');
+    }
+
+    public function test_void_requires_an_explicit_permission(): void
+    {
+        [$admin, $agency] = $this->agencyUser($this->financePermissions(), 'manager');
+        [$viewer] = $this->agencyUser(['finance.view'], 'viewer', $agency);
+        $deal = $this->createDeal($admin);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'viewer should not be allowed',
+        ], $this->authHeaders($this->tokenFor($viewer)))
+            ->assertForbidden();
+
+        $this->assertNull(Transaction::find($deal['id'])->voided_at);
+    }
+
+    public function test_finance_store_persists_property_and_dealer_references(): void
+    {
+        [$user, $agency] = $this->agencyUser($this->financePermissions(), 'manager');
+        $property = $this->makePublicProperty($agency);
+        $dealer = \App\Models\Dealer::create([
+            'id' => 'dlr_' . \Illuminate\Support\Str::random(8),
+            'fullName' => 'Agency Dealer',
+            'phone' => '0300-1111111',
+        ]);
+        $dealerUser = $this->makeUser('agent', ['dealer_id' => $dealer->id]);
+        $this->makeMember($dealerUser, $agency, $this->makeRole('agency', 'agent', []));
+
+        $deal = $this->postJson('/api/agency/transactions', [
+            'propertyId' => $property->id,
+            'propertyTitle' => 'Attributed Plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agreementAmountPKR' => 5000000,
+            'dealerId' => $dealer->id,
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(201)
+            ->json('transaction');
+
+        $this->assertSame($property->id, $deal['propertyId']);
+        $this->assertSame($dealer->id, $deal['dealerId']);
+        $this->assertDatabaseHas('transactions', [
+            'id' => $deal['id'],
+            'propertyId' => $property->id,
+            'dealerId' => $dealer->id,
+        ]);
+    }
+
+    public function test_finance_index_and_show_work_when_the_agency_has_deals(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $list = $this->getJson('/api/agency/transactions', $headers)
+            ->assertStatus(200)
+            ->json();
+        $this->assertContains($deal['id'], array_column($list['transactions'] ?? [], 'id'));
+
+        $this->getJson("/api/agency/transactions/{$deal['id']}", $headers)
+            ->assertStatus(200)
+            ->assertJsonPath('transaction.id', $deal['id']);
+    }
+
     public function test_agency_cannot_read_or_mutate_another_agencys_deal(): void
     {
         [$userA, $agencyA] = $this->agencyUser($this->financePermissions());

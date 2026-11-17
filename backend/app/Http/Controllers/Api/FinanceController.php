@@ -130,13 +130,20 @@ public function store(Request $request)
         $this->requireAny($request, ['manage_deals', 'finance.manage_deals']);
 
         $data = $request->validate([
-            'propertyId' => 'nullable|string|max:256',
+            'propertyId' => [
+                'nullable', 'string', 'max:256',
+                Rule::exists('properties', 'id')->where(function ($q) use ($agencyId) {
+                    if ($agencyId !== null) {
+                        $q->where('agency_id', $agencyId);
+                    }
+                }),
+            ],
             'propertyTitle' => 'required|string|max:255',
             'plotNumber' => 'nullable|string|max:50',
             'sector' => 'nullable|string|max:100',
             'sellerName' => 'required|string|max:255',
             'buyerName' => 'required|string|max:255',
-            'dealerId' => 'nullable|string|max:64',
+            'dealerId' => 'nullable|string|max:64|exists:dealers,id',
             'transactionType' => 'nullable|in:Sale,Rent,Lease,Transfer',
             'agreementAmountPKR' => 'required|numeric|min:0|max:999999999999',
             'advancePaymentPKR' => 'nullable|numeric|min:0|max:999999999999',
@@ -144,6 +151,19 @@ public function store(Request $request)
             'dealStatus' => 'nullable|in:Draft,Negotiation,Agreed,Completed,Cancelled',
             'transactionDate' => 'nullable|date',
         ]);
+
+        // A dealer must belong to the acting agency. Dealer ownership is
+        // derived from active memberships (dealers has no agency_id column).
+        if (!empty($data['dealerId']) && $agencyId !== null) {
+            $dealerInAgency = User::where('dealer_id', $data['dealerId'])
+                ->whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
+                ->exists();
+            if (!$dealerInAgency) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'dealerId' => ['Dealer does not belong to the acting agency.'],
+                ]);
+            }
+        }
 
         // Calculate remaining balance and defaults before creating the deal.
         $advance = (int) ($data['advancePaymentPKR'] ?? 0);
@@ -176,13 +196,16 @@ public function store(Request $request)
                         'id' => 'txn-' . Str::uuid(),
                         'dealNumber' => $dealNumber,
                         'agency_id' => $agencyId,
-                        'property_id' => $data['propertyId'] ?? null,
+                        // Actual schema columns are propertyId / dealerId.
+                        // The old property_id / dealer_id keys were silently
+                        // discarded by mass-assignment, losing attribution.
+                        'propertyId' => $data['propertyId'] ?? null,
                         'propertyTitle' => $data['propertyTitle'],
                         'plotNumber' => $data['plotNumber'] ?? null,
                         'sector' => $data['sector'] ?? null,
                         'sellerName' => $data['sellerName'],
                         'buyerName' => $data['buyerName'],
-                        'dealer_id' => $data['dealerId'] ?? null,
+                        'dealerId' => $data['dealerId'] ?? null,
                         'transactionType' => $data['transactionType'] ?? 'Sale',
                         'agreementAmountPKR' => (int) $data['agreementAmountPKR'],
                         'advancePaymentPKR' => $advance,
@@ -248,7 +271,7 @@ public function update(Request $request, string $id)
             'propertyTitle' => 'sometimes|string|max:255',
             'sellerName' => 'sometimes|string|max:255',
             'buyerName' => 'sometimes|string|max:255',
-            'dealerId' => 'nullable|string|max:64',
+            'dealerId' => 'nullable|string|max:64|exists:dealers,id',
             'agreementAmountPKR' => 'sometimes|numeric|min:0|max:999999999999',
             'advancePaymentPKR' => 'nullable|numeric|min:0|max:999999999999',
             'commissionAmountPKR' => 'nullable|numeric|min:0|max:999999999999',
@@ -256,6 +279,19 @@ public function update(Request $request, string $id)
             'status' => 'sometimes|string|max:50',
             'transactionDate' => 'nullable|date',
         ]);
+
+        // Reject a dealer from another agency (dealers has no agency_id, so
+        // derive ownership from active memberships).
+        if (!empty($data['dealerId']) && $agencyId !== null) {
+            $dealerInAgency = User::where('dealer_id', $data['dealerId'])
+                ->whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
+                ->exists();
+            if (!$dealerInAgency) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'dealerId' => ['Dealer does not belong to the acting agency.'],
+                ]);
+            }
+        }
 
         // Handle dealStatus transition with state machine validation
         $newStatus = $data['dealStatus'] ?? $data['status'] ?? null;
@@ -340,6 +376,9 @@ public function update(Request $request, string $id)
     public function void(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
+        // Voiding is irreversible for bookkeeping. It must require an explicit
+        // permission; previously any workspace member could void any deal.
+        $this->requireAny($request, ['void_transactions', 'finance.update_transaction', 'update_transactions']);
 
         $transaction = $this->findScoped($agencyId, $id, $request->user());
 

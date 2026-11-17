@@ -1,0 +1,157 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\AgencySubscription;
+use App\Models\Dealer;
+use App\Models\DealerFile;
+use App\Models\SubscriptionPlan;
+use Illuminate\Support\Str;
+
+/**
+ * Dealer-file legacy endpoints must not bypass permissions, tenancy, quotas
+ * or buyer-data protection just because a token is present.
+ */
+class DealerFilesAuthorizationTest extends EnterpriseTestCase
+{
+    private function makeDealer(string $name): Dealer
+    {
+        return Dealer::create([
+            'id' => 'dlr_' . Str::random(8),
+            'fullName' => $name,
+            'phone' => '0300-0000000',
+        ]);
+    }
+
+    private function dealerUser(array $permissions, Dealer $dealer, $agency = null): array
+    {
+        $user = $this->makeUser('agent', ['dealer_id' => $dealer->id]);
+        $agency = $agency ?? $this->makeAgency('Dealer Files Agency');
+        $this->makeMember($user, $agency, $this->makeRole('agency', 'dealer', $permissions));
+
+        return [$user, $agency];
+    }
+
+    private function uploadPayload(): array
+    {
+        return [
+            'title' => 'Registry File',
+            'type' => 'pdf',
+            'url' => 'https://example.test/file.pdf',
+            'folder' => 'Documents',
+            'file_size_kb' => 100,
+        ];
+    }
+
+    public function test_upload_requires_upload_permission(): void
+    {
+        [$user] = $this->dealerUser(['documents.view'], $this->makeDealer('No Upload'));
+
+        $this->postJson('/api/dealer-files', $this->uploadPayload(), $this->authHeaders($this->tokenFor($user)))
+            ->assertForbidden();
+        $this->assertSame(0, DealerFile::count());
+    }
+
+    public function test_sale_requires_transaction_permission(): void
+    {
+        $dealer = $this->makeDealer('No Sale');
+        [$user] = $this->dealerUser(['documents.view'], $dealer);
+        $file = DealerFile::create([
+            'title' => 'Plot File', 'type' => 'image', 'url' => 'https://example.test/f.jpg',
+            'folder' => 'Properties', 'file_size_kb' => 100,
+            'dealer_id' => $dealer->id, 'uploaded_by' => $dealer->id, 'status' => 'available',
+        ]);
+
+        $this->postJson("/api/dealer-files/{$file->id}/sell", [
+            'selling_price_kbr' => 9000, 'buyer_name' => 'Buyer', 'buyer_phone' => '0300-1',
+        ], $this->authHeaders($this->tokenFor($user)))->assertForbidden();
+
+        $this->assertSame('available', $file->fresh()->status);
+    }
+
+    public function test_account_without_dealer_identity_is_rejected(): void
+    {
+        [$user] = $this->agencyUser(['documents.view', 'documents.upload'], 'manager');
+
+        $this->postJson('/api/dealer-files', $this->uploadPayload(), $this->authHeaders($this->tokenFor($user)))
+            ->assertForbidden();
+    }
+
+    public function test_dealer_from_another_agency_cannot_act_in_this_agency(): void
+    {
+        [, $agencyA] = $this->agencyUser(['documents.view', 'documents.upload'], 'manager');
+        $dealerB = $this->makeDealer('Agency B Dealer');
+        [$userB] = $this->dealerUser(['documents.view', 'documents.upload'], $dealerB);
+
+        // Give user B a valid token for A's agency context while their dealer
+        // belongs elsewhere — the server must reject the mismatched identity.
+        $headers = $this->authHeaders($this->tokenFor($userB));
+        $headers['X-Agency-Id'] = $agencyA->id;
+
+        $this->postJson('/api/dealer-files', $this->uploadPayload(), $headers)->assertForbidden();
+    }
+
+    public function test_sales_report_cannot_read_another_agencys_dealer(): void
+    {
+        $dealerB = $this->makeDealer('Foreign Sales Dealer');
+        [$userB, $agencyB] = $this->dealerUser(['finance.view', 'documents.view'], $dealerB);
+        [$userA] = $this->agencyUser(['finance.view', 'documents.view'], 'manager');
+        $file = DealerFile::create([
+            'title' => 'Sold File', 'type' => 'image', 'url' => 'https://example.test/s.jpg',
+            'folder' => 'Properties', 'file_size_kb' => 100,
+            'dealer_id' => $dealerB->id, 'uploaded_by' => $dealerB->id,
+            'sold_by_dealer_id' => $dealerB->id, 'status' => 'sold', 'profit_kbr' => 1000,
+        ]);
+
+        $this->getJson("/api/dealers/{$dealerB->id}/sales-report", $this->authHeaders($this->tokenFor($userA)))
+            ->assertForbidden();
+        $this->getJson("/api/dealers/{$dealerB->id}/sales-report", $this->authHeaders($this->tokenFor($userB)))
+            ->assertOk();
+    }
+
+    public function test_buyer_pii_is_hidden_without_sensitive_clearance(): void
+    {
+        $dealer = $this->makeDealer('PII Dealer');
+        [$user] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $file = DealerFile::create([
+            'title' => 'PII File', 'type' => 'image', 'url' => 'https://example.test/p.jpg',
+            'folder' => 'Properties', 'file_size_kb' => 100,
+            'dealer_id' => $dealer->id, 'uploaded_by' => $dealer->id, 'status' => 'available',
+        ]);
+
+        $this->postJson("/api/dealer-files/{$file->id}/sell", [
+            'selling_price_kbr' => 9000, 'buyer_name' => 'Secret Buyer', 'buyer_phone' => '0300-9999999',
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $report = $this->getJson("/api/dealers/{$dealer->id}/sales-report", $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()->json('data.files');
+        $this->assertNotEmpty($report);
+        $this->assertArrayNotHasKey('buyer_name', $report[0]);
+        $this->assertArrayNotHasKey('buyer_phone', $report[0]);
+        $this->assertArrayHasKey('profit_kbr', $report[0]);
+    }
+
+    public function test_dealer_file_quota_blocks_uploads_past_the_limit(): void
+    {
+        [$user, $agency] = $this->agencyUser(['documents.view', 'documents.upload'], 'manager');
+        $dealer = $this->makeDealer('Quota Dealer');
+        $dealerUser = $this->makeUser('agent', ['dealer_id' => $dealer->id]);
+        $this->makeMember($dealerUser, $agency, $this->makeRole('agency', 'agent', ['documents.upload']));
+
+        $plan = SubscriptionPlan::create([
+            'key' => 'quota-' . Str::random(6), 'name' => 'Quota', 'description' => 'test',
+            'price' => 1000, 'currency' => 'PKR', 'interval' => 'month',
+            'limits' => ['dealer_files' => 1], 'features' => [],
+            'is_active' => true, 'is_default' => false, 'sort_order' => 1,
+        ]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id, 'plan_id' => $plan->id, 'status' => 'active', 'starts_at' => now(),
+        ]);
+
+        $headers = $this->authHeaders($this->tokenFor($dealerUser));
+        $this->postJson('/api/dealer-files', $this->uploadPayload(), $headers)->assertStatus(201);
+        $this->postJson('/api/dealer-files', $this->uploadPayload(), $headers)
+            ->assertStatus(402)
+            ->assertJsonPath('code', 'plan_limit_reached');
+    }
+}

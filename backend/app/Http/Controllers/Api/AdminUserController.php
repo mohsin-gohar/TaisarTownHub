@@ -128,12 +128,14 @@ class AdminUserController extends Controller
         $user->save();
 
         if (($payload['status'] ?? '') === 'suspended') {
+            \App\Support\MfaVerification::forgetAll((int) $user->id);
             $user->tokens()->delete();
         }
 
         // A platform-side password reset is a security event the account owner
         // must know about (Phase 6 — password change notifications).
         if ($request->filled('password')) {
+            \App\Support\MfaVerification::forgetAll((int) $user->id);
             $user->tokens()->delete();
             $user->notify(new \App\Notifications\PasswordChangedNotification($request->ip(), true));
         }
@@ -177,6 +179,7 @@ class AdminUserController extends Controller
         $this->requirePermission($request, 'admin.manage_users');
 
         $user = User::findOrFail($id);
+        \App\Support\MfaVerification::forgetAll((int) $user->id);
         $count = $user->tokens()->delete();
 
         $this->writeAudit($request, 'user.revoke_tokens', 'user:' . $user->id, "Revoked {$count} token(s): {$user->email}", [

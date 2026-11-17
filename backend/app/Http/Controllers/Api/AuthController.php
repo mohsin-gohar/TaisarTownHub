@@ -11,6 +11,7 @@ use App\Notifications\PasswordChangedNotification;
 use App\Notifications\SuspiciousLoginDetected;
 use App\Notifications\VerifyEmailLink;
 use App\Support\MfaService;
+use App\Support\MfaVerification;
 use App\Support\RolePermissions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -176,7 +177,11 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $token = $request->user()->currentAccessToken();
+        if ($token) {
+            MfaVerification::forgetToken((int) $request->user()->id, (int) $token->id);
+            $token->delete();
+        }
 
         return response()->json([
             'success' => true,
@@ -226,7 +231,9 @@ class AuthController extends Controller
                     'remember_token' => Str::random(60),
                 ])->save();
 
-                // Reset is a global logout: revoke every issued token.
+                // Reset is a global logout: revoke every issued token and
+                // clear every MFA verification stamp.
+                MfaVerification::forgetAll((int) $user->id);
                 $user->tokens()->delete();
 
                 $user->forceFill([
@@ -351,6 +358,7 @@ class AuthController extends Controller
      */
     public function logoutAll(Request $request)
     {
+        MfaVerification::forgetAll((int) $request->user()->id);
         $request->user()->tokens()->delete();
 
         return response()->json([
@@ -489,6 +497,8 @@ class AuthController extends Controller
             'mfa_enabled_at' => null,
             'mfa_recovery_codes' => null,
         ])->save();
+        // Disabling MFA must invalidate every outstanding verification stamp.
+        MfaVerification::forgetAll((int) $user->id);
 
         $this->writeAudit($request, 'auth.mfa_disabled', (string) $user->id, 'Two-factor sign-in removed.', [
             'entity_type' => 'user',
@@ -561,10 +571,16 @@ class AuthController extends Controller
         // The challenge is single-use: it is destroyed as soon as it succeeds.
         Cache::forget($key);
 
-        // Stamp MFA verification for 24h so subsequent requests pass EnsureMfaVerified
-        Cache::put('mfa_verified:' . $user->id, now(), \App\Http\Middleware\EnsureMfaVerified::MFA_VERIFIED_TTL_SECONDS);
+        // A recovery code is a "lost device" signal: revoke every other
+        // verified session before issuing this one.
+        if ($usedRecovery) {
+            MfaVerification::forgetAll((int) $user->id);
+        }
 
-        $token = $user->createToken('auth-token')->plainTextToken;
+        // Create the token first, then stamp verification for THAT token only.
+        $token = $user->createToken('auth-token');
+        MfaVerification::stamp((int) $user->id, (int) $token->accessToken->id);
+        $token = $token->plainTextToken;
         $this->recordLoginAttempt($request, $user, $user->email, true, true, $usedRecovery ? 'recovery_code' : 'totp');
 
         $this->writeAudit($request, 'auth.mfa_verified', (string) $user->id, 'Two-factor sign-in completed.', [

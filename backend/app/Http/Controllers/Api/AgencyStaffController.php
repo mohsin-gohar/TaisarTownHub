@@ -72,6 +72,16 @@ class AgencyStaffController extends Controller
 
         $role = $this->resolveAgencyRole($agencyId, $request->role_id);
 
+        // Only an existing owner may mint another owner invitation. Without
+        // this guard any agency.manage_staff holder could invite themselves
+        // (or an accomplice) into full agency ownership.
+        if ($role->id === 'role_agency_owner' && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only an agency owner may invite another owner.',
+            ], 403);
+        }
+
         if (User::where('email', $request->email)->exists()
             && AgencyMember::where('agency_id', $agencyId)
                 ->whereHas('user', fn ($q) => $q->where('email', $request->email))
@@ -209,22 +219,17 @@ class AgencyStaffController extends Controller
                 ], 422);
             }
 
-            $inviteRole = Role::find($invitation->role_id);
-            $mappedRole = 'operator';
-            if ($inviteRole) {
-                $key = $inviteRole->key ?? '';
-                $mappedRole = match (true) {
-                    str_contains($key, 'owner') => 'admin',
-                    str_contains($key, 'manager') => 'manager',
-                    str_contains($key, 'agent') || str_contains($key, 'dealer') => 'dealer',
-                    default => 'operator',
-                };
-            }
+            // SECURITY: agency roles live ONLY in agency_members.role_id.
+            // users.role is the legacy *platform* role key. Mapping an agency
+            // owner invitation to 'admin' here made every invitee a platform
+            // administrator (isPlatformUser() grants admin.manage_agencies).
+            // Use the same non-platform base role as agency self-registration
+            // (AgencyController::register) for every invited account.
             $user = User::create([
                 'name' => $request->name,
                 'email' => $invitation->email,
                 'password' => Hash::make($request->password),
-                'role' => $mappedRole,
+                'role' => 'dealer',
                 'last_login_at' => now(),
             ]);
         } elseif (strtolower($user->email) !== strtolower($invitation->email)) {
@@ -234,19 +239,37 @@ class AgencyStaffController extends Controller
             ], 403);
         }
 
-        $membership = DB::transaction(function () use ($invitation, $user) {
-            $membership = AgencyMember::updateOrCreate(
-                ['agency_id' => $invitation->agency_id, 'user_id' => $user->id],
-                [
-                    'role_id' => $invitation->role_id,
-                    'status' => 'active',
-                    'deactivated_at' => null,
-                    'invited_by' => $invitation->invited_by,
-                ]
-            );
-            $invitation->update(['status' => 'accepted', 'accepted_at' => now()]);
-            return $membership;
-        });
+        try {
+            $membership = DB::transaction(function () use ($invitation, $user) {
+                // Re-read and claim the row INSIDE the transaction. The initial
+                // lookup above is inherently race-prone: two concurrent calls
+                // could otherwise both mint a token from one invitation.
+                $claim = AgencyInvitation::where('id', $invitation->id)
+                    ->where('status', 'pending')
+                    ->lockForUpdate()
+                    ->first();
+                if (!$claim) {
+                    throw new \RuntimeException('invitation_already_claimed');
+                }
+
+                $membership = AgencyMember::updateOrCreate(
+                    ['agency_id' => $claim->agency_id, 'user_id' => $user->id],
+                    [
+                        'role_id' => $claim->role_id,
+                        'status' => 'active',
+                        'deactivated_at' => null,
+                        'invited_by' => $claim->invited_by,
+                    ]
+                );
+                $claim->update(['status' => 'accepted', 'accepted_at' => now()]);
+                return $membership;
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or already used invitation token.',
+            ], 422);
+        }
 
         $token = $user->createToken('auth-token')->plainTextToken;
 
@@ -271,7 +294,7 @@ class AgencyStaffController extends Controller
                 'permissions' => \App\Support\RolePermissions::forRole($fresh->role),
                 'enterprise_permissions' => $fresh->permissionsFor($invitation->agency_id),
                 'agencies' => $fresh->memberAgencies(),
-                'is_platform' => false,
+                'is_platform' => $fresh->isPlatformUser(),
             ],
         ]);
     }
@@ -299,11 +322,7 @@ class AgencyStaffController extends Controller
             $role = $this->resolveAgencyRole($agencyId, $request->role_id);
             // Privilege escalation guard: only an existing owner may promote to
             // or demote from the owner role.
-            $requesterIsOwner = AgencyMember::where('agency_id', $agencyId)
-                ->where('user_id', $request->user()->id)
-                ->where('role_id', 'role_agency_owner')
-                ->where('status', 'active')
-                ->exists();
+            $requesterIsOwner = $this->requesterIsOwner($agencyId, $request->user()->id);
             if (($role->id === 'role_agency_owner' || $member->role_id === 'role_agency_owner')
                 && !$requesterIsOwner) {
                 return response()->json([
@@ -568,6 +587,16 @@ class AgencyStaffController extends Controller
             ->where('role_id', 'role_agency_owner')
             ->where('status', 'active')
             ->count();
+    }
+
+    /** True only for an active, agency-scoped owner membership (never a global role). */
+    private function requesterIsOwner(string $agencyId, int $userId): bool
+    {
+        return AgencyMember::where('agency_id', $agencyId)
+            ->where('user_id', $userId)
+            ->where('role_id', 'role_agency_owner')
+            ->where('status', 'active')
+            ->exists();
     }
 }
 

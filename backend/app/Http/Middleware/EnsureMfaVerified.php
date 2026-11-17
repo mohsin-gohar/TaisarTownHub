@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\User;
 use App\Models\SystemSetting;
+use App\Support\MfaVerification;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -44,8 +45,18 @@ class EnsureMfaVerified
             return $next($request);
         }
 
-        $cacheKey = 'mfa_verified:' . $user->id;
-        if (Cache::has($cacheKey)) {
+        // Verification is bound to the exact token used for this request.
+        // A user-wide stamp let any other token (e.g. one issued before MFA
+        // enrolment or via invitation acceptance) bypass the second factor.
+        $token = $request->user()->currentAccessToken();
+        if (!$token) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Multi-factor authentication is required.',
+                'mfa_required' => true,
+            ], 403);
+        }
+        if (MfaVerification::isVerified((int) $user->id, (int) $token->id)) {
             return $next($request);
         }
 
