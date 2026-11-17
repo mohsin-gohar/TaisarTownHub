@@ -26,8 +26,8 @@
 ## 2. Real MySQL verification
 
 - Full backend suite ran on a disposable **MySQL 8.4.9** instance (`migrate:fresh` including new migration `2026_11_17_000001_add_vault_scan_lifecycle` → `260 passed / 2,095 assertions`, 133.46s).
-- SQLite suite: `260 passed / 2,095 assertions` (31.91s).
-- CI additionally runs the suite on MySQL 8 (integration job with driver guard — no silent SQLite fallback; `backend/scripts/assert-db-driver.php`).
+- SQLite suite: `261 passed / 2,104 assertions` (38.22s, incl. the path-traversal invariance test).
+- **CI (run [`44099075001`](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/44099075001), commit `a53f95e`, conclusion: success):** the dedicated **Backend suite on MySQL 8 (integration)** job ran the final 261-test suite against a MySQL 8 service container — `Wait for MySQL` ✅, `Confirm MySQL driver (no SQLite fallback)` ✅ (`backend/scripts/assert-db-driver.php`), full suite ✅.
 - Note: the quota/concurrency-relevant SQL (`withTrashed()` sums, `lockForUpdate` share counters) runs against MySQL in CI, so the quota accounting claims are engine-verified, not SQLite-only.
 
 ## 3. Vulnerabilities found and fixed (summary)

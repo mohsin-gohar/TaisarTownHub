@@ -29,7 +29,7 @@ The codebase already had a serious vault foundation — this audit confirms it, 
 
 ## 2. Verified vulnerabilities (all fixed in `8c56b76`)
 
-Each finding was reproduced and pinned by a regression test before the fix landed. Full suites: **260 passed / 2,095 assertions on SQLite AND MySQL 8.4.9** (baseline was 243 / 1,974).
+Each finding was reproduced and pinned by a regression test before the fix landed. Full suites: **261 passed / 2,104 assertions on SQLite** (final, incl. the path-traversal invariance test); MySQL 8 verified locally on 8.4.9 (260 / 2,095 at the 17-test stage) and in CI on the final commit — **Backend suite on MySQL 8 (integration) job green, run `44099075001`** (baseline was 243 / 1,974).
 
 ### V-1 — Magic-byte check inspected the wrong bytes (HIGH) — FIXED
 `DocumentController::magicBytesMatch()` read `file_get_contents($path, false, null, 32)` — PHP's 4th argument is the **offset**, so the first 32 bytes were never examined. A `<?php` script, `MZ` Windows PE or ELF binary wearing an allowed extension (`.pdf`, `.jpg`) passed the "magic bytes" gate.
@@ -120,4 +120,4 @@ Existing suites continue to pin tenancy: `StorageSecurityTest` (rival agency →
 - `FILE_STORAGE_THREAT_MODEL.md` — STRIDE-style threat model
 - `FILE_STORAGE_DEPLOYMENT_GUIDE.md` — ops runbook (ClamAV, keys, backups, retention)
 - `docs/openapi.yaml` — new endpoints documented (`documents-quarantine`, `rescan`, `storage-usage`, 423 semantics)
-- `backend/tests/Feature/FileVaultSecurityTest.php` — 17 regression tests (121 assertions)
+- `backend/tests/Feature/FileVaultSecurityTest.php` — 18 regression tests (130 assertions)

@@ -115,10 +115,18 @@ AES-256-GCM at-rest encryption (`FileVaultCrypto`, transparent legacy reads,
 `vault:encrypt` backfill/rotation tool); quarantine disk + visibility/rescan/purge endpoints;
 20/min upload throttles; header-injection-safe filenames.
 
-**Test evidence:** backend **260 passed / 2,095 assertions** on SQLite (31.9s) **and**
-MySQL 8.4.9 (133.5s, `migrate:fresh` incl. new vault migration); frontend verify chain green
-(133 tests / 9 suites, prerender, sitemap, bundle guard); OpenAPI spec updated + parses.
-Frontend gains quarantine panel with rescan in `AdminDocumentVault.tsx`.
+**Test evidence (final, commit `a53f95e`):** backend **261 passed / 2,104 assertions** on
+SQLite (38.2s) locally; on MySQL 8.4.9 locally **260 passed / 2,095 assertions** at the
+17-test stage with the full vault migration; the final 261-test suite was verified against
+MySQL 8 by the dedicated CI integration job. Frontend verify chain green (133 tests /
+9 suites, prerender, sitemap, bundle guard); OpenAPI spec updated + parses. Frontend gains
+quarantine panel with rescan in `AdminDocumentVault.tsx`.
+
+**CI evidence (real GitHub runs, verified):** run [`44098677166`](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/44098677166)
+(commit `64e4372`) — conclusion **success**; run [`44099075001`](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/44099075001)
+(commit `a53f95e`, final) — conclusion **success**, all four jobs green: Backend suite (PHP
+8.3), Frontend verify (Node 22), OpenAPI spec parses, and **Backend suite on MySQL 8
+(integration)** with the `Confirm MySQL driver (no SQLite fallback)` guard step passing.
 
 **Blocked (infrastructure, unchanged from §8):** real ClamAV daemon exercise (EICAR +
 clean-file acceptance), real backup restore drill (RPO/RTO documented, not measured),
