@@ -99,7 +99,33 @@ Two independent defects, both reproduced on a fresh `git clone` + `npm ci`:
 CI also pins `node-version: '22'` (Vite 8 / rolldown 1.2 require `^20.19 || >=22.12`) and the
 job was renamed `Frontend verify (Node 22)`.
 
-## 10. Verdict
+## 11. Enterprise Secure Document & Media Vault (2026-11-17, commit `8c56b76`)
+
+Full audit → fix → build cycle, documented in `SECURE_FILE_VAULT_AUDIT.md`,
+`SECURE_FILE_VAULT_ARCHITECTURE.md`, `FILE_STORAGE_SECURITY_REPORT.md`,
+`FILE_STORAGE_THREAT_MODEL.md`, `FILE_STORAGE_DEPLOYMENT_GUIDE.md`.
+
+**Verified vulnerabilities fixed (each with a regression test):** magic bytes read from
+offset 0 (was 32); version uploads run the full content pipeline; media uploads MIME-sniffed
++ magic-byte + malware-scanned with server-sniffed Content-Type; storage quota covers trash +
+versions + media (SubscriptionController mirrored); HTTPS-public-only external URLs enforced
+at registration and delivery; denied download attempts audited; scan lifecycle gates
+(fail-open holds → 423 download / 422 share until rescan; infected → quarantine disk);
+AES-256-GCM at-rest encryption (`FileVaultCrypto`, transparent legacy reads,
+`vault:encrypt` backfill/rotation tool); quarantine disk + visibility/rescan/purge endpoints;
+20/min upload throttles; header-injection-safe filenames.
+
+**Test evidence:** backend **260 passed / 2,095 assertions** on SQLite (31.9s) **and**
+MySQL 8.4.9 (133.5s, `migrate:fresh` incl. new vault migration); frontend verify chain green
+(133 tests / 9 suites, prerender, sitemap, bundle guard); OpenAPI spec updated + parses.
+Frontend gains quarantine panel with rescan in `AdminDocumentVault.tsx`.
+
+**Blocked (infrastructure, unchanged from §8):** real ClamAV daemon exercise (EICAR +
+clean-file acceptance), real backup restore drill (RPO/RTO documented, not measured),
+KMS integration, Docker compose orchestration. Fail-closed defaults keep the system safe
+without them.
+
+## 12. Verdict
 
 **Not 100% complete.** All confirmed Critical/High code defects were fixed and covered by
 passing regression tests; both CI failure root causes were reproduced locally and repaired.
