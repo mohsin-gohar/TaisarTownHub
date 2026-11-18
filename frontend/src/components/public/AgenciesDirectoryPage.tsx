@@ -103,7 +103,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
               Find Trusted Real Estate Agencies
             </h1>
             <p className="text-slate-400 text-sm sm:text-base">
-              Browse verified agencies, explore their public listings, and connect with the right team for buying, selling, or renting in Taisar Town.
+              Browse verified agencies, explore their public sale listings, and connect with the right team for Taisar Town.
             </p>
           </div>
           <button

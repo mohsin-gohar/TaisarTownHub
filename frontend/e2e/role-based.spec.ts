@@ -98,15 +98,11 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
       await page.goto('/');
       await expect(page.locator('main')).toBeVisible();
 
-      await page.getByRole('link', { name: /^projects$/i }).first().click();
-      await expect(page).toHaveURL(/\/projects/, { timeout: 10000 });
-      await expect(page.locator('main')).toBeVisible();
-
-      await page.getByRole('link', { name: /^properties$/i }).first().click();
+      await page.getByRole('button', { name: /^properties$/i }).first().click();
       await expect(page).toHaveURL(/\/properties/, { timeout: 10000 });
       await expect(page.locator('main')).toBeVisible();
 
-      await page.getByRole('link', { name: /^agencies$/i }).first().click();
+      await page.getByRole('button', { name: /^agencies$/i }).first().click();
       await expect(page).toHaveURL(/\/agencies/, { timeout: 10000 });
       await expect(page.locator('main')).toBeVisible();
     });

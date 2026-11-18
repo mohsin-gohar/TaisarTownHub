@@ -55,9 +55,10 @@ test.describe('Property Listings', () => {
     await expect(page.locator('main')).toBeVisible();
   });
 
-  test('Projects page shows project cards', async ({ page }) => {
+  test('Legacy Projects route opens sale listings', async ({ page }) => {
     await page.goto('/projects');
-    await expect(page.locator('main')).toBeVisible();
+    await expect(page).toHaveURL(/\/properties\?purpose=sale/);
+    await expect(page.locator('main')).toContainText(/properties|sale/i);
   });
 });
 

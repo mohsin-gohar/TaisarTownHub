@@ -38,8 +38,8 @@ export const NotFoundPage: React.FC = () => {
           This page has moved off the map.
         </h1>
         <p className="mt-4 text-sm sm:text-base text-slate-400 leading-relaxed max-w-xl mx-auto">
-          The address you followed doesn&apos;t exist or may have been retired. Every live listing,
-          project and advisory service is still one click away.
+          The address you followed doesn&apos;t exist or may have been retired. Live listings,
+          agency profiles and advisory services are still one click away.
         </p>
 
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">

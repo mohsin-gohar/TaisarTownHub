@@ -14,7 +14,7 @@ class HealthController
 {
     public function index(): JsonResponse
     {
-        $database = 'MySQL connected';
+        $database = ucfirst(DB::connection()->getDriverName()) . ' connected';
         $status = 'healthy';
         $httpStatus = 200;
 

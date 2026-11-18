@@ -12,14 +12,14 @@ test.describe('Public Pages', () => {
     await expect(page).toHaveTitle(/Taiser Town|TaisarTownHub/i);
     await expect(page.locator('main')).toBeVisible();
     await expect(page.locator('h1, h2').first()).toBeVisible();
-    await expect(page.locator('header')).toBeVisible();
+    await expect(page.locator('nav')).toBeVisible();
     await expect(page.locator('footer')).toBeVisible();
   });
 
-  test('Projects page loads', async ({ page }) => {
+  test('Legacy Projects route redirects to sale listings', async ({ page }) => {
     await page.goto('/projects');
-    await expect(page.locator('main')).toBeVisible();
-    await expect(page.locator('text=/Projects/i').first()).toBeVisible();
+    await expect(page).toHaveURL(/\/properties\?purpose=sale/);
+    await expect(page.locator('main')).toContainText(/properties|sale/i);
   });
 
   test('Properties page loads', async ({ page }) => {
@@ -43,7 +43,7 @@ test.describe('Public Pages', () => {
   test('Gallery page loads', async ({ page }) => {
     await page.goto('/gallery');
     await expect(page.locator('main')).toBeVisible();
-    await expect(page.locator('text=/Gallery/i').first()).toBeVisible();
+    await expect(page.locator('text=/Video Tours|Walkthroughs/i').first()).toBeVisible();
   });
 
   test('Services page loads', async ({ page }) => {
@@ -83,15 +83,11 @@ test.describe('Public Pages', () => {
 
   test('Navbar links navigate between pages', async ({ page }) => {
     await page.goto('/');
-    await page.locator('nav a:has-text("Projects"), nav [role="menuitem"]:has-text("Projects")').first().click();
-    await page.waitForURL('**/projects', { timeout: 10000 });
-    await expect(page.locator('main')).toBeVisible();
-
-    await page.locator('nav a:has-text("Properties"), nav [role="menuitem"]:has-text("Properties")').first().click();
+    await page.locator('nav button:has-text("Properties")').first().click();
     await page.waitForURL('**/properties', { timeout: 10000 });
     await expect(page.locator('main')).toBeVisible();
 
-    await page.locator('nav a:has-text("Agencies"), nav [role="menuitem"]:has-text("Agencies")').first().click();
+    await page.locator('nav button:has-text("Agencies")').first().click();
     await page.waitForURL('**/agencies', { timeout: 10000 });
     await expect(page.locator('main')).toBeVisible();
   });

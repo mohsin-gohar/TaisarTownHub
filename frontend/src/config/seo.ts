@@ -46,7 +46,7 @@ export const BUSINESS = {
   name: 'TaisarTownHub',
   alternateName: 'Taisar Town Hub',
   description:
-    'Independent real estate brokerage and property registry for Taiser Town (MDA Scheme 45), Karachi — verified plots, villas, commercial files and transparent transfer support.',
+    'Agency-first property marketplace for residential plots, homes and commercial properties for sale in Taiser Town (MDA Scheme 45), Karachi.',
   telephone: '+923218292831',
   telephoneDisplay: '+92 321 8292831',
   email: 'contact@taisartownhub.com',
@@ -87,10 +87,10 @@ export const SEO_ROUTES: RouteSeo[] = [
   {
     view: 'home',
     path: '/',
-    title: 'Taiser Town Scheme 45 Plots & Properties | TaisarTownHub',
+    title: 'Taiser Town Scheme 45 Properties for Sale | TaisarTownHub',
     description:
-      'Buy verified plots, villas and commercial files in Taiser Town (MDA Scheme 45), Karachi with transparent file verification, transfer support and site visits.',
-    keywords: 'Taiser Town Scheme 45, Karachi plots, MDA Scheme 45, verified plots Karachi, property registry',
+      'Browse agency-listed residential plots, homes and commercial properties for sale in Taiser Town Scheme 45, Karachi.',
+    keywords: 'Taiser Town Scheme 45, Karachi property for sale, MDA Scheme 45, plots for sale Karachi, real estate agencies',
     indexable: true,
     inSitemap: true,
     changefreq: 'weekly',

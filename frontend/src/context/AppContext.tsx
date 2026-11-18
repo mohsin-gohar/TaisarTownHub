@@ -272,6 +272,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const path = window.location.pathname;
     if (path === '/admin-login') return 'admin-login';
     if (path.startsWith('/admin')) return 'admin';
+    if (path === '/projects' || path === '/project-detail') return 'properties';
+    if (path.startsWith('/agencies/') && path !== '/agencies/') return 'agency-profile';
     return VIEW_MAP[path] || 'home';
   });
   const [selectedProjectId, setSelectedProjectIdState] = useState<string | null>(() => {

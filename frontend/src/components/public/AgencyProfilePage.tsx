@@ -238,14 +238,13 @@ export const AgencyProfilePage: React.FC<{ slug: string }> = ({ slug }) => {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [selected, setSelected] = useState<Listing | null>(null);
-  const [purpose, setPurpose] = useState<'all' | 'sale' | 'rent'>('all');
 
   useEffect(() => {
     let active = true;
     (async () => {
       setLoading(true);
       setNotFound(false);
-      const body = await api.getPublicAgency(slug, { per_page: 50, ...(purpose !== 'all' ? { purpose } : {}) });
+      const body = await api.getPublicAgency(slug, { per_page: 50, purpose: 'sale' });
       if (!active) return;
       setLoading(false);
       if (!body || body.success === false || !body.agency) {
@@ -256,13 +255,12 @@ export const AgencyProfilePage: React.FC<{ slug: string }> = ({ slug }) => {
       setAgency(body.agency as AgencyProfile);
     })();
     return () => { active = false; };
-  }, [slug, purpose]);
+  }, [slug]);
 
   const listings: Listing[] = useMemo(() => {
     const raw = agency?.listings;
-    if (Array.isArray(raw)) return raw;
-    if (raw && Array.isArray(raw.data)) return raw.data;
-    return [];
+    const rows = Array.isArray(raw) ? raw : raw && Array.isArray(raw.data) ? raw.data : [];
+    return rows.filter((listing) => !listing.listing_purpose || listing.listing_purpose === 'sale');
   }, [agency]);
 
   const scrollToContact = (listing?: Listing) => {
@@ -351,9 +349,7 @@ export const AgencyProfilePage: React.FC<{ slug: string }> = ({ slug }) => {
 
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Public listings', value: stats.public_listings ?? 0 },
             { label: 'For sale', value: stats.sale_listings ?? 0 },
-            { label: 'For rent', value: stats.rent_listings ?? 0 },
             { label: 'Team members', value: stats.team_members ?? 0 },
           ].map((item) => (
             <div key={item.label} className="rounded-xl border border-slate-800 bg-[#101C2C] p-4 text-center">
@@ -370,13 +366,7 @@ export const AgencyProfilePage: React.FC<{ slug: string }> = ({ slug }) => {
                 <h2 className="font-serif-luxury text-2xl font-bold text-white">Properties by {agency.name}</h2>
                 <p className="text-sm text-slate-400">Only approved, publicly visible listings are shown here.</p>
               </div>
-              <div className="flex items-center gap-1 bg-[#101C2C] border border-slate-800 rounded-xl p-1">
-                {(['all', 'sale', 'rent'] as const).map((p) => (
-                  <button key={p} onClick={() => setPurpose(p)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${purpose === p ? 'bg-[#C5A46D] text-[#101C2C]' : 'text-slate-300 hover:text-white'}`}>
-                    {p === 'all' ? 'All' : p === 'sale' ? 'For sale' : 'For rent'}
-                  </button>
-                ))}
-              </div>
+              <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#C5A46D]/10 text-[#C5A46D] border border-[#C5A46D]/30">Properties for sale</span>
             </div>
 
             {listings.length === 0 ? (

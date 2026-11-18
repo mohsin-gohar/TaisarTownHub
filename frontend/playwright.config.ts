@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000';
+const basePort = new URL(baseURL).port || (baseURL.startsWith('https:') ? '443' : '80');
+
 /**
  * G-13 — E2E smoke configuration.
  *
@@ -14,7 +17,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL,
     trace: 'retain-on-failure',
   },
   projects: [
@@ -24,8 +27,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
-    url: 'http://127.0.0.1:3000',
+    command: `npm run dev -- --port ${basePort}`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

@@ -18,13 +18,14 @@ import { Scheme45Guide } from './components/public/Scheme45Guide';
 import { ServicesSection } from './components/public/ServicesSection';
 import { MediaGallerySection } from './components/public/MediaGallerySection';
 import { AboutSection } from './components/public/AboutSection';
-import { TestimonialsSection } from './components/public/TestimonialsSection';
+
 import { ContactSection } from './components/public/ContactSection';
 import { AgencyProfilePage } from './components/public/AgencyProfilePage';
-import { Building2, ArrowRight, ShieldCheck, MapPin, Ruler, Users, Phone, Mail, Video, Quote } from 'lucide-react';
+import { Building2, ArrowRight, ShieldCheck, MapPin, Ruler, Users, Phone, Mail, Video, Home } from 'lucide-react';
 import { AgencyAccessPage } from './components/public/AgencyAccessPage';
 import { AuthPage } from './components/public/AuthPage';
 import { NotFoundPage } from './components/public/NotFoundPage';
+import { api } from './services/api';
 
 // Code-split sub-pages & modals
 const PropertyDetailPage = lazy(() => import('./components/public/PropertyDetailPage').then((m) => ({ default: m.PropertyDetailPage })));
@@ -34,6 +35,24 @@ const AgenciesDirectoryPage = lazy(() => import('./components/public/AgenciesDir
 // Admin views
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
 const AdminLoginModal = lazy(() => import('./components/admin/AdminLoginModal').then((m) => ({ default: m.AdminLoginModal })));
+
+const WHY_CHOOSE_ITEMS = [
+  { icon: Building2, title: 'Agency-first discovery', description: 'Browse agency profiles and connect directly with teams working in Taiser Town.' },
+  { icon: MapPin, title: 'Taiser Town focus', description: 'Explore property information scoped to Taiser Town Scheme 45, Karachi.' },
+  { icon: Home, title: 'Properties for sale', description: 'The public marketplace is focused on homes, plots and commercial properties for sale.' },
+  { icon: ShieldCheck, title: 'Approval before publication', description: 'Listings must pass the platform approval workflow before public display.' },
+  { icon: Ruler, title: 'Clear listing details', description: 'Compare location, property type, size and asking price before contacting an agency.' },
+  { icon: Phone, title: 'Direct agency contact', description: 'Reach the listing agency to ask questions or arrange a site visit.' },
+];
+
+interface FeaturedAgency {
+  id: string;
+  name: string;
+  slug?: string;
+  logo_url?: string | null;
+  description?: string | null;
+  sale_listing_count?: number;
+}
 
 // SEO utilities from the single source of truth
 import {
@@ -133,8 +152,8 @@ const redirectLegacyProjectPaths = (pathname: string): string | null => {
 
 /** Determines the effective view considering legacy project path redirects. */
 const getEffectiveView = (resolvedView: string, pathname: string): string => {
-  // If the URL looks like a legacy project path, treat it as properties
-  if (isProjectsLikePath(pathname)) return 'properties';
+  // Legacy project state can survive the URL redirect during the same SPA session.
+  if (isProjectsLikePath(pathname) || resolvedView === 'projects' || resolvedView === 'project-detail') return 'properties';
   return resolvedView;
 };
 
@@ -199,14 +218,36 @@ const MainAppContent: React.FC = () => {
     isAdminAuthenticated,
     isSessionLoading,
     currentUser,
+    cmsConfig,
     properties,
     selectedPropertyId,
     selectedProjectId,
   } = useApp();
 
   // Resolve view considering legacy project path redirects
-  const resolvedView = getEffectiveView(currentView, window.location.pathname);
+  const isNotFoundRoute = !isKnownPath(window.location.pathname) && !isProjectsLikePath(window.location.pathname);
+  const resolvedView = isNotFoundRoute ? 'not-found' : getEffectiveView(currentView, window.location.pathname);
   const [pathTick, setPathTick] = useState(0);
+  const [activeFilterCriteria, setActiveFilterCriteria] = useState<Parameters<React.ComponentProps<typeof HeroSection>['onSearch']>[0]>({});
+  const [featuredAgencies, setFeaturedAgencies] = useState<FeaturedAgency[]>([]);
+  const [featuredAgenciesLoading, setFeaturedAgenciesLoading] = useState(true);
+  const [featuredAgenciesError, setFeaturedAgenciesError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void api.getPublicAgencies({ sort: 'listings', page: 1, per_page: 3 }).then((body) => {
+      if (!active) return;
+      const agencies = Array.isArray(body?.agencies?.data)
+        ? body.agencies.data
+        : Array.isArray(body?.agencies)
+          ? body.agencies
+          : [];
+      setFeaturedAgencies(agencies.slice(0, 3));
+      setFeaturedAgenciesError(!body || body.success === false);
+      setFeaturedAgenciesLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
 
   // Legacy project URLs must end up on the sale-only properties route so the
   // address bar matches the rendered content (avoids duplicate URLs in SEO).
@@ -214,6 +255,7 @@ const MainAppContent: React.FC = () => {
     const target = redirectLegacyProjectPaths(window.location.pathname);
     if (target !== null) {
       window.history.replaceState({}, '', target);
+      window.dispatchEvent(new PopStateEvent('popstate'));
       setPathTick((tick) => tick + 1);
     }
   }, []);
@@ -247,7 +289,7 @@ const MainAppContent: React.FC = () => {
   }, []);
 
   // SEO: keeps the crawlable <head> in sync with the active route
-  useEffect(() => applySeo(resolvedView, false, pathTick, properties, selectedPropertyId), [resolvedView, pathTick, properties, selectedPropertyId]);
+  useEffect(() => applySeo(resolvedView, isNotFoundRoute, pathTick, properties, selectedPropertyId), [resolvedView, isNotFoundRoute, pathTick, properties, selectedPropertyId]);
 
   // Admin view
   if (resolvedView === 'admin') {
@@ -302,34 +344,70 @@ const MainAppContent: React.FC = () => {
           <Navbar />
 
           <main id="main-content" className="flex-1 page-surface">
-            {false && (
+            {isNotFoundRoute ? (
               <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-slate-400">Loading content...</div>}>
                 <NotFoundPage />
               </Suspense>
-            )}
+            ) : resolvedView !== 'home' ? (
+              <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-slate-400">Loading content...</div>}>
+                {resolvedView === 'properties' && <PropertiesListingPage initialFilter={activeFilterCriteria} />}
+                {resolvedView === 'property-detail' && <PropertyDetailPage />}
+                {resolvedView === 'agencies' && <AgenciesDirectoryPage />}
+                {resolvedView === 'agency-profile' && (
+                  <AgencyProfilePage slug={decodeURIComponent(window.location.pathname.replace(/^\/agencies\//, '').replace(/\/+$/, ''))} />
+                )}
+                {resolvedView === 'guide' && <Scheme45Guide />}
+                {resolvedView === 'gallery' && <MediaGallerySection />}
+                {resolvedView === 'services' && <ServicesSection />}
+                {resolvedView === 'about' && <AboutSection />}
+                {resolvedView === 'contact' && <ContactSection />}
+                {resolvedView === 'login' && <AuthPage initialTab="signin" />}
+                {resolvedView === 'register' && <AuthPage initialTab="register" />}
+              </Suspense>
+            ) : null}
 
+            {resolvedView === 'home' && <>
             {/* SECTION 1 — Premium Navbar (included via Navbar component) */}
             {/* Already rendered by Navbar above */}
 
             {/* SECTION 2 — Hero Section */}
-            <HeroSection onSearch={ (criteria: any) => { /* handled internally */ } } />
+            <HeroSection onSearch={setActiveFilterCriteria} />
 
             {/* SECTION 3 — Featured Verified Agencies */}
             <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220]">
               <div className="max-w-7xl mx-auto">
                 <h2 className="font-serif-luxury text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
-                  Featured Verified Agencies
+                  Featured Agencies
                 </h2>
                 <p className="text-slate-400 text-lg sm:text-base mb-8 max-w-2xl">
-                  Agencies trusted by TaisarTownHub with approved Taisar Town sale listings.
+                  Public agencies with Taiser Town properties for sale.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[/* Agencies rendered from API when navigating to /agencies */]}
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-8 text-center">
-                    <Building2 className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                    <h3 className="text-white font-semibold">Agencies loading...</h3>
-                    <p className="text-slate-400">Agency cards will appear from the verified agency directory.</p>
-                  </div>
+                  {featuredAgenciesLoading ? (
+                    <p role="status" className="text-slate-400">Loading agencies…</p>
+                  ) : featuredAgencies.length > 0 ? featuredAgencies.map((agency) => (
+                    <a
+                      key={agency.id}
+                      href={`/agencies/${encodeURIComponent(agency.slug || agency.id)}`}
+                      className="flex items-start gap-4 rounded-lg border border-slate-800 bg-[#101C2C] p-5 hover:border-[#C5A46D]/50 transition-colors"
+                    >
+                      {agency.logo_url ? (
+                        <img src={agency.logo_url} alt="" loading="lazy" className="w-12 h-12 rounded-lg object-cover bg-[#0B1220]" />
+                      ) : (
+                        <Building2 aria-hidden="true" className="w-12 h-12 p-3 rounded-lg bg-[#0B1220] text-[#C5A46D]" />
+                      )}
+                      <span className="min-w-0">
+                        <span className="block text-white font-semibold">{agency.name}</span>
+                        <span className="block mt-1 text-slate-400 text-sm line-clamp-2">{agency.description || 'View agency profile and sale listings.'}</span>
+                        {typeof agency.sale_listing_count === 'number' && <span className="block mt-2 text-xs text-[#C5A46D]">{agency.sale_listing_count} sale listings</span>}
+                      </span>
+                    </a>
+                  )) : (
+                    <div className="sm:col-span-2 lg:col-span-3 py-8 text-center">
+                      <p className="text-slate-300 font-semibold">{featuredAgenciesError ? 'Agency directory is unavailable right now.' : 'No public agencies are available yet.'}</p>
+                      <button onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="mt-3 text-sm text-[#C5A46D] hover:text-[#F9E7BA]">Browse the agency directory</button>
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
@@ -370,14 +448,6 @@ const MainAppContent: React.FC = () => {
                     <div className="text-white font-serif-luxury text-xl font-bold">Properties for sale</div>
                     <div className="text-slate-400 text-sm mt-1">Browse approved listings from verified agencies.</div>
                   </button>
-                  <button
-                    onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="rounded-2xl border border-slate-800 bg-[#101C2C] p-5 text-left hover:border-[#C5A46D]/50 transition"
-                  >
-                    <div className="text-[#C5A46D] font-semibold text-sm mb-1">Agencies</div>
-                    <div className="text-white font-serif-luxury text-xl font-bold">Agency directory</div>
-                    <div className="text-slate-400 text-sm mt-1">View profiles, stock, and contact details.</div>
-                  </button>
                 </div>
               </div>
             </section>
@@ -385,66 +455,18 @@ const MainAppContent: React.FC = () => {
             {/* SECTION 5 — Why Choose TaisarTownHub */}
             <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220]">
               <div className="max-w-7xl mx-auto text-center">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-bg-[#C5A46D]/15 border border-[#C5A46D]/30 flex items-center justify-center flex-shrink-0">
-                        <ShieldCheck className="w-4 h-4 text-[#C5A46D]" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {WHY_CHOOSE_ITEMS.map(({ icon: Icon, title, description }) => (
+                    <div key={title} className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-[#C5A46D]/10 border border-[#C5A46D]/30 flex items-center justify-center flex-shrink-0">
+                        <Icon className="w-4 h-4 text-[#C5A46D]" />
                       </div>
                       <div>
-                        <h4 className="font-serif-luxury text-xl font-bold text-white">Verified Agencies</h4>
-                        <p className="text-slate-400 text-sm">Every agency on TaisarTownHub undergoes rigorous verification for trust and credibility.</p>
+                        <h3 className="font-serif-luxury text-lg font-bold text-white">{title}</h3>
+                        <p className="text-slate-400 text-sm">{description}</p>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-bg-[#C5A46D]/15 border border-[#C5A46D]/30 flex items-center justify-center flex-shrink-0">
-                        <MapPin className="w-4 h-4 text-[#C5A46D]" />
-                      </div>
-                      <div>
-                        <h4 className="font-serif-luxury text-xl font-bold text-white">Taisar Town Specialization</h4>
-                        <p className="text-slate-400 text-sm">Exclusive focus on Taiser Town Scheme 45 — no distractions from other cities or rental markets.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-bg-[#C5A46D]/15 border border-[#C5A46D]/30 flex items-center justify-center flex-shrink-0">
-                        <ShieldCheck className="w-4 h-4 text-[#C5A46D]" />
-                      </div>
-                      <div>
-                        <h4 className="font-serif-luxury text-xl font-bold text-white">Secure Document Management</h4>
-                        <p className="text-slate-400 text-sm">Agencies privately organize owner documents, images, videos and legal files outside public view.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-bg-[#C5A46D]/15 border border-[#C5A46D]/30 flex items-center justify-center flex-shrink-0">
-                        <Ruler className="w-4 h-4 text-[#C5A46D]" />
-                      </div>
-                      <div>
-                        <h4 className="font-serif-luxury text-xl font-bold text-white">Transparent Property Information</h4>
-                        <p className="text-slate-400 text-sm">Only approved, publicly visible listings with full details — no hidden or pending properties.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-bg-[#C5A46D]/15 border border-[#C5A46D]/30 flex items-center justify-center flex-shrink-0">
-                        <Users className="w-4 h-4 text-[#C5A46D]" />
-                      </div>
-                      <div>
-                        <h4 className="font-serif-luxury text-xl font-bold text-white">Agency Accountability</h4>
-                        <p className="text-slate-400 text-sm">Agencies control their own listing visibility and profile — every action audited and traceable.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-bg-[#C5A46D]/15 border border-[#C5A46D]/30 flex items-center justify-center flex-shrink-0">
-                        <Phone className="w-4 h-4 text-[#C5A46D]" />
-                      </div>
-                      <div>
-                        <h4 className="font-serif-luxury text-xl font-bold text-white">Dedicated Support</h4>
-                        <p className="text-slate-400 text-sm">Advisory desk support for property inquiries, site visits and document assistance.</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-8 hidden sm:block" />
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-8 hidden sm:block" />
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-8 hidden sm:block" />
+                  ))}
                 </div>
               </div>
             </section>
@@ -491,20 +513,9 @@ const MainAppContent: React.FC = () => {
                 <p className="text-slate-400 text-lg mb-6">
                   Video content for approved Taisar Town properties.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {/* Video cards will render from agency video API when content exists */}
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-6 text-center">
-                    <Video className="w-16 h-16 text-slate-600 mx-auto mb-3" /> {/* Placeholder: Video icon */}
-                    <p className="text-slate-500 text-sm">No walkthrough videos available at this time</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-6 text-center">
-                    <Video className="w-16 h-16 text-slate-600 mx-auto mb-3" /> {/* Placeholder: Video icon */}
-                    <p className="text-slate-500 text-sm">No walkthrough videos available at this time</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-6 text-center">
-                    <Video className="w-16 h-16 text-slate-600 mx-auto mb-3" /> {/* Placeholder: Video icon */}
-                    <p className="text-slate-500 text-sm">No walkthrough videos available at this time</p>
-                  </div>
+                <div className="max-w-3xl border-t border-slate-800 pt-6">
+                  <p className="text-slate-400 text-sm">No public video walkthroughs are available right now.</p>
+                  <button onClick={() => { window.history.pushState({}, '', '/gallery'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="mt-3 inline-flex items-center gap-2 text-sm text-[#C5A46D] hover:text-[#F9E7BA]">Browse video gallery <ArrowRight className="w-4 h-4" /></button>
                 </div>
               </div>
             </section>
@@ -550,43 +561,16 @@ const MainAppContent: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mx-auto">
                   <button
                     onClick={() => { window.history.pushState({}, '', '/register'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="w-full sm:w-px py-3 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm transition-shadow shadow-lg shadow-[#C5A46D]/20"
+                    className="w-full py-3 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm transition-shadow shadow-lg shadow-[#C5A46D]/20"
                   >
                     Register Your Agency
                   </button>
                   <button
                     onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="w-full sm:w-px py-3 rounded-xl border border-[#C5A46D]/30 bg-transparent hover:bg-[#C5A46D]/10 text-[#C5A46D] font-bold text-sm transition-shadow"
+                    className="w-full py-3 rounded-xl border border-[#C5A46D]/30 bg-transparent hover:bg-[#C5A46D]/10 text-[#C5A46D] font-bold text-sm transition-shadow"
                   >
                     Already have an agency? Log in
                   </button>
-                </div>
-              </div>
-            </section>
-
-            {/* SECTION 10 — Testimonials */}
-            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220] border-t border-[#C5A46D]/10 border-b border-[#C5A46D]/10">
-              <div className="max-w-7xl mx-auto">
-                <h2 className="font-serif-luxury text-4xl sm:text-5xl font-bold text-white mb-8">
-                  Client Testimonials
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Testimonials rendered from approved user feedback when available */}
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-6 text-center">
-                    <Quote className="w-10 h-10 text-[#C5A46D] mx-auto mb-4" /> {/* Placeholder: Quote icon */}
-                    <p className="text-slate-400 text-sm italic">"Professional team with verified properties. Honest and transparent."</p>
-                    <p className="text-slate-500 text-xs mt-2">— Verified Client</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-6 text-center">
-                    <Quote className="w-10 h-10 text-[#C5A46D] mx-auto mb-4" /> {/* Placeholder: Quote icon */}
-                    <p className="text-slate-400 text-sm italic">"Transparent process, genuine listings, recommended."</p>
-                    <p className="text-slate-500 text-xs mt-2">— Investor</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-6 text-center">
-                    <Quote className="w-10 h-10 text-[#C5A46D] mx-auto mb-4" /> {/* Placeholder: Quote icon */}
-                    <p className="text-slate-400 text-sm italic">"Good selection of Taisar Town properties."</p>
-                    <p className="text-slate-500 text-xs mt-2">— Buyer</p>
-                  </div>
                 </div>
               </div>
             </section>
@@ -608,7 +592,7 @@ const MainAppContent: React.FC = () => {
                       Office Location
                     </h3>
                     <p className="text-slate-400 text-sm">
-                      Taiser Town Scheme 45, Malir, Karachi, Pakistan
+                      {cmsConfig.officeAddress}
                     </p>
                     <div className="mt-3">
                       <p className="text-slate-300 text-sm">Malir Development Authority (MDA) approved area</p>
@@ -620,10 +604,10 @@ const MainAppContent: React.FC = () => {
                     </h3>
                     <ul className="space-y-3 text-sm text-slate-300">
                       <li>
-                        <Phone className="w-4 h-4 text-[#C5A46D] mr-2" /> +92 300 1234567
+                        <a href={`tel:${cmsConfig.contactPhone.replace(/[^+\d]/g, '')}`} className="inline-flex items-center hover:text-[#C5A46D]"><Phone className="w-4 h-4 text-[#C5A46D] mr-2" />{cmsConfig.contactPhone}</a>
                       </li>
                       <li>
-                        <Mail className="w-4 h-4 text-[#C5A46D] mr-2" /> info@taisartownhub.com
+                        <a href={`mailto:${cmsConfig.contactEmail}`} className="inline-flex items-center hover:text-[#C5A46D]"><Mail className="w-4 h-4 text-[#C5A46D] mr-2" />{cmsConfig.contactEmail}</a>
                       </li>
                     </ul>
                   </div>
@@ -643,8 +627,7 @@ const MainAppContent: React.FC = () => {
             </section>
 
             {/* SECTION 12 — Premium Footer */}
-            <Footer />
-
+            </>}
           </main>
 
           <Footer />

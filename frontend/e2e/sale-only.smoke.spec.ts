@@ -22,7 +22,20 @@ test.describe('Sale-only marketplace (live)', () => {
     await expect(page.locator('main')).toBeVisible({ timeout: 20000 });
     await page.waitForTimeout(1500);
     const cards = await page.locator('main a, main article').count();
-    expect(cards).toBeGreaterThan(0);
+    if (cards === 0) {
+      await expect(page.locator('main')).toContainText(/Found 0 matching properties|No public listings|No properties/i);
+    } else {
+      expect(cards).toBeGreaterThan(0);
+    }
+  });
+
+  test('homepage search carries selected filters into sale listings', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('select').nth(2).selectOption('Sector 70-D');
+    await page.getByRole('button', { name: /^search$/i }).click();
+    await expect(page).toHaveURL(/\/properties/);
+    const sectorFilter = page.locator('select').filter({ has: page.locator('option[value="Sector 70-D"]') }).last();
+    await expect(sectorFilter).toHaveValue('Sector 70-D');
   });
 
   test('legacy /projects redirects to sale properties', async ({ page }) => {

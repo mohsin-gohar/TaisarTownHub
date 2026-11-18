@@ -80,7 +80,7 @@ export const Navbar: React.FC = () => {
           <div className="flex justify-between h-20 items-center gap-4">
             <button type="button" onClick={() => handleNavClick('/')} className="flex-shrink-0 flex items-center gap-3 cursor-pointer group" aria-label="Go to home">
               <div className="w-11 h-11 rounded-full border-2 border-[#C5A46D]/60 bg-[#101C2C] flex items-center justify-center shadow-md shadow-[#C5A46D]/20 group-hover:border-[#F9E7BA] transition-colors shrink-0">
-                <span className="font-serif-luxury font-bold text-[#C5A46D] text-lg">TT</span>
+                <img src="/logo.jpg" alt="" className="w-full h-full rounded-full object-contain" />
               </div>
               <div className="text-left leading-tight hidden sm:block">
                 <h1 className="font-serif-luxury font-bold text-base lg:text-lg text-white tracking-wide whitespace-nowrap">{cmsConfig.agencyName || 'TaisarTownHub'}</h1>
@@ -144,7 +144,7 @@ export const Navbar: React.FC = () => {
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-full border border-[#C5A46D]/50 bg-[#101C2C] flex items-center justify-center">
-                  <span className="font-serif-luxury font-bold text-[#C5A46D] text-sm">TT</span>
+                  <img src="/logo.jpg" alt="" className="w-full h-full rounded-full object-contain" />
                 </div>
                 <span className="font-serif-luxury font-bold text-white text-sm">{cmsConfig.agencyName || 'TaisarTownHub'}</span>
               </div>

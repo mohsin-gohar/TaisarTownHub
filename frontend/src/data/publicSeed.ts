@@ -17,18 +17,18 @@ import {
 
 export const initialCMSConfig: CMSConfig = {
   agencyName: 'TaisarTownHub',
-  tagline: 'Premier Real Estate Agency & Project Showcase — Scheme 45, Karachi',
+  tagline: 'Premier Real Estate Agency — Taiser Town, Scheme 45, Karachi',
   heroHeadline: 'Discover Your Place. Build Your Future.',
-  heroSubtitle: 'Explore verified residential plots, commercial opportunities, and master-planned housing societies across Taiser Town Scheme 45, Karachi.',
-  heroBackground: '/hero-bg.jpg',
-  statsProjectsCount: '45+',
-  statsPropertiesCount: '320+',
-  statsSatisfiedClients: '1,450+',
-  statsAcresPlanned: '20,570',
+  heroSubtitle: 'Explore agency-listed residential plots, homes, and commercial properties for sale in Taiser Town Scheme 45, Karachi.',
+  heroBackground: '/image.png',
+  statsProjectsCount: '',
+  statsPropertiesCount: '',
+  statsSatisfiedClients: '',
+  statsAcresPlanned: '',
   aboutTitle: 'Specialized Real Estate Experts in Taiser Town Scheme 45',
   aboutDescription: 'TaisarTownHub is an independent premier real estate brokerage and consultancy agency dedicated to connecting buyers, overseas investors, and developers with prime opportunities in Taiser Town (MDA Scheme 45), Karachi. With unmatched sector-by-sector knowledge and transparent documentation assistance, we guide you through safe, high-yielding property decisions.',
   aboutMission: 'To bring international-standard transparency, digital-first property discovery, and reliable verification to Karachi’s most promising developmental frontier.',
-  aboutVision: 'To become the most trusted real estate ecosystem for Taiser Town, empowering 10,000+ families and investors to build secure wealth and homes.',
+  aboutVision: 'To build a transparent real estate ecosystem for Taiser Town with secure property information and responsible agency connections.',
   officeAddress: 'Executive Tower 4B, Main Northern Bypass Road, Scheme 45 Entrance, Karachi, Sindh, Pakistan',
   contactPhone: '+92 321 8292831',
   contactWhatsApp: '+92 321 8292831',
@@ -38,9 +38,9 @@ export const initialCMSConfig: CMSConfig = {
   facebookUrl: 'https://facebook.com',
   youtubeUrl: 'https://youtube.com',
   instagramUrl: 'https://instagram.com',
-  seoTitle: 'TaisarTownHub | Premier Real Estate Agency & Development Showcase',
-  seoDescription: 'Find 80, 120, 240, 400 Sq Yd plots, commercial avenues, and housing schemes in Taiser Town Scheme 45, Karachi with verified files and possession support.',
-  noticeBannerText: 'TaisarTownHub Real Estate Platform — Verified listings, MDA-approved projects, and digital property registry for Taiser Town Scheme 45, Karachi.'
+  seoTitle: 'TaisarTownHub | Taiser Town Properties for Sale',
+  seoDescription: 'Browse agency-listed residential plots, homes and commercial properties for sale in Taiser Town Scheme 45, Karachi.',
+  noticeBannerText: 'TaisarTownHub — Taiser Town Scheme 45 properties for sale.'
 };
 
 export const clientThemes: ClientTheme[] = [
@@ -994,28 +994,7 @@ export const initialMedia: MediaItem[] = [
   }
 ];
 
-export const initialTestimonials: Testimonial[] = [
-  {
-    id: 'test-1',
-    clientName: 'Rashid Minhas',
-    designation: 'Overseas Investor (Doha, Qatar)',
-    quote: 'Investing from abroad is always daunting, but TaisarTownHub provided transparent drone updates, verified the MDA file transfer with biometric confirmation, and handed over physical possession without any hidden charges. Exceptional professionalism!',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-    propertyPurchased: '240 Sq. Yd. Corner Plot in Sector 71',
-    rating: 5,
-    isVerifiedDemo: true
-  },
-  {
-    id: 'test-2',
-    clientName: 'Engr. Zeeshan Abbasi',
-    designation: 'Resident & Homeowner',
-    quote: 'We constructed our 3-bed family home in Sector 70-D through their guidance. Their knowledge of street widths, utility connections, and soil levelling saved us lakhs of rupees during construction.',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
-    propertyPurchased: '120 Sq. Yd. Single Storey House in Sector 70-D',
-    rating: 5,
-    isVerifiedDemo: true
-  }
-];
+export const initialTestimonials: Testimonial[] = [];
 
 export const initialPlotMarkers: PlotMarker[] = [
   // Sector 63 - Block A (Highlighted around R-66 from handwritten requirements)

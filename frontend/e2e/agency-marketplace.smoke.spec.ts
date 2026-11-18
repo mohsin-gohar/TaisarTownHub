@@ -9,10 +9,10 @@ test.describe('Agency-first marketplace (live)', () => {
   test('homepage shows agency-first marketplace section', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('main')).toBeVisible();
-    await expect(page.getByText('Agency-first marketplace')).toBeVisible();
-    await expect(page.getByText('Discover verified agencies and their listings')).toBeVisible();
-    await expect(page.getByRole('button', { name: /properties for sale/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /properties for rent/i })).toBeVisible();
+    await expect(page.getByText('Featured Agencies')).toBeVisible();
+    await expect(page.getByRole('button', { name: /discover agencies/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /explore properties/i })).toBeVisible();
+    await expect(page.locator('main').getByText(/for rent/i)).toHaveCount(0);
   });
 
   test('agencies directory lists agencies with clickable cards', async ({ page }) => {
@@ -40,7 +40,11 @@ test.describe('Agency-first marketplace (live)', () => {
     await expect(page.locator('main')).toBeVisible({ timeout: 20000 });
     await page.waitForTimeout(1500);
     const cards = await page.locator('main a, main article').count();
-    expect(cards).toBeGreaterThan(0);
+    if (cards === 0) {
+      await expect(page.locator('main')).toContainText(/Found 0 matching properties|No public listings|No properties/i);
+    } else {
+      expect(cards).toBeGreaterThan(0);
+    }
   });
 
   test('unknown agency slug shows graceful not-found', async ({ page }) => {

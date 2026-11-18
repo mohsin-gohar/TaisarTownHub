@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Production-readiness contracts:
@@ -33,7 +34,7 @@ class ProductionReadinessTest extends EnterpriseTestCase
         $this->getJson('/api/health')
             ->assertOk()
             ->assertJsonPath('status', 'healthy')
-            ->assertJsonPath('database', 'MySQL connected')
+            ->assertJsonPath('database', ucfirst(DB::connection()->getDriverName()) . ' connected')
             ->assertHeader('X-Content-Type-Options', 'nosniff')
             ->assertHeader('X-Frame-Options', 'DENY')
             ->assertHeader('Cross-Origin-Resource-Policy', 'same-origin');

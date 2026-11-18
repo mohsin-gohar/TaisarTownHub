@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test';
  * matrix is open work (see CODEBASE_AUDIT.md → G-13).
  */
 
-const API_BASE = process.env.VITE_API_URL || 'http://127.0.0.1:8090/api';
+const API_BASE = process.env.PLAYWRIGHT_API_URL || process.env.VITE_API_URL || 'http://127.0.0.1:8080/api';
 
 test('homepage renders the hero and public shell', async ({ page }) => {
   await page.goto('/');

@@ -64,11 +64,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
   const [selectedType, setSelectedType] = useState<PropertyType | 'All'>(initialFilter?.type || 'All');
   const [selectedSector, setSelectedSector] = useState<string>(initialFilter?.sector || 'All');
   const [selectedSize, setSelectedSize] = useState<string>(initialFilter?.size || 'All');
-  const [selectedPurpose, setSelectedPurpose] = useState<'sale' | 'rent' | 'All'>(
-    (initialFilter?.purpose as 'sale' | 'rent' | undefined) ||
-    (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('purpose') === 'rent' ? 'rent' :
-      typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('purpose') === 'sale' ? 'sale' : 'All')
-  );
+  const [selectedPurpose] = useState<'sale'>('sale');
   const [possessionOnly, setPossessionOnly] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
 
@@ -143,9 +139,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
     sizeSqYards: selectedSize !== 'All' ? Number(selectedSize) : 'All',
     possessionOnly,
   }).filter((p: any) => {
-    if (selectedPurpose === 'All') return true;
     const purpose = p.listing_purpose || p.listingPurpose || p.purpose;
-    if (selectedPurpose === 'rent') return purpose === 'rent';
     return purpose === 'sale' || purpose === undefined || purpose === null || purpose === '';
   });
 
@@ -170,7 +164,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
     setSelectedType('All');
     setSelectedSector('All');
     setSelectedSize('All');
-    setSelectedPurpose('All');
+
     setPossessionOnly(false);
     setPriceRange({ min: 0, max: 0 });
     setSortBy('featured');

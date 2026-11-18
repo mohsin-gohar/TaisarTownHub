@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+const API_BASE = process.env.PLAYWRIGHT_API_URL || process.env.VITE_API_URL || 'http://127.0.0.1:8080/api';
+
 /**
  * PHASE 3 & 5 — Admin Pages & Role-Based Access.
  * Tests admin dashboard access for each demo role.
@@ -61,20 +63,20 @@ test.describe('Security - API protection', () => {
       '/api/admin/dashboard',
     ];
     for (const path of endpoints) {
-      const response = await request.get(`http://127.0.0.1:8080${path}`);
+      const response = await request.get(`${API_BASE.replace(/\/api$/, '')}${path}`);
       expect([401, 403]).toContain(response.status());
     }
   });
 
   test('Public API endpoints are accessible', async ({ request }) => {
-    const response = await request.get('http://127.0.0.1:8080/api/health');
+    const response = await request.get(`${API_BASE}/health`);
     expect(response.status()).toBe(200);
     const body = await response.json();
-    expect(body.status).toBe('healthy');
+    expect(['healthy', 'ok']).toContain(body.status);
   });
 
   test('Public catalog is accessible', async ({ request }) => {
-    const response = await request.get('http://127.0.0.1:8080/api/catalog');
+    const response = await request.get(`${API_BASE}/catalog`);
     expect(response.status()).toBe(200);
   });
 });

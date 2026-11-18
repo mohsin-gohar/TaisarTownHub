@@ -2,10 +2,9 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Search,
-  Building,
+  Building2,
   ArrowRight,
   Compass,
-  Star,
   ChevronDown
 } from 'lucide-react';
 import { PropertyType } from '../../types';
@@ -77,8 +76,6 @@ const HERO_SLIDES: HeroSlide[] = [
 /** Slides advance every 6–8 seconds; reduced motion disables the autoplay. */
 const HERO_SLIDE_INTERVAL_MS = 7000;
 
-const TRUST_AVATARS = ['AS', 'KH', 'ST', 'MR', 'IJ'];
-
 export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
   const { cmsConfig, currentTheme, setCurrentView, properties } = useApp();
 
@@ -143,6 +140,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
 
   const headlineParts = cmsConfig.heroHeadline.split('. ');
   const isStatic = !!reduceMotion;
+  const statistics = [
+    { value: cmsConfig.statsAcresPlanned, label: 'Acres Master-Planned' },
+    { value: cmsConfig.statsPropertiesCount, label: 'Verified Properties' },
+    { value: cmsConfig.statsSatisfiedClients, label: 'Satisfied Investors' },
+  ].filter((stat) => stat.value.trim());
 
   const scrollToNext = () => {
     window.scrollTo({ top: window.innerHeight * 0.92, behavior: reduceMotion ? 'auto' : 'smooth' });
@@ -210,35 +212,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
           {cmsConfig.heroSubtitle}
         </p>
 
-        {/* Trust Badge Row */}
-        <div
-          className="mt-7 flex items-center gap-3 sm:gap-4 animate-fadeInUp"
-          style={isStatic ? undefined : { animationDelay: '1.25s' }}
-        >
-          <div className="flex -space-x-2.5">
-            {TRUST_AVATARS.map((initials, i) => (
-              <div
-                key={initials}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-[#2A3A52] to-[#101C2C] border-2 border-[#101C2C] ring-1 ring-[#C5A46D]/50 flex items-center justify-center text-[9px] sm:text-[10px] font-bold text-[#F9E7BA] shadow"
-                style={{ zIndex: TRUST_AVATARS.length - i }}
-              >
-                {initials}
-              </div>
-            ))}
-          </div>
-          <div className="text-left">
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Star key={s} className="w-3.5 h-3.5 text-[#C5A46D] fill-current" />
-              ))}
-              <span className="ml-1 text-[11px] font-bold text-white">4.9</span>
-            </div>
-            <span className="block text-[11px] sm:text-xs text-slate-300 mt-0.5">
-              Trusted by <strong className="text-[#F9E7BA]">1,450+ families</strong> investing in Scheme 45
-            </span>
-          </div>
-        </div>
-
         {/* Quick CTA Buttons */}
         <div
           className="mt-8 flex flex-wrap items-center justify-center gap-4 animate-fadeInUp"
@@ -252,11 +225,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
             <ArrowRight className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setCurrentView('projects')}
+            onClick={() => setCurrentView('agencies')}
             className="px-7 py-3.5 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 text-white font-semibold text-sm tracking-wide transition-all duration-200 backdrop-blur-md border border-white/20 flex items-center gap-2 cursor-pointer"
           >
-            <span>Discover Projects</span>
-            <Building className="w-4 h-4 text-[#C5A46D]" />
+            <span>Discover Agencies</span>
+            <Building2 className="w-4 h-4 text-[#C5A46D]" />
           </button>
           <button
             onClick={() => setCurrentView('guide')}
@@ -398,23 +371,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
         </div>
 
         {/* Key Statistics Strip — animated count-up */}
-        <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6 w-full max-w-5xl pt-8 border-t border-slate-800/80">
-          {[
-            { value: cmsConfig.statsAcresPlanned, label: 'Acres Master-Planned' },
-            { value: '80+', label: 'Sectors & Blocks' },
-            { value: cmsConfig.statsPropertiesCount, label: 'Verified Properties' },
-            { value: cmsConfig.statsSatisfiedClients, label: 'Satisfied Investors' },
-          ].map((stat) => (
-            <div key={stat.label} className="space-y-1">
-              <div className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white">
-                <StatsCounter value={stat.value} />
+        {statistics.length > 0 && (
+          <div className="mt-16 grid grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-5xl pt-8 border-t border-slate-800/80">
+            {statistics.map((stat) => (
+              <div key={stat.label} className="space-y-1">
+                <div className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white">
+                  <StatsCounter value={stat.value} />
+                </div>
+                <div className="text-xs text-[#C5A46D] uppercase tracking-wider font-semibold">
+                  {stat.label}
+                </div>
               </div>
-              <div className="text-xs text-[#C5A46D] uppercase tracking-wider font-semibold">
-                {stat.label}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Hero Slide Switcher Dots */}

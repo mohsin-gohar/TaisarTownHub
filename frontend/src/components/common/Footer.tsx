@@ -197,7 +197,7 @@ export const Footer: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-[#C5A46D] shrink-0" />
-                <span>{cmsConfig.contactEmail}</span>
+                <a href={`mailto:${cmsConfig.contactEmail}`} className="min-w-0 break-all hover:text-[#C5A46D]">{cmsConfig.contactEmail}</a>
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-[#C5A46D] shrink-0" />

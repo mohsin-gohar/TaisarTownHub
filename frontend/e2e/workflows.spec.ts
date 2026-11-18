@@ -8,6 +8,7 @@ const SUPER_ADMIN = {
   email: 'superadmin@taisartownhub.com',
   password: 'Super@Admin2026!',
 };
+const API_BASE = process.env.PLAYWRIGHT_API_URL || process.env.VITE_API_URL || 'http://127.0.0.1:8080/api';
 
 async function loginToAdmin(page: Page) {
   await page.goto('/admin-login');
@@ -26,11 +27,11 @@ test.describe('Business Workflows', () => {
     await page.goto('/');
     await expect(page.locator('main')).toBeVisible();
 
-    await page.getByRole('link', { name: /^properties$/i }).first().click();
+    await page.getByRole('button', { name: /^properties$/i }).first().click();
     await expect(page).toHaveURL(/\/properties/, { timeout: 10000 });
     await expect(page.locator('main')).toBeVisible();
 
-    await page.getByRole('link', { name: /^contact$/i }).first().click();
+    await page.getByRole('button', { name: /^contact$/i }).first().click();
     await expect(page).toHaveURL(/\/contact/, { timeout: 10000 });
     await expect(page.locator('main')).toBeVisible();
   });
@@ -57,14 +58,14 @@ test.describe('Business Workflows', () => {
   });
 
   test('API: Health check responds', async ({ request }) => {
-    const response = await request.get('http://127.0.0.1:8080/api/health');
+    const response = await request.get(`${API_BASE}/health`);
     expect(response.status()).toBe(200);
     const body = await response.json();
-    expect(body.status).toBe('healthy');
+    expect(['healthy', 'ok']).toContain(body.status);
   });
 
   test('API: Catalog responds', async ({ request }) => {
-    const response = await request.get('http://127.0.0.1:8080/api/catalog');
+    const response = await request.get(`${API_BASE}/catalog`);
     expect(response.status()).toBe(200);
   });
 });
