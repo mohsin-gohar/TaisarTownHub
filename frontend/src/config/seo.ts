@@ -87,7 +87,7 @@ export const SEO_ROUTES: RouteSeo[] = [
   {
     view: 'home',
     path: '/',
-    title: 'Taiser Town Scheme 45 Plots & Projects | TaisarTownHub',
+    title: 'Taiser Town Scheme 45 Plots & Properties | TaisarTownHub',
     description:
       'Buy verified plots, villas and commercial files in Taiser Town (MDA Scheme 45), Karachi with transparent file verification, transfer support and site visits.',
     keywords: 'Taiser Town Scheme 45, Karachi plots, MDA Scheme 45, verified plots Karachi, property registry',
@@ -111,19 +111,6 @@ export const SEO_ROUTES: RouteSeo[] = [
     breadcrumb: ['Properties'],
   },
   {
-    view: 'projects',
-    path: '/projects',
-    title: 'Housing Projects in Taiser Town Scheme 45 | TaisarTownHub',
-    description:
-      'Explore master-planned residential and commercial projects across every sector of Taiser Town Scheme 45, Karachi — plot sizes, pricing and booking status.',
-    keywords: 'housing projects Scheme 45, new projects Karachi, Taiser Town development, MDA approved projects',
-    indexable: true,
-    inSitemap: true,
-    changefreq: 'weekly',
-    priority: 0.8,
-    breadcrumb: ['Projects'],
-  },
-  {
     view: 'property-detail',
     path: '/properties',
     title: 'Property Details — Taiser Town Scheme 45 | TaisarTownHub',
@@ -133,18 +120,6 @@ export const SEO_ROUTES: RouteSeo[] = [
     indexable: true,
     inSitemap: false,
     breadcrumb: ['Properties', 'Property Details'],
-    requiresQuery: true,
-  },
-  {
-    view: 'project-detail',
-    path: '/projects',
-    title: 'Project Details — Taiser Town Scheme 45 | TaisarTownHub',
-    description:
-      'Complete project details for Taiser Town Scheme 45 developments: plot sizes, amenities, pricing, availability and booking process.',
-    keywords: 'project details Scheme 45, plot sizes, amenities, booking status Karachi',
-    indexable: true,
-    inSitemap: false,
-    breadcrumb: ['Projects', 'Project Details'],
     requiresQuery: true,
   },
   {
@@ -167,6 +142,7 @@ export const SEO_ROUTES: RouteSeo[] = [
     description: 'View an agency profile and its approved public property listings on TaisarTownHub.',
     keywords: 'agency profile, property listings, real estate agency',
     indexable: false,
+    requiresQuery: true,
     inSitemap: false,
     priority: 0.4,
     breadcrumb: ['Agencies', 'Agency Profile'],

@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { LayoutDashboard, Menu, X, ChevronRight, Building2, LogOut, UserCircle2 } from 'lucide-react';
+import { LayoutDashboard, Menu, X, ChevronRight, Building2, LogOut, UserCircle2, Home } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const {
@@ -53,12 +53,10 @@ export const Navbar: React.FC = () => {
   const navItems = [
     { label: 'Home', path: '/' },
     { label: 'Agencies', path: '/agencies' },
-    { label: 'Buy', path: '/properties?purpose=sale' },
-    { label: 'Rent', path: '/properties?purpose=rent' },
     { label: 'Properties', path: '/properties' },
     { label: 'Services', path: '/services' },
-    { label: 'About', path: '/about' },
-    { label: 'Contact', path: '/contact' },
+      { label: 'About', path: '/about' },
+      { label: 'Contact', path: '/contact' },
   ];
 
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
@@ -108,7 +106,9 @@ export const Navbar: React.FC = () => {
             <div className="flex items-center gap-2 sm:gap-3">
               {hasDashboardAccess ? (
                 <div className="hidden md:flex items-center gap-2">
-                  <button type="button" onClick={() => handleNavClick('/admin')} className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold border transition-colors cursor-pointer ${isActive('/admin') ? 'bg-[#C5A46D] text-[#101C2C] border-[#C5A46D]' : 'bg-transparent text-[#C5A46D] border-[#C5A46D]/50 hover:bg-[#C5A46D]/10'}`}>
+                  <button type="button" onClick={() => handleNavClick('/admin')} className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold border transition-colors cursor-pointer ${
+                    isActive('/admin') ? 'bg-[#C5A46D] text-[#101C2C] border-[#C5A46D]' : 'bg-transparent text-[#C5A46D] border-[#C5A46D]/50 hover:bg-[#C5A46D]/10'
+                  }`}>
                     <LayoutDashboard className="w-4 h-4" />
                     <span>Dashboard</span>
                   </button>
