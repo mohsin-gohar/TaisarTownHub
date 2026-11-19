@@ -83,7 +83,10 @@ export const Navbar: React.FC = () => {
                 <img src="/logo.jpg" alt="" className="w-full h-full rounded-full object-contain" />
               </div>
               <div className="text-left leading-tight hidden sm:block">
-                <h1 className="font-serif-luxury font-bold text-base lg:text-lg text-white tracking-wide whitespace-nowrap">{cmsConfig.agencyName || 'TaisarTownHub'}</h1>
+                <h1 className="font-brand-cinzel text-base lg:text-lg text-white whitespace-nowrap">
+                  <span className="text-white">TAISAR</span>
+                  <span className="gold-gradient-text font-brand-cinzel">TOWN HUB</span>
+                </h1>
                 <p className="text-[11px] text-[#E7C878]">Find &middot; Sell &middot; Invest</p>
               </div>
             </button>
@@ -153,7 +156,10 @@ export const Navbar: React.FC = () => {
                 <div className="w-9 h-9 rounded-full border border-[#E7C878]/50 bg-[#0B1220] flex items-center justify-center">
                   <img src="/logo.jpg" alt="" className="w-full h-full rounded-full object-contain" />
                 </div>
-                <span className="font-serif-luxury font-bold text-white text-sm">{cmsConfig.agencyName || 'TaisarTownHub'}</span>
+                <span className="font-brand-cinzel text-white text-sm">
+                  <span className="text-white">TAISAR</span>
+                  <span className="gold-gradient-text font-brand-cinzel">TOWN HUB</span>
+                </span>
               </div>
               <button type="button" onClick={() => setDrawerOpen(false)} className="p-2 rounded-md text-slate-400 hover:text-white hover:bg-white/10 cursor-pointer" aria-label="Close menu"><X className="w-5 h-5" /></button>
             </div>
