@@ -4,7 +4,15 @@
 #   docker compose down           # Stop all services
 #   docker compose logs -f        # View logs
 #
-# Services: mysql, redis, clamav, backend, frontend, nginx, worker
+# Services: mysql, redis, clamav, migrate (one-shot), backend (N replicas),
+#           frontend, nginx, worker
+#
+# Scale the API horizontally with:
+#   docker compose up -d --scale backend=2
+# The backend intentionally has NO fixed container_name and NO host port: all
+# traffic enters through nginx, which discovers and load-balances every replica
+# via Docker DNS. Migrations run once in the `migrate` service so replicas and
+# workers never race on schema changes.
 #
 # Build contexts match the per-service Dockerfiles:
 #   backend/Dockerfile.prod   (context ./backend)
@@ -77,16 +85,48 @@ services:
       - taisartownhub-network
 
   # ------------------------------------------------------------
-  # 4. Laravel Backend (API + Sanctum)
+  # 4a. Migrations — one-shot, runs exactly once before any replica boots
+  # ------------------------------------------------------------
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: "no"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY}
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-taisartownhub}
+      DB_USERNAME: ${DB_USERNAME:-taisar}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the deployment environment}
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
+      RUN_MIGRATIONS: "true"
+      MIGRATIONS_ONLY: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - taisartownhub-network
+    command: ["php", "artisan", "migrate", "--force", "--no-interaction"]
+
+  # ------------------------------------------------------------
+  # 4b. Laravel Backend (API + Sanctum) — horizontally scalable
+  #     No container_name / host ports: nginx is the single entrypoint.
   # ------------------------------------------------------------
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    container_name: taisartownhub-backend
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
@@ -129,6 +169,17 @@ services:
       CLAMD_TIMEOUT: "30"
       MALWARE_SCAN_FAIL_CLOSED: "true"
       MALWARE_SCAN_LOG_SKIPPED: "true"
+      # Migrations run once in the `migrate` service; replicas must not race.
+      RUN_MIGRATIONS: "false"
+    volumes:
+      # Shared private document vault: every replica must see the same files.
+      - private_vault:/var/www/html/storage/app/private/documents
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       mysql:
         condition: service_healthy
@@ -136,6 +187,8 @@ services:
         condition: service_healthy
       clamav:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - taisartownhub-network
     command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8080"]
@@ -213,6 +266,8 @@ services:
       CLAMD_TIMEOUT: "30"
       MALWARE_SCAN_FAIL_CLOSED: "true"
       MALWARE_SCAN_LOG_SKIPPED: "true"
+    volumes:
+      - private_vault:/var/www/html/storage/app/private/documents
     depends_on:
       mysql:
         condition: service_healthy
@@ -220,6 +275,8 @@ services:
         condition: service_healthy
       clamav:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=90"]
     networks:
       - taisartownhub-network
@@ -232,3 +289,6 @@ volumes:
   mysql_data:
   redis_data:
   clamav_data:
+  # Shared across every backend replica and the queue worker so private
+  # document downloads and generated files behave identically on any node.
+  private_vault:

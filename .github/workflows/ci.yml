@@ -28,7 +28,7 @@ jobs:
       # .env.example would enable fail-closed malware scanning and break
       # upload tests.
       - name: Prepare test environment
-        run: echo "# CI test bootstrap: phpunit.xml supplies the test environment." > .env
+        run: 'echo "# CI test bootstrap: phpunit.xml supplies the test environment." > .env'
 
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@v2
@@ -76,7 +76,7 @@ jobs:
       # Same reason as the backend job: a fresh checkout has no .env. Keep it
       # empty so the job-level DB_* variables and phpunit.xml are authoritative.
       - name: Prepare test environment
-        run: echo "# CI test bootstrap: phpunit.xml supplies the test environment." > .env
+        run: 'echo "# CI test bootstrap: phpunit.xml supplies the test environment." > .env'
 
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@v2

@@ -16,6 +16,22 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // The enterprise catalog (permissions, roles, plans, settings) is
+        // idempotent configuration that every environment needs, including
+        // production. Everything below it is local/demo fixture data with
+        // hard-coded IDs (deal-1, prop-1, comm-101, demo staff accounts, ...).
+        // Running that in production would overwrite real records and create
+        // known-password demo accounts, so production stops here.
+        if (app()->environment('production')) {
+            $this->call(EnterpriseSeeder::class);
+
+            if (isset($this->command)) {
+                $this->command->info('Production: seeded the enterprise catalog only; demo/legacy fixtures and demo accounts were skipped.');
+            }
+
+            return;
+        }
+
         $this->seedBusinessRecords();
 
         // 1. Seed 12 Scheme 45 Verified Agencies

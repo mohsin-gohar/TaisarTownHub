@@ -12,7 +12,8 @@
 # Env:
 #   APP_KEY           (required) - Laravel application key
 #   DB_HOST           (required unless DB_CONNECTION=sqlite)
-#   RUN_MIGRATIONS    'true' (default) | 'false'  - set 'false' for workers
+#   RUN_MIGRATIONS    'true' (default) | 'false'  - set 'false' for replicas/workers
+#   MIGRATIONS_ONLY   'true' - run migrations then exit (one-shot migrate service)
 #   APP_PORT          (optional) - port for the default web command
 
 set -e
@@ -30,10 +31,16 @@ fi
 php artisan config:cache
 php artisan route:cache
 
-# Migrations are executed by the web container (and by an explicit migration
-# job). A queue worker restarting must NOT run migrations again.
+# Migrations run ONCE in the compose `migrate` service. Web replicas and queue
+# workers set RUN_MIGRATIONS=false so they can never race on schema changes.
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
-  php artisan migrate --force
+  php artisan migrate --force --no-interaction
+fi
+
+# One-shot migration service: do not exec the web command after migrating.
+if [ "${MIGRATIONS_ONLY:-false}" = "true" ]; then
+  echo "[entrypoint] migrations complete; exiting (MIGRATIONS_ONLY=true)."
+  exit 0
 fi
 
 # Respect the command supplied by docker-compose (`command:`) / the image CMD.
