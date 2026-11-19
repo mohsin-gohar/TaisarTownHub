@@ -14,6 +14,7 @@ import { APP_MODE } from './config/appMode';
 
 // Public views
 import { HeroSection } from './components/public/HeroSection';
+import { AvailableForSaleSection } from './components/public/AvailableForSaleSection';
 import { Scheme45Guide } from './components/public/Scheme45Guide';
 import { ServicesSection } from './components/public/ServicesSection';
 import { MediaGallerySection } from './components/public/MediaGallerySection';
@@ -56,6 +57,7 @@ interface FeaturedAgency {
 
 // SEO utilities from the single source of truth
 import {
+  SEO_ROUTES,
   routeSeoForView,
   canonicalUrl,
   robotsContent,
@@ -165,7 +167,10 @@ const applySeo = (
   properties: any[],
   selectedPropertyId: string | null
 ) => {
-  if (resolvedView.startsWith('admin')) return;
+  // Back-office views must never receive public meta. `admin-login` IS in
+  // SEO_ROUTES (noindex) and must get its own title/robots instead of the
+  // homepage shell, so only skip views with no explicit SEO record.
+  if (resolvedView.startsWith('admin') && !SEO_ROUTES.some((route) => route.view === resolvedView)) return;
 
   if (isNotFoundRoute) {
     document.title = 'Page Not Found (404) — TaisarTownHub';
@@ -315,7 +320,7 @@ const MainAppContent: React.FC = () => {
     }
     return (
       <>
-        <Suspense fallback={<div className="min-h-screen bg-[#0B1220] flex items-center justify-center text-slate-400">Loading dashboard...</div>}>
+        <Suspense fallback={<div className="min-h-screen bg-[#07141E] flex items-center justify-center text-slate-400">Loading dashboard...</div>}>
           <AdminLayout />
         </Suspense>
         <ToastContainer />
@@ -327,7 +332,7 @@ const MainAppContent: React.FC = () => {
 
   // Public Site Router
   return (
-    <div className="min-h-screen bg-[#0B1220] text-slate-100 flex flex-col justify-between selection:bg-[#C5A46D] selection:text-[#101C2C]">
+    <div className="min-h-screen bg-[#07141E] text-slate-100 flex flex-col justify-between selection:bg-[#E7C878] selection:text-[#0B1220]">
       {/* Presentation control bar — demo build only (in-memory toggle, never localStorage) */}
       {APP_MODE === 'demo' && <PresentationBar />}
 
@@ -337,7 +342,7 @@ const MainAppContent: React.FC = () => {
           {/* Accessibility: skip straight to content (keyboard users) */}
           <a
             href="#main-content"
-            className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[80] focus:bg-[#C5A46D] focus:text-[#101C2C] focus:px-4 focus:py-2 focus:rounded-lg focus:font-bold focus:text-xs focus:shadow-xl"
+            className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[80] focus:bg-[#E7C878] focus:text-[#0B1220] focus:px-4 focus:py-2 focus:rounded-lg focus:font-bold focus:text-xs focus:shadow-xl"
           >
             Skip to main content
           </a>
@@ -373,8 +378,11 @@ const MainAppContent: React.FC = () => {
             {/* SECTION 2 — Hero Section */}
             <HeroSection onSearch={setActiveFilterCriteria} />
 
+            {/* SECTION 2B — Available for Sale (light inventory band) */}
+            <AvailableForSaleSection />
+
             {/* SECTION 3 — Featured Verified Agencies */}
-            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220]">
+            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
               <div className="max-w-7xl mx-auto">
                 <h2 className="font-serif-luxury text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
                   Featured Agencies
@@ -389,23 +397,23 @@ const MainAppContent: React.FC = () => {
                     <a
                       key={agency.id}
                       href={`/agencies/${encodeURIComponent(agency.slug || agency.id)}`}
-                      className="flex items-start gap-4 rounded-lg border border-slate-800 bg-[#101C2C] p-5 hover:border-[#C5A46D]/50 transition-colors"
+                      className="flex items-start gap-4 rounded-lg border border-slate-800 bg-[#0B1220] p-5 hover:border-[#E7C878]/50 transition-colors"
                     >
                       {agency.logo_url ? (
-                        <img src={agency.logo_url} alt="" loading="lazy" className="w-12 h-12 rounded-lg object-cover bg-[#0B1220]" />
+                        <img src={agency.logo_url} alt="" loading="lazy" className="w-12 h-12 rounded-lg object-cover bg-[#07141E]" />
                       ) : (
-                        <Building2 aria-hidden="true" className="w-12 h-12 p-3 rounded-lg bg-[#0B1220] text-[#C5A46D]" />
+                        <Building2 aria-hidden="true" className="w-12 h-12 p-3 rounded-lg bg-[#07141E] text-[#E7C878]" />
                       )}
                       <span className="min-w-0">
                         <span className="block text-white font-semibold">{agency.name}</span>
                         <span className="block mt-1 text-slate-400 text-sm line-clamp-2">{agency.description || 'View agency profile and sale listings.'}</span>
-                        {typeof agency.sale_listing_count === 'number' && <span className="block mt-2 text-xs text-[#C5A46D]">{agency.sale_listing_count} sale listings</span>}
+                        {typeof agency.sale_listing_count === 'number' && <span className="block mt-2 text-xs text-[#E7C878]">{agency.sale_listing_count} sale listings</span>}
                       </span>
                     </a>
                   )) : (
                     <div className="sm:col-span-2 lg:col-span-3 py-8 text-center">
                       <p className="text-slate-300 font-semibold">{featuredAgenciesError ? 'Agency directory is unavailable right now.' : 'No public agencies are available yet.'}</p>
-                      <button onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="mt-3 text-sm text-[#C5A46D] hover:text-[#F9E7BA]">Browse the agency directory</button>
+                      <button onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="mt-3 text-sm text-[#E7C878] hover:text-[#F6E3B4]">Browse the agency directory</button>
                     </div>
                   )}
                 </div>
@@ -413,7 +421,7 @@ const MainAppContent: React.FC = () => {
             </section>
 
             {/* SECTION 4 — Browse All Agencies */}
-            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220] border-t border-[#C5A46D]/10 border-b border-[#C5A46D]/10">
+            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E] border-t border-[#E7C878]/10 border-b border-[#E7C878]/10">
               <div className="max-w-7xl mx-auto">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
                   <div>
@@ -426,7 +434,7 @@ const MainAppContent: React.FC = () => {
                   </div>
                   <button
                     onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm transition"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm transition"
                   >
                     View all agencies <ArrowRight className="w-4 h-4" />
                   </button>
@@ -434,17 +442,17 @@ const MainAppContent: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <button
                     onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="rounded-2xl border border-slate-800 bg-[#101C2C] p-5 text-left hover:border-[#C5A46D]/50 transition"
+                    className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5 text-left hover:border-[#E7C878]/50 transition"
                   >
-                    <div className="text-[#C5A46D] font-semibold text-sm mb-1">Agencies</div>
+                    <div className="text-[#E7C878] font-semibold text-sm mb-1">Agencies</div>
                     <div className="text-white font-serif-luxury text-xl font-bold">Agency directory</div>
                     <div className="text-slate-400 text-sm mt-1">View profiles, stock, and contact details.</div>
                   </button>
                   <button
                     onClick={() => { window.history.pushState({}, '', '/properties?purpose=sale'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="rounded-2xl border border-slate-800 bg-[#101C2C] p-5 text-left hover:border-[#C5A46D]/50 transition"
+                    className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5 text-left hover:border-[#E7C878]/50 transition"
                   >
-                    <div className="text-[#C5A46D] font-semibold text-sm mb-1">Buy</div>
+                    <div className="text-[#E7C878] font-semibold text-sm mb-1">Buy</div>
                     <div className="text-white font-serif-luxury text-xl font-bold">Properties for sale</div>
                     <div className="text-slate-400 text-sm mt-1">Browse approved listings from verified agencies.</div>
                   </button>
@@ -453,13 +461,13 @@ const MainAppContent: React.FC = () => {
             </section>
 
             {/* SECTION 5 — Why Choose TaisarTownHub */}
-            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220]">
+            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
               <div className="max-w-7xl mx-auto text-center">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                   {WHY_CHOOSE_ITEMS.map(({ icon: Icon, title, description }) => (
                     <div key={title} className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-[#C5A46D]/10 border border-[#C5A46D]/30 flex items-center justify-center flex-shrink-0">
-                        <Icon className="w-4 h-4 text-[#C5A46D]" />
+                      <div className="w-8 h-8 rounded-lg bg-[#E7C878]/10 border border-[#E7C878]/30 flex items-center justify-center flex-shrink-0">
+                        <Icon className="w-4 h-4 text-[#E7C878]" />
                       </div>
                       <div>
                         <h3 className="font-serif-luxury text-lg font-bold text-white">{title}</h3>
@@ -472,7 +480,7 @@ const MainAppContent: React.FC = () => {
             </section>
 
             {/* SECTION 6 — Understanding Taisar Town, Scheme 45 */}
-            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220] border-t border-[#C5A46D]/10 border-b border-[#C5A46D]/10">
+            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E] border-t border-[#E7C878]/10 border-b border-[#E7C878]/10">
               <div className="max-w-7xl mx-auto">
                 <h2 className="font-serif-luxury text-4xl sm:text-5xl font-bold text-white mb-8">
                   Understanding Taisar Town, Scheme 45
@@ -481,18 +489,18 @@ const MainAppContent: React.FC = () => {
                   <div>
                     <h3 className="font-serif-luxury text-2xl font-bold text-white mb-4">Phases</h3>
                     <ul className="space-y-2 text-sm text-slate-300">
-                      <li className="flex items-center gap-2"><Building2 className="w-3.5 h-3.5 text-[#C5A46D]" />Phase 1: Possession-ready sectors (70-D, 71, 72, 50, 30-A, 40)</li>
-                      <li className="flex items-center gap-2"><Building2 className="w-3.5 h-3.5 text-[#C5A46D]" />Phase 2: Developing avenues (63, 64, 65, 77, 78)</li>
-                      <li className="flex items-center gap-2"><Building2 className="w-3.5 h-3.5 text-[#C5A46D]" />Phase 3: Upcoming expansions (84, 85, 88)</li>
+                      <li className="flex items-center gap-2"><Building2 className="w-3.5 h-3.5 text-[#E7C878]" />Phase 1: Possession-ready sectors (70-D, 71, 72, 50, 30-A, 40)</li>
+                      <li className="flex items-center gap-2"><Building2 className="w-3.5 h-3.5 text-[#E7C878]" />Phase 2: Developing avenues (63, 64, 65, 77, 78)</li>
+                      <li className="flex items-center gap-2"><Building2 className="w-3.5 h-3.5 text-[#E7C878]" />Phase 3: Upcoming expansions (84, 85, 88)</li>
                     </ul>
                   </div>
                   <div>
                     <h3 className="font-serif-luxury text-2xl font-bold text-white mb-4">Sectors & Blocks</h3>
                     <ul className="space-y-2 text-sm text-slate-300">
-                      <li className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-[#C5A46D]" />Sector 70-D: Executive enclave, premium plots</li>
-                      <li className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-[#C5A46D]" />Sector 71: Park view & villas</li>
-                      <li className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-[#C5A46D]" />Sector 50: Main commercial zone</li>
-                      <li className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-[#C5A46D]" />Sector 30-A: MDA homes</li>
+                      <li className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-[#E7C878]" />Sector 70-D: Executive enclave, premium plots</li>
+                      <li className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-[#E7C878]" />Sector 71: Park view & villas</li>
+                      <li className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-[#E7C878]" />Sector 50: Main commercial zone</li>
+                      <li className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-[#E7C878]" />Sector 30-A: MDA homes</li>
                     </ul>
                   </div>
                   <div>
@@ -505,7 +513,7 @@ const MainAppContent: React.FC = () => {
             </section>
 
             {/* SECTION 7 — Taisar Town Video Walkthroughs */}
-            <section id="video-walkthroughs" className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220]">
+            <section id="video-walkthroughs" className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
               <div className="max-w-7xl mx-auto">
                 <h2 className="font-serif-luxury text-4xl sm:text-5xl font-bold text-white mb-8">
                   Taisar Town Video Walkthroughs
@@ -515,13 +523,13 @@ const MainAppContent: React.FC = () => {
                 </p>
                 <div className="max-w-3xl border-t border-slate-800 pt-6">
                   <p className="text-slate-400 text-sm">No public video walkthroughs are available right now.</p>
-                  <button onClick={() => { window.history.pushState({}, '', '/gallery'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="mt-3 inline-flex items-center gap-2 text-sm text-[#C5A46D] hover:text-[#F9E7BA]">Browse video gallery <ArrowRight className="w-4 h-4" /></button>
+                  <button onClick={() => { window.history.pushState({}, '', '/gallery'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="mt-3 inline-flex items-center gap-2 text-sm text-[#E7C878] hover:text-[#F6E3B4]">Browse video gallery <ArrowRight className="w-4 h-4" /></button>
                 </div>
               </div>
             </section>
 
             {/* SECTION 8 — How TaisarTownHub Works */}
-            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220]">
+            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
               <div className="max-w-7xl mx-auto">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   <div>
@@ -550,7 +558,7 @@ const MainAppContent: React.FC = () => {
             </section>
 
             {/* SECTION 9 — Agency Registration CTA */}
-            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-[#101C2C] via-[#1A2638] to-[#101C2C]">
+            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-[#0B1220] via-[#1A2638] to-[#0B1220]">
               <div className="max-w-4xl mx-auto text-center">
                 <h2 className="font-serif-luxury text-4xl sm:text-5xl font-bold text-white mb-6">
                   Grow Your Real Estate Business with TaisarTownHub
@@ -561,13 +569,13 @@ const MainAppContent: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mx-auto">
                   <button
                     onClick={() => { window.history.pushState({}, '', '/register'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="w-full py-3 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm transition-shadow shadow-lg shadow-[#C5A46D]/20"
+                    className="w-full py-3 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm transition-shadow shadow-lg shadow-[#E7C878]/20"
                   >
                     Register Your Agency
                   </button>
                   <button
                     onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="w-full py-3 rounded-xl border border-[#C5A46D]/30 bg-transparent hover:bg-[#C5A46D]/10 text-[#C5A46D] font-bold text-sm transition-shadow"
+                    className="w-full py-3 rounded-xl border border-[#E7C878]/30 bg-transparent hover:bg-[#E7C878]/10 text-[#E7C878] font-bold text-sm transition-shadow"
                   >
                     Already have an agency? Log in
                   </button>
@@ -576,7 +584,7 @@ const MainAppContent: React.FC = () => {
             </section>
 
             {/* SECTION 11 — Contact & Office Information */}
-            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#0B1220]">
+            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
               <div className="max-w-7xl mx-auto">
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                   <div>
@@ -604,10 +612,10 @@ const MainAppContent: React.FC = () => {
                     </h3>
                     <ul className="space-y-3 text-sm text-slate-300">
                       <li>
-                        <a href={`tel:${cmsConfig.contactPhone.replace(/[^+\d]/g, '')}`} className="inline-flex items-center hover:text-[#C5A46D]"><Phone className="w-4 h-4 text-[#C5A46D] mr-2" />{cmsConfig.contactPhone}</a>
+                        <a href={`tel:${cmsConfig.contactPhone.replace(/[^+\d]/g, '')}`} className="inline-flex items-center hover:text-[#E7C878]"><Phone className="w-4 h-4 text-[#E7C878] mr-2" />{cmsConfig.contactPhone}</a>
                       </li>
                       <li>
-                        <a href={`mailto:${cmsConfig.contactEmail}`} className="inline-flex items-center hover:text-[#C5A46D]"><Mail className="w-4 h-4 text-[#C5A46D] mr-2" />{cmsConfig.contactEmail}</a>
+                        <a href={`mailto:${cmsConfig.contactEmail}`} className="inline-flex items-center hover:text-[#E7C878]"><Mail className="w-4 h-4 text-[#E7C878] mr-2" />{cmsConfig.contactEmail}</a>
                       </li>
                     </ul>
                   </div>
@@ -616,10 +624,10 @@ const MainAppContent: React.FC = () => {
                       Quick Links
                     </h3>
                     <ul className="space-y-3 text-sm text-slate-300">
-                      <li><a href="/agencies" className="hover:text-[#C5A46D] transition-colors">Agencies</a></li>
-                      <li><a href="/properties" className="hover:text-[#C5A46D] transition-colors">Properties for Sale</a></li>
-                      <li><a href="/services" className="hover:text-[#C5A46D] transition-colors">Services</a></li>
-                      <li><a href="/about" className="hover:text-[#C5A46D] transition-colors">About</a></li>
+                      <li><a href="/agencies" className="hover:text-[#E7C878] transition-colors">Agencies</a></li>
+                      <li><a href="/properties" className="hover:text-[#E7C878] transition-colors">Properties for Sale</a></li>
+                      <li><a href="/services" className="hover:text-[#E7C878] transition-colors">Services</a></li>
+                      <li><a href="/about" className="hover:text-[#E7C878] transition-colors">About</a></li>
                     </ul>
                   </div>
                 </div>

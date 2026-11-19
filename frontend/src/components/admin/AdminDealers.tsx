@@ -190,13 +190,13 @@ export const AdminDealers: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#101C2C] to-[#1A2638] border border-[#C5A46D]/30 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#0B1220] to-[#1A2638] border border-[#E7C878]/30 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-serif-luxury text-2xl font-bold text-white">
               Dealer & Agent Commission Ledger
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/20 text-[#C5A46D] border border-[#C5A46D]/40">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E7C878]/20 text-[#E7C878] border border-[#E7C878]/40">
               Agency Accounts
             </span>
           </div>
@@ -207,7 +207,7 @@ export const AdminDealers: React.FC = () => {
 
         <button
           onClick={handleOpenAdd}
-          className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+          className="px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20"
         >
           <Plus className="w-4 h-4" />
           <span>Add New Dealer</span>
@@ -216,10 +216,10 @@ export const AdminDealers: React.FC = () => {
 
       {/* 3 Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+        <div className="bg-[#0B1220] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Total Commission Accrued</span>
-            <DollarSign className="w-4 h-4 text-[#C5A46D]" />
+            <DollarSign className="w-4 h-4 text-[#E7C878]" />
           </div>
           <div className="text-2xl font-bold font-serif-luxury text-white mt-2">
             {formatPKRCurrency(totalAgencyCommissionEarned)}
@@ -227,21 +227,21 @@ export const AdminDealers: React.FC = () => {
           <div className="text-[11px] text-slate-400 mt-1">Across all closed transactions</div>
         </div>
 
-        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+        <div className="bg-[#0B1220] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Commission Settled / Paid</span>
-            <CheckCircle2 className="w-4 h-4 text-[#C5A46D]" />
+            <CheckCircle2 className="w-4 h-4 text-[#E7C878]" />
           </div>
-          <div className="text-2xl font-bold font-serif-luxury text-[#C5A46D] mt-2">
+          <div className="text-2xl font-bold font-serif-luxury text-[#E7C878] mt-2">
             {formatPKRCurrency(totalAgencyCommissionPaid)}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">Disbursed to agents via cash/transfer</div>
         </div>
 
-        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+        <div className="bg-[#0B1220] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Pending Payouts</span>
-            <Clock className="w-4 h-4 text-[#C5A46D]" />
+            <Clock className="w-4 h-4 text-[#E7C878]" />
           </div>
           <div className="text-2xl font-bold font-serif-luxury text-white mt-2">
             {formatPKRCurrency(totalAgencyCommissionPending)}
@@ -251,7 +251,7 @@ export const AdminDealers: React.FC = () => {
       </div>
 
       {/* Filter and Search */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#101C2C] p-4 rounded-xl border border-slate-800">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0B1220] p-4 rounded-xl border border-slate-800">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -259,7 +259,7 @@ export const AdminDealers: React.FC = () => {
             placeholder="Search dealer by name, agency, phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#0B1220] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+            className="w-full bg-[#07141E] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
           />
         </div>
         <span className="text-xs text-slate-400">
@@ -282,19 +282,19 @@ export const AdminDealers: React.FC = () => {
           return (
             <div
               key={dealer.id}
-              className="bg-[#101C2C] rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-[#C5A46D]/50 transition-all shadow-lg"
+              className="bg-[#0B1220] rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-[#E7C878]/50 transition-all shadow-lg"
             >
               <div className="space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#C5A46D]/20 to-[#101C2C] border border-[#C5A46D]/40 flex items-center justify-center font-serif-luxury font-bold text-[#F9E7BA] text-lg shadow">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#E7C878]/20 to-[#0B1220] border border-[#E7C878]/40 flex items-center justify-center font-serif-luxury font-bold text-[#F6E3B4] text-lg shadow">
                       {dealer.fullName.charAt(0)}
                     </div>
                     <div>
                       <h3 className="font-bold text-white text-sm">
                         {dealer.fullName}
                       </h3>
-                      <span className="text-[11px] text-[#C5A46D] block">
+                      <span className="text-[11px] text-[#E7C878] block">
                         {agencyVal}
                       </span>
                     </div>
@@ -318,10 +318,10 @@ export const AdminDealers: React.FC = () => {
                 </div>
 
                 {/* Commission Structure Badge */}
-                <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-800 space-y-2 text-xs">
+                <div className="p-3 rounded-xl bg-[#07141E] border border-slate-800 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Commission Rule:</span>
-                    <span className="font-bold text-[#C5A46D] capitalize">
+                    <span className="font-bold text-[#E7C878] capitalize">
                       {dealer.commissionType?.toLowerCase() === 'fixed'
                         ? `PKR ${commVal.toLocaleString()} Fixed / Deal`
                         : dealer.commissionType?.toLowerCase() === 'percentage'
@@ -353,21 +353,21 @@ export const AdminDealers: React.FC = () => {
                   </div>
                   <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase block">Earned</span>
-                    <span className="font-bold text-[#C5A46D] text-xs">
+                    <span className="font-bold text-[#E7C878] text-xs">
                       {formatPKRCurrency(earned)}
                     </span>
                   </div>
                 </div>
 
                 {/* Pending vs Settled */}
-                <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-800/80 space-y-1.5 text-xs">
+                <div className="p-3 rounded-xl bg-[#07141E] border border-slate-800/80 space-y-1.5 text-xs">
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">Paid to date:</span>
                     <span className="text-slate-200 font-mono">{formatPKRCurrency(paid)}</span>
                   </div>
                   <div className="flex justify-between items-center pt-1 border-t border-slate-800">
                     <span className="font-semibold text-slate-300">Pending Payable:</span>
-                    <span className={`font-mono font-bold ${pendingBalance > 0 ? 'text-[#F9E7BA]' : 'text-slate-400'}`}>
+                    <span className={`font-mono font-bold ${pendingBalance > 0 ? 'text-[#F6E3B4]' : 'text-slate-400'}`}>
                       {formatPKRCurrency(pendingBalance)}
                     </span>
                   </div>
@@ -378,7 +378,7 @@ export const AdminDealers: React.FC = () => {
                   <div className="text-[11px] text-slate-400">
                     <span className="font-semibold text-slate-300">Active Deal Associated: </span>
                     {dealerDeals.map((d) => (
-                      <span key={d.id} className="text-[#C5A46D] font-mono">
+                      <span key={d.id} className="text-[#E7C878] font-mono">
                         {d.dealNumber} ({d.status})
                       </span>
                     ))}
@@ -391,7 +391,7 @@ export const AdminDealers: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSelectedDealerForFiles(dealer)}
-                  className="px-2.5 py-1.5 rounded-lg bg-[#0B1220] hover:bg-[#C5A46D]/20 text-[#C5A46D] text-[11px] font-semibold transition flex items-center gap-1.5 cursor-pointer border border-[#C5A46D]/30"
+                  className="px-2.5 py-1.5 rounded-lg bg-[#07141E] hover:bg-[#E7C878]/20 text-[#E7C878] text-[11px] font-semibold transition flex items-center gap-1.5 cursor-pointer border border-[#E7C878]/30"
                   title="Inspect Dealer Inventory Files"
                 >
                   <Building className="w-3.5 h-3.5" />
@@ -401,7 +401,7 @@ export const AdminDealers: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleOpenPayout(dealer)}
-                  className="px-3 py-1.5 rounded-lg bg-[#C5A46D]/20 hover:bg-[#C5A46D] text-[#C5A46D] hover:text-[#101C2C] text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-[#C5A46D]/40"
+                  className="px-3 py-1.5 rounded-lg bg-[#E7C878]/20 hover:bg-[#E7C878] text-[#E7C878] hover:text-[#0B1220] text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-[#E7C878]/40"
                   disabled={!hasPermission(currentUser.role, 'pay_commissions')}
                   title={
                     hasPermission(currentUser.role, 'pay_commissions')
@@ -421,7 +421,7 @@ export const AdminDealers: React.FC = () => {
       {/* Settle Commission Payout Modal */}
       {isPayoutModalOpen && selectedDealerForPayout && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-md bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl">
+          <div className="relative w-full max-w-md bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl">
             <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">
               Disburse Commission Payout
             </h3>
@@ -430,16 +430,16 @@ export const AdminDealers: React.FC = () => {
             </p>
 
             <form onSubmit={handleExecutePayout} className="space-y-4 text-xs">
-              <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-800 space-y-1">
+              <div className="p-3 rounded-xl bg-[#07141E] border border-slate-800 space-y-1">
                 <div className="flex justify-between text-slate-400">
                   <span>Total Earned (ledger):</span>
                   <span className="text-white font-mono">{formatPKRCurrency(ledgerEarned)}</span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Already Paid:</span>
-                  <span className="text-[#C5A46D] font-mono">{formatPKRCurrency(ledgerPaid)}</span>
+                  <span className="text-[#E7C878] font-mono">{formatPKRCurrency(ledgerPaid)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-[#C5A46D] pt-1 border-t border-slate-800">
+                <div className="flex justify-between font-bold text-[#E7C878] pt-1 border-t border-slate-800">
                   <span>Payable (accrued):</span>
                   <span>{formatPKRCurrency(ledgerPayable)}</span>
                 </div>
@@ -454,7 +454,7 @@ export const AdminDealers: React.FC = () => {
                   required
                   value={payoutAmount}
                   onChange={(e) => setPayoutAmount(Number(e.target.value))}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono text-sm"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono text-sm"
                 />
               </div>
 
@@ -468,7 +468,7 @@ export const AdminDealers: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold cursor-pointer shadow"
+                  className="px-5 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold cursor-pointer shadow"
                 >
                   Confirm Payout
                 </button>
@@ -481,7 +481,7 @@ export const AdminDealers: React.FC = () => {
       {/* Add / Edit Dealer Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-md bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl">
+          <div className="relative w-full max-w-md bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl">
             <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">
               {editingDealerId ? 'Edit Dealer Details' : 'Register New Real Estate Dealer'}
             </h3>
@@ -498,7 +498,7 @@ export const AdminDealers: React.FC = () => {
                   placeholder="e.g. Saleem Siddiqui"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -510,7 +510,7 @@ export const AdminDealers: React.FC = () => {
                     placeholder="42101-9876543-1"
                     value={formData.cnic}
                     onChange={(e) => setFormData({ ...formData, cnic: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
                 <div>
@@ -521,7 +521,7 @@ export const AdminDealers: React.FC = () => {
                     placeholder="0321-9876543"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -533,7 +533,7 @@ export const AdminDealers: React.FC = () => {
                   placeholder="e.g. Al-Madina Real Estate / Taiser Town Desk"
                   value={formData.agencyOrBranch}
                   onChange={(e) => setFormData({ ...formData, agencyOrBranch: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -543,7 +543,7 @@ export const AdminDealers: React.FC = () => {
                   <select
                     value={formData.commissionType}
                     onChange={(e) => setFormData({ ...formData, commissionType: e.target.value as CommissionType })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   >
                     <option value="fixed">Fixed Amount (PKR)</option>
                     <option value="percentage">Percentage (%)</option>
@@ -558,7 +558,7 @@ export const AdminDealers: React.FC = () => {
                     type="number"
                     value={formData.commissionValue}
                     onChange={(e) => setFormData({ ...formData, commissionValue: Number(e.target.value) })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -573,7 +573,7 @@ export const AdminDealers: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold cursor-pointer shadow"
+                  className="px-5 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold cursor-pointer shadow"
                 >
                   {editingDealerId ? 'Save Terms' : 'Register Dealer'}
                 </button>

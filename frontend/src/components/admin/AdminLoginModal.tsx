@@ -115,7 +115,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-4 my-auto">
+      <div className="relative w-full max-w-lg bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-4 my-auto">
         <button
           onClick={() => setCurrentView('home')}
           className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
@@ -125,8 +125,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
         </button>
 
         <div className="text-center space-y-1.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#C5A46D] to-[#8C6D37] flex items-center justify-center mx-auto shadow-lg shadow-[#C5A46D]/20 border border-[#F9E7BA]/40">
-            <Shield className="w-6 h-6 text-[#101C2C]" />
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#E7C878] to-[#8C6D37] flex items-center justify-center mx-auto shadow-lg shadow-[#E7C878]/20 border border-[#F6E3B4]/40">
+            <Shield className="w-6 h-6 text-[#0B1220]" />
           </div>
           <h2 className="font-serif-luxury text-xl font-bold text-white">
             Agency Management & ERP Portal
@@ -137,13 +137,13 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
         </div>
 
         {/* Tab Switcher: Sign In vs Register */}
-        <div className="grid grid-cols-2 p-1 rounded-xl bg-[#0B1220] border border-slate-800 text-xs">
+        <div className="grid grid-cols-2 p-1 rounded-xl bg-[#07141E] border border-slate-800 text-xs">
           <button
             type="button"
             onClick={() => setTab('signin')}
             className={`py-2 rounded-lg font-bold transition-all cursor-pointer ${
               tab === 'signin'
-                ? 'bg-[#C5A46D] text-[#101C2C] shadow'
+                ? 'bg-[#E7C878] text-[#0B1220] shadow'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -154,7 +154,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
             onClick={() => setTab('register')}
             className={`py-2 rounded-lg font-bold transition-all cursor-pointer ${
               tab === 'register'
-                ? 'bg-[#C5A46D] text-[#101C2C] shadow'
+                ? 'bg-[#E7C878] text-[#0B1220] shadow'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -180,7 +180,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
           <form onSubmit={handleLogin} className="space-y-4 animate-fadeIn">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-[#C5A46D]" />
+                <Mail className="w-3.5 h-3.5 text-[#E7C878]" />
                 <span>Account Email</span>
               </label>
               <input
@@ -189,20 +189,20 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
                 placeholder="admin@taisartownhub.com (or dealer email)"
-                className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3.5 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3.5 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
               />
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-[#C5A46D]" />
+                  <Lock className="w-3.5 h-3.5 text-[#E7C878]" />
                   <span>Password</span>
                 </label>
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="text-[11px] text-slate-400 hover:text-[#C5A46D] flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] text-slate-400 hover:text-[#E7C878] flex items-center gap-1 cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   <span>{showPassword ? 'Hide' : 'Show'}</span>
@@ -214,14 +214,14 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
-                className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3.5 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3.5 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
               />
             </div>
 
             <button
               type="submit"
               disabled={busy}
-              className="w-full py-3 px-4 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20 disabled:opacity-60"
+              className="w-full py-3 px-4 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20 disabled:opacity-60"
             >
               <span>{busy ? 'Authenticating…' : 'Sign In to Dashboard'}</span>
               <ArrowRight className="w-4 h-4" />
@@ -232,8 +232,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
         {/* TAB 2: REGISTER */}
         {tab === 'register' && (
           <form onSubmit={handleRegister} className="space-y-3 pt-1 animate-fadeIn">
-            <div className="bg-[#0B1220] border border-slate-800 rounded-xl p-3 text-xs text-slate-300">
-              <span className="font-bold text-[#C5A46D] block mb-0.5">
+            <div className="bg-[#07141E] border border-slate-800 rounded-xl p-3 text-xs text-slate-300">
+              <span className="font-bold text-[#E7C878] block mb-0.5">
                 Join Taiser Town Scheme 45 Dealer Network
               </span>
               <p className="text-[10px] text-slate-400">
@@ -250,7 +250,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                   placeholder="e.g. Asad Siddiqui"
                   value={regFullName}
                   onChange={(e) => setRegFullName(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -262,7 +262,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                   placeholder="0300-1234567"
                   value={regPhone}
                   onChange={(e) => setRegPhone(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                 />
               </div>
             </div>
@@ -275,7 +275,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                 placeholder="consultant@agency.pk"
                 value={regEmail}
                 onChange={(e) => setRegEmail(e.target.value)}
-                className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
               />
             </div>
 
@@ -288,7 +288,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                   placeholder="e.g. Al-Madina Realty"
                   value={regAgency}
                   onChange={(e) => setRegAgency(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -297,7 +297,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                 <select
                   value={regSector}
                   onChange={(e) => setRegSector(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none cursor-pointer"
                 >
                   <option value="Sector 63">Sector 63 (100ft Boulevard)</option>
                   <option value="Sector 70-D">Sector 70-D (Prime Possession)</option>
@@ -318,7 +318,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                   placeholder="Min 8 characters"
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                 />
               </div>
 
@@ -329,7 +329,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
                   placeholder="Repeat password"
                   value={regConfirmPassword}
                   onChange={(e) => setRegConfirmPassword(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                 />
               </div>
             </div>
@@ -337,7 +337,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ initialTab = '
             <button
               type="submit"
               disabled={busy}
-              className="w-full py-2.5 px-4 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20 disabled:opacity-60"
+              className="w-full py-2.5 px-4 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20 disabled:opacity-60"
             >
               <span>{busy ? 'Registering…' : 'Register & Enter Dashboard'}</span>
               <ArrowRight className="w-4 h-4" />

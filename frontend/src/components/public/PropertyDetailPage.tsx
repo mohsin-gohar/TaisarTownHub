@@ -66,6 +66,7 @@ export const PropertyDetailPage: React.FC = () => {
   // Inquiry Form State
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [inquirySubmitting, setInquirySubmitting] = useState(false);
   const [message, setMessage] = useState(
     property
       ? `Salam, I am interested in Property ID ${property.id}: ${property.title}. Please provide file verification and token procedure.`
@@ -76,7 +77,7 @@ export const PropertyDetailPage: React.FC = () => {
     return (
       <div className="py-24 px-4 text-center max-w-lg mx-auto min-h-[60vh] flex items-center justify-center">
         <EmptyState
-          icon={<Home className="w-8 h-8 text-[#C5A46D]" />}
+          icon={<Home className="w-8 h-8 text-[#E7C878]" />}
           title="Listing Not Available"
           description="The selected property is currently unavailable or has been archived."
           actionLabel="Explore All Verified Properties"
@@ -103,14 +104,16 @@ export const PropertyDetailPage: React.FC = () => {
     tenureYears
   );
 
-  const handleInquirySubmit = (e: React.FormEvent) => {
+  const handleInquirySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (inquirySubmitting) return;
     if (!fullName || !phone) {
       showToast('error', 'Please enter your full name and phone number.');
       return;
     }
 
-    addInquiry({
+    setInquirySubmitting(true);
+    const sent = await addInquiry({
       fullName,
       phone,
       subject: `Property Inquiry: ${property.title}`,
@@ -118,13 +121,15 @@ export const PropertyDetailPage: React.FC = () => {
       message,
       source: 'Property Page'
     });
+    setInquirySubmitting(false);
 
+    if (!sent) return;
     setFullName('');
     setPhone('');
   };
 
   return (
-    <div className="py-12 px-4 sm:px-6 lg:px-8 bg-[#0B1220] min-h-screen">
+    <div className="py-12 px-4 sm:px-6 lg:px-8 bg-[#07141E] min-h-screen">
       <div className="max-w-7xl mx-auto space-y-10">
         {/* Navigation Bar */}
         <div className="flex items-center justify-between">
@@ -133,21 +138,21 @@ export const PropertyDetailPage: React.FC = () => {
               setCurrentView('properties');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-[#C5A46D] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-[#E7C878] transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to All Properties</span>
           </button>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#C5A46D] text-[#101C2C] shadow">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#E7C878] text-[#0B1220] shadow">
               {property.type}
             </span>
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#101C2C] text-[#F9E7BA] border border-[#C5A46D]/40">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#0B1220] text-[#F6E3B4] border border-[#E7C878]/40">
               {property.phase || 'Phase 1'}
             </span>
             {property.plotNumber && (
-              <span className="px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-slate-800 text-[#C5A46D] border border-slate-700">
+              <span className="px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-slate-800 text-[#E7C878] border border-slate-700">
                 Plot {property.plotNumber}
               </span>
             )}
@@ -162,7 +167,7 @@ export const PropertyDetailPage: React.FC = () => {
         {/* Title Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-800">
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs text-[#C5A46D]">
+            <div className="flex items-center gap-2 text-xs text-[#E7C878]">
               <MapPin className="w-4 h-4" />
               <span>{property.location}</span>
             </div>
@@ -173,7 +178,7 @@ export const PropertyDetailPage: React.FC = () => {
 
           <div className="text-left md:text-right space-y-1">
             <span className="text-xs text-slate-400 uppercase tracking-wider block">Demand Price</span>
-            <div className="font-serif-luxury text-3xl sm:text-4xl font-bold text-[#F9E7BA]">
+            <div className="font-serif-luxury text-3xl sm:text-4xl font-bold text-[#F6E3B4]">
               {property.formattedPrice}
             </div>
             {Number(property.sizeSqYards) > 0 && (
@@ -187,7 +192,7 @@ export const PropertyDetailPage: React.FC = () => {
         {/* Image Showcase with lightbox & video overlay */}
         <div className="space-y-4">
           <div
-            className="group relative aspect-16/9 sm:aspect-21/9 max-h-[500px] rounded-2xl overflow-hidden border border-[#C5A46D]/30 bg-slate-900 shadow-2xl cursor-zoom-in"
+            className="group relative aspect-16/9 sm:aspect-21/9 max-h-[500px] rounded-2xl overflow-hidden border border-[#E7C878]/30 bg-slate-900 shadow-2xl cursor-zoom-in"
             onClick={openLightbox}
             role="button"
             aria-label="Open gallery full screen"
@@ -222,7 +227,7 @@ export const PropertyDetailPage: React.FC = () => {
                   setActiveImage(VIDEO_SENTINEL);
                 }}
                 aria-label="Play property video"
-                className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-md border border-[#C5A46D]/40 text-[#F9E7BA] text-[11px] font-bold flex items-center gap-1.5 hover:bg-[#C5A46D] hover:text-[#101C2C] transition-colors cursor-pointer"
+                className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-md border border-[#E7C878]/40 text-[#F6E3B4] text-[11px] font-bold flex items-center gap-1.5 hover:bg-[#E7C878] hover:text-[#0B1220] transition-colors cursor-pointer"
               >
                 <Play className="w-3.5 h-3.5" />
                 Watch Video Tour
@@ -232,7 +237,7 @@ export const PropertyDetailPage: React.FC = () => {
             {/* Expand affordance */}
             {!activeIsVideo && (
               <span className="absolute bottom-4 right-4 p-2.5 rounded-full bg-black/70 backdrop-blur-md border border-white/15 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                <Maximize2 className="w-4 h-4 text-[#C5A46D]" />
+                <Maximize2 className="w-4 h-4 text-[#E7C878]" />
               </span>
             )}
           </div>
@@ -249,7 +254,7 @@ export const PropertyDetailPage: React.FC = () => {
                   aria-pressed={isActive}
                   title={`View image ${idx + 1}`}
                   className={`relative w-24 h-16 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
-                    isActive ? 'border-[#C5A46D] scale-105' : 'border-slate-800 opacity-60 hover:opacity-100'
+                    isActive ? 'border-[#E7C878] scale-105' : 'border-slate-800 opacity-60 hover:opacity-100'
                   }`}
                 >
                   <ImageWithFallback src={img} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -264,10 +269,10 @@ export const PropertyDetailPage: React.FC = () => {
                 aria-pressed={activeIsVideo}
                 title="Play property video"
                 className={`relative w-24 h-16 rounded-xl shrink-0 border-2 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                  activeIsVideo ? 'border-[#C5A46D] bg-[#C5A46D]/15' : 'border-slate-800 bg-[#101C2C] opacity-70 hover:opacity-100'
+                  activeIsVideo ? 'border-[#E7C878] bg-[#E7C878]/15' : 'border-slate-800 bg-[#0B1220] opacity-70 hover:opacity-100'
                 }`}
               >
-                <Play className="w-4 h-4 text-[#C5A46D]" />
+                <Play className="w-4 h-4 text-[#E7C878]" />
                 <span className="text-[9px] uppercase tracking-wider font-bold text-slate-300">Video Tour</span>
               </button>
             )}
@@ -291,11 +296,11 @@ export const PropertyDetailPage: React.FC = () => {
           {/* Main Info (8 cols) */}
           <div className="lg:col-span-8 space-y-10">
             {/* Quick Specs Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 rounded-2xl bg-[#101C2C] border border-slate-800">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 rounded-2xl bg-[#0B1220] border border-slate-800">
               <div className="space-y-1">
                 <span className="text-[10px] text-slate-400 uppercase font-semibold">Taiser Phase</span>
-                <div className="font-serif-luxury text-lg font-bold text-[#F9E7BA] flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-[#C5A46D]" />
+                <div className="font-serif-luxury text-lg font-bold text-[#F6E3B4] flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-[#E7C878]" />
                   <span>{property.phase || 'Phase 1'}</span>
                 </div>
               </div>
@@ -303,7 +308,7 @@ export const PropertyDetailPage: React.FC = () => {
               <div className="space-y-1">
                 <span className="text-[10px] text-slate-400 uppercase font-semibold">Plot Size</span>
                 <div className="font-serif-luxury text-xl font-bold text-white flex items-center gap-1.5">
-                  <Maximize2 className="w-4 h-4 text-[#C5A46D]" />
+                  <Maximize2 className="w-4 h-4 text-[#E7C878]" />
                   <span>{property.sizeSqYards} Sq. Yd</span>
                 </div>
               </div>
@@ -318,7 +323,7 @@ export const PropertyDetailPage: React.FC = () => {
 
               <div className="space-y-1">
                 <span className="text-[10px] text-slate-400 uppercase font-semibold">File / Allotment</span>
-                <div className="text-sm font-bold text-[#C5A46D] flex items-center gap-1.5 font-mono">
+                <div className="text-sm font-bold text-[#E7C878] flex items-center gap-1.5 font-mono">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>{property.fileNumber ? `#${property.fileNumber}` : 'Verified'}</span>
                 </div>
@@ -326,7 +331,7 @@ export const PropertyDetailPage: React.FC = () => {
             </div>
 
             {/* Description */}
-            <div className="bg-[#101C2C] p-8 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
+            <div className="bg-[#0B1220] p-8 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
               <h3 className="font-serif-luxury text-2xl font-bold text-white">
                 Detailed Property Description
               </h3>
@@ -336,14 +341,14 @@ export const PropertyDetailPage: React.FC = () => {
             </div>
 
             {/* Features & Amenities List */}
-            <div className="bg-[#101C2C] p-8 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
+            <div className="bg-[#0B1220] p-8 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
               <h3 className="font-serif-luxury text-2xl font-bold text-white">
                 Location & Construction Highlights
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 {property.features.map((feat, i) => (
                   <div key={i} className="flex items-center gap-2.5 text-xs text-slate-200">
-                    <CheckCircle2 className="w-4 h-4 text-[#C5A46D] shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-[#E7C878] shrink-0" />
                     <span>{feat}</span>
                   </div>
                 ))}
@@ -351,9 +356,9 @@ export const PropertyDetailPage: React.FC = () => {
             </div>
 
             {/* Installment Calculator */}
-            <div className="bg-[#101C2C] p-8 rounded-2xl border border-[#C5A46D]/30 space-y-6 shadow-2xl">
+            <div className="bg-[#0B1220] p-8 rounded-2xl border border-[#E7C878]/30 space-y-6 shadow-2xl">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#C5A46D]/15 text-[#C5A46D] flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[#E7C878]/15 text-[#E7C878] flex items-center justify-center">
                   <Calculator className="w-5 h-5" />
                 </div>
                 <div>
@@ -371,7 +376,7 @@ export const PropertyDetailPage: React.FC = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs text-slate-300">
                     <span>Down Payment Percentage: <strong>{downPaymentPct}%</strong></span>
-                    <span className="text-[#C5A46D] font-bold">
+                    <span className="text-[#E7C878] font-bold">
                       {formatPKRCurrency(installmentResult.downPayment)}
                     </span>
                   </div>
@@ -382,7 +387,7 @@ export const PropertyDetailPage: React.FC = () => {
                     step={5}
                     value={downPaymentPct}
                     onChange={(e) => setDownPaymentPct(Number(e.target.value))}
-                    className="w-full accent-[#C5A46D] cursor-pointer"
+                    className="w-full accent-[#E7C878] cursor-pointer"
                   />
                   <div className="flex justify-between text-[10px] text-slate-500">
                     <span>15%</span>
@@ -401,8 +406,8 @@ export const PropertyDetailPage: React.FC = () => {
                         onClick={() => setTenureYears(years)}
                         className={`py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                           tenureYears === years
-                            ? 'bg-[#C5A46D] text-[#101C2C]'
-                            : 'bg-[#0B1220] text-slate-300 border border-slate-700 hover:border-slate-500'
+                            ? 'bg-[#E7C878] text-[#0B1220]'
+                            : 'bg-[#07141E] text-slate-300 border border-slate-700 hover:border-slate-500'
                         }`}
                       >
                         {years} {years === 1 ? 'Year' : 'Years'}
@@ -412,7 +417,7 @@ export const PropertyDetailPage: React.FC = () => {
                 </div>
 
                 {/* Results Card */}
-                <div className="p-4 rounded-xl bg-[#0B1220] border border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-[#07141E] border border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
                       Estimated Monthly Installment
@@ -440,20 +445,20 @@ export const PropertyDetailPage: React.FC = () => {
 
           {/* Contact Agent Sidebar (4 cols) */}
           <div className="lg:col-span-4 space-y-6">
-            <div className="bg-[#101C2C] p-6 sm:p-8 rounded-2xl border border-[#C5A46D]/30 shadow-2xl space-y-6 sticky top-28">
+            <div className="bg-[#0B1220] p-6 sm:p-8 rounded-2xl border border-[#E7C878]/30 shadow-2xl space-y-6 sticky top-28">
               <div>
-                <span className="text-[10px] uppercase font-bold text-[#C5A46D] tracking-wider block">
+                <span className="text-[10px] uppercase font-bold text-[#E7C878] tracking-wider block">
                   Designated Property Specialist
                 </span>
                 <div className="flex items-center gap-3 mt-3 pb-3 border-b border-slate-800">
-                  <div className="w-12 h-12 rounded-full bg-slate-800 border border-[#C5A46D]/40 flex items-center justify-center font-bold text-white">
+                  <div className="w-12 h-12 rounded-full bg-slate-800 border border-[#E7C878]/40 flex items-center justify-center font-bold text-white">
                     {property.contactPerson?.split(' ').map(n => n[0]).join('') || 'TT'}
                   </div>
                   <div>
                     <h4 className="font-serif-luxury font-bold text-white text-base">
                       {property.contactPerson || 'Taisar Town Advisory Desk'}
                     </h4>
-                    <span className="text-xs text-[#C5A46D]">Scheme 45 Senior Advisor</span>
+                    <span className="text-xs text-[#E7C878]">Scheme 45 Senior Advisor</span>
                   </div>
                 </div>
               </div>
@@ -468,7 +473,7 @@ export const PropertyDetailPage: React.FC = () => {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="e.g. Asad Siddiqui"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
 
@@ -480,7 +485,7 @@ export const PropertyDetailPage: React.FC = () => {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="e.g. +92 300 0000000"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
 
@@ -490,16 +495,17 @@ export const PropertyDetailPage: React.FC = () => {
                     rows={3}
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg p-3 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg p-3 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3 px-4 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#C5A46D]/20"
+                  disabled={inquirySubmitting}
+                  className="w-full py-3 px-4 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] disabled:opacity-60 disabled:cursor-not-allowed text-[#0B1220] font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#E7C878]/20"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Send Property Inquiry</span>
+                  <span>{inquirySubmitting ? 'Sending…' : 'Send Property Inquiry'}</span>
                 </button>
               </form>
             </div>

@@ -28,9 +28,11 @@ export const ContactSection: React.FC = () => {
 
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<boolean>(false);
+  const [formSubmitting, setFormSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (formSubmitting) return;
     setFormError(null);
 
     const validation = validateInquiryForm({
@@ -45,7 +47,8 @@ export const ContactSection: React.FC = () => {
       return;
     }
 
-    addInquiry({
+    setFormSubmitting(true);
+    const sent = await addInquiry({
       fullName: formData.fullName.trim(),
       phone: formData.phone.trim(),
       email: formData.email.trim(),
@@ -55,6 +58,12 @@ export const ContactSection: React.FC = () => {
       message: formData.message.trim(),
       source: 'Contact Form'
     });
+    setFormSubmitting(false);
+
+    if (!sent) {
+      setFormError('Your inquiry was not sent. Please check the connection and try again.');
+      return;
+    }
 
     setFormSuccess(true);
     setFormData({
@@ -69,11 +78,11 @@ export const ContactSection: React.FC = () => {
   };
 
   return (
-    <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#0B1220] border-t border-[#C5A46D]/15">
+    <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#07141E] border-t border-[#E7C878]/15">
       <div className="max-w-7xl mx-auto space-y-16">
         {/* Title */}
         <div className="text-center max-w-3xl mx-auto space-y-3">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E7C878]/15 text-[#E7C878] border border-[#E7C878]/30">
             <Mail className="w-3.5 h-3.5" /> Direct Agency Connect
           </span>
           <h2 className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white">
@@ -88,7 +97,7 @@ export const ContactSection: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           {/* Contact Details & Quick Links (5 cols) */}
           <div className="lg:col-span-5 space-y-6">
-            <div className="bg-[#101C2C] p-8 rounded-2xl border border-slate-800 space-y-6 shadow-xl">
+            <div className="bg-[#0B1220] p-8 rounded-2xl border border-slate-800 space-y-6 shadow-xl">
               <h3 className="font-serif-luxury text-2xl font-bold text-white">
                 Main Advisory Office
               </h3>
@@ -98,7 +107,7 @@ export const ContactSection: React.FC = () => {
 
               <div className="space-y-4 pt-2 text-xs sm:text-sm">
                 <div className="flex items-start gap-3 text-slate-300">
-                  <MapPin className="w-5 h-5 text-[#C5A46D] shrink-0 mt-0.5" />
+                  <MapPin className="w-5 h-5 text-[#E7C878] shrink-0 mt-0.5" />
                   <div>
                     <span className="block font-semibold text-white">Office Address</span>
                     <span className="text-slate-400 text-xs">{cmsConfig.officeAddress}</span>
@@ -106,7 +115,7 @@ export const ContactSection: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3 text-slate-300">
-                  <Phone className="w-5 h-5 text-[#C5A46D] shrink-0" />
+                  <Phone className="w-5 h-5 text-[#E7C878] shrink-0" />
                   <div>
                     <span className="block font-semibold text-white">Direct Phone</span>
                     <span className="text-slate-400 text-xs">{cmsConfig.contactPhone}</span>
@@ -114,7 +123,7 @@ export const ContactSection: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3 text-slate-300">
-                  <Mail className="w-5 h-5 text-[#C5A46D] shrink-0" />
+                  <Mail className="w-5 h-5 text-[#E7C878] shrink-0" />
                   <div>
                     <span className="block font-semibold text-white">Email Desk</span>
                     <span className="text-slate-400 text-xs">{cmsConfig.contactEmail}</span>
@@ -122,7 +131,7 @@ export const ContactSection: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3 text-slate-300">
-                  <Clock className="w-5 h-5 text-[#C5A46D] shrink-0" />
+                  <Clock className="w-5 h-5 text-[#E7C878] shrink-0" />
                   <div>
                     <span className="block font-semibold text-white">Operating Hours</span>
                     <span className="text-slate-400 text-xs">{cmsConfig.workingHours}</span>
@@ -131,9 +140,9 @@ export const ContactSection: React.FC = () => {
               </div>
 
               <div className="pt-4 border-t border-slate-800">
-                <div className="p-4 rounded-xl bg-[#0B1220] border border-[#C5A46D]/20 text-center space-y-1.5 shadow-inner">
-                  <div className="text-xs font-bold text-[#F9E7BA] flex items-center justify-center gap-1.5">
-                    <Phone className="w-4 h-4 text-[#C5A46D]" />
+                <div className="p-4 rounded-xl bg-[#07141E] border border-[#E7C878]/20 text-center space-y-1.5 shadow-inner">
+                  <div className="text-xs font-bold text-[#F6E3B4] flex items-center justify-center gap-1.5">
+                    <Phone className="w-4 h-4 text-[#E7C878]" />
                     <span>Speak with the advisory desk</span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
@@ -159,7 +168,7 @@ export const ContactSection: React.FC = () => {
 
           {/* Form (7 cols) */}
           <div className="lg:col-span-7">
-            <div className="bg-[#101C2C] p-8 sm:p-10 rounded-2xl border border-[#C5A46D]/30 shadow-2xl space-y-6">
+            <div className="bg-[#0B1220] p-8 sm:p-10 rounded-2xl border border-[#E7C878]/30 shadow-2xl space-y-6">
               <div>
                 <h3 className="font-serif-luxury text-2xl font-bold text-white">
                   Send an Inquiry or Schedule a Site Tour
@@ -205,7 +214,7 @@ export const ContactSection: React.FC = () => {
                         value={formData.fullName}
                         onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                         placeholder="e.g. Tariq Siddiqui"
-                        className="w-full bg-[#0B1220] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                        className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                       />
                     </div>
 
@@ -219,7 +228,7 @@ export const ContactSection: React.FC = () => {
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                         placeholder="e.g. +92 300 1234567"
-                        className="w-full bg-[#0B1220] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                        className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                       />
                     </div>
                   </div>
@@ -234,7 +243,7 @@ export const ContactSection: React.FC = () => {
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         placeholder="e.g. investor@gmail.com"
-                        className="w-full bg-[#0B1220] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                        className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                       />
                     </div>
 
@@ -245,7 +254,7 @@ export const ContactSection: React.FC = () => {
                       <select
                         value={formData.budgetRange}
                         onChange={(e) => setFormData({ ...formData, budgetRange: e.target.value })}
-                        className="w-full bg-[#0B1220] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
+                        className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none cursor-pointer"
                       >
                         <option value="Under PKR 25 Lacs">Under PKR 25 Lacs (Phase 2 Plots)</option>
                         <option value="PKR 25 - 50 Lacs">PKR 25 - 50 Lacs (120 Sq Yd Phase 1)</option>
@@ -265,7 +274,7 @@ export const ContactSection: React.FC = () => {
                       value={formData.preferredPropertyOrProject}
                       onChange={(e) => setFormData({ ...formData, preferredPropertyOrProject: e.target.value })}
                       placeholder="e.g. Sector 70-D, 120 Sq Yd West Open Plot"
-                      className="w-full bg-[#0B1220] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                      className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                     />
                   </div>
 
@@ -279,16 +288,17 @@ export const ContactSection: React.FC = () => {
                       value={formData.message}
                       onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                       placeholder="Please mention your preferred location, whether you require ready possession, or if you wish to book an accompanied Sunday site visit..."
-                      className="w-full bg-[#0B1220] text-white text-xs sm:text-sm rounded-lg p-3.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                      className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-lg p-3.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                     />
                   </div>
 
                   <button
                     type="submit"
-                    className="w-full py-3.5 px-6 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm transition-all duration-200 shadow-lg shadow-[#C5A46D]/20 flex items-center justify-center gap-2 cursor-pointer"
+                    disabled={formSubmitting}
+                    className="w-full py-3.5 px-6 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] disabled:opacity-60 disabled:cursor-not-allowed text-[#0B1220] font-bold text-sm transition-all duration-200 shadow-lg shadow-[#E7C878]/20 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
-                    <span>Submit Official Inquiry</span>
+                    <span>{formSubmitting ? 'Sending inquiry…' : 'Submit Official Inquiry'}</span>
                   </button>
                 </form>
               )}

@@ -130,11 +130,11 @@ export const CompareModal: React.FC<CompareModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="compare-dialog-title"
-        className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[#C5A46D]/35 bg-[#0B1220] shadow-2xl"
+        className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[#E7C878]/35 bg-[#07141E] shadow-2xl"
       >
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-[#101C2C] px-4 py-3 sm:px-6">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-[#0B1220] px-4 py-3 sm:px-6">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#C5A46D]">Shortlist analysis</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#E7C878]">Shortlist analysis</p>
             <h2 id="compare-dialog-title" className="font-serif-luxury text-lg font-bold text-white sm:text-xl">
               Compare {items.length} properties
             </h2>
@@ -143,7 +143,7 @@ export const CompareModal: React.FC<CompareModalProps> = ({
             <button
               type="button"
               onClick={copyShareLink}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-[11px] font-semibold text-slate-200 transition hover:border-[#C5A46D]/50 hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-[11px] font-semibold text-slate-200 transition hover:border-[#E7C878]/50 hover:text-white"
             >
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
               {copied ? 'Link copied' : 'Copy share link'}
@@ -170,7 +170,7 @@ export const CompareModal: React.FC<CompareModalProps> = ({
               aria-label="Shortlist share link"
               value={shareUrl}
               onFocus={(event) => event.currentTarget.select()}
-              className="w-full rounded-lg border border-slate-700 bg-[#0B1220] px-3 py-1.5 font-mono text-[11px] text-slate-200 focus:border-[#C5A46D] focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-[#07141E] px-3 py-1.5 font-mono text-[11px] text-slate-200 focus:border-[#E7C878] focus:outline-none"
             />
           </div>
         )}
@@ -181,7 +181,7 @@ export const CompareModal: React.FC<CompareModalProps> = ({
               <tr>
                 <th scope="col" className="w-36 border-b border-r border-slate-800 p-3 align-bottom text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   <span className="inline-flex items-center gap-1.5">
-                    <Scale className="h-3.5 w-3.5 text-[#C5A46D]" /> Attribute
+                    <Scale className="h-3.5 w-3.5 text-[#E7C878]" /> Attribute
                   </span>
                 </th>
                 {items.map((item) => (
@@ -205,7 +205,7 @@ export const CompareModal: React.FC<CompareModalProps> = ({
                       <button
                         type="button"
                         onClick={() => onOpenProperty(item)}
-                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[#C5A46D] hover:underline"
+                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[#E7C878] hover:underline"
                       >
                         Open dossier <ExternalLink className="h-3 w-3" />
                       </button>
@@ -216,7 +216,7 @@ export const CompareModal: React.FC<CompareModalProps> = ({
             </thead>
             <tbody>
               {rows.map((row, index) => (
-                <tr key={row.label} className={index % 2 === 0 ? 'bg-[#0B1220]' : 'bg-[#0D1624]'}>
+                <tr key={row.label} className={index % 2 === 0 ? 'bg-[#07141E]' : 'bg-[#0D1624]'}>
                   <th scope="row" className="border-b border-r border-slate-800 px-3 py-2.5 text-[11px] font-semibold text-slate-400">
                     {row.label}
                   </th>
@@ -237,12 +237,12 @@ export const CompareModal: React.FC<CompareModalProps> = ({
           </table>
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 bg-[#101C2C] px-4 py-3 text-[11px] text-slate-500 sm:px-6">
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 bg-[#0B1220] px-4 py-3 text-[11px] text-slate-500 sm:px-6">
           <span>Comparison uses only publicly published listing data. Verify ownership and documents before payment.</span>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-[#C5A46D] px-4 py-2 text-[11px] font-bold text-[#101C2C] transition hover:bg-[#D4AF37]"
+            className="rounded-lg bg-[#E7C878] px-4 py-2 text-[11px] font-bold text-[#0B1220] transition hover:bg-[#F3C464]"
           >
             Back to listings
           </button>

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { DEMO_ROLE_IPS, loginToAdminViaApi } from './helpers/adminLogin';
 
 const API_BASE = process.env.PLAYWRIGHT_API_URL || process.env.VITE_API_URL || 'http://127.0.0.1:8080/api';
 
@@ -15,7 +16,8 @@ const DEMO_ACCOUNTS = [
   { role: 'operator', email: 'operator@taisartownhub.com', password: 'Operator@2026' },
 ] as const;
 
-async function loginAs(page: Page, account: (typeof DEMO_ACCOUNTS)[number]) {
+/** One real browser-form sign-in keeps the auth UI itself under test. */
+async function loginAsViaForm(page: Page, account: (typeof DEMO_ACCOUNTS)[number]) {
   await page.goto('/admin-login');
   const emailInput = page.getByRole('textbox', { name: /account email|admin@taisartownhub/i });
   const passwordInput = page.locator('input[type="password"]').first();
@@ -29,8 +31,14 @@ async function loginAs(page: Page, account: (typeof DEMO_ACCOUNTS)[number]) {
 
 test.describe('Admin Login - Every demo role can authenticate', () => {
   for (const account of DEMO_ACCOUNTS) {
-    test(`${account.role} can reach admin dashboard`, async ({ page }) => {
-      await loginAs(page, account);
+    test(`${account.role} can reach admin dashboard`, async ({ page, request }) => {
+      if (account.role === 'super_admin') {
+        await loginAsViaForm(page, account);
+      } else {
+        // Node-side API sign-in with a per-role IP bucket. Eleven browser form
+        // logins across this suite would exceed the 10/min shared-IP limiter.
+        await loginToAdminViaApi(page, request, account, DEMO_ROLE_IPS[account.role]);
+      }
       await expect(page).toHaveURL(/\/admin/);
       await expect(page.locator('main')).toBeVisible();
     });

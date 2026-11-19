@@ -33,7 +33,7 @@ const UsageMeter: React.FC<{ label: string; used: number; limit: number | null; 
       </div>
       <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
         <div
-          className={`h-full ${pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-400' : 'bg-[#C5A46D]'}`}
+          className={`h-full ${pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-400' : 'bg-[#E7C878]'}`}
           style={{ width: `${unlimited ? 12 : Math.max(pct, 2)}%` }}
         />
       </div>
@@ -185,12 +185,12 @@ export const AdminSubscription: React.FC = () => {
                       <div
                         key={candidate.id ?? candidate.key}
                         className={`p-3 rounded-xl border ${
-                          current ? 'border-[#C5A46D]/50 bg-[#C5A46D]/10' : 'border-slate-800 bg-[#0B1220]'
+                          current ? 'border-[#E7C878]/50 bg-[#E7C878]/10' : 'border-slate-800 bg-[#07141E]'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-[#C5A46D]" />
+                            <Sparkles className="w-3.5 h-3.5 text-[#E7C878]" />
                             <span className="text-xs font-bold text-white">{candidate.name}</span>
                           </div>
                           {current && <EnterpriseBadge tone="gold">Current</EnterpriseBadge>}
@@ -226,7 +226,7 @@ export const AdminSubscription: React.FC = () => {
               )}
 
               <div className="mt-4 flex items-start gap-2 text-[10px] text-slate-500">
-                <CreditCard className="w-4 h-4 text-[#C5A46D] shrink-0" />
+                <CreditCard className="w-4 h-4 text-[#E7C878] shrink-0" />
                 <span>
                   No payment details are collected in the app. Subscriptions are assigned by a platform
                   administrator with the `admin.manage_subscriptions` permission.

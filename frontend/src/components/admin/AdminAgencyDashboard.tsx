@@ -41,7 +41,7 @@ const UsageBar: React.FC<{ label: string; used: number; limit: number | null }> 
       </div>
       <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
         <div
-          className={`h-full ${pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-400' : 'bg-[#C5A46D]'}`}
+          className={`h-full ${pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-400' : 'bg-[#E7C878]'}`}
           style={{ width: `${unlimited ? 12 : Math.max(pct, 2)}%` }}
         />
       </div>
@@ -102,8 +102,8 @@ export const AdminAgencyDashboard: React.FC<AgencyDashboardProps> = ({ onNavigat
           <EnterpriseCard>
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="flex items-start gap-4 min-w-0">
-                <div className="w-14 h-14 rounded-2xl bg-[#C5A46D]/15 border border-[#C5A46D]/30 flex items-center justify-center shrink-0">
-                  <Building2 className="w-7 h-7 text-[#C5A46D]" />
+                <div className="w-14 h-14 rounded-2xl bg-[#E7C878]/15 border border-[#E7C878]/30 flex items-center justify-center shrink-0">
+                  <Building2 className="w-7 h-7 text-[#E7C878]" />
                 </div>
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -197,16 +197,16 @@ export const AdminAgencyDashboard: React.FC<AgencyDashboardProps> = ({ onNavigat
                     <button
                       key={action.tab}
                       onClick={() => onNavigate(action.tab)}
-                      className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-[#0B1220] border border-slate-800 hover:border-[#C5A46D]/40 text-left cursor-pointer transition-colors"
+                      className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-[#07141E] border border-slate-800 hover:border-[#E7C878]/40 text-left cursor-pointer transition-colors"
                     >
                       <span className="flex items-center gap-2.5 min-w-0">
-                        <Icon className="w-4 h-4 text-[#C5A46D] shrink-0" />
+                        <Icon className="w-4 h-4 text-[#E7C878] shrink-0" />
                         <span className="min-w-0">
                           <span className="block text-xs font-semibold text-white">{action.label}</span>
                           <span className="block text-[10px] text-slate-500">{action.hint}</span>
                         </span>
                       </span>
-                      <span className="text-[#C5A46D] text-xs">→</span>
+                      <span className="text-[#E7C878] text-xs">→</span>
                     </button>
                   );
                 })}

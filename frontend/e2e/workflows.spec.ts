@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 /**
  * PHASE 6 — End-to-End Business Workflow Testing.
@@ -10,14 +10,25 @@ const SUPER_ADMIN = {
 };
 const API_BASE = process.env.PLAYWRIGHT_API_URL || process.env.VITE_API_URL || 'http://127.0.0.1:8080/api';
 
-async function loginToAdmin(page: Page) {
-  await page.goto('/admin-login');
-  const emailInput = page.getByRole('textbox', { name: /account email|admin@taisartownhub/i });
-  const passwordInput = page.locator('input[type="password"]').first();
-  await expect(emailInput).toBeVisible({ timeout: 15000 });
-  await emailInput.fill(SUPER_ADMIN.email);
-  await passwordInput.fill(SUPER_ADMIN.password);
-  await passwordInput.press('Enter');
+async function loginToAdmin(page: Page, request: APIRequestContext) {
+  // The auth limiter is deliberately 10/min per IP. The suite already signs
+  // in as five roles elsewhere, so another form login from 127.0.0.1 would be
+  // throttled for reasons unrelated to the workflow under test. Sign in via
+  // the API from a TEST-NET-2 address (trusted only because the test client is
+  // 127.0.0.1), then load the real admin SPA with that session. The sign-in
+  // form itself is covered by admin-pages.spec.ts and role-based.spec.ts.
+  const response = await request.post(`${API_BASE}/auth/login`, {
+    headers: { 'X-Forwarded-For': '198.51.100.42', Accept: 'application/json' },
+    data: SUPER_ADMIN,
+  });
+  expect(response.ok(), `API login failed: ${response.status()}`).toBeTruthy();
+  const body = await response.json();
+  const token = body.token as string;
+  expect(token).toBeTruthy();
+
+  await page.goto('/admin', { waitUntil: 'domcontentloaded' });
+  await page.evaluate((value) => sessionStorage.setItem('tth_token', value), token);
+  await page.goto('/admin', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/admin(\/.*)?$/, { timeout: 20000 });
   await expect(page.locator('main')).toBeVisible();
 }
@@ -36,13 +47,13 @@ test.describe('Business Workflows', () => {
     await expect(page.locator('main')).toBeVisible();
   });
 
-  test('Workflow: Login → Admin Dashboard', async ({ page }) => {
-    await loginToAdmin(page);
+  test('Workflow: Login → Admin Dashboard', async ({ page, request }) => {
+    await loginToAdmin(page, request);
     await expect(page).toHaveURL(/\/admin/);
   });
 
-  test('Workflow: Protected route access after logout flow is blocked', async ({ page, context }) => {
-    await loginToAdmin(page);
+  test('Workflow: Protected route access after logout flow is blocked', async ({ page, context, request }) => {
+    await loginToAdmin(page, request);
     await expect(page).toHaveURL(/\/admin/);
 
     await context.clearCookies();

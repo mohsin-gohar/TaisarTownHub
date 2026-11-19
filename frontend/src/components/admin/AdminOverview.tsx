@@ -110,13 +110,13 @@ export const AdminOverview: React.FC = () => {
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Top Banner / Welcome */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#101C2C] to-[#1A2638] border border-[#C5A46D]/30 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#0B1220] to-[#1A2638] border border-[#E7C878]/30 shadow-xl">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h2 className="font-serif-luxury text-2xl font-bold text-white">
               Agency Control Center & Real Estate ERP
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D] text-[#101C2C]">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E7C878] text-[#0B1220]">
               v2.0 ERP
             </span>
           </div>
@@ -127,7 +127,7 @@ export const AdminOverview: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setAdminTab('transactions')}
-            className="px-3.5 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow"
+            className="px-3.5 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow"
           >
             <FileText className="w-3.5 h-3.5" />
             <span>Manage Deals</span>
@@ -136,14 +136,14 @@ export const AdminOverview: React.FC = () => {
             onClick={() => setAdminTab('plot_locator')}
             className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs flex items-center gap-1.5 border border-slate-700 cursor-pointer"
           >
-            <MapPin className="w-3.5 h-3.5 text-[#C5A46D]" />
+            <MapPin className="w-3.5 h-3.5 text-[#E7C878]" />
             <span>Sector Map</span>
           </button>
           <button
             onClick={() => setAdminTab('properties')}
             className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs flex items-center gap-1.5 border border-slate-700 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5 text-[#C5A46D]" />
+            <Plus className="w-3.5 h-3.5 text-[#E7C878]" />
             <span>Add Property</span>
           </button>
         </div>
@@ -151,31 +151,31 @@ export const AdminOverview: React.FC = () => {
 
       {/* Primary ERP Financial KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
+        <div className="bg-[#0B1220] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-semibold uppercase">Total Sales Volume</span>
-            <div className="p-2 rounded-xl bg-[#C5A46D]/15 text-[#C5A46D]">
+            <div className="p-2 rounded-xl bg-[#E7C878]/15 text-[#E7C878]">
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
           <div className="font-serif-luxury text-3xl font-bold text-white">
             {formatPKRCurrency(totalSalesVolume)}
           </div>
-          <div className="text-[11px] text-[#C5A46D] flex items-center gap-1">
+          <div className="text-[11px] text-[#E7C878] flex items-center gap-1">
             <TrendingUp className="w-3.5 h-3.5" />
             <span className="font-semibold">{formatPKRCurrency(collectedThisPeriod)} collected (30d)</span>
             <span className="text-slate-500">• {activeDeals} active deals</span>
           </div>
         </div>
 
-        <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
+        <div className="bg-[#0B1220] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-semibold uppercase">Advances Collected</span>
-            <div className="p-2 rounded-xl bg-[#C5A46D]/15 text-[#C5A46D]">
+            <div className="p-2 rounded-xl bg-[#E7C878]/15 text-[#E7C878]">
               <CheckCircle2 className="w-5 h-5" />
             </div>
           </div>
-          <div className="font-serif-luxury text-3xl font-bold text-[#C5A46D]">
+          <div className="font-serif-luxury text-3xl font-bold text-[#E7C878]">
             {formatPKRCurrency(advancesCollected)}
           </div>
           <div className="text-[11px] text-slate-400">
@@ -183,10 +183,10 @@ export const AdminOverview: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
+        <div className="bg-[#0B1220] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-semibold uppercase">Receivables at Transfer</span>
-            <div className="p-2 rounded-xl bg-[#C5A46D]/15 text-[#C5A46D]">
+            <div className="p-2 rounded-xl bg-[#E7C878]/15 text-[#E7C878]">
               <Clock className="w-5 h-5" />
             </div>
           </div>
@@ -197,14 +197,14 @@ export const AdminOverview: React.FC = () => {
             Due upon MDA transfer completion
           </div>        </div>
 
-        <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
+        <div className="bg-[#0B1220] p-6 rounded-2xl border border-slate-800 space-y-2 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-semibold uppercase">Dealer Commissions</span>
-            <div className="p-2 rounded-xl bg-[#C5A46D]/15 text-[#C5A46D]">
+            <div className="p-2 rounded-xl bg-[#E7C878]/15 text-[#E7C878]">
               <Users className="w-5 h-5" />
             </div>
           </div>
-          <div className="font-serif-luxury text-3xl font-bold text-[#C5A46D]">
+          <div className="font-serif-luxury text-3xl font-bold text-[#E7C878]">
             {formatPKRCurrency(totalCommissionPayable)}
           </div>
           <div className="text-[11px] text-slate-400">
@@ -214,14 +214,14 @@ export const AdminOverview: React.FC = () => {
       </div>
 
       {/* Handwritten Requirement Spotlight Box */}
-      <div className="p-5 rounded-2xl bg-[#0B1220] border border-[#C5A46D]/40 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="p-5 rounded-2xl bg-[#07141E] border border-[#E7C878]/40 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#C5A46D]" />
+            <Sparkles className="w-4 h-4 text-[#E7C878]" />
             <span className="font-bold text-white text-sm">
               Handwritten Notes Record: Plot R-66 (Sector 63, Scheme 45)
             </span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#C5A46D]/20 text-[#F9E7BA] border border-[#C5A46D]/40">
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#E7C878]/20 text-[#F6E3B4] border border-[#E7C878]/40">
               Integrated & Verified
             </span>
           </div>
@@ -234,7 +234,7 @@ export const AdminOverview: React.FC = () => {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setAdminTab('plot_locator')}
-            className="px-3 py-1.5 rounded-lg bg-[#C5A46D]/20 hover:bg-[#C5A46D] text-[#C5A46D] hover:text-[#101C2C] text-xs font-bold transition cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-[#E7C878]/20 hover:bg-[#E7C878] text-[#E7C878] hover:text-[#0B1220] text-xs font-bold transition cursor-pointer"
           >
             Locate Plot R-66
           </button>
@@ -250,7 +250,7 @@ export const AdminOverview: React.FC = () => {
       {/* Visual Analytics & Portfolio Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Inquiry Traffic Chart (SVG) (8 cols) */}
-        <div className="lg:col-span-8 bg-[#101C2C] p-6 sm:p-8 rounded-2xl border border-slate-800 shadow-xl space-y-6">
+        <div className="lg:col-span-8 bg-[#0B1220] p-6 sm:p-8 rounded-2xl border border-slate-800 shadow-xl space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-serif-luxury text-lg font-bold text-white">
@@ -258,7 +258,7 @@ export const AdminOverview: React.FC = () => {
               </h3>
               <p className="text-xs text-slate-400">Scheme 45 plots vs commercial shops query trends</p>
             </div>
-            <span className="px-3 py-1 rounded-lg bg-slate-800 text-[11px] text-[#C5A46D] font-semibold border border-slate-700">
+            <span className="px-3 py-1 rounded-lg bg-slate-800 text-[11px] text-[#E7C878] font-semibold border border-slate-700">
               2026 Quarter 1
             </span>
           </div>
@@ -277,7 +277,7 @@ export const AdminOverview: React.FC = () => {
                   {col.count} Events
                 </span>
                 <div
-                  className="w-full max-w-[48px] rounded-t-lg bg-gradient-to-t from-[#C5A46D]/20 to-[#C5A46D] group-hover:to-[#F9E7BA] transition-all duration-300 relative"
+                  className="w-full max-w-[48px] rounded-t-lg bg-gradient-to-t from-[#E7C878]/20 to-[#E7C878] group-hover:to-[#F6E3B4] transition-all duration-300 relative"
                   style={{ height: `${Math.min(100, (Number(col.count) / Math.max(1, Math.max(...monthlySeries.map((m) => m.count), 1))) * 100)}%` }}
                 >
                   <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-white shadow" />
@@ -291,12 +291,12 @@ export const AdminOverview: React.FC = () => {
 
           <div className="flex items-center justify-between pt-4 border-t border-slate-800 text-xs text-slate-400">
             <span>Average inquiry conversion rate: <strong>{leadConversionPct}%</strong></span>
-            <span className="text-[#C5A46D]">Highest demand: Sector 70-D & 71</span>
+            <span className="text-[#E7C878]">Highest demand: Sector 70-D & 71</span>
           </div>
         </div>
 
         {/* Property Categories Distribution (4 cols) */}
-        <div className="lg:col-span-4 bg-[#101C2C] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-6">
+        <div className="lg:col-span-4 bg-[#0B1220] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-6">
           <div>
             <h3 className="font-serif-luxury text-lg font-bold text-white">
               Inventory Distribution
@@ -306,10 +306,10 @@ export const AdminOverview: React.FC = () => {
 
           <div className="space-y-4">
             {[
-              { label: 'Residential Plots', pct: 45, color: 'bg-[#C5A46D]' },
-              { label: 'Commercial Plots & Shops', pct: 25, color: 'bg-[#E0C79A]' },
+              { label: 'Residential Plots', pct: 45, color: 'bg-[#E7C878]' },
+              { label: 'Commercial Plots & Shops', pct: 25, color: 'bg-[#F6E3B4]' },
               { label: 'Ready Villas & Houses', pct: 20, color: 'bg-[#8C6D37]' },
-              { label: 'Farmhouses & Leisure', pct: 10, color: 'bg-[#F9E7BA]' }
+              { label: 'Farmhouses & Leisure', pct: 10, color: 'bg-[#F6E3B4]' }
             ].map((cat, i) => (
               <div key={i} className="space-y-1.5">
                 <div className="flex justify-between text-xs text-slate-300">
@@ -323,7 +323,7 @@ export const AdminOverview: React.FC = () => {
             ))}
           </div>
 
-          <div className="p-4 rounded-xl bg-[#0B1220] border border-slate-800 text-xs text-slate-400 space-y-1">
+          <div className="p-4 rounded-xl bg-[#07141E] border border-slate-800 text-xs text-slate-400 space-y-1">
             <span className="font-bold text-white block">Central Media Storage</span>
             <span>Total stored files: {mediaItems.filter((item) => !item.deletedAt).length} assets across 6 folders.</span>
           </div>
@@ -331,7 +331,7 @@ export const AdminOverview: React.FC = () => {
       </div>
 
       {/* Latest Inquiries Table Preview */}
-      <div className="bg-[#101C2C] p-6 sm:p-8 rounded-2xl border border-slate-800 shadow-xl space-y-6">
+      <div className="bg-[#0B1220] p-6 sm:p-8 rounded-2xl border border-slate-800 shadow-xl space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-serif-luxury text-xl font-bold text-white">
@@ -341,7 +341,7 @@ export const AdminOverview: React.FC = () => {
           </div>
           <button
             onClick={() => setAdminTab('inquiries')}
-            className="text-xs font-semibold text-[#C5A46D] hover:underline cursor-pointer"
+            className="text-xs font-semibold text-[#E7C878] hover:underline cursor-pointer"
           >
             Manage All Inquiries ({inquiries.length}) &rarr;
           </button>
@@ -349,7 +349,7 @@ export const AdminOverview: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px]">
+            <thead className="bg-[#07141E] text-slate-400 uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="py-3 px-4 rounded-l-lg">Client Name</th>
                 <th className="py-3 px-4">Phone / WhatsApp</th>
@@ -372,9 +372,9 @@ export const AdminOverview: React.FC = () => {
                   </td>
                   <td className="py-3.5 px-4">
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                      inq.status === 'Pending' ? 'bg-[#C5A46D]/10 text-[#C5A46D] border-[#C5A46D]/30' :
-                      inq.status === 'Contacted' ? 'bg-[#C5A46D]/20 text-[#F9E7BA] border-[#C5A46D]/40' :
-                      inq.status === 'Resolved' ? 'bg-[#C5A46D]/30 text-white border-[#C5A46D]/50' :
+                      inq.status === 'Pending' ? 'bg-[#E7C878]/10 text-[#E7C878] border-[#E7C878]/30' :
+                      inq.status === 'Contacted' ? 'bg-[#E7C878]/20 text-[#F6E3B4] border-[#E7C878]/40' :
+                      inq.status === 'Resolved' ? 'bg-[#E7C878]/30 text-white border-[#E7C878]/50' :
                       'bg-slate-800 text-slate-300 border-slate-700'
                     }`}>
                       {inq.status}
@@ -383,7 +383,7 @@ export const AdminOverview: React.FC = () => {
                   <td className="py-3.5 px-4 text-right">
                     <button
                       onClick={() => setAdminTab('inquiries')}
-                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-[#C5A46D] hover:text-[#101C2C] text-[#C5A46D] text-[11px] font-semibold transition-colors cursor-pointer"
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-[#E7C878] hover:text-[#0B1220] text-[#E7C878] text-[11px] font-semibold transition-colors cursor-pointer"
                     >
                       Open CRM
                     </button>

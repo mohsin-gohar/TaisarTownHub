@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Inbox,
@@ -79,11 +79,11 @@ export const AdminInquiries: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-[#101C2C] border border-slate-800 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-[#0B1220] border border-slate-800 shadow-xl">
         <div>
           <h2 className="font-serif-luxury text-2xl font-bold text-white flex items-center gap-2">
             <span>Client Inquiry CRM & Lead Stream</span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/15 text-[#F9E7BA] border border-[#C5A46D]/30">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E7C878]/15 text-[#F6E3B4] border border-[#E7C878]/30">
               {inquiries.length} Total Leads
             </span>
           </h2>
@@ -92,16 +92,16 @@ export const AdminInquiries: React.FC = () => {
           </p>
         </div>
 
-        <div className="text-xs text-slate-400 bg-[#0B1220] px-4 py-2 rounded-xl border border-slate-800">
+        <div className="text-xs text-slate-400 bg-[#07141E] px-4 py-2 rounded-xl border border-slate-800">
           <span>Pending Follow-up: </span>
-          <strong className="text-[#C5A46D] font-bold">
+          <strong className="text-[#E7C878] font-bold">
             {inquiries.filter((i) => i.status === 'Pending').length}
           </strong>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#101C2C] border border-slate-800">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0B1220] border border-slate-800">
         <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
           {statuses.map((status) => {
             const isActive = activeFilter === status;
@@ -113,7 +113,7 @@ export const AdminInquiries: React.FC = () => {
                 onClick={() => setActiveFilter(status)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-[#C5A46D] text-[#101C2C] font-bold shadow'
+                    ? 'bg-[#E7C878] text-[#0B1220] font-bold shadow'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
@@ -131,7 +131,7 @@ export const AdminInquiries: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search leads by name or phone..."
-            className="w-full bg-[#0B1220] text-white text-xs rounded-lg pl-9 pr-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+            className="w-full bg-[#07141E] text-white text-xs rounded-lg pl-9 pr-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
           />
         </div>
       </div>
@@ -160,12 +160,12 @@ export const AdminInquiries: React.FC = () => {
             return (
               <div
                 key={inq.id}
-                className="bg-[#101C2C] rounded-2xl border border-slate-800 hover:border-[#C5A46D]/40 p-6 transition-all shadow-xl space-y-4"
+                className="bg-[#0B1220] rounded-2xl border border-slate-800 hover:border-[#E7C878]/40 p-6 transition-all shadow-xl space-y-4"
               >
                 {/* Top Row: Client Info, Date, Status */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-800 text-[#C5A46D] font-bold flex items-center justify-center border border-slate-700">
+                    <div className="w-10 h-10 rounded-full bg-slate-800 text-[#E7C878] font-bold flex items-center justify-center border border-slate-700">
                       {inq.fullName.split(' ').map(n => n[0]).join('')}
                     </div>
                     <div>
@@ -173,7 +173,7 @@ export const AdminInquiries: React.FC = () => {
                         {inq.fullName}
                       </h4>
                       <div className="flex items-center gap-3 text-xs text-slate-400">
-                        <span className="text-[#C5A46D] font-mono">{inq.phone}</span>
+                        <span className="text-[#E7C878] font-mono">{inq.phone}</span>
                         {inq.email && <span>• {inq.email}</span>}
                         <span className="hidden sm:inline">• {inq.submittedAt}</span>
                       </div>
@@ -186,10 +186,10 @@ export const AdminInquiries: React.FC = () => {
                       value={inq.status}
                       onChange={(e) => updateInquiryStatus(inq.id, e.target.value as InquiryStatus)}
                       className={`text-xs font-bold rounded-lg px-2.5 py-1 border cursor-pointer ${
-                        inq.status === 'Pending' ? 'bg-[#0B1220] text-[#C5A46D] border-[#C5A46D]/30' :
-                        inq.status === 'Contacted' ? 'bg-[#101C2C] text-[#E0C79A] border-[#C5A46D]/40' :
-                        inq.status === 'In Progress' ? 'bg-[#101C2C] text-[#F9E7BA] border-[#C5A46D]/60' :
-                        'bg-[#0B1220] text-white border-[#C5A46D]/50'
+                        inq.status === 'Pending' ? 'bg-[#07141E] text-[#E7C878] border-[#E7C878]/30' :
+                        inq.status === 'Contacted' ? 'bg-[#0B1220] text-[#F6E3B4] border-[#E7C878]/40' :
+                        inq.status === 'In Progress' ? 'bg-[#0B1220] text-[#F6E3B4] border-[#E7C878]/60' :
+                        'bg-[#07141E] text-white border-[#E7C878]/50'
                       }`}
                     >
                       <option value="Pending">Pending</option>
@@ -213,17 +213,17 @@ export const AdminInquiries: React.FC = () => {
                   <div className="md:col-span-8 space-y-2">
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-slate-400">Property / Sector:</span>
-                      <span className="font-bold text-white bg-[#0B1220] px-2 py-0.5 rounded border border-slate-800">
+                      <span className="font-bold text-white bg-[#07141E] px-2 py-0.5 rounded border border-slate-800">
                         {inq.preferredPropertyOrProject || inq.subject}
                       </span>
                       {inq.budgetRange && (
-                        <span className="text-[#C5A46D] font-semibold text-xs ml-2">
+                        <span className="text-[#E7C878] font-semibold text-xs ml-2">
                           Budget: {inq.budgetRange}
                         </span>
                       )}
                     </div>
 
-                    <p className="text-xs text-slate-300 leading-relaxed bg-[#0B1220] p-3.5 rounded-xl border border-slate-800">
+                    <p className="text-xs text-slate-300 leading-relaxed bg-[#07141E] p-3.5 rounded-xl border border-slate-800">
                       "{inq.message}"
                     </p>
                   </div>
@@ -235,7 +235,7 @@ export const AdminInquiries: React.FC = () => {
                       {editingNotesId !== inq.id && (
                         <button
                           onClick={() => handleStartEditNotes(inq)}
-                          className="text-[#C5A46D] hover:underline flex items-center gap-1 cursor-pointer text-[11px]"
+                          className="text-[#E7C878] hover:underline flex items-center gap-1 cursor-pointer text-[11px]"
                         >
                           <FileEdit className="w-3 h-3" />
                           <span>Edit</span>
@@ -249,18 +249,18 @@ export const AdminInquiries: React.FC = () => {
                           rows={2}
                           value={tempNotes}
                           onChange={(e) => setTempNotes(e.target.value)}
-                          className="w-full bg-[#0B1220] text-white text-xs rounded-lg p-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                          className="w-full bg-[#07141E] text-white text-xs rounded-lg p-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                         />
                         <button
                           onClick={() => handleSaveNotes(inq.id)}
-                          className="px-3 py-1 rounded bg-[#C5A46D] text-[#101C2C] font-bold text-xs flex items-center gap-1"
+                          className="px-3 py-1 rounded bg-[#E7C878] text-[#0B1220] font-bold text-xs flex items-center gap-1"
                         >
                           <Save className="w-3 h-3" />
                           <span>Save Note</span>
                         </button>
                       </div>
                     ) : (
-                      <div className="text-[11px] text-slate-400 italic bg-[#0B1220] p-2.5 rounded-lg border border-slate-800">
+                      <div className="text-[11px] text-slate-400 italic bg-[#07141E] p-2.5 rounded-lg border border-slate-800">
                         {inq.adminNotes || 'No notes added yet.'}
                       </div>
                     )}
@@ -269,7 +269,7 @@ export const AdminInquiries: React.FC = () => {
                     <a
                       href={whatsAppReply}
                       target="_blank" rel="noopener noreferrer"
-                      className="w-full py-2 px-3 rounded-lg bg-[#C5A46D]/15 hover:bg-[#C5A46D] text-[#F9E7BA] hover:text-[#101C2C] transition-colors border border-[#C5A46D]/40 font-bold text-xs flex items-center justify-center gap-2"
+                      className="w-full py-2 px-3 rounded-lg bg-[#E7C878]/15 hover:bg-[#E7C878] text-[#F6E3B4] hover:text-[#0B1220] transition-colors border border-[#E7C878]/40 font-bold text-xs flex items-center justify-center gap-2"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
                       <span>WhatsApp Client</span>

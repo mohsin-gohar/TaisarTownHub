@@ -177,11 +177,11 @@ export const AdminMediaLibrary: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-[#101C2C] border border-slate-800 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-[#0B1220] border border-slate-800 shadow-xl">
         <div>
           <h2 className="font-serif-luxury text-2xl font-bold text-white flex items-center gap-2">
             <span>Centralized Media Library</span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/20 text-[#C5A46D] border border-[#C5A46D]/30">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E7C878]/20 text-[#E7C878] border border-[#E7C878]/30">
               {visibleMedia.length} Assets
             </span>
           </h2>
@@ -192,7 +192,7 @@ export const AdminMediaLibrary: React.FC = () => {
 
         <button
           onClick={() => setIsUploadModalOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20 self-start sm:self-auto"
+          className="px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20 self-start sm:self-auto"
         >
           <Upload className="w-4 h-4" />
           <span>Upload New Asset</span>
@@ -201,10 +201,10 @@ export const AdminMediaLibrary: React.FC = () => {
 
       {/* Sale Attribution Report (who sold which file & profit earned) */}
       {(canSell || totalSoldCount > 0) && (
-        <div className="p-5 rounded-2xl bg-[#101C2C] border border-slate-800 shadow-lg space-y-3">
+        <div className="p-5 rounded-2xl bg-[#0B1220] border border-slate-800 shadow-lg space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-[#C5A46D]" />
+              <Wallet className="w-4 h-4 text-[#E7C878]" />
               <span>Sale Attribution &amp; Profit Report</span>
             </h3>
             <span className="text-[11px] text-slate-400">
@@ -219,9 +219,9 @@ export const AdminMediaLibrary: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {salesSummary.map((s) => (
-                <div key={s.seller} className="p-3 rounded-xl bg-[#0B1220] border border-slate-800 space-y-1">
+                <div key={s.seller} className="p-3 rounded-xl bg-[#07141E] border border-slate-800 space-y-1">
                   <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                    <UserRound className="w-3.5 h-3.5 text-[#C5A46D]" />
+                    <UserRound className="w-3.5 h-3.5 text-[#E7C878]" />
                     <span className="truncate">{s.seller}</span>
                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 uppercase">{s.role || 'staff'}</span>
                   </div>
@@ -237,7 +237,7 @@ export const AdminMediaLibrary: React.FC = () => {
       )}
 
       {/* Folders and Search bar */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#101C2C] border border-slate-800">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0B1220] border border-slate-800">
         <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
           {folders.map((folder) => {
             const isActive = activeFolder === folder;
@@ -249,7 +249,7 @@ export const AdminMediaLibrary: React.FC = () => {
                 onClick={() => setActiveFolder(folder)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   isActive
-                    ? 'bg-[#C5A46D] text-[#101C2C] font-bold shadow'
+                    ? 'bg-[#E7C878] text-[#0B1220] font-bold shadow'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
@@ -268,7 +268,7 @@ export const AdminMediaLibrary: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by file title..."
-            className="w-full bg-[#0B1220] text-white text-xs rounded-lg pl-9 pr-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+            className="w-full bg-[#07141E] text-white text-xs rounded-lg pl-9 pr-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
           />
         </div>
       </div>
@@ -282,8 +282,8 @@ export const AdminMediaLibrary: React.FC = () => {
             onClick={() => setStatusFilter(s)}
             className={`px-3 py-1 rounded-lg text-[11px] font-semibold capitalize transition-all cursor-pointer ${
               statusFilter === s
-                ? 'bg-[#C5A46D] text-[#101C2C] font-bold'
-                : 'bg-[#101C2C] text-slate-300 border border-slate-800 hover:text-white'
+                ? 'bg-[#E7C878] text-[#0B1220] font-bold'
+                : 'bg-[#0B1220] text-slate-300 border border-slate-800 hover:text-white'
             }`}
           >
             {s}
@@ -301,10 +301,10 @@ export const AdminMediaLibrary: React.FC = () => {
           return (
             <div
               key={item.id}
-              className="group bg-[#101C2C] rounded-xl overflow-hidden border border-slate-800 hover:border-[#C5A46D]/50 transition-all flex flex-col justify-between shadow-lg"
+              className="group bg-[#0B1220] rounded-xl overflow-hidden border border-slate-800 hover:border-[#E7C878]/50 transition-all flex flex-col justify-between shadow-lg"
             >
               {/* Asset Box */}
-              <div className="relative aspect-square bg-[#0B1220] overflow-hidden flex items-center justify-center">
+              <div className="relative aspect-square bg-[#07141E] overflow-hidden flex items-center justify-center">
                 {isVid ? (
                   <div
                     onClick={() => setActiveVideoModal({ url: item.url, title: item.title })}
@@ -316,14 +316,14 @@ export const AdminMediaLibrary: React.FC = () => {
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <div className="w-10 h-10 rounded-full bg-[#C5A46D] text-[#101C2C] flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-[#E7C878] text-[#0B1220] flex items-center justify-center">
                         <Play className="w-4 h-4 fill-current ml-0.5" />
                       </div>
                     </div>
                   </div>
                 ) : isPdf ? (
                   <div className="p-4 flex flex-col items-center justify-center text-center space-y-2">
-                    <FileText className="w-10 h-10 text-[#C5A46D]" />
+                    <FileText className="w-10 h-10 text-[#E7C878]" />
                     <span className="text-[11px] text-slate-300 font-medium line-clamp-2">
                       {item.title}
                     </span>
@@ -342,7 +342,7 @@ export const AdminMediaLibrary: React.FC = () => {
                     {item.folder}
                   </span>
                   {isUsed && (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#C5A46D]/90 text-[#101C2C] shadow">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#E7C878]/90 text-[#0B1220] shadow">
                       Used ({item.usageCount})
                     </span>
                   )}
@@ -363,7 +363,7 @@ export const AdminMediaLibrary: React.FC = () => {
               </div>
 
               {/* Info & Action Strip */}
-              <div className="p-3 space-y-2 bg-[#101C2C]">
+              <div className="p-3 space-y-2 bg-[#0B1220]">
                 <div>
                   <h4 className="font-semibold text-white text-xs truncate" title={item.title}>
                     {item.title}
@@ -377,7 +377,7 @@ export const AdminMediaLibrary: React.FC = () => {
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                   <button
                     onClick={() => handleCopyUrl(item.url)}
-                    className="text-[11px] text-[#C5A46D] hover:underline flex items-center gap-1 cursor-pointer"
+                    className="text-[11px] text-[#E7C878] hover:underline flex items-center gap-1 cursor-pointer"
                     title="Copy URL for use in projects or properties"
                   >
                     <Copy className="w-3 h-3" />
@@ -413,7 +413,7 @@ export const AdminMediaLibrary: React.FC = () => {
       {/* Upload Modal */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
+          <div className="relative w-full max-w-lg bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <h3 className="font-serif-luxury text-xl font-bold text-white">
                 Upload Media Asset
@@ -429,9 +429,9 @@ export const AdminMediaLibrary: React.FC = () => {
             {/* Drag & Drop File Input Area */}
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="p-8 border-2 border-dashed border-[#C5A46D]/40 hover:border-[#C5A46D] rounded-xl text-center bg-[#0B1220] cursor-pointer transition-colors space-y-2"
+              className="p-8 border-2 border-dashed border-[#E7C878]/40 hover:border-[#E7C878] rounded-xl text-center bg-[#07141E] cursor-pointer transition-colors space-y-2"
             >
-              <Upload className="w-10 h-10 text-[#C5A46D] mx-auto" />
+              <Upload className="w-10 h-10 text-[#E7C878] mx-auto" />
               <div className="text-xs font-semibold text-white">
                 Choose a local file from your computer
               </div>
@@ -463,7 +463,7 @@ export const AdminMediaLibrary: React.FC = () => {
                   value={uploadTitle}
                   onChange={(e) => setUploadTitle(e.target.value)}
                   placeholder="e.g. Sector 70-D Boulevard Drone View"
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -475,7 +475,7 @@ export const AdminMediaLibrary: React.FC = () => {
                   value={uploadUrl}
                   onChange={(e) => setUploadUrl(e.target.value)}
                   placeholder="https://images.unsplash.com/..."
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -485,7 +485,7 @@ export const AdminMediaLibrary: React.FC = () => {
                   <select
                     value={uploadFolder}
                     onChange={(e) => setUploadFolder(e.target.value as any)}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   >
                     <option value="Projects">Projects</option>
                     <option value="Properties">Properties</option>
@@ -501,7 +501,7 @@ export const AdminMediaLibrary: React.FC = () => {
                   <select
                     value={uploadType}
                     onChange={(e) => setUploadType(e.target.value as any)}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   >
                     <option value="image">Image</option>
                     <option value="video">Video</option>
@@ -520,7 +520,7 @@ export const AdminMediaLibrary: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold shadow"
+                  className="px-6 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold shadow"
                 >
                   Add to Library
                 </button>
@@ -540,7 +540,7 @@ export const AdminMediaLibrary: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="sell-modal-title"
-            className="relative w-full max-w-md bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5"
+            className="relative w-full max-w-md bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5"
           >
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <h3 id="sell-modal-title" className="font-serif-luxury text-lg font-bold text-white flex items-center gap-2">
@@ -569,7 +569,7 @@ export const AdminMediaLibrary: React.FC = () => {
                     value={sellPrice}
                     onChange={(e) => setSellPrice(e.target.value)}
                     placeholder="e.g. 3600000"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
                 <div className="space-y-1">
@@ -581,7 +581,7 @@ export const AdminMediaLibrary: React.FC = () => {
                     value={sellCost}
                     onChange={(e) => setSellCost(e.target.value)}
                     placeholder="Blank = 30% margin"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
               </div>
@@ -596,7 +596,7 @@ export const AdminMediaLibrary: React.FC = () => {
                   value={buyerName}
                   onChange={(e) => setBuyerName(e.target.value)}
                   placeholder="e.g. Ahmed Raza"
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -611,7 +611,7 @@ export const AdminMediaLibrary: React.FC = () => {
                     value={buyerPhone}
                     onChange={(e) => setBuyerPhone(e.target.value)}
                     placeholder="+92 3XX XXXXXXX"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
                 <div className="space-y-1">
@@ -622,7 +622,7 @@ export const AdminMediaLibrary: React.FC = () => {
                     value={buyerCnic}
                     onChange={(e) => setBuyerCnic(e.target.value)}
                     placeholder="Stored masked"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
               </div>

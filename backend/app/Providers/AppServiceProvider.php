@@ -63,7 +63,15 @@ class AppServiceProvider extends ServiceProvider
         }); // state-changing writes
 
         RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+            // Fallback for routes without a specific limiter. throttleApi()
+            // applies this in addition to every route's own throttle, so this
+            // ceiling must never sit BELOW the route-specific limits: the old
+            // 60/min value silently capped the 300/min public marketplace and
+            // throttled ordinary browsing (61st request -> 429). Auth (10/min)
+            // and write (30/min) routes still enforce their stricter limits.
+            return $request->user()
+                ? Limit::perMinute(600)->by($request->user()->getAuthIdentifier())
+                : Limit::perMinute(300)->by($request->ip());
         }); // legacy fallback limiter (kept for backwards compatibility)
     }
 }

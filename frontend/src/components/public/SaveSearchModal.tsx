@@ -61,11 +61,11 @@ export const SaveSearchModal: React.FC<SaveSearchModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="save-search-title"
-        className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#C5A46D]/35 bg-[#101C2C] shadow-2xl"
+        className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#E7C878]/35 bg-[#0B1220] shadow-2xl"
       >
         <header className="flex items-start justify-between gap-3 border-b border-slate-800 px-5 py-4">
           <div className="flex items-center gap-2.5">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#C5A46D]/30 bg-[#C5A46D]/10 text-[#C5A46D]">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#E7C878]/30 bg-[#E7C878]/10 text-[#E7C878]">
               <BookmarkPlus className="h-4 w-4" />
             </span>
             <div>
@@ -86,7 +86,7 @@ export const SaveSearchModal: React.FC<SaveSearchModalProps> = ({
         </header>
 
         <div className="space-y-4 px-5 py-4">
-          <div className="rounded-xl border border-slate-800 bg-[#0B1220] p-3">
+          <div className="rounded-xl border border-slate-800 bg-[#07141E] p-3">
             <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Filters to save</p>
             <p className="mt-1 text-xs leading-relaxed text-slate-300">{summary}</p>
           </div>
@@ -102,7 +102,7 @@ export const SaveSearchModal: React.FC<SaveSearchModalProps> = ({
               minLength={2}
               required
               placeholder="e.g. Sector 63 plots under 1 crore"
-              className="w-full rounded-lg border border-slate-700 bg-[#0B1220] px-3 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-[#C5A46D] focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-[#07141E] px-3 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-[#E7C878] focus:outline-none"
             />
           </label>
 
@@ -111,7 +111,7 @@ export const SaveSearchModal: React.FC<SaveSearchModalProps> = ({
             <select
               value={frequency}
               onChange={(event) => setFrequency(event.target.value as 'instant' | 'daily' | 'weekly')}
-              className="w-full rounded-lg border border-slate-700 bg-[#0B1220] px-3 py-2.5 text-xs text-white focus:border-[#C5A46D] focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-[#07141E] px-3 py-2.5 text-xs text-white focus:border-[#E7C878] focus:outline-none"
             >
               <option value="instant">Instant — on the next hourly sweep</option>
               <option value="daily">Daily digest</option>
@@ -124,15 +124,15 @@ export const SaveSearchModal: React.FC<SaveSearchModalProps> = ({
             role="switch"
             aria-checked={alertsEnabled}
             onClick={() => setAlertsEnabled((value) => !value)}
-            className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-800 bg-[#0B1220] px-3 py-2.5 text-left"
+            className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-800 bg-[#07141E] px-3 py-2.5 text-left"
           >
             <span className="flex items-center gap-2 text-xs text-slate-300">
-              {alertsEnabled ? <Bell className="h-4 w-4 text-[#C5A46D]" /> : <BellOff className="h-4 w-4 text-slate-500" />}
+              {alertsEnabled ? <Bell className="h-4 w-4 text-[#E7C878]" /> : <BellOff className="h-4 w-4 text-slate-500" />}
               Email me when matching listings are published
             </span>
             <span
               className={`relative h-5 w-9 shrink-0 rounded-full transition ${
-                alertsEnabled ? 'bg-[#C5A46D]' : 'bg-slate-700'
+                alertsEnabled ? 'bg-[#E7C878]' : 'bg-slate-700'
               }`}
             >
               <span
@@ -167,7 +167,7 @@ export const SaveSearchModal: React.FC<SaveSearchModalProps> = ({
           <button
             type="submit"
             disabled={saving || name.trim().length < 2}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#C5A46D] px-4 py-2 text-[11px] font-bold text-[#101C2C] transition hover:bg-[#D4AF37] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#E7C878] px-4 py-2 text-[11px] font-bold text-[#0B1220] transition hover:bg-[#F3C464] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
           >
             {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {saving ? 'Saving…' : 'Save search'}

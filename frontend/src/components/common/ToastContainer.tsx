@@ -21,16 +21,16 @@ export const ToastContainer: React.FC = () => {
             key={toast.id}
             className={`pointer-events-auto relative overflow-hidden flex items-start gap-3 p-4 rounded-xl border shadow-2xl backdrop-blur-md animate-slideIn ${
               isSuccess
-                ? 'bg-[#101C2C]/95 border-emerald-500/40 text-emerald-200'
+                ? 'bg-[#0B1220]/95 border-emerald-500/40 text-emerald-200'
                 : isError
                 ? 'bg-rose-950/95 border-rose-500/40 text-rose-200'
-                : 'bg-slate-900/95 border-[#C5A46D]/40 text-slate-200'
+                : 'bg-slate-900/95 border-[#E7C878]/40 text-slate-200'
             }`}
             role="status"
           >
             {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />}
             {isError && <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />}
-            {!isSuccess && !isError && <Info className="w-5 h-5 text-[#C5A46D] shrink-0 mt-0.5" />}
+            {!isSuccess && !isError && <Info className="w-5 h-5 text-[#E7C878] shrink-0 mt-0.5" />}
 
             <div className="flex-1 text-xs sm:text-sm font-medium pt-0.5">
               {toast.message}
@@ -48,7 +48,7 @@ export const ToastContainer: React.FC = () => {
             <span
               aria-hidden="true"
               className={`absolute bottom-0 left-0 h-0.5 w-full animate-progressBar origin-right ${
-                isSuccess ? 'bg-emerald-400/60' : isError ? 'bg-rose-400/60' : 'bg-[#C5A46D]/60'
+                isSuccess ? 'bg-emerald-400/60' : isError ? 'bg-rose-400/60' : 'bg-[#E7C878]/60'
               }`}
             />
           </div>

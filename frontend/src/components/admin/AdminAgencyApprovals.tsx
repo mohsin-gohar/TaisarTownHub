@@ -43,7 +43,7 @@ const decisionLabels: Record<Decision, string> = {
 const decisionResults: Record<Decision, string> = {
   approve: 'approved', reject: 'rejected', suspend: 'suspended', reactivate: 'reactivated',
 };
-const focusClass = 'min-h-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A46D] focus-visible:ring-offset-2 focus-visible:ring-offset-[#101C2C]';
+const focusClass = 'min-h-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E7C878] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B1220]';
 
 // Verification and account status are independent: suspension must not be
 // mistaken for approval, and only verified agencies can be reactivated.
@@ -272,7 +272,7 @@ export const AdminAgencyApprovals: React.FC = () => {
                       ))}
                     </dl>
                     {agency.verification_notes && (
-                      <div className="rounded-xl bg-[#0B1220] border border-slate-800 p-3 text-xs">
+                      <div className="rounded-xl bg-[#07141E] border border-slate-800 p-3 text-xs">
                         <p className="text-slate-400 mb-1">Previous verification notes</p>
                         <p className="text-slate-200 whitespace-pre-wrap break-words">{agency.verification_notes}</p>
                       </div>

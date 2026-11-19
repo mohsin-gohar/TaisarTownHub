@@ -306,30 +306,30 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
   };
 
   return (
-    <div className={`py-12 px-4 sm:px-6 lg:px-8 bg-[#0B1220] min-h-screen space-y-10 ${compareIds.length > 0 ? 'pb-40' : ''}`}>
+    <div className={`py-12 px-4 sm:px-6 lg:px-8 bg-[#F9F9F9] min-h-screen space-y-10 ${compareIds.length > 0 ? 'pb-40' : ''}`}>
       <div className="max-w-7xl mx-auto space-y-10">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto space-y-3">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E7C878]/25 text-[#8A6A1F] border border-[#B98A2F]/50">
             <Sparkles className="w-3.5 h-3.5" /> Verified Land & Homes
           </span>
-          <h1 className="font-serif-luxury text-3xl sm:text-4xl lg:text-5xl font-bold text-white">
+          <h1 className="font-serif-luxury text-3xl sm:text-4xl lg:text-5xl font-bold text-[#0B1220]">
             Taiser Town Scheme 45 Property Listings
           </h1>
-          <p className="text-slate-400 text-sm">
+          <p className="text-[#475569] text-sm">
             Browse verified 80, 120, 240, 400 Sq. Yd. plots, commercial avenues, and luxury duplex villas.
           </p>
         </div>
 
         {/* Filter Controls Panel */}
-        <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 space-y-5 shadow-xl">
+        <div className="bg-white p-6 rounded-2xl border border-[#E7E3DA] space-y-5 shadow-xl">
           {/* Phase Quick Selector Tabs */}
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2.5">
-              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#C5A46D]" /> Taiser Town Phase:
+              <span className="text-xs font-bold text-[#334155] uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#E7C878]" /> Taiser Town Phase:
               </span>
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[11px] text-[#475569]">
                 Scheme 45 is organized into 3 operational phases
               </span>
             </div>
@@ -348,12 +348,12 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                     onClick={() => setSelectedPhase(tab.id as any)}
                     className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                       isActive
-                        ? 'bg-[#C5A46D] text-[#101C2C] border-[#F9E7BA] font-bold shadow-md shadow-[#C5A46D]/20'
-                        : 'bg-[#0B1220] text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+                        ? 'bg-[#E7C878] text-[#0B1220] border-[#F6E3B4] font-bold shadow-md shadow-[#E7C878]/20'
+                        : 'bg-[#F1F0EC] text-[#475569] border-slate-300 hover:border-[#B98A2F]/60 hover:text-[#0B1220]'
                     }`}
                   >
                     <div className="text-xs font-semibold">{tab.label}</div>
-                    <div className={`text-[10px] truncate ${isActive ? 'text-[#101C2C]/80 font-medium' : 'text-slate-400'}`}>
+                    <div className={`text-[10px] truncate ${isActive ? 'text-[#0B1220]/80 font-medium' : 'text-[#475569]'}`}>
                       {tab.desc}
                     </div>
                   </button>
@@ -362,29 +362,29 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-3 border-t border-slate-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-3 border-t border-[#E7E3DA]">
             {/* Search */}
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-300 uppercase">Search Keywords</label>
+              <label className="text-[11px] font-semibold text-[#475569] uppercase">Search Keywords</label>
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-[#475569] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Plot number, sector, road..."
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg pl-9 pr-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-white text-[#0B1220] text-xs rounded-lg pl-9 pr-3 py-2 border border-slate-300 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
             </div>
 
             {/* Type */}
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-300 uppercase">Property Type</label>
+              <label className="text-[11px] font-semibold text-[#475569] uppercase">Property Type</label>
               <select
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value as PropertyType | 'All')}
-                className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
+                className="w-full bg-white text-[#0B1220] text-xs rounded-lg px-3 py-2 border border-slate-300 focus:border-[#E7C878] focus:outline-none cursor-pointer"
               >
                 <option value="All">All Types</option>
                 <option value="Residential Plot">Residential Plot</option>
@@ -397,11 +397,11 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
 
             {/* Sector */}
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-300 uppercase">Sector / Block</label>
+              <label className="text-[11px] font-semibold text-[#475569] uppercase">Sector / Block</label>
               <select
                 value={selectedSector}
                 onChange={(e) => setSelectedSector(e.target.value)}
-                className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
+                className="w-full bg-white text-[#0B1220] text-xs rounded-lg px-3 py-2 border border-slate-300 focus:border-[#E7C878] focus:outline-none cursor-pointer"
               >
                 <option value="All">All Sectors</option>
                 <optgroup label="Phase 1 (Possession Ready)">
@@ -430,11 +430,11 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
 
             {/* Size */}
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-300 uppercase">Size (Sq. Yards)</label>
+              <label className="text-[11px] font-semibold text-[#475569] uppercase">Size (Sq. Yards)</label>
               <select
                 value={selectedSize}
                 onChange={(e) => setSelectedSize(e.target.value)}
-                className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
+                className="w-full bg-white text-[#0B1220] text-xs rounded-lg px-3 py-2 border border-slate-300 focus:border-[#E7C878] focus:outline-none cursor-pointer"
               >
                 <option value="All">All Sizes</option>
                 <option value="80">80 Sq. Yds</option>
@@ -446,11 +446,11 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
 
             {/* Sort Order */}
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-300 uppercase">Sort Listings</label>
+              <label className="text-[11px] font-semibold text-[#475569] uppercase">Sort Listings</label>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
+                className="w-full bg-white text-[#0B1220] text-xs rounded-lg px-3 py-2 border border-slate-300 focus:border-[#E7C878] focus:outline-none cursor-pointer"
               >
                 <option value="featured">Featured First</option>
                 <option value="price-asc">Price: Low to High</option>
@@ -461,24 +461,24 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
           </div>
 
           {/* Secondary Filter Row */}
-          <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-800 text-xs">
-            <label className="flex items-center gap-2 cursor-pointer text-slate-300 select-none">
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-[#E7E3DA] text-xs">
+            <label className="flex items-center gap-2 cursor-pointer text-[#475569] select-none">
               <input
                 type="checkbox"
                 checked={possessionOnly}
                 onChange={(e) => setPossessionOnly(e.target.checked)}
-                className="rounded text-[#C5A46D] focus:ring-[#C5A46D] accent-[#C5A46D]"
+                className="rounded text-[#E7C878] focus:ring-[#E7C878] accent-[#E7C878]"
               />
               <span>Show Ready Possession Plots Only</span>
             </label>
 
             <div className="flex items-center gap-4">
-              <span className="text-slate-400">
+              <span className="text-[#475569]">
                 Found <strong>{sortedProperties.length}</strong> matching properties
               </span>
               <button
                 onClick={resetAllFilters}
-                className="text-[#C5A46D] hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-[#8A6A1F] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset Filters</span>
@@ -515,7 +515,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
               return (
                 <div
                   key={prop.id}
-                  className="group bg-[#101C2C] rounded-2xl overflow-hidden border border-slate-800 hover:border-[#C5A46D]/50 shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between"
+                  className="group bg-white rounded-2xl overflow-hidden border border-[#E7E3DA] hover:border-[#B98A2F]/60 shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between"
                 >
                   <div
                     className="relative h-56 overflow-hidden cursor-pointer"
@@ -528,13 +528,13 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                       decoding="async"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#101C2C] via-transparent to-black/30" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-transparent to-black/30" />
 
                     <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#C5A46D] text-[#101C2C]">
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#E7C878] text-[#0B1220]">
                         {prop.type}
                       </span>
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#101C2C]/90 text-[#F9E7BA] border border-[#C5A46D]/40 backdrop-blur-sm">
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#0B1220]/90 text-[#F6E3B4] border border-[#E7C878]/40 backdrop-blur-sm">
                         {prop.phase || 'Phase 1'}
                       </span>
                       {prop.status === 'Hot Deal' && (
@@ -543,7 +543,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                         </span>
                       )}
                       {prop.status === 'Sold' && (
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-900/90 text-slate-300 border border-slate-600 backdrop-blur-sm">
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-900/90 text-[#475569] border border-slate-600 backdrop-blur-sm">
                           Sold
                         </span>
                       )}
@@ -561,10 +561,10 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
 
                     {/* Price overlay with per-sq-yd reference */}
                     <div className="absolute bottom-3 left-3 flex flex-col">
-                      <span className="px-3 py-1 rounded-lg bg-black/80 font-serif-luxury font-bold text-base text-[#F9E7BA]">
+                      <span className="px-3 py-1 rounded-lg bg-black/80 font-serif-luxury font-bold text-base text-[#F6E3B4]">
                         {prop.formattedPrice}
                       </span>
-                      <span className="mt-1 px-2 text-[10px] text-slate-300 bg-black/60 rounded inline-block">
+                      <span className="mt-1 px-2 text-[10px] text-[#475569] bg-black/60 rounded inline-block">
                         PKR {Math.round(prop.pricePKR / Math.max(prop.sizeSqYards, 1)).toLocaleString()} / Sq. Yd
                       </span>
                     </div>
@@ -584,8 +584,8 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                       }
                       className={`absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold backdrop-blur-md transition ${
                         compareIds.includes(prop.id)
-                          ? 'border-[#C5A46D] bg-[#C5A46D] text-[#101C2C]'
-                          : 'border-white/20 bg-black/65 text-slate-200 hover:border-[#C5A46D]/70 hover:text-[#F9E7BA]'
+                          ? 'border-[#E7C878] bg-[#E7C878] text-[#0B1220]'
+                          : 'border-white/20 bg-black/65 text-[#334155] hover:border-[#E7C878]/70 hover:text-[#F6E3B4]'
                       }`}
                     >
                       {compareIds.includes(prop.id) ? <Check className="h-3 w-3" /> : <Scale className="h-3 w-3" />}
@@ -595,53 +595,53 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
 
                   <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                     <div className="space-y-2">
-                      <div className="flex items-center gap-1.5 text-xs text-[#C5A46D]">
+                      <div className="flex items-center gap-1.5 text-xs text-[#8A6A1F]">
                         <MapPin className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{prop.location}</span>
                       </div>
 
-                      <h3 className="font-serif-luxury text-lg font-bold text-white group-hover:text-[#C5A46D] transition-colors line-clamp-1">
+                      <h3 className="font-serif-luxury text-lg font-bold text-[#0B1220] group-hover:text-[#8A6A1F] transition-colors line-clamp-1">
                         <a
                           href={propertyHref(prop.id)}
                           onClick={onPropertyLinkClick(prop.id)}
-                          className="hover:text-[#C5A46D] transition-colors"
+                          className="hover:text-[#8A6A1F] transition-colors"
                         >
                           {prop.title}
                         </a>
                       </h3>
 
-                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      <p className="text-xs text-[#475569] line-clamp-2 leading-relaxed">
                         {prop.description}
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 py-2 border-t border-b border-slate-800 text-xs text-slate-300">
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#0B1220] border border-slate-700">
-                        <Maximize2 className="w-3 h-3 text-[#C5A46D]" />
+                    <div className="flex flex-wrap items-center gap-2 py-2 border-t border-b border-[#E7E3DA] text-xs text-[#475569]">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#F1F0EC] border border-slate-300">
+                        <Maximize2 className="w-3 h-3 text-[#E7C878]" />
                         <strong>{prop.sizeSqYards}</strong> Sq. Yd
                       </span>
                       {prop.plotNumber && (
-                        <span className="px-2 py-1 rounded bg-[#0B1220] border border-[#C5A46D]/30 text-[#C5A46D] text-[11px] font-mono">
+                        <span className="px-2 py-1 rounded bg-[#E7C878]/15 border border-[#B98A2F]/40 text-[#8A6A1F] text-[11px] font-mono">
                           Plot {prop.plotNumber}
                         </span>
                       )}
                       {prop.fileNumber && (
-                        <span className="px-2 py-1 rounded bg-[#0B1220] border border-slate-700 text-slate-300 text-[11px] font-mono">
+                        <span className="px-2 py-1 rounded bg-[#F1F0EC] border border-slate-300 text-[#475569] text-[11px] font-mono">
                           File #{prop.fileNumber}
                         </span>
                       )}
                       {prop.westOpen && (
-                        <span className="px-2 py-1 rounded bg-[#0B1220] border border-slate-700 text-[11px]">
+                        <span className="px-2 py-1 rounded bg-[#F1F0EC] border border-slate-300 text-[11px]">
                           West Open
                         </span>
                       )}
                       {prop.cornerPlot && (
-                        <span className="px-2 py-1 rounded bg-[#0B1220] border border-slate-700 text-[11px]">
+                        <span className="px-2 py-1 rounded bg-[#F1F0EC] border border-slate-300 text-[11px]">
                           Corner
                         </span>
                       )}
                       {prop.parkFacing && (
-                        <span className="px-2 py-1 rounded bg-[#0B1220] border border-slate-700 text-[11px]">
+                        <span className="px-2 py-1 rounded bg-[#F1F0EC] border border-slate-300 text-[11px]">
                           Park Facing
                         </span>
                       )}
@@ -651,7 +651,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                       <a
                         href={propertyHref(prop.id)}
                         onClick={onPropertyLinkClick(prop.id)}
-                        className="w-full py-2.5 px-3 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-[#C5A46D]/20"
+                        className="w-full py-2.5 px-3 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-[#E7C878]/20"
                       >
                         <span>View Details &amp; Dossier</span>
                         <ArrowRight className="w-3.5 h-3.5" />

@@ -112,7 +112,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-xs text-slate-300 font-medium tracking-wide">
-          <span className="text-[#C5A46D] font-bold">{index + 1}</span>
+          <span className="text-[#E7C878] font-bold">{index + 1}</span>
           <span className="mx-1.5 text-slate-500">/</span>
           <span>{total}</span>
           <span className="hidden sm:inline text-slate-500 ml-3 truncate max-w-[280px] md:max-w-none inline-block align-middle">
@@ -125,7 +125,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
         <button
           onClick={onClose}
           aria-label="Close gallery"
-          className="p-2 rounded-full bg-white/5 hover:bg-[#C5A46D] hover:text-[#101C2C] text-white transition-colors cursor-pointer"
+          className="p-2 rounded-full bg-white/5 hover:bg-[#E7C878] hover:text-[#0B1220] text-white transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
@@ -140,7 +140,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
           <button
             onClick={() => goTo(index - 1)}
             aria-label="Previous image"
-            className="absolute left-3 z-10 p-3 rounded-full bg-[#101C2C]/90 border border-white/20 text-white hover:bg-[#C5A46D] hover:text-[#101C2C] transition-colors cursor-pointer touch-none sm:cursor-pointer"
+            className="absolute left-3 z-10 p-3 rounded-full bg-[#0B1220]/90 border border-white/20 text-white hover:bg-[#E7C878] hover:text-[#0B1220] transition-colors cursor-pointer touch-none sm:cursor-pointer"
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
@@ -169,7 +169,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
           <button
             onClick={() => goTo(index + 1)}
             aria-label="Next image"
-            className="absolute right-3 z-10 p-3 rounded-full bg-[#101C2C]/90 border border-white/20 text-white hover:bg-[#C5A46D] hover:text-[#101C2C] transition-colors cursor-pointer touch-none sm:cursor-pointer"
+            className="absolute right-3 z-10 p-3 rounded-full bg-[#0B1220]/90 border border-white/20 text-white hover:bg-[#E7C878] hover:text-[#0B1220] transition-colors cursor-pointer touch-none sm:cursor-pointer"
           >
             <ChevronRight className="w-6 h-6" />
           </button>
@@ -189,7 +189,7 @@ export const Lightbox: React.FC<LightboxProps> = ({
               aria-label={`Open image ${i + 1}`}
               aria-current={i === index}
               className={`relative w-16 h-11 rounded-lg overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
-                i === index ? 'border-[#C5A46D] opacity-100' : 'border-transparent opacity-50 hover:opacity-90'
+                i === index ? 'border-[#E7C878] opacity-100' : 'border-transparent opacity-50 hover:opacity-90'
               }`}
             >
               <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
@@ -201,10 +201,10 @@ export const Lightbox: React.FC<LightboxProps> = ({
               aria-label="Play property video"
               aria-current={isVideoSlot}
               className={`relative w-16 h-11 rounded-lg shrink-0 border-2 flex items-center justify-center transition-all cursor-pointer ${
-                isVideoSlot ? 'border-[#C5A46D] bg-[#C5A46D]/20' : 'border-transparent bg-white/10 opacity-60 hover:opacity-90'
+                isVideoSlot ? 'border-[#E7C878] bg-[#E7C878]/20' : 'border-transparent bg-white/10 opacity-60 hover:opacity-90'
               }`}
             >
-              <Play className="w-4 h-4 text-[#C5A46D]" />
+              <Play className="w-4 h-4 text-[#E7C878]" />
             </button>
           )}
         </div>

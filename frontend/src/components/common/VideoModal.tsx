@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Play, Maximize2, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -49,11 +49,11 @@ export const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, title, 
       aria-modal="true"
       aria-label={title}
     >
-      <div className="relative w-full max-w-4xl bg-[#101C2C] border border-[#C5A46D]/30 rounded-2xl overflow-hidden shadow-2xl animate-scaleUp">
+      <div className="relative w-full max-w-4xl bg-[#0B1220] border border-[#E7C878]/30 rounded-2xl overflow-hidden shadow-2xl animate-scaleUp">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#0B1220]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#07141E]">
           <div className="flex items-center gap-2">
-            <Play className="w-4 h-4 text-[#C5A46D]" />
+            <Play className="w-4 h-4 text-[#E7C878]" />
             <h3 className="font-serif-luxury font-bold text-white text-base truncate max-w-lg">
               {title}
             </h3>
@@ -71,17 +71,17 @@ export const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, title, 
         <div className="relative aspect-video bg-black flex items-center justify-center">
           {status === 'loading' && (
             <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-              <Loader2 className="w-8 h-8 text-[#C5A46D] animate-spin" />
+              <Loader2 className="w-8 h-8 text-[#E7C878] animate-spin" />
             </div>
           )}
           {status === 'error' ? (
             <div className="flex flex-col items-center gap-3 text-slate-300 px-6 text-center">
-              <AlertCircle className="w-10 h-10 text-[#C5A46D]" />
+              <AlertCircle className="w-10 h-10 text-[#E7C878]" />
               <p className="text-sm">This video could not be loaded. It may be unavailable or blocked by your network.</p>
               <a
                 href={videoUrl}
                 target="_blank" rel="noopener noreferrer"
-                className="text-[#C5A46D] underline text-xs hover:text-[#D4AF37]"
+                className="text-[#E7C878] underline text-xs hover:text-[#F3C464]"
               >
                 Open video in a new tab
               </a>
@@ -106,9 +106,9 @@ export const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, title, 
         </div>
 
         {/* Footer info */}
-        <div className="px-6 py-3 bg-[#0B1220] flex items-center justify-between text-xs text-slate-400">
+        <div className="px-6 py-3 bg-[#07141E] flex items-center justify-between text-xs text-slate-400">
           <span>High-Definition Architectural Walkthrough & Site Footage</span>
-          <span className="text-[#C5A46D] font-medium">Taiser Town Scheme 45 Media Archive</span>
+          <span className="text-[#E7C878] font-medium">Taiser Town Scheme 45 Media Archive</span>
         </div>
       </div>
     </div>,

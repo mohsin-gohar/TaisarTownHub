@@ -41,12 +41,13 @@ export const ProjectDetailPage: React.FC = () => {
   const [inquiryMsg, setInquiryMsg] = useState(
     project ? `I would like booking details and payment schedule for ${project.title}.` : ''
   );
+  const [inquirySubmitting, setInquirySubmitting] = useState(false);
 
   if (!project) {
     return (
       <div className="py-24 px-4 text-center max-w-lg mx-auto min-h-[60vh] flex items-center justify-center">
         <EmptyState
-          icon={<Building2 className="w-8 h-8 text-[#C5A46D]" />}
+          icon={<Building2 className="w-8 h-8 text-[#E7C878]" />}
           title="Project Not Found"
           description="The selected real estate development project is currently unavailable."
           actionLabel="Explore All Master Projects"
@@ -63,14 +64,16 @@ export const ProjectDetailPage: React.FC = () => {
     setLightboxIndex(idx < 0 ? 0 : idx);
   };
 
-  const handleInquirySubmit = (e: React.FormEvent) => {
+  const handleInquirySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (inquirySubmitting) return;
     if (!inquiryName || !inquiryPhone) {
       showToast('error', 'Please enter your name and phone number.');
       return;
     }
 
-    addInquiry({
+    setInquirySubmitting(true);
+    const sent = await addInquiry({
       fullName: inquiryName,
       phone: inquiryPhone,
       subject: `Project Booking Inquiry: ${project.title}`,
@@ -78,13 +81,15 @@ export const ProjectDetailPage: React.FC = () => {
       message: inquiryMsg,
       source: 'Project Page'
     });
+    setInquirySubmitting(false);
 
+    if (!sent) return;
     setInquiryName('');
     setInquiryPhone('');
   };
 
   return (
-    <div className="py-12 px-4 sm:px-6 lg:px-8 bg-[#0B1220] min-h-screen">
+    <div className="py-12 px-4 sm:px-6 lg:px-8 bg-[#07141E] min-h-screen">
       <div className="max-w-7xl mx-auto space-y-10">
         {/* Top Navigation */}
         <div className="flex items-center justify-between">
@@ -93,14 +98,14 @@ export const ProjectDetailPage: React.FC = () => {
               setCurrentView('projects');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-[#C5A46D] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-[#E7C878] transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to All Projects</span>
           </button>
 
           <div className="flex items-center gap-3">
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#E7C878]/15 text-[#E7C878] border border-[#E7C878]/30">
               {project.status}
             </span>
           </div>
@@ -108,13 +113,13 @@ export const ProjectDetailPage: React.FC = () => {
 
         {/* Project Header Title */}
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3 text-xs text-[#C5A46D]">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-[#E7C878]">
             <span className="flex items-center gap-1 font-semibold">
               <Building2 className="w-4 h-4" /> {project.category}
             </span>
             <span>•</span>
             <span className="flex items-center gap-1 text-slate-300">
-              <MapPin className="w-3.5 h-3.5 text-[#C5A46D]" /> {project.location}
+              <MapPin className="w-3.5 h-3.5 text-[#E7C878]" /> {project.location}
             </span>
             <span>•</span>
             <span className="text-slate-400">Completion: {project.completionYear}</span>
@@ -132,7 +137,7 @@ export const ProjectDetailPage: React.FC = () => {
         {/* Image & Video Gallery Showcase */}
         <div className="space-y-4">
           <div
-            className="group relative aspect-16/9 sm:aspect-21/9 max-h-[520px] rounded-2xl overflow-hidden border border-[#C5A46D]/30 bg-slate-900 shadow-2xl cursor-zoom-in"
+            className="group relative aspect-16/9 sm:aspect-21/9 max-h-[520px] rounded-2xl overflow-hidden border border-[#E7C878]/30 bg-slate-900 shadow-2xl cursor-zoom-in"
             onClick={openLightbox}
             role="button"
             aria-label="Open project gallery full screen"
@@ -153,9 +158,9 @@ export const ProjectDetailPage: React.FC = () => {
             {project.videoUrl && (
               <button
                 onClick={() => setIsVideoModalOpen(true)}
-                className="absolute bottom-6 right-6 px-4 py-2.5 rounded-xl bg-[#101C2C]/90 hover:bg-[#101C2C] text-white border border-[#C5A46D]/50 backdrop-blur-md text-xs font-bold flex items-center gap-2 shadow-2xl cursor-pointer group"
+                className="absolute bottom-6 right-6 px-4 py-2.5 rounded-xl bg-[#0B1220]/90 hover:bg-[#0B1220] text-white border border-[#E7C878]/50 backdrop-blur-md text-xs font-bold flex items-center gap-2 shadow-2xl cursor-pointer group"
               >
-                <div className="w-7 h-7 rounded-full bg-[#C5A46D] text-[#101C2C] flex items-center justify-center group-hover:scale-110 transition-transform">
+                <div className="w-7 h-7 rounded-full bg-[#E7C878] text-[#0B1220] flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                 </div>
                 <span>Watch Architectural Tour</span>
@@ -171,7 +176,7 @@ export const ProjectDetailPage: React.FC = () => {
                 onClick={() => setActiveImage(img)}
                 aria-label={`Show project image ${idx + 1}`}
                 className={`relative w-24 h-16 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
-                  activeImage === img ? 'border-[#C5A46D] scale-105' : 'border-slate-800 opacity-60 hover:opacity-100'
+                  activeImage === img ? 'border-[#E7C878] scale-105' : 'border-slate-800 opacity-60 hover:opacity-100'
                 }`}
               >
                 <ImageWithFallback src={img} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -196,7 +201,7 @@ export const ProjectDetailPage: React.FC = () => {
           {/* Main Info (8 cols) */}
           <div className="lg:col-span-8 space-y-10">
             {/* Overview Description */}
-            <div className="bg-[#101C2C] p-8 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
+            <div className="bg-[#0B1220] p-8 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
               <h3 className="font-serif-luxury text-2xl font-bold text-white">
                 Project Overview & Scope
               </h3>
@@ -207,7 +212,7 @@ export const ProjectDetailPage: React.FC = () => {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-800">
                 <div>
                   <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Starting Price</span>
-                  <span className="font-serif-luxury text-lg font-bold text-[#F9E7BA]">
+                  <span className="font-serif-luxury text-lg font-bold text-[#F6E3B4]">
                     {formatPKRCurrency(project.startingPricePKR)}
                   </span>
                 </div>
@@ -235,9 +240,9 @@ export const ProjectDetailPage: React.FC = () => {
                 {project.facilities.map((fac, i) => (
                   <div
                     key={i}
-                    className="p-5 rounded-xl bg-[#101C2C] border border-slate-800 space-y-2 hover:border-[#C5A46D]/30 transition-colors"
+                    className="p-5 rounded-xl bg-[#0B1220] border border-slate-800 space-y-2 hover:border-[#E7C878]/30 transition-colors"
                   >
-                    <div className="flex items-center gap-2 text-[#C5A46D] font-bold text-sm">
+                    <div className="flex items-center gap-2 text-[#E7C878] font-bold text-sm">
                       <CheckCircle2 className="w-4 h-4" />
                       <span>{fac.name}</span>
                     </div>
@@ -250,7 +255,7 @@ export const ProjectDetailPage: React.FC = () => {
             </div>
 
             {/* Attached Documents */}
-            <div className="bg-[#101C2C] p-8 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
+            <div className="bg-[#0B1220] p-8 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
               <h3 className="font-serif-luxury text-2xl font-bold text-white">
                 Official Project Documents & Brochures
               </h3>
@@ -262,10 +267,10 @@ export const ProjectDetailPage: React.FC = () => {
                 {project.documents.map((doc) => (
                   <div
                     key={doc.id}
-                    className="flex items-center justify-between p-4 rounded-xl bg-[#0B1220] border border-slate-800 hover:border-slate-700 transition-colors"
+                    className="flex items-center justify-between p-4 rounded-xl bg-[#07141E] border border-slate-800 hover:border-slate-700 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-[#C5A46D]/15 text-[#C5A46D] flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-lg bg-[#E7C878]/15 text-[#E7C878] flex items-center justify-center">
                         <FileText className="w-5 h-5" />
                       </div>
                       <div>
@@ -281,7 +286,7 @@ export const ProjectDetailPage: React.FC = () => {
                         document.getElementById('project-booking')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         showToast('info', 'Add your name and phone, then send the request. It is stored with the agency inquiries.');
                       }}
-                      className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#C5A46D] hover:text-[#101C2C] text-xs font-semibold text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#E7C878] hover:text-[#0B1220] text-xs font-semibold text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <FileText className="w-3.5 h-3.5" />
                       <span>Request Copy</span>
@@ -294,9 +299,9 @@ export const ProjectDetailPage: React.FC = () => {
 
           {/* Project Booking & Inquiry Sidebar (4 cols) */}
           <div className="lg:col-span-4 space-y-6">
-            <div className="bg-[#101C2C] p-6 sm:p-8 rounded-2xl border border-[#C5A46D]/30 shadow-2xl space-y-6 sticky top-28">
+            <div className="bg-[#0B1220] p-6 sm:p-8 rounded-2xl border border-[#E7C878]/30 shadow-2xl space-y-6 sticky top-28">
               <div>
-                <span className="text-[10px] uppercase font-bold text-[#C5A46D] tracking-wider block">
+                <span className="text-[10px] uppercase font-bold text-[#E7C878] tracking-wider block">
                   Direct Booking Desk
                 </span>
                 <h4 className="font-serif-luxury text-xl font-bold text-white mt-1">
@@ -316,7 +321,7 @@ export const ProjectDetailPage: React.FC = () => {
                     value={inquiryName}
                     onChange={(e) => setInquiryName(e.target.value)}
                     placeholder="e.g. Asad Farooqui"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
 
@@ -328,7 +333,7 @@ export const ProjectDetailPage: React.FC = () => {
                     value={inquiryPhone}
                     onChange={(e) => setInquiryPhone(e.target.value)}
                     placeholder="e.g. +92 321 0000000"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
 
@@ -338,16 +343,17 @@ export const ProjectDetailPage: React.FC = () => {
                     rows={3}
                     value={inquiryMsg}
                     onChange={(e) => setInquiryMsg(e.target.value)}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg p-3 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg p-3 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3 px-4 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#C5A46D]/20"
+                  disabled={inquirySubmitting}
+                  className="w-full py-3 px-4 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] disabled:opacity-60 disabled:cursor-not-allowed text-[#0B1220] font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#E7C878]/20"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Send Booking Request</span>
+                  <span>{inquirySubmitting ? 'Sending…' : 'Send Booking Request'}</span>
                 </button>
               </form>
             </div>

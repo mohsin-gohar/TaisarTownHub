@@ -123,7 +123,15 @@ Expected pages:
 
 ### Agency User Flow
 1. Log in at http://127.0.0.1:3000/login
-   - Use: admin@taisartownhub.com / password (see seed data)
+   - Local demo accounts (created by `DemoStaffSeeder`):
+     | Role | Email | Password |
+     |---|---|---|
+     | Super Admin | superadmin@taisartownhub.com | Super@Admin2026! |
+     | Agency Owner | admin@taisartownhub.com | Admin@Taisar2026 |
+     | Agency Manager | manager@taisartownhub.com | Manager@2026 |
+     | Dealer | dealer@taisartownhub.com | Dealer@2026 |
+     | Operator | operator@taisartownhub.com | Operator@2026 |
+   - Recreate missing accounts with `php artisan db:seed --class=DemoStaffSeeder`.
 
 2. Open agency dashboard
    - Navigate to Secure File Vault
@@ -208,8 +216,10 @@ npx tsx scripts/prerender.mts  # generates sitemap/robots
    - Vite may take ~2s first startup to compile
 
 3. **`Authentication failed` on login**
-   - Seed data creates: `admin@taisartownhub.com` with password `password123`
-   - Use Laravel's default or reset via `php artisan db:seed --class=UserSeed`
+   - Local demo accounts are created by `DemoStaffSeeder`:
+     `admin@taisartownhub.com` / `Admin@Taisar2026` (and the other roles listed above).
+   - If the accounts are missing, run `php artisan db:seed --class=DemoStaffSeeder`.
+   - `password123` is **not** a valid demo password.
 
 4. **Properties not appearing on agency profile**
    - Verify property has `approval_status = 'approved'`

@@ -19,13 +19,13 @@ export const AdminSecurityRoles: React.FC = () => {
       role: 'super_admin',
       title: 'Super Admin',
       desc: 'Complete system control, role assignment, unmasked CNICs, private pricing, database migration, and staff management.',
-      color: 'border-[#C5A46D]/60 bg-[#C5A46D]/20 text-[#F9E7BA]'
+      color: 'border-[#E7C878]/60 bg-[#E7C878]/20 text-[#F6E3B4]'
     },
     {
       role: 'admin',
       title: 'Agency Admin',
       desc: 'Full back-office operations: property CRUD, seller/buyer records, staff registration, task assignment, dealer payouts, and CMS builder.',
-      color: 'border-[#C5A46D]/40 bg-[#C5A46D]/15 text-[#C5A46D]'
+      color: 'border-[#E7C878]/40 bg-[#E7C878]/15 text-[#E7C878]'
     }
   ];
 
@@ -47,13 +47,13 @@ export const AdminSecurityRoles: React.FC = () => {
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#101C2C] to-[#1A2638] border border-[#C5A46D]/30 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#0B1220] to-[#1A2638] border border-[#E7C878]/30 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-serif-luxury text-2xl font-bold text-white">
               Role-Based Access Control (RBAC) & Security Architecture
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/20 text-[#C5A46D] border border-[#C5A46D]/40">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E7C878]/20 text-[#E7C878] border border-[#E7C878]/40">
               Enterprise Grade
             </span>
           </div>
@@ -62,8 +62,8 @@ export const AdminSecurityRoles: React.FC = () => {
           </p>
         </div>
 
-        <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-800 text-xs text-slate-300 flex items-center gap-2.5">
-          <ShieldCheck className="w-5 h-5 text-[#C5A46D]" />
+        <div className="p-3 rounded-xl bg-[#07141E] border border-slate-800 text-xs text-slate-300 flex items-center gap-2.5">
+          <ShieldCheck className="w-5 h-5 text-[#E7C878]" />
           <div>
             <span className="text-[10px] text-slate-400 block uppercase font-bold">Current Active Session</span>
             <span className="font-bold text-white capitalize">{activeRole.replace('_', ' ')}</span>
@@ -72,7 +72,7 @@ export const AdminSecurityRoles: React.FC = () => {
       </div>
 
       {/* Session Role Switcher */}
-      <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+      <div className="bg-[#0B1220] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
         <div>
           <h3 className="font-serif-luxury text-lg font-bold text-white">
             Session Role Switcher
@@ -96,7 +96,7 @@ export const AdminSecurityRoles: React.FC = () => {
               onChange={(e) => setPresenterPin(e.target.value)}
               placeholder="PIN"
               aria-label="Presenter PIN for role switching"
-              className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none font-mono tracking-widest"
+              className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none font-mono tracking-widest"
             />
             <p className="text-[9px] text-slate-500 leading-snug">
               Role switching requires the presenter PIN configured for this deployment.
@@ -123,8 +123,8 @@ export const AdminSecurityRoles: React.FC = () => {
                 disabled={switching}
                 className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between disabled:opacity-60 ${
                   isActive
-                    ? 'border-[#C5A46D] bg-[#C5A46D]/20 ring-2 ring-[#C5A46D] shadow-lg'
-                    : 'border-slate-800 bg-[#0B1220] hover:border-slate-700'
+                    ? 'border-[#E7C878] bg-[#E7C878]/20 ring-2 ring-[#E7C878] shadow-lg'
+                    : 'border-slate-800 bg-[#07141E] hover:border-slate-700'
                 }`}
               >
                 <div>
@@ -132,7 +132,7 @@ export const AdminSecurityRoles: React.FC = () => {
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${item.color}`}>
                       {item.title}
                     </span>
-                    {isActive && <CheckCircle2 className="w-4 h-4 text-[#C5A46D]" />}
+                    {isActive && <CheckCircle2 className="w-4 h-4 text-[#E7C878]" />}
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">
                     {item.desc}
@@ -149,7 +149,7 @@ export const AdminSecurityRoles: React.FC = () => {
       </div>
 
       {/* Permissions Matrix Table */}
-      <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+      <div className="bg-[#0B1220] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
         <div>
           <h3 className="font-serif-luxury text-lg font-bold text-white">
             Granular Permissions Matrix
@@ -161,7 +161,7 @@ export const AdminSecurityRoles: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+            <thead className="bg-[#07141E] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
               <tr>
                 <th className="py-3 px-4">System Operation / Module</th>
                 <th className="py-3 px-4 text-center">Super Admin</th>
@@ -176,14 +176,14 @@ export const AdminSecurityRoles: React.FC = () => {
                   </td>
                   <td className="py-3 px-4 text-center">
                     {row.super_admin ? (
-                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
+                      <CheckCircle2 className="w-4 h-4 text-[#E7C878] mx-auto" />
                     ) : (
                       <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
                     )}
                   </td>
                   <td className="py-3 px-4 text-center">
                     {row.admin ? (
-                      <CheckCircle2 className="w-4 h-4 text-[#C5A46D] mx-auto" />
+                      <CheckCircle2 className="w-4 h-4 text-[#E7C878] mx-auto" />
                     ) : (
                       <XCircle className="w-4 h-4 text-slate-600 mx-auto" />
                     )}
@@ -196,10 +196,10 @@ export const AdminSecurityRoles: React.FC = () => {
       </div>
 
       {/* Production Security Controls */}
-      <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+      <div className="bg-[#0B1220] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
         <div>
           <h3 className="font-serif-luxury text-lg font-bold text-white flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-[#C5A46D]" />
+            <ShieldCheck className="w-5 h-5 text-[#E7C878]" />
             <span>Production Security Controls</span>
           </h3>
           <p className="text-xs text-slate-400">
@@ -216,9 +216,9 @@ export const AdminSecurityRoles: React.FC = () => {
             { title: 'CORS allowlist', desc: 'API origins are restricted to the dashboard domains configured for this deployment.' },
             { title: 'Transport security', desc: 'Production deployments terminate TLS at the web server; keep HTTPS enforced for the dashboard and API.' },
           ].map((item) => (
-            <div key={item.title} className="p-4 rounded-xl bg-[#0B1220] border border-slate-800">
+            <div key={item.title} className="p-4 rounded-xl bg-[#07141E] border border-slate-800">
               <div className="flex items-center gap-2 text-xs font-bold text-white">
-                <CheckCircle2 className="w-4 h-4 text-[#C5A46D] shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-[#E7C878] shrink-0" />
                 <span>{item.title}</span>
               </div>
               <p className="mt-1.5 text-[11px] text-slate-400 leading-relaxed">{item.desc}</p>

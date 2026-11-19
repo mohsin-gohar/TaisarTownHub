@@ -34,7 +34,7 @@ export const EnterprisePage: React.FC<{
   children: React.ReactNode;
 }> = ({ title, subtitle, actions, children }) => (
   <div className="space-y-6 animate-fadeIn">
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#101C2C] to-[#1A2638] border border-[#C5A46D]/30 shadow-xl">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#0B1220] to-[#1A2638] border border-[#E7C878]/30 shadow-xl">
       <div className="space-y-1 min-w-0">
         <h2 className="font-serif-luxury text-2xl font-bold text-white truncate">{title}</h2>
         {subtitle && <p className="text-xs text-slate-300">{subtitle}</p>}
@@ -52,7 +52,7 @@ export const EnterpriseCard: React.FC<{
   className?: string;
   children: React.ReactNode;
 }> = ({ title, subtitle, actions, className = '', children }) => (
-  <div className={`bg-[#101C2C] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-lg ${className}`}>
+  <div className={`bg-[#0B1220] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-lg ${className}`}>
     {(title || actions) && (
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
@@ -73,14 +73,14 @@ export const EnterpriseStat: React.FC<{
   tone?: 'gold' | 'white' | 'green' | 'red';
 }> = ({ label, value, hint, tone = 'white' }) => {
   const toneClass = {
-    gold: 'text-[#C5A46D]',
+    gold: 'text-[#E7C878]',
     white: 'text-white',
     green: 'text-emerald-400',
     red: 'text-rose-400',
   }[tone];
 
   return (
-    <div className="bg-[#101C2C] p-5 rounded-2xl border border-slate-800 shadow-lg">
+    <div className="bg-[#0B1220] p-5 rounded-2xl border border-slate-800 shadow-lg">
       <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{label}</span>
       <div className={`font-serif-luxury text-2xl font-bold mt-1 ${toneClass}`}>{value}</div>
       {hint && <div className="text-[11px] text-slate-500 mt-1">{hint}</div>}
@@ -93,7 +93,7 @@ export const EnterpriseBadge: React.FC<{
   tone?: 'gold' | 'green' | 'red' | 'blue' | 'slate';
 }> = ({ children, tone = 'slate' }) => {
   const tones = {
-    gold: 'bg-[#C5A46D]/15 text-[#F9E7BA] border-[#C5A46D]/40',
+    gold: 'bg-[#E7C878]/15 text-[#F6E3B4] border-[#E7C878]/40',
     green: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
     red: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
     blue: 'bg-sky-500/10 text-sky-300 border-sky-500/30',
@@ -146,7 +146,7 @@ export const EnterpriseButton: React.FC<
   React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger' }
 > = ({ variant = 'primary', className = '', children, ...rest }) => {
   const variants = {
-    primary: 'bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold shadow',
+    primary: 'bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold shadow',
     secondary: 'bg-slate-800 hover:bg-slate-700 text-white font-semibold border border-slate-700',
     danger: 'bg-rose-600/20 hover:bg-rose-600/30 text-rose-200 font-semibold border border-rose-500/30',
   }[variant];
@@ -162,4 +162,4 @@ export const EnterpriseButton: React.FC<
 };
 
 export const enterpriseInputClass =
-  'w-full px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-[#C5A46D]';
+  'w-full px-3 py-2 rounded-lg bg-[#07141E] border border-slate-700 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-[#E7C878]';

@@ -336,6 +336,28 @@ async function login(email: string, password: string) {
   }
 
   // ---------------------------------------------------------------------------
+  // Cleanup: neutralise the listing this run published (never delete history)
+  // and suspend the disposable buyer agency. Financial fixtures created by W3
+  // are intentionally left for audit review (sales/payment records must not be
+  // silently rewritten); they are clearly labelled with the run stamp.
+  if (ownerToken && w2PropertyId) {
+    const hidden = await call(`/properties/${w2PropertyId}/visibility`, {
+      method: 'POST',
+      token: ownerToken,
+      agency: 'agency-demo',
+      body: { visibility: 'private' },
+    });
+    console.log(`cleanup: W2 listing ${w2PropertyId} visibility=${hidden.status === 200 ? 'private' : 'UNCHANGED'}`);
+  }
+  if (sa.token && buyerAgencyId) {
+    await call(`/admin/agencies/${buyerAgencyId}/status`, {
+      method: 'PUT',
+      token: sa.token,
+      body: { status: 'suspended' },
+    });
+    console.log(`cleanup: buyer probe agency ${buyerAgencyId} suspended`);
+  }
+
   const passed = rows.filter((r) => r.ok).length;
   console.log(`\n${passed}/${rows.length} workflow steps passed`);
 

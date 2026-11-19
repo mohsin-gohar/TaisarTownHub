@@ -179,8 +179,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
             </div>
           );
         })}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-[#0B1220]/65 to-[#0B1220]/25" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#0B1220]/30 to-[#0B1220]/75" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07141E] via-[#07141E]/65 to-[#07141E]/25" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#07141E]/30 to-[#07141E]/75" />
       </div>
 
       <div
@@ -188,9 +188,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
         className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28 flex flex-col items-center text-center"
       >
         {/* Top Floating Pill */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#101C2C]/80 border border-[#C5A46D]/40 backdrop-blur-md mb-6 shadow-xl animate-fadeIn">
-          <span className="w-2 h-2 rounded-full bg-[#C5A46D] animate-ping" />
-          <span className="text-xs uppercase tracking-widest text-[#F9E7BA] font-semibold">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0B1220]/80 border border-[#E7C878]/40 backdrop-blur-md mb-6 shadow-xl animate-fadeIn">
+          <span className="w-2 h-2 rounded-full bg-[#E7C878] animate-ping" />
+          <span className="text-xs uppercase tracking-widest text-[#F6E3B4] font-semibold">
             {currentTheme.heroBadge}
           </span>
         </div>
@@ -219,7 +219,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
         >
           <button
             onClick={() => setCurrentView('properties')}
-            className="px-7 py-3.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] active:scale-95 text-[#101C2C] font-bold text-sm tracking-wide transition-all duration-200 shadow-lg shadow-[#C5A46D]/25 hover:shadow-[#C5A46D]/40 flex items-center gap-2 cursor-pointer"
+            className="px-7 py-3.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] active:scale-95 text-[#0B1220] font-bold text-sm tracking-wide transition-all duration-200 shadow-lg shadow-[#E7C878]/25 hover:shadow-[#E7C878]/40 flex items-center gap-2 cursor-pointer"
           >
             <span>Explore Properties</span>
             <ArrowRight className="w-4 h-4" />
@@ -229,13 +229,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
             className="px-7 py-3.5 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 text-white font-semibold text-sm tracking-wide transition-all duration-200 backdrop-blur-md border border-white/20 flex items-center gap-2 cursor-pointer"
           >
             <span>Discover Agencies</span>
-            <Building2 className="w-4 h-4 text-[#C5A46D]" />
+            <Building2 className="w-4 h-4 text-[#E7C878]" />
           </button>
           <button
             onClick={() => setCurrentView('guide')}
-            className="px-5 py-3.5 rounded-xl bg-[#101C2C]/80 hover:bg-[#101C2C] active:scale-95 text-slate-300 hover:text-white font-medium text-sm transition-all border border-[#C5A46D]/30 flex items-center gap-2 cursor-pointer"
+            className="px-5 py-3.5 rounded-xl bg-[#0B1220]/80 hover:bg-[#0B1220] active:scale-95 text-slate-300 hover:text-white font-medium text-sm transition-all border border-[#E7C878]/30 flex items-center gap-2 cursor-pointer"
           >
-            <Compass className="w-4 h-4 text-[#C5A46D]" />
+            <Compass className="w-4 h-4 text-[#E7C878]" />
             <span>Scheme 45 Master Plan</span>
           </button>
         </div>
@@ -245,10 +245,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
           className="mt-12 w-full max-w-5xl animate-fadeInUp"
           style={isStatic ? undefined : { animationDelay: '1.6s' }}
         >
-          <div className="glass-panel p-4 sm:p-6 rounded-2xl shadow-2xl border border-[#C5A46D]/30 text-left">
+          <div className="glass-panel p-4 sm:p-6 rounded-2xl shadow-2xl border border-[#E7C878]/30 text-left">
             <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
               <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <Search className="w-4 h-4 text-[#C5A46D]" />
+                <Search className="w-4 h-4 text-[#E7C878]" />
                 <span>Search Scheme 45 Real Estate Portfolio</span>
               </div>
               <span className="text-xs text-slate-400 hidden sm:inline">
@@ -266,7 +266,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                   <select
                     value={selectedType}
                     onChange={(e) => setSelectedType(e.target.value as PropertyType | 'All')}
-                    className="w-full bg-[#0B1220]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none appearance-none cursor-pointer"
+                    className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
                   >
                     <option value="All">All Property Types</option>
                     <option value="Residential Plot">Residential Plot</option>
@@ -281,13 +281,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
 
               {/* Taiser Town Phase */}
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-[#F9E7BA] uppercase tracking-wider block">
+                <label className="text-[11px] font-semibold text-[#F6E3B4] uppercase tracking-wider block">
                   Taiser Town Phase
                 </label>
                 <select
                   value={selectedPhase}
                   onChange={(e) => setSelectedPhase(e.target.value as 'Phase 1' | 'Phase 2' | 'Phase 3' | 'All')}
-                  className="w-full bg-[#0B1220]/90 text-[#F9E7BA] font-medium text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-[#C5A46D]/50 focus:border-[#C5A46D] focus:outline-none appearance-none cursor-pointer"
+                  className="w-full bg-[#07141E]/90 text-[#F6E3B4] font-medium text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-[#E7C878]/50 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
                 >
                   <option value="All">All Phases (1, 2, 3)</option>
                   <option value="Phase 1">Phase 1 (Possession Ready)</option>
@@ -304,7 +304,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                 <select
                   value={selectedSector}
                   onChange={(e) => setSelectedSector(e.target.value)}
-                  className="w-full bg-[#0B1220]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none appearance-none cursor-pointer"
+                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
                 >
                   <option value="All">All Sectors</option>
                   <option value="Sector 70-D">Sector 70-D (Phase 1)</option>
@@ -327,7 +327,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                 <select
                   value={selectedBudget}
                   onChange={(e) => setSelectedBudget(e.target.value)}
-                  className="w-full bg-[#0B1220]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none appearance-none cursor-pointer"
+                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
                 >
                   <option value="All">Any Price Range</option>
                   <option value="under-25">Under 25 Lacs</option>
@@ -345,7 +345,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                 <select
                   value={selectedSize}
                   onChange={(e) => setSelectedSize(e.target.value)}
-                  className="w-full bg-[#0B1220]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none appearance-none cursor-pointer"
+                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
                 >
                   <option value="All">All Sizes</option>
                   <option value="80">80 Sq. Yards</option>
@@ -360,7 +360,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
               <div className="flex items-end">
                 <button
                   type="submit"
-                  className="w-full py-2.5 px-4 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] active:scale-95 text-[#101C2C] font-bold text-sm tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#C5A46D]/20 h-[42px]"
+                  className="w-full py-2.5 px-4 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] active:scale-95 text-[#0B1220] font-bold text-sm tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#E7C878]/20 h-[42px]"
                 >
                   <Search className="w-4 h-4" />
                   <span>Search</span>
@@ -378,7 +378,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                 <div className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white">
                   <StatsCounter value={stat.value} />
                 </div>
-                <div className="text-xs text-[#C5A46D] uppercase tracking-wider font-semibold">
+                <div className="text-xs text-[#E7C878] uppercase tracking-wider font-semibold">
                   {stat.label}
                 </div>
               </div>
@@ -388,7 +388,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
       </div>
 
       {/* Hero Slide Switcher Dots */}
-      <div className="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-2 bg-[#0B1220]/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#C5A46D]/30 shadow-lg">
+      <div className="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-2 bg-[#07141E]/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#E7C878]/30 shadow-lg">
         {HERO_SLIDES.map((slide, idx) => (
           <button
             key={slide.id}
@@ -396,7 +396,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
             aria-label={`Switch to slide ${idx + 1}`}
             className={`transition-all duration-300 rounded-full cursor-pointer ${
               idx === activeSlideIndex
-                ? 'w-6 h-2 bg-[#C5A46D] shadow-sm shadow-[#C5A46D]/50'
+                ? 'w-6 h-2 bg-[#E7C878] shadow-sm shadow-[#E7C878]/50'
                 : 'w-2 h-2 bg-slate-500 hover:bg-slate-300'
             }`}
           />
@@ -407,11 +407,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
       <button
         onClick={scrollToNext}
         aria-label="Scroll down to explore"
-        className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 text-slate-300 hover:text-[#C5A46D] transition-colors cursor-pointer group"
+        className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 text-slate-300 hover:text-[#E7C878] transition-colors cursor-pointer group"
       >
         <span className="text-[10px] uppercase tracking-[0.25em] font-semibold">Scroll</span>
-        <span className="w-7 h-11 rounded-full border-2 border-slate-400/50 group-hover:border-[#C5A46D]/70 flex items-start justify-center p-1.5">
-          <ChevronDown className="w-4 h-4 animate-scrollHint text-[#C5A46D]" />
+        <span className="w-7 h-11 rounded-full border-2 border-slate-400/50 group-hover:border-[#E7C878]/70 flex items-start justify-center p-1.5">
+          <ChevronDown className="w-4 h-4 animate-scrollHint text-[#E7C878]" />
         </span>
       </button>
 

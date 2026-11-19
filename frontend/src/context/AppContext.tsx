@@ -187,7 +187,7 @@ interface AppContextType {
   
   // Inquiries & CMS
   inquiries: Inquiry[];
-  addInquiry: (inquiry: Omit<Inquiry, 'id' | 'submittedAt' | 'status'>) => void;
+  addInquiry: (inquiry: Omit<Inquiry, 'id' | 'submittedAt' | 'status'>) => Promise<boolean>;
   updateInquiryStatus: (id: string, status: InquiryStatus) => void;
   updateInquiryNotes: (id: string, notes: string) => void;
   deleteInquiry: (id: string) => void;
@@ -538,6 +538,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     staffPersistRef.current = true;
   };
 
+  /**
+   * Guest/public hydration.
+   *
+   * Listings come ONLY from the governed Property API (agency-owned +
+   * approved + public + sale). The legacy catalog endpoint may still supply
+   * CMS/videos/media/testimonials, but its `properties` collection must never
+   * override the governed listings.
+   */
+  const applyPublicData = (
+    catalog: Record<string, unknown> | null,
+    publicProperties: Property[] | null
+  ) => {
+    if (catalog) {
+      const catalogWithoutListings = { ...catalog };
+      delete catalogWithoutListings.properties;
+      applyServerData(catalogWithoutListings, false);
+    }
+    if (publicProperties) setProperties(publicProperties);
+  };
+
   const clearWorkspace = () => {
     staffPersistRef.current = false;
     erpReadyRef.current = false;
@@ -636,10 +656,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         clearSession();
       }
-      const catalog = await api.getCatalog();
+      const [catalog, publicProperties] = await Promise.all([
+        api.getCatalog(),
+        api.getPublicProperties(),
+      ]);
       if (version !== sessionVersionRef.current) return;
-      if (catalog) applyServerData(catalog, false);
-      setBackendConnected(Boolean(catalog));
+      applyPublicData(catalog, publicProperties);
+      setBackendConnected(Boolean(catalog) || publicProperties !== null);
       setIsSessionLoading(false);
     };
     void boot();
@@ -870,8 +893,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     void api.logout();
     clearSession();
     setIsSessionLoading(false);
-    void api.getCatalog().then((catalog) => {
-      if (version === sessionVersionRef.current && catalog) applyServerData(catalog, false);
+    void Promise.all([api.getCatalog(), api.getPublicProperties()]).then(([catalog, publicProperties]) => {
+      if (version === sessionVersionRef.current) applyPublicData(catalog, publicProperties);
     });
     showToast('info', 'Signed out. Private records have been cleared from this session.');
     setCurrentView('home');
@@ -1828,10 +1851,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Inquiries Management
-  const addInquiry = (inquiryData: Omit<Inquiry, 'id' | 'submittedAt' | 'status'>) => {
+  const addInquiry = async (
+    inquiryData: Omit<Inquiry, 'id' | 'submittedAt' | 'status'>
+  ): Promise<boolean> => {
     const now = new Date();
     const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    
+
     const newInquiry: Inquiry = {
       ...inquiryData,
       id: `inq-${Date.now()}`,
@@ -1839,21 +1864,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       submittedAt: formattedDate,
       adminNotes: 'New inquiry received via public portal. Awaiting agent follow-up.'
     };
-    setInquiries((prev) => [newInquiry, ...prev]);
 
-    if (backendConnected) {
-      api.submitInquiry({
-        fullName: inquiryData.fullName,
-        email: inquiryData.email,
-        phone: inquiryData.phone,
-        subject: inquiryData.subject,
-        message: inquiryData.message,
-        preferredPropertyOrProject: inquiryData.preferredPropertyOrProject,
-        budgetRange: inquiryData.budgetRange
-      }).catch(() => {});
+    if (!backendConnected) {
+      showToast('error', 'Our inquiry desk is temporarily unreachable. Please try again or contact us on WhatsApp.');
+      return false;
     }
 
+    const result = await api.submitInquiry({
+      fullName: inquiryData.fullName,
+      email: inquiryData.email,
+      phone: inquiryData.phone,
+      subject: inquiryData.subject,
+      message: inquiryData.message,
+      preferredPropertyOrProject: inquiryData.preferredPropertyOrProject,
+      budgetRange: inquiryData.budgetRange
+    });
+
+    if (!result) {
+      showToast('error', 'We could not send your inquiry. Please try again or contact us on WhatsApp.');
+      return false;
+    }
+
+    setInquiries((prev) => [newInquiry, ...prev]);
     showToast('success', 'Thank you! Your inquiry has been dispatched to our Taiser Town advisory desk.');
+    return true;
   };
 
   const updateInquiryStatus = (id: string, status: InquiryStatus) => {
@@ -1890,12 +1924,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetToDefaultData = async () => {
     const token = getAuthToken();
-    const data = token ? await api.getWorkspace() : await api.getCatalog();
-    if (!data) {
+    if (token) {
+      const data = await api.getWorkspace();
+      if (!data) {
+        showToast('error', 'MySQL is not reachable, so records were not reloaded.');
+        return;
+      }
+      applyServerData(data, true);
+      showToast('success', 'Records reloaded from MySQL.');
+      return;
+    }
+
+    const [catalog, publicProperties] = await Promise.all([api.getCatalog(), api.getPublicProperties()]);
+    if (!catalog && publicProperties === null) {
       showToast('error', 'MySQL is not reachable, so records were not reloaded.');
       return;
     }
-    applyServerData(data, Boolean(token));
+    applyPublicData(catalog, publicProperties);
     showToast('success', 'Records reloaded from MySQL.');
   };
 

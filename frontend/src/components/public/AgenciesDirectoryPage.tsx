@@ -24,7 +24,7 @@ interface AgencyCardData {
 }
 
 const SkeletonCard = () => (
-  <div className="rounded-2xl border border-slate-800 bg-[#101C2C] overflow-hidden animate-pulse">
+  <div className="rounded-2xl border border-slate-800 bg-[#0B1220] overflow-hidden animate-pulse">
     <div className="h-28 bg-slate-800/60" />
     <div className="p-5 space-y-3">
       <div className="h-4 w-2/3 bg-slate-800 rounded" />
@@ -92,11 +92,11 @@ export const AgenciesDirectoryPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B1220] pt-10 pb-20 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#07141E] pt-10 pb-20 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
           <div className="space-y-3 max-w-3xl">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E7C878]/15 text-[#E7C878] border border-[#E7C878]/30">
               <Building2 className="w-3.5 h-3.5" /> Verified Agency Network
             </span>
             <h1 className="font-serif-luxury text-3xl sm:text-4xl lg:text-5xl font-bold text-white">
@@ -108,13 +108,13 @@ export const AgenciesDirectoryPage: React.FC = () => {
           </div>
           <button
             onClick={() => void load(page)}
-            className="self-start lg:self-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-700 bg-[#101C2C] text-slate-200 hover:text-white hover:border-[#C5A46D]/50 transition text-sm font-semibold"
+            className="self-start lg:self-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-700 bg-[#0B1220] text-slate-200 hover:text-white hover:border-[#E7C878]/50 transition text-sm font-semibold"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </div>
 
-        <div className="bg-[#101C2C] border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+        <div className="bg-[#0B1220] border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <label className="md:col-span-2 space-y-1">
               <span className="text-[11px] font-semibold text-slate-300 uppercase">Search agency</span>
@@ -125,7 +125,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') void load(1); }}
                   placeholder="Agency name, city or description"
-                  className="w-full bg-[#0B1220] text-white text-sm rounded-xl pl-9 pr-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-sm rounded-xl pl-9 pr-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
             </label>
@@ -136,7 +136,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
                 onChange={(e) => setCity(e.target.value)}
                 list="agency-cities"
                 placeholder="Any city"
-                className="w-full bg-[#0B1220] text-white text-sm rounded-xl px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                className="w-full bg-[#07141E] text-white text-sm rounded-xl px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
               />
               <datalist id="agency-cities">
                 {cities.map((c) => <option key={c} value={c} />)}
@@ -147,7 +147,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as any)}
-                className="w-full bg-[#0B1220] text-white text-sm rounded-xl px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                className="w-full bg-[#07141E] text-white text-sm rounded-xl px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
               >
                 <option value="name">Name</option>
                 <option value="newest">Newest</option>
@@ -157,12 +157,12 @@ export const AgenciesDirectoryPage: React.FC = () => {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <label className="inline-flex items-center gap-2 text-sm text-slate-300 cursor-pointer select-none">
-              <input type="checkbox" checked={hasListings} onChange={(e) => setHasListings(e.target.checked)} className="accent-[#C5A46D]" />
-              <Filter className="w-4 h-4 text-[#C5A46D]" /> Only agencies with public listings
+              <input type="checkbox" checked={hasListings} onChange={(e) => setHasListings(e.target.checked)} className="accent-[#E7C878]" />
+              <Filter className="w-4 h-4 text-[#E7C878]" /> Only agencies with public listings
             </label>
             <button
               onClick={() => void load(1)}
-              className="px-5 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm transition shadow-lg shadow-[#C5A46D]/20"
+              className="px-5 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm transition shadow-lg shadow-[#E7C878]/20"
             >
               Search agencies
             </button>
@@ -180,7 +180,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
             {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         ) : agencies.length === 0 ? (
-          <div className="rounded-2xl border border-slate-800 bg-[#101C2C] p-10 text-center space-y-3">
+          <div className="rounded-2xl border border-slate-800 bg-[#0B1220] p-10 text-center space-y-3">
             <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
             <h3 className="text-white font-semibold text-lg">No agencies match your filters</h3>
             <p className="text-slate-400 text-sm">Try clearing the search or city filter to see all verified agencies.</p>
@@ -196,17 +196,17 @@ export const AgenciesDirectoryPage: React.FC = () => {
             {agencies.map((agency) => {
               const initials = agency.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
               return (
-                <article key={agency.id} className="group rounded-2xl border border-slate-800 bg-[#101C2C] overflow-hidden hover:border-[#C5A46D]/50 transition-all duration-300 hover:-translate-y-0.5 shadow-xl flex flex-col">
-                  <div className="relative h-28 bg-gradient-to-br from-slate-800 via-[#0B1220] to-slate-900">
+                <article key={agency.id} className="group rounded-2xl border border-slate-800 bg-[#0B1220] overflow-hidden hover:border-[#E7C878]/50 transition-all duration-300 hover:-translate-y-0.5 shadow-xl flex flex-col">
+                  <div className="relative h-28 bg-gradient-to-br from-slate-800 via-[#07141E] to-slate-900">
                     {agency.cover_url ? (
                       <img src={agency.cover_url} alt="" className="w-full h-full object-cover opacity-80" loading="lazy" />
                     ) : null}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#101C2C] to-transparent" />
-                    <div className="absolute -bottom-6 left-5 w-14 h-14 rounded-xl border-2 border-[#101C2C] bg-[#0B1220] overflow-hidden flex items-center justify-center shadow-lg">
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] to-transparent" />
+                    <div className="absolute -bottom-6 left-5 w-14 h-14 rounded-xl border-2 border-[#0B1220] bg-[#07141E] overflow-hidden flex items-center justify-center shadow-lg">
                       {agency.logo_url ? (
                         <img src={agency.logo_url} alt={`${agency.name} logo`} className="w-full h-full object-cover" loading="lazy" />
                       ) : (
-                        <span className="text-[#C5A46D] font-bold text-sm">{initials}</span>
+                        <span className="text-[#E7C878] font-bold text-sm">{initials}</span>
                       )}
                     </div>
                   </div>
@@ -214,7 +214,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
                   <div className="pt-8 px-5 pb-5 flex-1 flex flex-col gap-4">
                     <div className="space-y-1.5">
                       <div className="flex items-start justify-between gap-2">
-                        <h2 className="font-serif-luxury text-lg font-bold text-white leading-snug group-hover:text-[#C5A46D] transition-colors">
+                        <h2 className="font-serif-luxury text-lg font-bold text-white leading-snug group-hover:text-[#E7C878] transition-colors">
                           {agency.name}
                         </h2>
                         {agency.verification_status === 'verified' && (
@@ -225,7 +225,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
                       </div>
                       {(agency.city || agency.office_address) && (
                         <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-[#C5A46D]" />
+                          <MapPin className="w-3.5 h-3.5 text-[#E7C878]" />
                           <span className="line-clamp-1">{agency.city || agency.office_address}</span>
                         </p>
                       )}
@@ -237,15 +237,15 @@ export const AgenciesDirectoryPage: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="rounded-lg bg-[#0B1220] border border-slate-800 p-2">
+                      <div className="rounded-lg bg-[#07141E] border border-slate-800 p-2">
                         <div className="text-sm font-bold text-white">{agency.listing_count ?? 0}</div>
                         <div className="text-[10px] text-slate-400 uppercase tracking-wide">Listings</div>
                       </div>
-                      <div className="rounded-lg bg-[#0B1220] border border-slate-800 p-2">
+                      <div className="rounded-lg bg-[#07141E] border border-slate-800 p-2">
                         <div className="text-sm font-bold text-white">{agency.member_count ?? 0}</div>
                         <div className="text-[10px] text-slate-400 uppercase tracking-wide">Team</div>
                       </div>
-                      <div className="rounded-lg bg-[#0B1220] border border-slate-800 p-2">
+                      <div className="rounded-lg bg-[#07141E] border border-slate-800 p-2">
                         <div className="text-sm font-bold text-white">{agency.since || '—'}</div>
                         <div className="text-[10px] text-slate-400 uppercase tracking-wide">Since</div>
                       </div>
@@ -254,7 +254,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
                     <div className="mt-auto pt-1 flex items-center gap-2">
                       <button
                         onClick={() => openAgency(agency)}
-                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm transition"
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm transition"
                       >
                         View agency profile <ArrowRight className="w-4 h-4" />
                       </button>
@@ -271,7 +271,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
             <button
               disabled={page <= 1 || loading}
               onClick={() => void load(page - 1)}
-              className="px-4 py-2 rounded-lg border border-slate-700 bg-[#101C2C] text-slate-200 disabled:opacity-40"
+              className="px-4 py-2 rounded-lg border border-slate-700 bg-[#0B1220] text-slate-200 disabled:opacity-40"
             >
               Previous
             </button>
@@ -279,21 +279,21 @@ export const AgenciesDirectoryPage: React.FC = () => {
             <button
               disabled={page >= pagination.last_page || loading}
               onClick={() => void load(page + 1)}
-              className="px-4 py-2 rounded-lg border border-slate-700 bg-[#101C2C] text-slate-200 disabled:opacity-40"
+              className="px-4 py-2 rounded-lg border border-slate-700 bg-[#0B1220] text-slate-200 disabled:opacity-40"
             >
               Next
             </button>
           </div>
         )}
 
-        <div className="rounded-2xl border border-[#C5A46D]/20 bg-gradient-to-r from-[#101C2C] to-[#0B1220] p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="rounded-2xl border border-[#E7C878]/20 bg-gradient-to-r from-[#0B1220] to-[#07141E] p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-white font-serif-luxury text-xl font-bold">Are you a real estate agency?</h3>
             <p className="text-slate-400 text-sm mt-1">Register your agency, get verified, and showcase your listings to buyers and tenants.</p>
           </div>
           <button
             onClick={() => { window.history.pushState({}, '', '/register'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-            className="px-5 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm whitespace-nowrap"
+            className="px-5 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm whitespace-nowrap"
           >
             Register your agency
           </button>

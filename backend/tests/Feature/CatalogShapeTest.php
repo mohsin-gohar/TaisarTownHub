@@ -16,21 +16,39 @@ class CatalogShapeTest extends EnterpriseTestCase
 {
     public function test_catalog_properties_stay_a_list_when_rows_are_filtered(): void
     {
-        // Public rows (legacy payloads predate the workflow: no explicit
-        // approval/visibility keys default to approved + public).
-        BusinessRecord::put('properties', 'pub-1', ['id' => 'pub-1', 'title' => 'Public One']);
-        BusinessRecord::put('properties', 'pub-2', ['id' => 'pub-2', 'title' => 'Public Two']);
+        $agency = $this->makeAgency('Catalog Agency');
+
+        // Public rows: agency-owned and explicitly approved + public + sale.
+        BusinessRecord::put('properties', 'pub-1', [
+            'id' => 'pub-1', 'title' => 'Public One',
+            'approval_status' => 'approved', 'visibility' => 'public', 'listing_purpose' => 'sale',
+        ], $agency->id);
+        BusinessRecord::put('properties', 'pub-2', [
+            'id' => 'pub-2', 'title' => 'Public Two',
+            'approval_status' => 'approved', 'visibility' => 'public', 'listing_purpose' => 'sale',
+        ], $agency->id);
 
         // A row the catalog must skip (draft + private) — this is what used to
         // leave a key gap and turn the list into an object.
         BusinessRecord::put('properties', 'draft-1', [
             'id' => 'draft-1', 'title' => 'Draft', 'approval_status' => 'draft', 'visibility' => 'private',
+        ], $agency->id);
+
+        // An unowned row, even with all governance keys, is never public.
+        BusinessRecord::put('properties', 'unowned-1', [
+            'id' => 'unowned-1', 'title' => 'Unowned',
+            'approval_status' => 'approved', 'visibility' => 'public', 'listing_purpose' => 'sale',
         ]);
+
+        // An owned legacy row without explicit governance keys is not public.
+        BusinessRecord::put('properties', 'legacy-1', [
+            'id' => 'legacy-1', 'title' => 'Legacy implicit',
+        ], $agency->id);
 
         // A payload-soft-deleted row (publicRows must drop it entirely).
         BusinessRecord::put('properties', 'gone-1', [
             'id' => 'gone-1', 'title' => 'Gone', 'deletedAt' => '2026-01-01',
-        ]);
+        ], $agency->id);
 
         $response = $this->getJson('/api/catalog')->assertOk();
 
@@ -40,7 +58,7 @@ class CatalogShapeTest extends EnterpriseTestCase
 
         $ids = array_map(fn ($p) => $p['id'], $properties);
         sort($ids);
-        $this->assertSame(['pub-1', 'pub-2'], $ids, 'only approved+public rows are listed');
+        $this->assertSame(['pub-1', 'pub-2'], $ids, 'only agency-owned, explicitly approved+public+sale rows are listed');
     }
 
     public function test_catalog_collections_exclude_payload_deleted_rows_and_stay_lists(): void
@@ -86,20 +104,22 @@ class CatalogShapeTest extends EnterpriseTestCase
 
     public function test_catalog_filters_legacy_rent_properties(): void
     {
+        $agency = $this->makeAgency('Legacy Purpose Agency');
+
         BusinessRecord::put('properties', 'legacy-sale', [
             'id' => 'legacy-sale',
             'title' => 'Legacy Sale',
             'listing_purpose' => 'sale',
             'approval_status' => 'approved',
             'visibility' => 'public',
-        ]);
+        ], $agency->id);
         BusinessRecord::put('properties', 'legacy-rent', [
             'id' => 'legacy-rent',
             'title' => 'Legacy Rent',
             'listing_purpose' => 'rent',
             'approval_status' => 'approved',
             'visibility' => 'public',
-        ]);
+        ], $agency->id);
 
         $response = $this->getJson('/api/catalog')->assertOk();
         $ids = array_column($response->json('properties'), 'id');

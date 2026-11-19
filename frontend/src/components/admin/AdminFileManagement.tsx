@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   FileCheck,
@@ -237,13 +237,13 @@ export const AdminFileManagement: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#101C2C] to-[#1A2638] border border-[#C5A46D]/30 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#0B1220] to-[#1A2638] border border-[#E7C878]/30 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-serif-luxury text-2xl font-bold text-white">
               Property File & Legal Document Desk
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/20 text-[#C5A46D] border border-[#C5A46D]/40">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E7C878]/20 text-[#E7C878] border border-[#E7C878]/40">
               MDA Scheme 45 Compliance
             </span>
           </div>
@@ -254,7 +254,7 @@ export const AdminFileManagement: React.FC = () => {
 
         <button
           onClick={openUploadModal}
-          className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+          className="px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20"
         >
           <Upload className="w-4 h-4" />
           <span>Upload Document</span>
@@ -263,21 +263,21 @@ export const AdminFileManagement: React.FC = () => {
 
       {/* 3 Metric Pills */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+        <div className="bg-[#0B1220] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Internally Verified Documents</span>
-            <CheckCircle2 className="w-4 h-4 text-[#C5A46D]" />
+            <CheckCircle2 className="w-4 h-4 text-[#E7C878]" />
           </div>
-          <div className="text-2xl font-bold font-serif-luxury text-[#C5A46D] mt-2">
+          <div className="text-2xl font-bold font-serif-luxury text-[#E7C878] mt-2">
             {verifiedCount}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">Legally cleared for immediate sale & transfer</div>
         </div>
 
-        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+        <div className="bg-[#0B1220] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Pending Verification</span>
-            <Clock className="w-4 h-4 text-[#C5A46D]" />
+            <Clock className="w-4 h-4 text-[#E7C878]" />
           </div>
           <div className="text-2xl font-bold font-serif-luxury text-white mt-2">
             {pendingCount}
@@ -285,7 +285,7 @@ export const AdminFileManagement: React.FC = () => {
           <div className="text-[11px] text-slate-400 mt-1">Awaiting legal scrutiny / MDA validation</div>
         </div>
 
-        <div className="bg-[#101C2C] p-5 rounded-xl border border-slate-800 shadow">
+        <div className="bg-[#0B1220] p-5 rounded-xl border border-slate-800 shadow">
           <div className="text-xs text-slate-400 font-semibold uppercase flex items-center justify-between">
             <span>Rejected / Exceptions</span>
             <XCircle className="w-4 h-4 text-slate-400" />
@@ -298,7 +298,7 @@ export const AdminFileManagement: React.FC = () => {
       </div>
 
       {/* Search and Category Filters */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-[#101C2C] p-4 rounded-xl border border-slate-800">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-[#0B1220] p-4 rounded-xl border border-slate-800">
         <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -306,7 +306,7 @@ export const AdminFileManagement: React.FC = () => {
             placeholder="Search by file #, plot #, title..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#0B1220] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+            className="w-full bg-[#07141E] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
           />
         </div>
 
@@ -317,8 +317,8 @@ export const AdminFileManagement: React.FC = () => {
               onClick={() => setFilterStatus(status)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer transition ${
                 filterStatus === status
-                  ? 'bg-[#C5A46D] text-[#101C2C]'
-                  : 'bg-[#0B1220] text-slate-400 hover:text-white border border-slate-800'
+                  ? 'bg-[#E7C878] text-[#0B1220]'
+                  : 'bg-[#07141E] text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
               {status === 'all' ? 'All Status' : status}
@@ -333,19 +333,19 @@ export const AdminFileManagement: React.FC = () => {
           return (
             <div
               key={doc.id}
-              className="bg-[#101C2C] rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-[#C5A46D]/50 transition-all shadow-lg"
+              className="bg-[#0B1220] rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-[#E7C878]/50 transition-all shadow-lg"
             >
               <div className="space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-[#C5A46D]">
+                    <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-[#E7C878]">
                       <FileText className="w-5 h-5" />
                     </div>
                     <div>
                       <h3 className="font-bold text-white text-sm">
                         {doc.title}
                       </h3>
-                      <span className="text-[11px] text-[#C5A46D] font-mono">
+                      <span className="text-[11px] text-[#E7C878] font-mono">
                         {doc.category}
                       </span>
                     </div>
@@ -354,14 +354,14 @@ export const AdminFileManagement: React.FC = () => {
                   <span
                     className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 ${
                       doc.verificationStatus === 'Verified'
-                        ? 'bg-[#C5A46D]/20 text-[#F9E7BA] border border-[#C5A46D]/40'
+                        ? 'bg-[#E7C878]/20 text-[#F6E3B4] border border-[#E7C878]/40'
                         : doc.verificationStatus === 'Pending Verification'
                         ? 'bg-slate-800 text-slate-300 border border-slate-700'
                         : 'bg-slate-800/80 text-slate-400 border border-slate-700'
                     }`}
                   >
-                    {doc.verificationStatus === 'Verified' && <CheckCircle2 className="w-3 h-3 text-[#C5A46D]" />}
-                    {doc.verificationStatus === 'Pending Verification' && <Clock className="w-3 h-3 text-[#C5A46D]" />}
+                    {doc.verificationStatus === 'Verified' && <CheckCircle2 className="w-3 h-3 text-[#E7C878]" />}
+                    {doc.verificationStatus === 'Pending Verification' && <Clock className="w-3 h-3 text-[#E7C878]" />}
                     {doc.verificationStatus === 'Rejected' && <AlertTriangle className="w-3 h-3 text-slate-400" />}
                     {doc.verificationStatus === 'Verified' ? 'Internally Verified' : doc.verificationStatus}
                   </span>
@@ -369,7 +369,7 @@ export const AdminFileManagement: React.FC = () => {
 
                 {/* Details */}
                 <div className="space-y-2 text-xs pt-2 border-t border-slate-800/80">
-                  <div className="flex items-center justify-between bg-[#0B1220] p-2 rounded-lg">
+                  <div className="flex items-center justify-between bg-[#07141E] p-2 rounded-lg">
                     <span className="text-slate-400">File Reference:</span>
                     <span className="font-mono text-white font-bold">{doc.fileNumber}</span>
                   </div>
@@ -377,7 +377,7 @@ export const AdminFileManagement: React.FC = () => {
                   {doc.plotNumber && (
                     <div className="flex items-center justify-between text-slate-300 px-1">
                       <span className="text-slate-400">Linked Plot:</span>
-                      <span className="font-bold text-[#C5A46D]">
+                      <span className="font-bold text-[#E7C878]">
                         Plot {doc.plotNumber} ({doc.sector})
                       </span>
                     </div>
@@ -386,12 +386,12 @@ export const AdminFileManagement: React.FC = () => {
                   {doc.verifiedBy && (
                     <div className="flex items-center justify-between text-slate-300 px-1">
                       <span className="text-slate-400">Verified By:</span>
-                      <span className="text-[#C5A46D] font-semibold">{doc.verifiedBy}</span>
+                      <span className="text-[#E7C878] font-semibold">{doc.verifiedBy}</span>
                     </div>
                   )}
 
                   {doc.rejectionReason && (
-                    <div className="p-2 rounded bg-[#0B1220] border border-slate-700 text-[11px] text-slate-300">
+                    <div className="p-2 rounded bg-[#07141E] border border-slate-700 text-[11px] text-slate-300">
                       <strong>Rejection Note:</strong> {doc.rejectionReason}
                     </div>
                   )}
@@ -410,7 +410,7 @@ export const AdminFileManagement: React.FC = () => {
                   onClick={() => setSelectedDocPreview(doc)}
                   className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Eye className="w-3.5 h-3.5 text-[#C5A46D]" />
+                  <Eye className="w-3.5 h-3.5 text-[#E7C878]" />
                   <span>View Doc</span>
                 </button>
 
@@ -418,7 +418,7 @@ export const AdminFileManagement: React.FC = () => {
                   {canVerify && doc.verificationStatus !== 'Verified' && (
                     <button
                       onClick={() => handleOpenVerify(doc.id)}
-                      className="px-2.5 py-1.5 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow"
+                      className="px-2.5 py-1.5 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Verify</span>
@@ -463,7 +463,7 @@ export const AdminFileManagement: React.FC = () => {
             if (e.target === e.currentTarget) setRejectModalDocId(null);
           }}
         >
-          <div className="relative w-full max-w-md bg-[#101C2C] border border-slate-700 rounded-2xl p-6 shadow-2xl">
+          <div className="relative w-full max-w-md bg-[#0B1220] border border-slate-700 rounded-2xl p-6 shadow-2xl">
             <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">
               Reject Document Verification
             </h3>
@@ -475,7 +475,7 @@ export const AdminFileManagement: React.FC = () => {
               rows={3}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs"
+              className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none text-xs"
               placeholder="e.g. Signature mismatch with MDA allotment letter..."
             />
 
@@ -505,7 +505,7 @@ export const AdminFileManagement: React.FC = () => {
             if (e.target === e.currentTarget) setVerifyModalDocId(null);
           }}
         >
-          <div className="relative w-full max-w-md bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 shadow-2xl">
+          <div className="relative w-full max-w-md bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 shadow-2xl">
             <h3 className="font-serif-luxury text-lg font-bold text-white mb-2">
               Verify Document
             </h3>
@@ -517,7 +517,7 @@ export const AdminFileManagement: React.FC = () => {
               rows={3}
               value={verifyNote}
               onChange={(e) => setVerifyNote(e.target.value)}
-              className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs"
+              className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none text-xs"
               placeholder="e.g. Allotment order matches MDA ledger; signature and thumb impression confirmed on-site..."
             />
 
@@ -530,7 +530,7 @@ export const AdminFileManagement: React.FC = () => {
               </button>
               <button
                 onClick={handleConfirmVerify}
-                className="px-4 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold cursor-pointer transition shadow"
+                className="px-4 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold cursor-pointer transition shadow"
               >
                 Confirm Verification
               </button>
@@ -547,7 +547,7 @@ export const AdminFileManagement: React.FC = () => {
             if (e.target === e.currentTarget) setSelectedDocPreview(null);
           }}
         >
-          <div className="relative w-full max-w-2xl bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-2xl bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedDocPreview(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
@@ -558,11 +558,11 @@ export const AdminFileManagement: React.FC = () => {
             <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">
               {selectedDocPreview.title}
             </h3>
-            <span className="text-xs font-mono text-[#C5A46D]">
+            <span className="text-xs font-mono text-[#E7C878]">
               {selectedDocPreview.category} • File: {selectedDocPreview.fileNumber}
             </span>
 
-            <div className="my-4 rounded-xl overflow-hidden border border-slate-800 bg-[#0B1220]">
+            <div className="my-4 rounded-xl overflow-hidden border border-slate-800 bg-[#07141E]">
               {!previewHasFile ? (
                 <div className="h-44 flex flex-col items-center justify-center gap-2 text-slate-500 px-6 text-center">
                   <FileText className="w-8 h-8 text-slate-600" />
@@ -580,7 +580,7 @@ export const AdminFileManagement: React.FC = () => {
                 <img
                   src={previewDocUrl}
                   alt={selectedDocPreview.title}
-                  className="w-full h-80 object-contain bg-[#0B1220]"
+                  className="w-full h-80 object-contain bg-[#07141E]"
                 />
               )}
             </div>
@@ -589,14 +589,14 @@ export const AdminFileManagement: React.FC = () => {
               <a
                 href={previewDocUrl}
                 target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C5A46D] hover:text-[#D4AF37]"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#E7C878] hover:text-[#F3C464]"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Open document in a new tab</span>
               </a>
             )}
 
-            <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-800 text-xs space-y-1">
+            <div className="p-3 rounded-xl bg-[#07141E] border border-slate-800 text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-slate-400">Verification Status:</span>
                 <span className="font-bold text-white">{selectedDocPreview.verificationStatus}</span>
@@ -613,7 +613,7 @@ export const AdminFileManagement: React.FC = () => {
               {selectedDocPreview.verifiedBy && (
                 <div className="flex justify-between">
                   <span className="text-slate-400">Verified By:</span>
-                  <span className="text-[#C5A46D] font-semibold">{selectedDocPreview.verifiedBy}</span>
+                  <span className="text-[#E7C878] font-semibold">{selectedDocPreview.verifiedBy}</span>
                 </div>
               )}
             </div>
@@ -638,7 +638,7 @@ export const AdminFileManagement: React.FC = () => {
             if (e.target === e.currentTarget) closeUploadModal();
           }}
         >
-          <div className="relative w-full max-w-lg bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">
               Upload Official Property Document
             </h3>
@@ -655,7 +655,7 @@ export const AdminFileManagement: React.FC = () => {
                   placeholder="e.g. MDA Allotment Order - Sector 63 R-66"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -665,7 +665,7 @@ export const AdminFileManagement: React.FC = () => {
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value as DocumentCategory })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   >
                     <option value="Allotment Order">Allotment Order</option>
                     <option value="Possession Letter">Possession Letter</option>
@@ -684,7 +684,7 @@ export const AdminFileManagement: React.FC = () => {
                     required
                     value={formData.fileNumber}
                     onChange={(e) => setFormData({ ...formData, fileNumber: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -694,7 +694,7 @@ export const AdminFileManagement: React.FC = () => {
                 <select
                   value={formData.propertyId}
                   onChange={(e) => setFormData({ ...formData, propertyId: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 >
                   {properties.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -718,10 +718,10 @@ export const AdminFileManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => documentInputRef.current?.click()}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-[#0B1220] border-2 border-dashed border-[#C5A46D]/40 hover:border-[#C5A46D] text-left cursor-pointer transition-colors"
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-[#07141E] border-2 border-dashed border-[#E7C878]/40 hover:border-[#E7C878] text-left cursor-pointer transition-colors"
                 >
-                  <span className="w-9 h-9 rounded-lg bg-[#C5A46D]/15 border border-[#C5A46D]/30 flex items-center justify-center shrink-0">
-                    <Upload className="w-4 h-4 text-[#C5A46D]" />
+                  <span className="w-9 h-9 rounded-lg bg-[#E7C878]/15 border border-[#E7C878]/30 flex items-center justify-center shrink-0">
+                    <Upload className="w-4 h-4 text-[#E7C878]" />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-white font-semibold truncate">
@@ -766,7 +766,7 @@ export const AdminFileManagement: React.FC = () => {
                     setDocumentFileType(undefined);
                     setDocumentFileError('');
                   }}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 {formData.documentUrl.startsWith('data:') && (
                   <p className="mt-1 text-[11px] text-slate-500">
@@ -782,7 +782,7 @@ export const AdminFileManagement: React.FC = () => {
                   placeholder="Official stamps, MDA verification slip reference..."
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -796,7 +796,7 @@ export const AdminFileManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold cursor-pointer shadow"
+                  className="px-5 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold cursor-pointer shadow"
                 >
                   Upload & Queue
                 </button>

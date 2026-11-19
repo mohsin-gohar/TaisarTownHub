@@ -40,11 +40,11 @@ export const SavedSearchPanel: React.FC<SavedSearchPanelProps> = ({
   return (
     <section
       aria-labelledby="saved-searches-heading"
-      className="rounded-2xl border border-slate-800 bg-[#101C2C] p-5 shadow-xl space-y-4"
+      className="rounded-2xl border border-slate-800 bg-[#0B1220] p-5 shadow-xl space-y-4"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#C5A46D]/30 bg-[#C5A46D]/10 text-[#C5A46D]">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#E7C878]/30 bg-[#E7C878]/10 text-[#E7C878]">
             <BookmarkCheck className="h-4 w-4" />
           </span>
           <div>
@@ -59,7 +59,7 @@ export const SavedSearchPanel: React.FC<SavedSearchPanelProps> = ({
         <button
           type="button"
           onClick={onSaveCurrent}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-[#C5A46D]/40 bg-[#C5A46D]/10 px-3 py-2 text-[11px] font-bold text-[#C5A46D] transition hover:bg-[#C5A46D] hover:text-[#101C2C]"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-[#E7C878]/40 bg-[#E7C878]/10 px-3 py-2 text-[11px] font-bold text-[#E7C878] transition hover:bg-[#E7C878] hover:text-[#0B1220]"
         >
           <Wand2 className="h-3.5 w-3.5" />
           Save current search
@@ -67,9 +67,9 @@ export const SavedSearchPanel: React.FC<SavedSearchPanelProps> = ({
       </div>
 
       {!authenticated ? (
-        <div className="rounded-xl border border-slate-800 bg-[#0B1220] p-4 text-xs text-slate-400">
+        <div className="rounded-xl border border-slate-800 bg-[#07141E] p-4 text-xs text-slate-400">
           <div className="flex items-start gap-2.5">
-            <Bell className="mt-0.5 h-4 w-4 shrink-0 text-[#C5A46D]" />
+            <Bell className="mt-0.5 h-4 w-4 shrink-0 text-[#E7C878]" />
             <p>
               Sign in to save this search and receive email alerts. Your filters stay in the URL, so you can come back to
               this exact result set at any time.
@@ -77,14 +77,14 @@ export const SavedSearchPanel: React.FC<SavedSearchPanelProps> = ({
           </div>
         </div>
       ) : loading ? (
-        <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-[#0B1220] p-4 text-xs text-slate-400">
-          <Loader2 className="h-4 w-4 animate-spin text-[#C5A46D]" />
+        <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-[#07141E] p-4 text-xs text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin text-[#E7C878]" />
           Loading saved searches…
         </div>
       ) : searches.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-700 bg-[#0B1220] p-4 text-xs text-slate-400">
+        <div className="rounded-xl border border-dashed border-slate-700 bg-[#07141E] p-4 text-xs text-slate-400">
           <div className="flex items-start gap-2.5">
-            <Bookmark className="mt-0.5 h-4 w-4 shrink-0 text-[#C5A46D]" />
+            <Bookmark className="mt-0.5 h-4 w-4 shrink-0 text-[#E7C878]" />
             <p>
               No saved searches yet. Apply the filters above, then choose <strong className="text-slate-200">Save current search</strong> to
               start receiving matching alerts.
@@ -98,7 +98,7 @@ export const SavedSearchPanel: React.FC<SavedSearchPanelProps> = ({
             return (
               <li
                 key={search.id}
-                className="flex flex-col justify-between gap-3 rounded-xl border border-slate-800 bg-[#0B1220] p-3.5"
+                className="flex flex-col justify-between gap-3 rounded-xl border border-slate-800 bg-[#07141E] p-3.5"
               >
                 <div className="space-y-1.5">
                   <div className="flex items-start justify-between gap-2">
@@ -134,7 +134,7 @@ export const SavedSearchPanel: React.FC<SavedSearchPanelProps> = ({
                     {busy ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : search.alerts_enabled ? (
-                      <Bell className="h-3.5 w-3.5 text-[#C5A46D]" />
+                      <Bell className="h-3.5 w-3.5 text-[#E7C878]" />
                     ) : (
                       <BellOff className="h-3.5 w-3.5" />
                     )}
@@ -154,7 +154,7 @@ export const SavedSearchPanel: React.FC<SavedSearchPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => onApply(search)}
-                      className="rounded-lg bg-[#C5A46D] px-3 py-1.5 text-[10px] font-bold text-[#101C2C] transition hover:bg-[#D4AF37]"
+                      className="rounded-lg bg-[#E7C878] px-3 py-1.5 text-[10px] font-bold text-[#0B1220] transition hover:bg-[#F3C464]"
                     >
                       Apply filters
                     </button>

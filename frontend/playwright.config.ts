@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000';
+// Port 3000 is often occupied by another local app. A dedicated default
+// prevents Playwright from silently reusing and testing the wrong service.
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:4173';
 const basePort = new URL(baseURL).port || (baseURL.startsWith('https:') ? '443' : '80');
 
 /**
@@ -27,7 +29,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run dev -- --port ${basePort}`,
+    command: `npm run dev:e2e -- --port ${basePort}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

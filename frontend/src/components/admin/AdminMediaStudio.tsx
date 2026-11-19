@@ -63,7 +63,7 @@ const MediaPreview: React.FC<{ item: any }> = ({ item }) => {
     return <img src={url} alt={item.title || 'Media'} className="w-full h-36 object-cover rounded-lg bg-slate-900" />;
   }
   return (
-    <div className="w-full h-36 rounded-lg bg-[#0B1220] border border-slate-800 flex flex-col items-center justify-center gap-1 text-slate-500">
+    <div className="w-full h-36 rounded-lg bg-[#07141E] border border-slate-800 flex flex-col items-center justify-center gap-1 text-slate-500">
       {item.type === 'video' ? <Video className="w-6 h-6" /> : failed ? <FileText className="w-6 h-6" /> : <ImageIcon className="w-6 h-6" />}
       <span className="text-[9px]">{failed ? 'Preview unavailable' : 'Loading private preview…'}</span>
     </div>
@@ -324,12 +324,12 @@ export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
               <EnterpriseNote tone="info">`upload_media` or `manage_media` is required to add media.</EnterpriseNote>
             ) : (
               <form onSubmit={handleUpload} className="space-y-2.5">
-                <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-[#0B1220] border border-slate-800">
+                <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-[#07141E] border border-slate-800">
                   <button
                     type="button"
                     onClick={() => setMode('file')}
                     className={`px-2 py-1.5 rounded-md text-[10px] font-bold cursor-pointer ${
-                      mode === 'file' ? 'bg-[#C5A46D] text-[#101C2C]' : 'text-slate-400'
+                      mode === 'file' ? 'bg-[#E7C878] text-[#0B1220]' : 'text-slate-400'
                     }`}
                   >
                     <Upload className="w-3 h-3 inline mr-1" /> File
@@ -338,7 +338,7 @@ export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
                     type="button"
                     onClick={() => setMode('url')}
                     className={`px-2 py-1.5 rounded-md text-[10px] font-bold cursor-pointer ${
-                      mode === 'url' ? 'bg-[#C5A46D] text-[#101C2C]' : 'text-slate-400'
+                      mode === 'url' ? 'bg-[#E7C878] text-[#0B1220]' : 'text-slate-400'
                     }`}
                   >
                     <Link2 className="w-3 h-3 inline mr-1" /> URL
@@ -351,7 +351,7 @@ export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
                     type="file"
                     accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
                     onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    className="block w-full text-[11px] text-slate-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-[#C5A46D] file:text-[#101C2C] file:font-bold file:cursor-pointer"
+                    className="block w-full text-[11px] text-slate-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-[#E7C878] file:text-[#0B1220] file:font-bold file:cursor-pointer"
                   />
                 ) : (
                   <input

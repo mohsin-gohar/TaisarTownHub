@@ -82,9 +82,9 @@ export const AdminPlotLocator: React.FC = () => {
   const getStatusColor = (status: PlotMarker['status']) => {
     switch (status) {
       case 'Available':
-        return 'bg-[#C5A46D]/20 text-[#F9E7BA] border-[#C5A46D]/40 hover:bg-[#C5A46D]/30';
+        return 'bg-[#E7C878]/20 text-[#F6E3B4] border-[#E7C878]/40 hover:bg-[#E7C878]/30';
       case 'Token Paid':
-        return 'bg-[#C5A46D]/10 text-[#C5A46D] border-[#C5A46D]/30 hover:bg-[#C5A46D]/20';
+        return 'bg-[#E7C878]/10 text-[#E7C878] border-[#E7C878]/30 hover:bg-[#E7C878]/20';
       case 'Under Deal':
         return 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700';
       case 'Sold':
@@ -97,13 +97,13 @@ export const AdminPlotLocator: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#101C2C] to-[#1A2638] border border-[#C5A46D]/30 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#0B1220] to-[#1A2638] border border-[#E7C878]/30 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-serif-luxury text-2xl font-bold text-white">
               Sector Master Map & Plot Grid Locator
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/20 text-[#C5A46D] border border-[#C5A46D]/40">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E7C878]/20 text-[#E7C878] border border-[#E7C878]/40">
               Interactive GIS
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40">
@@ -116,12 +116,12 @@ export const AdminPlotLocator: React.FC = () => {
         </div>
 
         {/* Sector Switcher */}
-        <div className="flex items-center bg-[#0B1220] p-1 rounded-xl border border-slate-800">
+        <div className="flex items-center bg-[#07141E] p-1 rounded-xl border border-slate-800">
           <button
             onClick={() => setActiveSector('Sector 63')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
               activeSector === 'Sector 63'
-                ? 'bg-[#C5A46D] text-[#101C2C] shadow'
+                ? 'bg-[#E7C878] text-[#0B1220] shadow'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -131,7 +131,7 @@ export const AdminPlotLocator: React.FC = () => {
             onClick={() => setActiveSector('Sector 70-D')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
               activeSector === 'Sector 70-D'
-                ? 'bg-[#C5A46D] text-[#101C2C] shadow'
+                ? 'bg-[#E7C878] text-[#0B1220] shadow'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -141,7 +141,7 @@ export const AdminPlotLocator: React.FC = () => {
       </div>
 
       {/* Search & Legend Controls */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-[#101C2C] p-4 rounded-xl border border-slate-800">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-[#0B1220] p-4 rounded-xl border border-slate-800">
         <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -149,14 +149,14 @@ export const AdminPlotLocator: React.FC = () => {
             placeholder="Search plot number (e.g. R-66, R-65, D-101)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#0B1220] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+            className="w-full bg-[#07141E] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
           />
         </div>
 
         {/* Status Legend */}
         <div className="flex flex-wrap items-center gap-4 text-xs">
           <span className="flex items-center gap-1.5 text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-sm bg-[#C5A46D] inline-block" />
+            <span className="w-2.5 h-2.5 rounded-sm bg-[#E7C878] inline-block" />
             Available
           </span>
           <span className="flex items-center gap-1.5 text-slate-300">
@@ -177,13 +177,13 @@ export const AdminPlotLocator: React.FC = () => {
       {/* Main Map View & Plot Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Interactive Plot Map Grid (8 cols) */}
-        <div className="lg:col-span-8 bg-[#101C2C] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+        <div className="lg:col-span-8 bg-[#0B1220] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
               <h3 className="font-serif-luxury text-base font-bold text-white flex items-center gap-2">
                 <span>{activeSector} — Block A Master Grid Layout</span>
                 {activeSector === 'Sector 63' && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#C5A46D] text-[#101C2C]">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#E7C878] text-[#0B1220]">
                     Handwritten Notes Verified
                   </span>
                 )}
@@ -193,7 +193,7 @@ export const AdminPlotLocator: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Compass className="w-4 h-4 text-[#C5A46D]" />
+              <Compass className="w-4 h-4 text-[#E7C878]" />
               <span>North-West Facing</span>
             </div>
           </div>
@@ -233,7 +233,7 @@ export const AdminPlotLocator: React.FC = () => {
                   onClick={() => handleSelectPlot(plot)}
                   className={`p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between h-28 cursor-pointer ${
                     isSelected
-                      ? 'border-[#C5A46D] bg-[#C5A46D]/15 shadow-lg shadow-[#C5A46D]/20 ring-2 ring-[#C5A46D]'
+                      ? 'border-[#E7C878] bg-[#E7C878]/15 shadow-lg shadow-[#E7C878]/20 ring-2 ring-[#E7C878]'
                       : isSearchMatched
                       ? 'border-amber-400 bg-amber-400/20 ring-2 ring-amber-400 animate-pulse'
                       : getStatusColor(plot.status)
@@ -250,7 +250,7 @@ export const AdminPlotLocator: React.FC = () => {
                     </div>
 
                     {isSpecialR66 && (
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#C5A46D] shadow" title="Handwritten Note Plot" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#E7C878] shadow" title="Handwritten Note Plot" />
                     )}
                   </div>
 
@@ -275,23 +275,23 @@ export const AdminPlotLocator: React.FC = () => {
             })}
           </div>
 
-          <div className="p-3 rounded-xl bg-[#0B1220] border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+          <div className="p-3 rounded-xl bg-[#07141E] border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
             <span>
               Total Plots Mapped in {activeSector}: <strong>{sectorMarkers.length} Plots</strong>
             </span>
-            <span className="text-[#C5A46D]">
+            <span className="text-[#E7C878]">
               {sectorMarkers.filter((p) => p.status === 'Available').length} Ready for Immediate Possession
             </span>
           </div>
         </div>
 
         {/* Right Plot Inspector Panel (4 cols) */}
-        <div className="lg:col-span-4 bg-[#101C2C] p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between space-y-6">
+        <div className="lg:col-span-4 bg-[#0B1220] p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between space-y-6">
           {selectedPlot ? (
             <div className="space-y-4">
               <div className="flex items-start justify-between border-b border-slate-800 pb-3">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#C5A46D] block">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#E7C878] block">
                     Selected Plot Inspector
                   </span>
                   <h3 className="font-serif-luxury text-2xl font-bold text-white">
@@ -310,7 +310,7 @@ export const AdminPlotLocator: React.FC = () => {
               </div>
 
               {/* Status Pill */}
-              <div className="flex items-center justify-between bg-[#0B1220] p-3 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between bg-[#07141E] p-3 rounded-xl border border-slate-800">
                 <span className="text-xs text-slate-400">Plot Status:</span>
                 <select
                   value={selectedPlot.status}
@@ -319,7 +319,7 @@ export const AdminPlotLocator: React.FC = () => {
                     updatePlotMarker(selectedPlot.id, { status: newStatus as any });
                     setSelectedPlot({ ...selectedPlot, status: newStatus });
                   }}
-                  className="bg-slate-900 text-white font-bold text-xs p-1.5 rounded border border-slate-700 cursor-pointer focus:outline-none focus:border-[#C5A46D]"
+                  className="bg-slate-900 text-white font-bold text-xs p-1.5 rounded border border-slate-700 cursor-pointer focus:outline-none focus:border-[#E7C878]"
                 >
                   <option value="Available">Available</option>
                   <option value="Token Paid">Token Paid</option>
@@ -340,7 +340,7 @@ export const AdminPlotLocator: React.FC = () => {
                 {selectedPlot.dimensions && (
                   <div className="flex justify-between py-1 border-b border-slate-800/80">
                     <span className="text-slate-400">Dimensions:</span>
-                    <span className="font-mono font-bold text-[#C5A46D]">
+                    <span className="font-mono font-bold text-[#E7C878]">
                       {selectedPlot.dimensions} (24ft Front x 45ft Depth)
                     </span>
                   </div>
@@ -362,7 +362,7 @@ export const AdminPlotLocator: React.FC = () => {
 
                 <div className="flex justify-between py-1 border-b border-slate-800/80">
                   <span className="text-slate-400">West Open:</span>
-                  <span className="font-bold text-[#C5A46D]">
+                  <span className="font-bold text-[#E7C878]">
                     {(selectedPlot.isWestOpen || selectedPlot.westOpen) ? 'Yes (West Open)' : 'No'}
                   </span>
                 </div>
@@ -370,7 +370,7 @@ export const AdminPlotLocator: React.FC = () => {
                 {selectedPlot.pricePKR && (
                   <div className="flex justify-between py-1 border-b border-slate-800/80">
                     <span className="text-slate-400">List Consideration:</span>
-                    <span className="font-bold text-[#C5A46D] font-mono text-sm">
+                    <span className="font-bold text-[#E7C878] font-mono text-sm">
                       {formatPKRCurrency(selectedPlot.pricePKR)}
                     </span>
                   </div>
@@ -379,8 +379,8 @@ export const AdminPlotLocator: React.FC = () => {
 
               {/* Handwritten Note Highlight */}
               {selectedPlot.plotNumber === 'R-66' && (
-                <div className="p-3.5 rounded-xl bg-[#C5A46D]/10 border border-[#C5A46D]/40 space-y-1 text-xs text-[#F8F7F3]">
-                  <div className="font-bold text-[#C5A46D] flex items-center gap-1.5">
+                <div className="p-3.5 rounded-xl bg-[#E7C878]/10 border border-[#E7C878]/40 space-y-1 text-xs text-[#F8F7F3]">
+                  <div className="font-bold text-[#E7C878] flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" />
                     Handwritten Sheet Verification
                   </div>
@@ -393,7 +393,7 @@ export const AdminPlotLocator: React.FC = () => {
             </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
-              <div className="w-14 h-14 rounded-2xl bg-slate-800/60 border border-slate-700 flex items-center justify-center text-[#C5A46D]">
+              <div className="w-14 h-14 rounded-2xl bg-slate-800/60 border border-slate-700 flex items-center justify-center text-[#E7C878]">
                 <MapPin className="w-7 h-7" />
               </div>
               <h4 className="font-serif-luxury font-bold text-white text-base">
@@ -407,7 +407,7 @@ export const AdminPlotLocator: React.FC = () => {
                   const r66 = plotMarkers.find((p) => p.plotNumber === 'R-66');
                   if (r66) setSelectedPlot(r66);
                 }}
-                className="text-xs text-[#C5A46D] hover:underline font-bold cursor-pointer"
+                className="text-xs text-[#E7C878] hover:underline font-bold cursor-pointer"
               >
                 Inspect Plot R-66 (Handwritten Record) &rarr;
               </button>
@@ -418,7 +418,7 @@ export const AdminPlotLocator: React.FC = () => {
           <div className="pt-4 border-t border-slate-800">
             <button
               onClick={() => setAdminTab('transactions')}
-              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-[#C5A46D] hover:text-[#101C2C] text-[#C5A46D] text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-[#E7C878] hover:text-[#0B1220] text-[#E7C878] text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
             >
               <span>View Deal Transactions Ledger</span>
               <ChevronRight className="w-3.5 h-3.5" />

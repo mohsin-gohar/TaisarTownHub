@@ -25,13 +25,13 @@ export const NotFoundPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center px-4 py-16 bg-[#0B1220]">
+    <div className="min-h-[70vh] flex items-center justify-center px-4 py-16 bg-[#07141E]">
       <div className="w-full max-w-2xl text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#C5A46D]/10 border border-[#C5A46D]/30 mb-6">
-          <Compass className="w-8 h-8 text-[#C5A46D]" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#E7C878]/10 border border-[#E7C878]/30 mb-6">
+          <Compass className="w-8 h-8 text-[#E7C878]" />
         </div>
 
-        <p className="text-[11px] uppercase tracking-[0.35em] font-semibold text-[#C5A46D]">
+        <p className="text-[11px] uppercase tracking-[0.35em] font-semibold text-[#E7C878]">
           Error 404
         </p>
         <h1 className="mt-3 font-serif-luxury text-4xl sm:text-5xl font-bold text-white">
@@ -46,7 +46,7 @@ export const NotFoundPage: React.FC = () => {
           <a
             href="/"
             onClick={go('home', '/')}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-sm font-bold transition-colors cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-sm font-bold transition-colors cursor-pointer shadow-lg shadow-[#E7C878]/20"
           >
             <Home className="w-4 h-4" />
             Back to Home
@@ -57,14 +57,14 @@ export const NotFoundPage: React.FC = () => {
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold border border-slate-700 transition-colors cursor-pointer"
           >
             Browse Properties
-            <ArrowRight className="w-4 h-4 text-[#C5A46D]" />
+            <ArrowRight className="w-4 h-4 text-[#E7C878]" />
           </a>
           <a
             href="/contact"
             onClick={go('contact', '/contact')}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 text-sm font-semibold transition-colors cursor-pointer"
           >
-            <PhoneCall className="w-4 h-4 text-[#C5A46D]" />
+            <PhoneCall className="w-4 h-4 text-[#E7C878]" />
             Advisory Desk
           </a>
         </div>

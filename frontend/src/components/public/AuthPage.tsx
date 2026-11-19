@@ -149,25 +149,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
       <div className="w-full max-w-xl mb-6 flex items-center justify-between">
         <button
           onClick={() => setCurrentView('home')}
-          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-[#C5A46D] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-[#E7C878] transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Return to Public Website</span>
         </button>
 
-        <span className="text-[11px] font-mono text-[#C5A46D] uppercase tracking-wider">
+        <span className="text-[11px] font-mono text-[#E7C878] uppercase tracking-wider">
           Scheme 45, Karachi
         </span>
       </div>
 
       {/* Main Luxury Auth Card */}
-      <div className="w-full max-w-xl bg-[#101C2C] border border-[#C5A46D]/40 rounded-3xl p-6 sm:p-10 shadow-2xl relative overflow-hidden space-y-6">
+      <div className="w-full max-w-xl bg-[#0B1220] border border-[#E7C878]/40 rounded-3xl p-6 sm:p-10 shadow-2xl relative overflow-hidden space-y-6">
         {/* Decorative corner accent */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#C5A46D]/15 to-transparent rounded-bl-full pointer-events-none" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#E7C878]/15 to-transparent rounded-bl-full pointer-events-none" />
 
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center mx-auto shadow-lg shadow-[#C5A46D]/20 border border-[#F9E7BA]/40 overflow-hidden">
+          <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center mx-auto shadow-lg shadow-[#E7C878]/20 border border-[#F6E3B4]/40 overflow-hidden">
             <img src="/logo.jpg" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="font-serif-luxury text-2xl sm:text-3xl font-bold text-white tracking-tight">
@@ -179,13 +179,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
         </div>
 
         {/* Tab Switcher: Sign In vs Register */}
-        <div className="grid grid-cols-2 p-1.5 rounded-2xl bg-[#0B1220] border border-slate-800">
+        <div className="grid grid-cols-2 p-1.5 rounded-2xl bg-[#07141E] border border-slate-800">
           <button
             type="button"
             onClick={() => setTab('signin')}
             className={`py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               tab === 'signin'
-                ? 'bg-[#C5A46D] text-[#101C2C] shadow-md shadow-[#C5A46D]/20'
+                ? 'bg-[#E7C878] text-[#0B1220] shadow-md shadow-[#E7C878]/20'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -196,7 +196,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
             onClick={() => setTab('register')}
             className={`py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               tab === 'register'
-                ? 'bg-[#C5A46D] text-[#101C2C] shadow-md shadow-[#C5A46D]/20'
+                ? 'bg-[#E7C878] text-[#0B1220] shadow-md shadow-[#E7C878]/20'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -223,7 +223,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
           <form onSubmit={handleSignIn} className="space-y-4 animate-fadeIn">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-[#C5A46D]" />
+                <Mail className="w-3.5 h-3.5 text-[#E7C878]" />
                 <span>Account Email</span>
               </label>
               <input
@@ -234,20 +234,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 value={signInEmail}
                 onChange={(e) => setSignInEmail(e.target.value)}
                 placeholder="admin@taisartownhub.com (or dealer email)"
-                className="w-full bg-[#0B1220] text-white text-xs sm:text-sm rounded-xl px-4 py-3 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-xl px-4 py-3 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
               />
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-[#C5A46D]" />
+                  <Lock className="w-3.5 h-3.5 text-[#E7C878]" />
                   <span>Account Password</span>
                 </label>
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="text-[11px] text-slate-400 hover:text-[#C5A46D] flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] text-slate-400 hover:text-[#E7C878] flex items-center gap-1 cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   <span>{showPassword ? 'Hide' : 'Show'}</span>
@@ -261,14 +261,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 value={signInPassword}
                 onChange={(e) => setSignInPassword(e.target.value)}
                 placeholder="Enter password"
-                className="w-full bg-[#0B1220] text-white text-xs sm:text-sm rounded-xl px-4 py-3 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-xl px-4 py-3 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
               />
             </div>
 
             <button
               type="submit"
               disabled={busy}
-              className="w-full py-3.5 px-4 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] active:scale-[0.99] text-[#101C2C] font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20 disabled:opacity-60"
+              className="w-full py-3.5 px-4 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] active:scale-[0.99] text-[#0B1220] font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20 disabled:opacity-60"
             >
               <span>{busy ? 'Authenticating…' : 'Sign In to Agency Dashboard'}</span>
               <ArrowRight className="w-4 h-4" />
@@ -279,8 +279,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
         {/* TAB 2: REGISTER AS DEALER */}
         {tab === 'register' && (
           <form onSubmit={handleRegister} className="space-y-4 animate-fadeIn">
-            <div className="bg-[#0B1220] border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-300 space-y-1">
-              <span className="font-bold text-[#C5A46D] flex items-center gap-1.5">
+            <div className="bg-[#07141E] border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-300 space-y-1">
+              <span className="font-bold text-[#E7C878] flex items-center gap-1.5">
                 <Briefcase className="w-3.5 h-3.5" />
                 Agency registration & approval
               </span>
@@ -302,13 +302,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                   placeholder="e.g. Asad Siddiqui"
                   value={regFullName}
                   onChange={(e) => setRegFullName(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
-                  <Phone className="w-3 h-3 text-[#C5A46D]" />
+                  <Phone className="w-3 h-3 text-[#E7C878]" />
                   <span>WhatsApp / Phone *</span>
                 </label>
                 <input
@@ -320,7 +320,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                   placeholder="0300-1234567"
                   value={regPhone}
                   onChange={(e) => setRegPhone(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                 />
               </div>
             </div>
@@ -328,7 +328,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
-                  <Mail className="w-3 h-3 text-[#C5A46D]" />
+                  <Mail className="w-3 h-3 text-[#E7C878]" />
                   <span>Account Email *</span>
                 </label>
                 <input
@@ -339,7 +339,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                   placeholder="consultant@agency.pk"
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -353,7 +353,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                   placeholder="Office, street and sector"
                   value={officeAddress}
                   onChange={(e) => setOfficeAddress(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
             </div>
@@ -371,20 +371,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                   placeholder="e.g. Al-Madina Real Estate"
                   value={regAgency}
                   onChange={(e) => setRegAgency(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-[#C5A46D]" />
+                  <MapPin className="w-3 h-3 text-[#E7C878]" />
                   <span>Primary Sector Focus</span>
                 </label>
                 <select
                   aria-label="Primary sector focus"
                   value={regSector}
                   onChange={(e) => setRegSector(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none cursor-pointer"
                 >
                   <option value="Sector 63">Sector 63 (100ft Boulevard)</option>
                   <option value="Sector 70-D">Sector 70-D (Prime Possession)</option>
@@ -409,7 +409,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                   placeholder="Min 8 characters"
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                 />
               </div>
 
@@ -424,7 +424,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                   placeholder="Repeat password"
                   value={regConfirmPassword}
                   onChange={(e) => setRegConfirmPassword(e.target.value)}
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-xl px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                 />
               </div>
             </div>
@@ -435,7 +435,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                 type="checkbox"
                 checked={regTermsAgreed}
                 onChange={(e) => setRegTermsAgreed(e.target.checked)}
-                className="mt-0.5 rounded text-[#C5A46D] focus:ring-[#C5A46D] accent-[#C5A46D]"
+                className="mt-0.5 rounded text-[#E7C878] focus:ring-[#E7C878] accent-[#E7C878]"
               />
               <span className="text-[11px] text-slate-400">
                 I agree to the TaisarTownHub Real Estate Code of Conduct and authorize on-ground MDA file verification for all submitted deals.
@@ -445,7 +445,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
             <button
               type="submit"
               disabled={busy}
-              className="w-full py-3 px-4 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] active:scale-[0.99] text-[#101C2C] font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20 disabled:opacity-60"
+              className="w-full py-3 px-4 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] active:scale-[0.99] text-[#0B1220] font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20 disabled:opacity-60"
             >
               <span>{busy ? 'Submitting application…' : 'Submit agency application'}</span>
               <ArrowRight className="w-4 h-4" />
@@ -456,7 +456,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
         {/* Security / Verification footer */}
         <div className="pt-3 border-t border-slate-800 text-center text-[10px] text-slate-500 space-y-1">
           <p className="flex items-center justify-center gap-1.5">
-            <Lock className="w-3 h-3 text-[#C5A46D]" />
+            <Lock className="w-3 h-3 text-[#E7C878]" />
             <span>Private workspace access requires an approved agency and an authorized account.</span>
           </p>
         </div>

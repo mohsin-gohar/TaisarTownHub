@@ -145,10 +145,10 @@ export const AdminLocations: React.FC<LocationsProps> = ({ canManage }) => {
               ) : (
                 <div className="space-y-3">
                   {sectors.map((sector) => (
-                    <div key={sector.id} className="p-3 rounded-xl bg-[#0B1220] border border-slate-800">
+                    <div key={sector.id} className="p-3 rounded-xl bg-[#07141E] border border-slate-800">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-[#C5A46D]" />
+                          <MapPin className="w-4 h-4 text-[#E7C878]" />
                           <span className="text-xs font-bold text-white">{sector.name}</span>
                           {sector.phase && <EnterpriseBadge tone="gold">{sector.phase}</EnterpriseBadge>}
                           <span className="text-[10px] text-slate-500">{sector.slug}</span>
@@ -181,7 +181,7 @@ export const AdminLocations: React.FC<LocationsProps> = ({ canManage }) => {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px]">
+                    <thead className="bg-[#07141E] text-slate-400 uppercase tracking-wider text-[10px]">
                       <tr>
                         <th className="py-2.5 px-3 rounded-l-lg">Category</th>
                         <th className="py-2.5 px-3">Key</th>
@@ -194,7 +194,7 @@ export const AdminLocations: React.FC<LocationsProps> = ({ canManage }) => {
                         <tr key={category.id} className="hover:bg-slate-800/30">
                           <td className="py-2.5 px-3 font-semibold text-white">
                             <span className="inline-flex items-center gap-1.5">
-                              <Tag className="w-3 h-3 text-[#C5A46D]" /> {category.name}
+                              <Tag className="w-3 h-3 text-[#E7C878]" /> {category.name}
                             </span>
                           </td>
                           <td className="py-2.5 px-3 text-slate-400">{category.key}</td>

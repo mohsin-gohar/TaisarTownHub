@@ -236,16 +236,16 @@ export const AdminLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#070B14] flex flex-col md:flex-row text-slate-100">
       {/* Mobile Top App Bar */}
-      <div className="md:hidden bg-[#101C2C] border-b border-[#C5A46D]/20 px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-lg">
+      <div className="md:hidden bg-[#0B1220] border-b border-[#E7C878]/20 px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-lg">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-[#F9E7BA]/40 shadow shrink-0 overflow-hidden">
+          <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-[#F6E3B4]/40 shadow shrink-0 overflow-hidden">
             <img src="/logo.jpg" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <span className="font-serif-luxury font-bold text-xs text-white block">
               {currentTheme.agencyName}
             </span>
-            <span className="text-[9px] text-[#C5A46D] font-semibold uppercase tracking-wider block">
+            <span className="text-[9px] text-[#E7C878] font-semibold uppercase tracking-wider block">
               Real Estate ERP
             </span>
           </div>
@@ -264,7 +264,7 @@ export const AdminLayout: React.FC = () => {
 
       {/* Sidebar (Desktop Permanent + Mobile Drawer Overlay) */}
       <aside
-        className={`fixed md:sticky top-0 left-0 z-50 md:z-30 h-screen w-72 md:w-64 bg-[#101C2C] border-r border-[#C5A46D]/20 flex flex-col justify-between shrink-0 transition-transform duration-300 ease-in-out ${
+        className={`fixed md:sticky top-0 left-0 z-50 md:z-30 h-screen w-72 md:w-64 bg-[#0B1220] border-r border-[#E7C878]/20 flex flex-col justify-between shrink-0 transition-transform duration-300 ease-in-out ${
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
@@ -272,14 +272,14 @@ export const AdminLayout: React.FC = () => {
           {/* Brand header */}
           <div className="p-5 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shadow-lg border border-[#F9E7BA]/40 shrink-0 overflow-hidden">
+              <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shadow-lg border border-[#F6E3B4]/40 shrink-0 overflow-hidden">
                 <img src="/logo.jpg" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div className="min-w-0">
                 <span className="font-serif-luxury font-bold text-sm text-white block truncate">
                   {currentTheme.agencyName}
                 </span>
-                <span className="text-[10px] text-[#C5A46D] font-semibold uppercase tracking-wider block">
+                <span className="text-[10px] text-[#E7C878] font-semibold uppercase tracking-wider block">
                   Real Estate ERP
                 </span>
               </div>
@@ -295,9 +295,9 @@ export const AdminLayout: React.FC = () => {
 
           {/* Active Role indicator in Sidebar */}
           <div className="px-4 pt-3 pb-1">
-            <div className="px-3 py-1.5 rounded-lg bg-[#0B1220] border border-slate-800 flex items-center justify-between text-[11px]">
+            <div className="px-3 py-1.5 rounded-lg bg-[#07141E] border border-slate-800 flex items-center justify-between text-[11px]">
               <span className="text-slate-400">Role:</span>
-              <span className="font-bold text-[#C5A46D] capitalize">{activeRole.replace('_', ' ')}</span>
+              <span className="font-bold text-[#E7C878] capitalize">{activeRole.replace('_', ' ')}</span>
             </div>
           </div>
 
@@ -311,7 +311,7 @@ export const AdminLayout: React.FC = () => {
               <select
                 value={agencyContextId}
                 onChange={(e) => handleAgencyContext(e.target.value)}
-                className="w-full px-3 py-1.5 rounded-lg bg-[#0B1220] border border-slate-800 text-[11px] text-white focus:outline-none focus:border-[#C5A46D]"
+                className="w-full px-3 py-1.5 rounded-lg bg-[#07141E] border border-slate-800 text-[11px] text-white focus:outline-none focus:border-[#E7C878]"
               >
                 {agencyMemberships.length === 0 && <option value="">Platform view</option>}
                 {agencyOptions.map((option) => (
@@ -333,7 +333,7 @@ export const AdminLayout: React.FC = () => {
                   onClick={() => handleSelectTab(item.id)}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[#C5A46D] text-[#101C2C] shadow-lg shadow-[#C5A46D]/20 font-bold'
+                      ? 'bg-[#E7C878] text-[#0B1220] shadow-lg shadow-[#E7C878]/20 font-bold'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
@@ -343,13 +343,13 @@ export const AdminLayout: React.FC = () => {
                   </div>
 
                   {item.alertBadge !== undefined && (
-                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#C5A46D] text-[#101C2C] shrink-0">
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#E7C878] text-[#0B1220] shrink-0">
                       {item.alertBadge}
                     </span>
                   )}
                   {item.badge !== undefined && item.alertBadge === undefined && (
                     <span className={`px-1.5 py-0.5 rounded text-[10px] shrink-0 ${
-                      isActive ? 'bg-[#101C2C]/20 text-[#101C2C]' : 'bg-slate-800 text-slate-400'
+                      isActive ? 'bg-[#0B1220]/20 text-[#0B1220]' : 'bg-slate-800 text-slate-400'
                     }`}>
                       {item.badge}
                     </span>
@@ -367,7 +367,7 @@ export const AdminLayout: React.FC = () => {
             onClick={() => setCurrentView('home')}
             className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition-colors cursor-pointer"
           >
-            <ExternalLink className="w-3.5 h-3.5 text-[#C5A46D]" />
+            <ExternalLink className="w-3.5 h-3.5 text-[#E7C878]" />
             <span>View Public Website</span>
           </button>
 
@@ -393,7 +393,7 @@ export const AdminLayout: React.FC = () => {
       {/* Main Workspace Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Top Header */}
-        <header className="sticky top-0 z-30 bg-[#101C2C]/90 backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+        <header className="sticky top-0 z-30 bg-[#0B1220]/90 backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs text-slate-400 min-w-0">
             <span className="hidden sm:inline">Admin</span>
             <ChevronRight className="w-3.5 h-3.5 hidden sm:inline" />
@@ -404,13 +404,13 @@ export const AdminLayout: React.FC = () => {
 
           <div className="flex items-center gap-3 shrink-0">
             <div className="hidden sm:flex items-center gap-2 text-xs text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-[#C5A46D]" />
-              <span>Active Role: <strong className="text-[#C5A46D] capitalize">{activeRole.replace('_', ' ')}</strong></span>
+              <span className="w-2 h-2 rounded-full bg-[#E7C878]" />
+              <span>Active Role: <strong className="text-[#E7C878] capitalize">{activeRole.replace('_', ' ')}</strong></span>
             </div>
             <button
               onClick={() => setCurrentView('home')}
               aria-label="View public website"
-              className="text-xs text-[#C5A46D] hover:underline flex items-center gap-1 cursor-pointer"
+              className="text-xs text-[#E7C878] hover:underline flex items-center gap-1 cursor-pointer"
             >
               <span className="hidden sm:inline">View Public Site</span>
               <ExternalLink className="w-3 h-3" />

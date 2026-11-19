@@ -905,7 +905,7 @@ class PropertyController extends Controller
             'features', 'bedrooms', 'bathrooms', 'possessionReady', 'mdaApproved',
             'cornerPlot', 'westOpen', 'parkFacing', 'mainBoulevard', 'createdDate',
             'contactPerson', 'contactPhone', 'contactWhatsApp', 'agencyName',
-            'listing_purpose', 'slug', 'expires_at',
+            'listing_purpose', 'slug', 'expires_at', 'created_at',
         ];
 
         return collect($allowed)

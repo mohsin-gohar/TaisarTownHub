@@ -49,9 +49,9 @@ export const clientThemes: ClientTheme[] = [
     name: 'TaisarTownHub (Classic Luxury)',
     agencyName: 'TaisarTownHub',
     tagline: 'Premier Real Estate Agency & Development Showcase',
-    primaryColor: '#101C2C',
-    primaryAccent: '#C5A46D',
-    headerBg: 'bg-[#101C2C]/90',
+    primaryColor: '#0B1220',
+    primaryAccent: '#E7C878',
+    headerBg: 'bg-[#0B1220]/90',
     heroBadge: 'Exclusive Taiser Town Scheme 45 Portfolio',
     description: 'Deep royal navy blue with warm champagne gold accents. Perfect for high-end luxury brokerages and institutional developers.'
   },

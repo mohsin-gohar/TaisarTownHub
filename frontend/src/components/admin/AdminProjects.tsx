@@ -153,7 +153,7 @@ export const AdminProjects: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-[#101C2C] border border-slate-800 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-[#0B1220] border border-slate-800 shadow-xl">
         <div>
           <h2 className="font-serif-luxury text-2xl font-bold text-white">
             Project Portfolio Management
@@ -164,7 +164,7 @@ export const AdminProjects: React.FC = () => {
         </div>
         <button
           onClick={handleOpenAdd}
-          className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20 self-start sm:self-auto"
+          className="px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20 self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
           <span>Add New Project</span>
@@ -172,10 +172,10 @@ export const AdminProjects: React.FC = () => {
       </div>
 
       {/* Projects Table */}
-      <div className="bg-[#101C2C] rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+      <div className="bg-[#0B1220] rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px]">
+            <thead className="bg-[#07141E] text-slate-400 uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="py-3 px-4">Project</th>
                 <th className="py-3 px-4">Category</th>
@@ -208,7 +208,7 @@ export const AdminProjects: React.FC = () => {
                   <td className="py-3.5 px-4 text-slate-300">
                     {proj.category}
                   </td>
-                  <td className="py-3.5 px-4 text-[#C5A46D] font-medium">
+                  <td className="py-3.5 px-4 text-[#E7C878] font-medium">
                     {proj.sector}
                   </td>
                   <td className="py-3.5 px-4 font-serif-luxury font-bold text-white">
@@ -216,9 +216,9 @@ export const AdminProjects: React.FC = () => {
                   </td>
                   <td className="py-3.5 px-4">
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                      proj.status === 'Ready for Possession' ? 'bg-[#C5A46D]/15 text-[#F9E7BA] border-[#C5A46D]/30' :
-                      proj.status === 'Booking Open' ? 'bg-[#C5A46D]/25 text-[#F9E7BA] border-[#C5A46D]/40' :
-                      proj.status === 'Under Development' ? 'bg-[#C5A46D]/10 text-[#C5A46D] border-[#C5A46D]/30' :
+                      proj.status === 'Ready for Possession' ? 'bg-[#E7C878]/15 text-[#F6E3B4] border-[#E7C878]/30' :
+                      proj.status === 'Booking Open' ? 'bg-[#E7C878]/25 text-[#F6E3B4] border-[#E7C878]/40' :
+                      proj.status === 'Under Development' ? 'bg-[#E7C878]/10 text-[#E7C878] border-[#E7C878]/30' :
                       'bg-slate-800 text-slate-300 border-slate-700'
                     }`}>
                       {proj.status}
@@ -238,7 +238,7 @@ export const AdminProjects: React.FC = () => {
                       </button>
                       <button
                         onClick={() => handleOpenEdit(proj)}
-                        className="p-1.5 rounded-lg bg-[#C5A46D]/20 hover:bg-[#C5A46D] text-[#C5A46D] hover:text-[#101C2C] transition-colors"
+                        className="p-1.5 rounded-lg bg-[#E7C878]/20 hover:bg-[#E7C878] text-[#E7C878] hover:text-[#0B1220] transition-colors"
                         title="Edit Project"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -262,7 +262,7 @@ export const AdminProjects: React.FC = () => {
       {/* Add / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="relative w-full max-w-2xl bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-2xl bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <h3 className="font-serif-luxury text-xl font-bold text-white">
                 {editingProjectId ? 'Edit Project' : 'Add New Real Estate Project'}
@@ -285,7 +285,7 @@ export const AdminProjects: React.FC = () => {
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     placeholder="e.g. Al-Samnan Residency Phase 2"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
 
@@ -294,7 +294,7 @@ export const AdminProjects: React.FC = () => {
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value as ProjectCategory })}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none cursor-pointer"
                   >
                     <option value="Housing Societies">Housing Societies</option>
                     <option value="Residential Projects">Residential Projects</option>
@@ -311,7 +311,7 @@ export const AdminProjects: React.FC = () => {
                   value={formData.tagline}
                   onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
                   placeholder="e.g. Luxury Gated Residential Enclave with 100ft Boulevard"
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -324,7 +324,7 @@ export const AdminProjects: React.FC = () => {
                     value={formData.sector}
                     onChange={(e) => setFormData({ ...formData, sector: e.target.value })}
                     placeholder="Sector 70-D"
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
 
@@ -333,7 +333,7 @@ export const AdminProjects: React.FC = () => {
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as ProjectStatus })}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none cursor-pointer"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none cursor-pointer"
                   >
                     <option value="Ready for Possession">Ready for Possession</option>
                     <option value="Booking Open">Booking Open</option>
@@ -349,7 +349,7 @@ export const AdminProjects: React.FC = () => {
                     required
                     value={formData.startingPricePKR}
                     onChange={(e) => setFormData({ ...formData, startingPricePKR: Number(e.target.value) })}
-                    className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                 </div>
               </div>
@@ -362,7 +362,7 @@ export const AdminProjects: React.FC = () => {
                   value={formData.coverImage}
                   onChange={(e) => setFormData({ ...formData, coverImage: e.target.value })}
                   placeholder="https://..."
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -373,7 +373,7 @@ export const AdminProjects: React.FC = () => {
                   value={formData.plotSizes}
                   onChange={(e) => setFormData({ ...formData, plotSizes: e.target.value })}
                   placeholder="80 Sq. Yds, 120 Sq. Yds, 240 Sq. Yds"
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -385,7 +385,7 @@ export const AdminProjects: React.FC = () => {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Describe location advantages, road widths, utilities, and possession schedules..."
-                  className="w-full bg-[#0B1220] text-white text-xs rounded-lg p-3 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white text-xs rounded-lg p-3 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -399,7 +399,7 @@ export const AdminProjects: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold shadow"
+                  className="px-6 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold shadow"
                 >
                   {editingProjectId ? 'Update Project' : 'Publish Project'}
                 </button>

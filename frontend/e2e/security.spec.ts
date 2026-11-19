@@ -50,18 +50,25 @@ test.describe('Security Audit', () => {
   });
 
   test('Rate limiting triggers on repeated failed logins', async ({ request }) => {
-    let rateLimited = false;
-    for (let i = 0; i < 15; i++) {
-      const response = await request.post('http://127.0.0.1:8080/api/auth/login', {
-        data: { email: 'rate-limit-test@example.com', password: 'wrong' }
+    // Use TEST-NET-2 (198.51.100.0/24) so this test exercises the IP limiter in
+    // its own bucket. Without this, 15 deliberate failures exhaust the shared
+    // 127.0.0.1 login budget and poison every parallel role login test.
+    const response = await request.post('http://127.0.0.1:8080/api/auth/login', {
+      headers: { 'X-Forwarded-For': '198.51.100.77' },
+      data: { email: 'rate-limit-test@example.com', password: 'wrong' },
+    });
+    let rateLimited = response.status() === 429;
+
+    for (let i = 0; i < 20 && !rateLimited; i++) {
+      const next = await request.post('http://127.0.0.1:8080/api/auth/login', {
+        headers: { 'X-Forwarded-For': '198.51.100.77' },
+        data: { email: 'rate-limit-test@example.com', password: 'wrong' },
       });
-      if (response.status() === 429) {
-        rateLimited = true;
-        break;
-      }
+      if (next.status() === 429) rateLimited = true;
     }
-    // Rate limiting may or may not trigger in dev, but endpoint should respond
-    expect(true).toBe(true);
+
+    // The API auth limiter is 10/min per IP, so 21 attempts must be throttled.
+    expect(rateLimited).toBe(true);
   });
 
   test('MFA verify endpoint rejects unauthenticated requests', async ({ request }) => {

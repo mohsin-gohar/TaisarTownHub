@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { DEMO_ROLE_IPS, loginToAdminViaApi } from './helpers/adminLogin';
 
 /**
  * PHASE 5 — Role-based testing for demo accounts.
@@ -13,22 +14,20 @@ const DEMO_ACCOUNTS = [
   { role: 'operator', email: 'operator@taisartownhub.com', password: 'Operator@2026' },
 ] as const;
 
-async function loginAs(page: Page, account: (typeof DEMO_ACCOUNTS)[number]) {
-  await page.goto('/admin-login');
-  const emailInput = page.getByRole('textbox', { name: /account email|admin@taisartownhub/i });
-  const passwordInput = page.locator('input[type="password"]').first();
-  await expect(emailInput).toBeVisible({ timeout: 15000 });
-  await emailInput.fill(account.email);
-  await passwordInput.fill(account.password);
-  await passwordInput.press('Enter');
-  await expect(page).toHaveURL(/\/admin(\/.*)?$/, { timeout: 20000 });
-  await expect(page.locator('main')).toBeVisible();
+async function loginAs(page: Page, request: APIRequestContext, account: (typeof DEMO_ACCOUNTS)[number]) {
+  // Node-side API login with a per-role TEST-NET-3 bucket keeps the 10/min
+  // shared-IP limiter from throttling unrelated parallel role tests. The
+  // browser sign-in form itself is covered in admin-pages.spec.ts.
+  await loginToAdminViaApi(page, request, account, DEMO_ROLE_IPS[account.role]);
 }
 
 test.describe('Role-Based Access - Every role gets correct permissions', () => {
+  // Two SPA navigations per role under parallel load can exceed 30s on a
+  // busy local stack; this is a timeout allowance, not a weaker assertion.
+  test.slow();
   test.describe('Super Admin - Full platform access', () => {
-    test('can access key admin sections', async ({ page }) => {
-      await loginAs(page, DEMO_ACCOUNTS[0]);
+    test('can access key admin sections', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[0]);
 
       await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /security & roles/i }).first()).toBeVisible();
@@ -45,16 +44,16 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
       await expect(page.locator('main')).toContainText(/agency|approval|verify|status|plan|subscription/i);
     });
 
-    test('can access agency approval workspace', async ({ page }) => {
-      await loginAs(page, DEMO_ACCOUNTS[0]);
+    test('can access agency approval workspace', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[0]);
       await page.getByRole('button', { name: /agency approvals/i }).first().click();
       await expect(page.locator('main')).toContainText(/agency/i);
     });
   });
 
   test.describe('Agency Admin - Agency-scoped access', () => {
-    test('can access core admin dashboard', async ({ page }) => {
-      await loginAs(page, DEMO_ACCOUNTS[1]);
+    test('can access core admin dashboard', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[1]);
       await expect(page).toHaveURL(/\/admin/);
       await expect(page.locator('main')).toBeVisible();
       await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toBeVisible();
@@ -62,31 +61,31 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
   });
 
   test.describe('Manager - Scoped access', () => {
-    test('can access admin dashboard shell', async ({ page }) => {
-      await loginAs(page, DEMO_ACCOUNTS[2]);
+    test('can access admin dashboard shell', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[2]);
       await expect(page).toHaveURL(/\/admin/);
       await expect(page.locator('main')).toBeVisible();
     });
   });
 
   test.describe('Dealer - Scoped access', () => {
-    test('can access admin dashboard shell', async ({ page }) => {
-      await loginAs(page, DEMO_ACCOUNTS[3]);
+    test('can access admin dashboard shell', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[3]);
       await expect(page).toHaveURL(/\/admin/);
       await expect(page.locator('main')).toBeVisible();
     });
   });
 
   test.describe('Operator - Limited access', () => {
-    test('can access admin dashboard shell', async ({ page }) => {
-      await loginAs(page, DEMO_ACCOUNTS[4]);
+    test('can access admin dashboard shell', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[4]);
       await expect(page).toHaveURL(/\/admin/);
       await expect(page.locator('main')).toBeVisible();
     });
   });
 
   test.describe('Visitor / Guest - Public access only', () => {
-    test('cannot access admin dashboard', async ({ page }) => {
+    test('cannot access admin dashboard', async ({ page, request }) => {
       await page.goto('/admin');
       await page.waitForTimeout(2500);
       const hasSignIn = (await page.locator('text=/sign in|login/i').count()) > 0;
@@ -94,7 +93,7 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
       expect(hasSignIn || isLoginPage).toBe(true);
     });
 
-    test('can browse key public pages', async ({ page }) => {
+    test('can browse key public pages', async ({ page, request }) => {
       await page.goto('/');
       await expect(page.locator('main')).toBeVisible();
 

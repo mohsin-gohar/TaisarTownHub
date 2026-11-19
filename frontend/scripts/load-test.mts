@@ -204,4 +204,25 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
     concurrentBookingAttempts: attempts,
     concurrentBookingCreated: created,
   }, null, 2));
+
+  // --- cleanup (best effort): remove/void the disposable booking fixtures ---
+  const createdIds = bookingResults
+    .filter((r) => r.status === 201)
+    .map((r) => r.body?.transaction?.id || r.body?.id || r.body?.data?.id)
+    .filter(Boolean);
+  for (const id of createdIds) {
+    const res = await fetch(`${API}/agency/transactions/${id}/void`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ reason: 'automated load-test cleanup' }),
+    });
+    console.log(`cleanup: void transaction ${id} -> ${res.status}`);
+  }
+  if (propertyId && /^prop_[a-f0-9]+$/i.test(propertyId)) {
+    const res = await fetch(`${API}/properties/${propertyId}`, {
+      method: 'DELETE',
+      headers: authHeaders,
+    });
+    console.log(`cleanup: delete load-test property ${propertyId} -> ${res.status}`);
+  }
 })();

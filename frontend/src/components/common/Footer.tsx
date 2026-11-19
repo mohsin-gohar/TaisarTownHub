@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
 import {
@@ -43,12 +43,12 @@ export const Footer: React.FC = () => {
   };
 
   return (
-    <footer className="bg-[#0B1220] border-t border-[#C5A46D]/20 text-slate-400 text-sm">
+    <footer className="bg-[#07141E] border-t border-[#E7C878]/20 text-slate-400 text-sm">
       {/* Top Banner / Call to Action */}
-      <div className="bg-gradient-to-r from-[#101C2C] via-[#1A2638] to-[#101C2C] border-b border-[#C5A46D]/15 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="bg-gradient-to-r from-[#0B1220] via-[#1A2638] to-[#0B1220] border-b border-[#E7C878]/15 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-2 text-center md:text-left">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E7C878]/15 text-[#E7C878] border border-[#E7C878]/30">
               <Sparkles className="w-3.5 h-3.5" /> Scheme 45 Real Estate Advisory
             </span>
             <h3 className="font-serif-luxury text-2xl sm:text-3xl text-white font-bold">
@@ -61,7 +61,7 @@ export const Footer: React.FC = () => {
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => setCurrentView('contact')}
-              className="px-6 py-3 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-sm transition-all shadow-lg shadow-[#C5A46D]/20 flex items-center gap-2 cursor-pointer"
+              className="px-6 py-3 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm transition-all shadow-lg shadow-[#E7C878]/20 flex items-center gap-2 cursor-pointer"
             >
               <span>Inquire with Advisory Desk</span>
               <ArrowRight className="w-4 h-4" />
@@ -82,14 +82,14 @@ export const Footer: React.FC = () => {
           {/* Brand Info */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shadow-md border border-[#F9E7BA]/40 overflow-hidden">
+              <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shadow-md border border-[#F6E3B4]/40 overflow-hidden">
                 <img src="/logo.jpg" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div>
                 <span className="font-serif-luxury text-xl font-bold text-white">
                   {currentTheme.agencyName}
                 </span>
-                <span className="block text-[10px] uppercase tracking-widest text-[#C5A46D] font-semibold">
+                <span className="block text-[10px] uppercase tracking-widest text-[#E7C878] font-semibold">
                   Taiser Town Scheme 45
                 </span>
               </div>
@@ -115,7 +115,7 @@ export const Footer: React.FC = () => {
                   target="_blank" rel="noopener noreferrer"
                   aria-label={`${currentTheme.agencyName} on ${label}`}
                   title={label}
-                  className="w-9 h-9 rounded-lg bg-[#101C2C] border border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#C5A46D] hover:border-[#C5A46D]/50 hover:shadow-[0_0_12px_rgba(197,164,109,0.35)] hover:-translate-y-0.5 transition-all cursor-pointer"
+                  className="w-9 h-9 rounded-lg bg-[#0B1220] border border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#E7C878] hover:border-[#E7C878]/50 hover:shadow-[0_0_12px_rgba(231,200,120,0.35)] hover:-translate-y-0.5 transition-all cursor-pointer"
                 >
                   <Icon className="w-4 h-4" />
                 </a>
@@ -126,7 +126,7 @@ export const Footer: React.FC = () => {
               <div className="pt-2">
                 <button
                   onClick={togglePresentationMode}
-                  className="text-xs text-[#C5A46D] hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-xs text-[#E7C878] hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <span>Launch Client Presentation Mode</span>
                   <ExternalLink className="w-3 h-3" />
@@ -145,7 +145,7 @@ export const Footer: React.FC = () => {
                 <li key={sec}>
                   <button
                     onClick={() => setCurrentView('properties')}
-                    className="hover:text-[#C5A46D] transition-colors cursor-pointer text-left"
+                    className="hover:text-[#E7C878] transition-colors cursor-pointer text-left"
                   >
                     {sec}
                   </button>
@@ -172,7 +172,7 @@ export const Footer: React.FC = () => {
                 <li key={type}>
                   <button
                     onClick={() => setCurrentView('properties')}
-                    className="hover:text-[#C5A46D] transition-colors cursor-pointer text-left"
+                    className="hover:text-[#E7C878] transition-colors cursor-pointer text-left"
                   >
                     {type}
                   </button>
@@ -188,19 +188,19 @@ export const Footer: React.FC = () => {
             </h4>
             <div className="space-y-2.5 text-xs">
               <div className="flex items-start gap-2">
-                <MapPin className="w-4 h-4 text-[#C5A46D] shrink-0 mt-0.5" />
+                <MapPin className="w-4 h-4 text-[#E7C878] shrink-0 mt-0.5" />
                 <span>{cmsConfig.officeAddress}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-[#C5A46D] shrink-0" />
+                <Phone className="w-4 h-4 text-[#E7C878] shrink-0" />
                 <span>{cmsConfig.contactPhone}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-[#C5A46D] shrink-0" />
-                <a href={`mailto:${cmsConfig.contactEmail}`} className="min-w-0 break-all hover:text-[#C5A46D]">{cmsConfig.contactEmail}</a>
+                <Mail className="w-4 h-4 text-[#E7C878] shrink-0" />
+                <a href={`mailto:${cmsConfig.contactEmail}`} className="min-w-0 break-all hover:text-[#E7C878]">{cmsConfig.contactEmail}</a>
               </div>
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#C5A46D] shrink-0" />
+                <Clock className="w-4 h-4 text-[#E7C878] shrink-0" />
                 <span>{cmsConfig.workingHours}</span>
               </div>
             </div>
@@ -223,12 +223,12 @@ export const Footer: React.FC = () => {
                     onChange={(e) => setNewsletterEmail(e.target.value)}
                     placeholder="you@email.com"
                     aria-label="Email address for newsletter"
-                    className="flex-1 min-w-0 bg-[#101C2C] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="flex-1 min-w-0 bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   />
                   <button
                     type="submit"
                     aria-label="Subscribe to newsletter"
-                    className="px-3 py-2.5 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] active:scale-95 text-[#101C2C] font-bold transition-all cursor-pointer"
+                    className="px-3 py-2.5 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] active:scale-95 text-[#0B1220] font-bold transition-all cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
                   </button>
@@ -265,14 +265,14 @@ export const Footer: React.FC = () => {
               <span>•</span>
               <button
                 onClick={() => setCurrentView('login')}
-                className="text-[#C5A46D] hover:underline"
+                className="text-[#E7C878] hover:underline"
               >
                 Portal Sign In
               </button>
               <span>•</span>
               <button
                 onClick={() => setCurrentView('register')}
-                className="text-slate-400 hover:text-[#C5A46D]"
+                className="text-slate-400 hover:text-[#E7C878]"
               >
                 Register as Dealer
               </button>
@@ -287,7 +287,7 @@ export const Footer: React.FC = () => {
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           aria-label="Back to top"
           title="Back to top"
-          className="fixed bottom-5 left-5 z-40 w-11 h-11 rounded-full bg-[#101C2C]/95 border border-[#C5A46D]/40 shadow-xl backdrop-blur-md flex items-center justify-center text-[#C5A46D] hover:bg-[#C5A46D] hover:text-[#101C2C] transition-all animate-fadeInUp cursor-pointer"
+          className="fixed bottom-5 left-5 z-40 w-11 h-11 rounded-full bg-[#0B1220]/95 border border-[#E7C878]/40 shadow-xl backdrop-blur-md flex items-center justify-center text-[#E7C878] hover:bg-[#E7C878] hover:text-[#0B1220] transition-all animate-fadeInUp cursor-pointer"
         >
           <ArrowUp className="w-5 h-5" />
         </button>

@@ -39,8 +39,11 @@ class RateLimitTest extends EnterpriseTestCase
         $this->makePublicProperty($this->makeAgency());
         $this->asGuest();
 
-        // Well under the 300/min public-read cap.
-        for ($i = 0; $i < 5; $i++) {
+        // 100 requests must pass. Regression: the global `api` fallback used
+        // to be 60/min and undercut the 300/min public-read limiter, so the
+        // 61st request was throttled even though the route's own budget was
+        // far from exhausted.
+        for ($i = 0; $i < 100; $i++) {
             $this->getJson('/api/catalog')->assertStatus(200);
         }
     }

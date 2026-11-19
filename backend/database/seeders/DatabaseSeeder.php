@@ -477,6 +477,9 @@ class DatabaseSeeder extends Seeder
         // Enterprise catalog (permissions, roles, plans, settings) + local
         // multi-tenant demo fixture. Runs last so it can backfill tenancy on the
         // legacy rows seeded above.
+        if (!app()->environment('production')) {
+            $this->call(DemoStaffSeeder::class);
+        }
         $this->call(EnterpriseSeeder::class);
         $this->call(EnterpriseDemoSeeder::class);
     }
@@ -498,7 +501,8 @@ class DatabaseSeeder extends Seeder
         }
 
         // Staff users are NOT seeded from workspace.json (which may contain
-        // plaintext passwords). Demo users are created by EnterpriseDemoSeeder
+        // plaintext passwords). Demo users are created by DemoStaffSeeder
+        // (non-production only) before EnterpriseDemoSeeder runs.
         // using environment-driven credentials only in non-production envs.
 
         $lists = [

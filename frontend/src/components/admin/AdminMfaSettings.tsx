@@ -114,11 +114,11 @@ export const AdminMfaSettings: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#101C2C] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-5">
+    <div className="bg-[#0B1220] p-6 rounded-2xl border border-slate-800 shadow-xl space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h3 className="font-serif-luxury text-lg font-bold text-white flex items-center gap-2">
-            <KeyRound className="w-5 h-5 text-[#C5A46D]" />
+            <KeyRound className="w-5 h-5 text-[#E7C878]" />
             Two-Factor Sign-In (MFA)
           </h3>
           <p className="text-xs text-slate-400 mt-1">
@@ -153,7 +153,7 @@ export const AdminMfaSettings: React.FC = () => {
           type="button"
           onClick={handleStart}
           disabled={busy}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold transition cursor-pointer disabled:opacity-60"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold transition cursor-pointer disabled:opacity-60"
         >
           <ShieldCheck className="w-4 h-4" />
           {busy ? 'Preparing…' : 'Enable two-factor sign-in'}
@@ -162,14 +162,14 @@ export const AdminMfaSettings: React.FC = () => {
 
       {enrolment && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-slate-700 bg-[#0B1220] p-4 space-y-2">
+          <div className="rounded-xl border border-slate-700 bg-[#07141E] p-4 space-y-2">
             <p className="text-[11px] font-semibold text-slate-200">Step 1 — add the account to your app</p>
             <p className="text-[10px] text-slate-400 leading-relaxed">
               Open your authenticator app, choose “Add account → Enter secret manually” and paste the
               secret below (or import the otpauth link).
             </p>
             <div className="flex items-center gap-2">
-              <code className="flex-1 px-3 py-2 rounded-lg bg-[#101C2C] border border-slate-700 text-[11px] text-[#F9E7BA] font-mono tracking-wider break-all">
+              <code className="flex-1 px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-[11px] text-[#F6E3B4] font-mono tracking-wider break-all">
                 {enrolment.secret}
               </code>
               <button
@@ -183,7 +183,7 @@ export const AdminMfaSettings: React.FC = () => {
             </div>
             <details className="text-[10px] text-slate-400">
               <summary className="cursor-pointer hover:text-slate-200">Show otpauth link</summary>
-              <code className="block mt-1 px-2 py-1.5 rounded bg-[#101C2C] break-all">{enrolment.otpauthUri}</code>
+              <code className="block mt-1 px-2 py-1.5 rounded bg-[#0B1220] break-all">{enrolment.otpauthUri}</code>
             </details>
           </div>
 
@@ -192,7 +192,7 @@ export const AdminMfaSettings: React.FC = () => {
               <AlertTriangle className="w-3.5 h-3.5" />
               Step 2 — store your recovery codes (shown only once)
             </p>
-            <pre className="text-[11px] font-mono text-[#F9E7BA] whitespace-pre-wrap break-all bg-[#0B1220] border border-slate-700 rounded-lg p-3">
+            <pre className="text-[11px] font-mono text-[#F6E3B4] whitespace-pre-wrap break-all bg-[#07141E] border border-slate-700 rounded-lg p-3">
               {formatRecoveryCodes(enrolment.recoveryCodes)}
             </pre>
             <button
@@ -204,7 +204,7 @@ export const AdminMfaSettings: React.FC = () => {
             </button>
           </div>
 
-          <div className="rounded-xl border border-slate-700 bg-[#0B1220] p-4 space-y-2">
+          <div className="rounded-xl border border-slate-700 bg-[#07141E] p-4 space-y-2">
             <p className="text-[11px] font-semibold text-slate-200">Step 3 — confirm with a live code</p>
             <input
               type="text"
@@ -213,13 +213,13 @@ export const AdminMfaSettings: React.FC = () => {
               onChange={(e) => setConfirmCode(e.target.value)}
               placeholder="123456"
               aria-label="Authenticator code"
-              className="w-full bg-[#101C2C] text-white text-sm rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono tracking-widest"
+              className="w-full bg-[#0B1220] text-white text-sm rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono tracking-widest"
             />
             <button
               type="button"
               onClick={handleEnable}
               disabled={busy}
-              className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold transition cursor-pointer disabled:opacity-60"
+              className="px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold transition cursor-pointer disabled:opacity-60"
             >
               {busy ? 'Verifying…' : 'Activate two-factor sign-in'}
             </button>
@@ -228,7 +228,7 @@ export const AdminMfaSettings: React.FC = () => {
       )}
 
       {enabled && (
-        <div className="rounded-xl border border-slate-700 bg-[#0B1220] p-4 space-y-3">
+        <div className="rounded-xl border border-slate-700 bg-[#07141E] p-4 space-y-3">
           <p className="text-[11px] text-slate-300">
             Two-factor sign-in is active on this account
             {recoveryRemaining > 0 ? ` — ${recoveryRemaining} recovery code(s) left.` : ' — no recovery codes left.'}
@@ -240,7 +240,7 @@ export const AdminMfaSettings: React.FC = () => {
               onChange={(e) => setDisablePassword(e.target.value)}
               placeholder="Current password"
               aria-label="Current password"
-              className="bg-[#101C2C] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+              className="bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
             />
             <input
               type="text"
@@ -249,7 +249,7 @@ export const AdminMfaSettings: React.FC = () => {
               onChange={(e) => setDisableCode(e.target.value)}
               placeholder="Code or recovery code"
               aria-label="Verification code"
-              className="bg-[#101C2C] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+              className="bg-[#0B1220] text-white text-xs rounded-lg px-3 py-2 border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
             />
           </div>
           <button

@@ -96,10 +96,10 @@ export const AdminProperties: React.FC = () => {
           <p className="text-sm text-slate-400">Control which of your approved listings appear on the public website and your agency profile. Approval and moderation rules are enforced by the backend.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-[#101C2C] text-slate-200 hover:text-white text-sm">
+          <button onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-[#0B1220] text-slate-200 hover:text-white text-sm">
             <ExternalLink className="w-4 h-4" /> View agencies
           </button>
-          <button onClick={() => void load()} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-semibold text-sm">
+          <button onClick={() => void load()} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-semibold text-sm">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </div>
@@ -113,7 +113,7 @@ export const AdminProperties: React.FC = () => {
           { label: 'Hidden', value: stats.hidden },
           { label: 'Pending approval', value: stats.pending },
         ].map((item) => (
-          <div key={item.label} className="rounded-xl border border-slate-800 bg-[#101C2C] p-4">
+          <div key={item.label} className="rounded-xl border border-slate-800 bg-[#0B1220] p-4">
             <div className="text-xl font-bold text-white">{item.value}</div>
             <div className="text-[11px] uppercase tracking-wide text-slate-400 mt-1">{item.label}</div>
           </div>
@@ -126,10 +126,10 @@ export const AdminProperties: React.FC = () => {
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-800 bg-[#101C2C] overflow-hidden">
+      <div className="rounded-2xl border border-slate-800 bg-[#0B1220] overflow-hidden">
         <div className="px-4 sm:px-5 py-4 border-b border-slate-800 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-slate-300 text-sm">
-            <ShieldCheck className="w-4 h-4 text-[#C5A46D]" /> Visibility changes apply immediately to public API/pages for eligible listings.
+            <ShieldCheck className="w-4 h-4 text-[#E7C878]" /> Visibility changes apply immediately to public API/pages for eligible listings.
           </div>
         </div>
 
@@ -144,7 +144,7 @@ export const AdminProperties: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-[#0B1220] text-slate-400 text-xs uppercase tracking-wide">
+              <thead className="bg-[#07141E] text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="px-4 py-3">Listing</th>
                   <th className="px-4 py-3">Type / Purpose</th>
@@ -163,13 +163,13 @@ export const AdminProperties: React.FC = () => {
                     <tr key={listing.id} className="hover:bg-white/[0.02]">
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3 min-w-[240px]">
-                          <div className="w-14 h-14 rounded-lg overflow-hidden bg-[#0B1220] border border-slate-800 shrink-0 flex items-center justify-center">
+                          <div className="w-14 h-14 rounded-lg overflow-hidden bg-[#07141E] border border-slate-800 shrink-0 flex items-center justify-center">
                             {listing.images?.[0] ? <img src={listing.images[0]} alt="" className="w-full h-full object-cover" /> : <Home className="w-5 h-5 text-slate-600" />}
                           </div>
                           <div className="min-w-0">
                             <div className="font-semibold text-white truncate max-w-[280px]">{listing.title || 'Untitled listing'}</div>
                             <div className="text-xs text-slate-400 truncate max-w-[280px]">{[listing.location, listing.sector, listing.block].filter(Boolean).join(' · ') || 'Location not set'}</div>
-                            {listing.isFeatured ? <span className="inline-flex mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">Featured</span> : null}
+                            {listing.isFeatured ? <span className="inline-flex mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#E7C878]/15 text-[#E7C878] border border-[#E7C878]/30">Featured</span> : null}
                           </div>
                         </div>
                       </td>
@@ -177,7 +177,7 @@ export const AdminProperties: React.FC = () => {
                         <div>{listing.type || '—'}</div>
                         <div className="text-xs text-slate-500 capitalize">{listing.listing_purpose || 'sale'}</div>
                       </td>
-                      <td className="px-4 py-4 text-[#F9E7BA] font-semibold whitespace-nowrap">{formatPrice(listing.pricePKR, listing.formattedPrice)}</td>
+                      <td className="px-4 py-4 text-[#F6E3B4] font-semibold whitespace-nowrap">{formatPrice(listing.pricePKR, listing.formattedPrice)}</td>
                       <td className="px-4 py-4">
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold border ${
                           listing.approval_status === 'approved' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
@@ -202,7 +202,7 @@ export const AdminProperties: React.FC = () => {
                           onClick={() => void toggleVisibility(listing)}
                           disabled={busy || (!eligible && !isPublic)}
                           className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed ${
-                            isPublic ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C]'
+                            isPublic ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220]'
                           }`}
                         >
                           {busy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : isPublic ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}

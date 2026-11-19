@@ -15,7 +15,7 @@ import { API_BASE_URL } from '../services/api';
 const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="min-h-screen bg-[#070B14] text-slate-100 flex items-center justify-center px-4 py-16">
     <main
-      className="w-full max-w-md bg-[#0B1220] border border-white/10 rounded-2xl shadow-2xl p-8"
+      className="w-full max-w-md bg-[#07141E] border border-white/10 rounded-2xl shadow-2xl p-8"
       aria-live="polite"
     >
       {children}
@@ -25,7 +25,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const Brand: React.FC = () => (
   <div className="text-center mb-6">
-    <p className="text-[#C5A46D] font-black tracking-[0.3em] text-xs uppercase">TaisarTownHub</p>
+    <p className="text-[#E7C878] font-black tracking-[0.3em] text-xs uppercase">TaisarTownHub</p>
     <h1 className="mt-2 text-2xl font-bold text-white">Scheme 45 · Karachi</h1>
   </div>
 );
@@ -46,7 +46,7 @@ const Field: React.FC<{
       autoComplete={autoComplete}
       required
       minLength={type === 'password' ? 8 : undefined}
-      className="mt-1 w-full rounded-lg bg-[#070B14] border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#C5A46D]"
+      className="mt-1 w-full rounded-lg bg-[#070B14] border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#E7C878]"
     />
   </label>
 );
@@ -64,7 +64,7 @@ const DoneOrError: React.FC<{ ok: boolean; title: string; message: string }> = (
     <p className="mt-3 text-sm text-slate-300">{message}</p>
     <a
       href="/login"
-      className="mt-6 block text-center rounded-lg bg-[#C5A46D] text-[#101C2C] font-bold text-sm px-4 py-2.5 hover:bg-[#d4b67f] transition-colors"
+      className="mt-6 block text-center rounded-lg bg-[#E7C878] text-[#0B1220] font-bold text-sm px-4 py-2.5 hover:bg-[#d4b67f] transition-colors"
     >
       Go to sign in
     </a>
@@ -142,7 +142,7 @@ export const ResetPasswordPage: React.FC = () => {
         <button
           type="submit"
           disabled={state === 'saving'}
-          className="mt-6 w-full rounded-lg bg-[#C5A46D] text-[#101C2C] font-bold text-sm px-4 py-2.5 hover:bg-[#d4b67f] transition-colors disabled:opacity-60"
+          className="mt-6 w-full rounded-lg bg-[#E7C878] text-[#0B1220] font-bold text-sm px-4 py-2.5 hover:bg-[#d4b67f] transition-colors disabled:opacity-60"
         >
           {state === 'saving' ? 'Updating…' : 'Update password'}
         </button>

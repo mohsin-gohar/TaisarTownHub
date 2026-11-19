@@ -153,13 +153,13 @@ export const AdminBuyers: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#101C2C] to-[#1A2638] border border-[#C5A46D]/30 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#0B1220] to-[#1A2638] border border-[#E7C878]/30 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-serif-luxury text-2xl font-bold text-white">
               Buyer CRM & Deal Pipeline
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/20 text-[#C5A46D] border border-[#C5A46D]/40">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E7C878]/20 text-[#E7C878] border border-[#E7C878]/40">
               Investors & Allottees
             </span>
           </div>
@@ -170,7 +170,7 @@ export const AdminBuyers: React.FC = () => {
 
         <button
           onClick={handleOpenAdd}
-          className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+          className="px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20"
         >
           <Plus className="w-4 h-4" />
           <span>Register New Buyer</span>
@@ -178,7 +178,7 @@ export const AdminBuyers: React.FC = () => {
       </div>
 
       {/* Filter and Search */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-[#101C2C] p-4 rounded-xl border border-slate-800">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-[#0B1220] p-4 rounded-xl border border-slate-800">
         <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -186,7 +186,7 @@ export const AdminBuyers: React.FC = () => {
             placeholder="Search buyer by name, CNIC, sector..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#0B1220] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+            className="w-full bg-[#07141E] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
           />
         </div>
 
@@ -197,8 +197,8 @@ export const AdminBuyers: React.FC = () => {
               onClick={() => setFilterStatus(status)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer transition ${
                 filterStatus === status
-                  ? 'bg-[#C5A46D] text-[#101C2C]'
-                  : 'bg-[#0B1220] text-slate-400 hover:text-white border border-slate-800'
+                  ? 'bg-[#E7C878] text-[#0B1220]'
+                  : 'bg-[#07141E] text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
               {status === 'all' ? 'All Buyers' : status}
@@ -223,19 +223,19 @@ export const AdminBuyers: React.FC = () => {
           return (
             <div
               key={buyer.id}
-              className="bg-[#101C2C] rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-[#C5A46D]/50 transition-all shadow-lg"
+              className="bg-[#0B1220] rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-[#E7C878]/50 transition-all shadow-lg"
             >
               <div className="space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#C5A46D]/20 to-[#101C2C] border border-[#C5A46D]/40 flex items-center justify-center font-serif-luxury font-bold text-[#F9E7BA] text-lg shadow">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#E7C878]/20 to-[#0B1220] border border-[#E7C878]/40 flex items-center justify-center font-serif-luxury font-bold text-[#F6E3B4] text-lg shadow">
                       {buyer.fullName.charAt(0)}
                     </div>
                     <div>
                       <h3 className="font-bold text-white text-sm">
                         {buyer.fullName}
                       </h3>
-                      <span className="text-[11px] text-[#C5A46D] font-mono">
+                      <span className="text-[11px] text-[#E7C878] font-mono">
                         {buyer.interestedSector} • {buyer.interestedPlotSize || '120 Sq Yds'}
                       </span>
                     </div>
@@ -263,14 +263,14 @@ export const AdminBuyers: React.FC = () => {
                   <span
                     className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 ${
                       buyer.paymentStatus === 'Fully Paid'
-                        ? 'bg-[#C5A46D]/20 text-[#F9E7BA] border border-[#C5A46D]/40'
+                        ? 'bg-[#E7C878]/20 text-[#F6E3B4] border border-[#E7C878]/40'
                         : buyer.paymentStatus === 'Advance Paid'
-                        ? 'bg-[#C5A46D]/15 text-[#F9E7BA] border border-[#C5A46D]/30'
+                        ? 'bg-[#E7C878]/15 text-[#F6E3B4] border border-[#E7C878]/30'
                         : 'bg-slate-800 text-slate-300 border border-slate-700'
                     }`}
                   >
-                    {buyer.paymentStatus === 'Fully Paid' && <CheckCircle2 className="w-3 h-3 text-[#C5A46D]" />}
-                    {buyer.paymentStatus === 'Advance Paid' && <Clock className="w-3 h-3 text-[#C5A46D]" />}
+                    {buyer.paymentStatus === 'Fully Paid' && <CheckCircle2 className="w-3 h-3 text-[#E7C878]" />}
+                    {buyer.paymentStatus === 'Advance Paid' && <Clock className="w-3 h-3 text-[#E7C878]" />}
                     {buyer.paymentStatus}
                   </span>
 
@@ -281,7 +281,7 @@ export const AdminBuyers: React.FC = () => {
 
                 {/* Details */}
                 <div className="space-y-2 text-xs pt-2 border-t border-slate-800/80">
-                  <div className="flex items-center justify-between bg-[#0B1220] p-2 rounded-lg">
+                  <div className="flex items-center justify-between bg-[#07141E] p-2 rounded-lg">
                     <span className="text-slate-400 flex items-center gap-1.5">
                       <CreditCard className="w-3.5 h-3.5 text-slate-500" />
                       CNIC:
@@ -296,7 +296,7 @@ export const AdminBuyers: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => toggleCnicMask(buyer.id)}
-                          className="text-slate-400 hover:text-[#C5A46D] cursor-pointer"
+                          className="text-slate-400 hover:text-[#E7C878] cursor-pointer"
                           title={isUnmasked ? 'Mask' : 'Reveal'}
                         >
                           {isUnmasked ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -315,7 +315,7 @@ export const AdminBuyers: React.FC = () => {
 
                   <div className="flex items-center justify-between text-slate-300 px-1">
                     <span className="text-slate-400 flex items-center gap-1.5">
-                      <Coins className="w-3.5 h-3.5 text-[#C5A46D]" />
+                      <Coins className="w-3.5 h-3.5 text-[#E7C878]" />
                       Max Budget:
                     </span>
                     <span className="font-bold text-white font-mono">
@@ -326,7 +326,7 @@ export const AdminBuyers: React.FC = () => {
                   {assignedDealer && (
                     <div className="flex items-center justify-between text-slate-300 px-1 pt-1">
                       <span className="text-slate-400">Assigned Agent:</span>
-                      <span className="text-[#E0C79A] font-semibold">{assignedDealer.fullName}</span>
+                      <span className="text-[#F6E3B4] font-semibold">{assignedDealer.fullName}</span>
                     </div>
                   )}
 
@@ -339,8 +339,8 @@ export const AdminBuyers: React.FC = () => {
 
                 {/* Inventory Match Spotlight */}
                 <div className="pt-2">
-                  <div className="text-[10px] font-bold text-[#C5A46D] uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-[#C5A46D]" />
+                  <div className="text-[10px] font-bold text-[#E7C878] uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-[#E7C878]" />
                     <span>Matching Plots in Agency Inventory ({matchingProperties.length})</span>
                   </div>
                   {matchingProperties.length > 0 ? (
@@ -348,12 +348,12 @@ export const AdminBuyers: React.FC = () => {
                       {matchingProperties.slice(0, 2).map((mp) => (
                         <div
                           key={mp.id}
-                          className="p-1.5 rounded bg-[#0B1220] border border-slate-800/80 text-[10px] flex items-center justify-between"
+                          className="p-1.5 rounded bg-[#07141E] border border-slate-800/80 text-[10px] flex items-center justify-between"
                         >
                           <span className="text-white font-medium truncate max-w-[170px]">
                             {mp.plotNumber ? `Plot ${mp.plotNumber} (${mp.sector})` : mp.title}
                           </span>
-                          <span className="text-[#C5A46D] font-mono font-bold">
+                          <span className="text-[#E7C878] font-mono font-bold">
                             {formatPKRCurrency(mp.pricePKR)}
                           </span>
                         </div>
@@ -368,7 +368,7 @@ export const AdminBuyers: React.FC = () => {
               {/* Footer */}
               <div className="pt-3 mt-4 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
                 <span>Preference: {buyer.interestedPlotSize}</span>
-                <span className="text-[#C5A46D] font-semibold">Active Deal Lead</span>
+                <span className="text-[#E7C878] font-semibold">Active Deal Lead</span>
               </div>
             </div>
           );
@@ -378,7 +378,7 @@ export const AdminBuyers: React.FC = () => {
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">
               {editingBuyerId ? 'Edit Buyer Profile' : 'Register New Buyer Prospect'}
             </h3>
@@ -395,7 +395,7 @@ export const AdminBuyers: React.FC = () => {
                   placeholder="e.g. Muhammad Usman"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -408,7 +408,7 @@ export const AdminBuyers: React.FC = () => {
                     placeholder="42201-1234567-1"
                     value={formData.cnic}
                     onChange={(e) => setFormData({ ...formData, cnic: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
                 <div>
@@ -419,7 +419,7 @@ export const AdminBuyers: React.FC = () => {
                     placeholder="0312-3456789"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -432,7 +432,7 @@ export const AdminBuyers: React.FC = () => {
                     required
                     value={formData.budgetPKR}
                     onChange={(e) => setFormData({ ...formData, budgetPKR: Number(e.target.value) })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
                 <div>
@@ -441,7 +441,7 @@ export const AdminBuyers: React.FC = () => {
                     type="number"
                     value={formData.advancePaidPKR}
                     onChange={(e) => setFormData({ ...formData, advancePaidPKR: Number(e.target.value) })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -452,7 +452,7 @@ export const AdminBuyers: React.FC = () => {
                   <select
                     value={formData.interestedSector}
                     onChange={(e) => setFormData({ ...formData, interestedSector: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   >
                     <option value="Sector 63">Sector 63 (Scheme 45)</option>
                     <option value="Sector 70-D">Sector 70-D</option>
@@ -466,7 +466,7 @@ export const AdminBuyers: React.FC = () => {
                   <select
                     value={formData.interestedPlotSize}
                     onChange={(e) => setFormData({ ...formData, interestedPlotSize: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   >
                     <option value="80 Sq Yds">80 Sq Yds</option>
                     <option value="120 Sq Yds">120 Sq Yds (Colloquial 120-M)</option>
@@ -483,7 +483,7 @@ export const AdminBuyers: React.FC = () => {
                   <select
                     value={formData.paymentStatus}
                     onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value as BuyerPaymentStatus })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   >
                     <option value="Advance Paid">Advance Paid</option>
                     <option value="Fully Paid">Fully Paid</option>
@@ -495,7 +495,7 @@ export const AdminBuyers: React.FC = () => {
                   <select
                     value={formData.assignedDealerId}
                     onChange={(e) => setFormData({ ...formData, assignedDealerId: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                   >
                     {dealers.map((d) => (
                       <option key={d.id} value={d.id}>{d.fullName} ({d.agencyOrBranch})</option>
@@ -511,7 +511,7 @@ export const AdminBuyers: React.FC = () => {
                   placeholder="Special terms, payment schedule, road-facing requirement..."
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -525,7 +525,7 @@ export const AdminBuyers: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold cursor-pointer shadow"
+                  className="px-5 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold cursor-pointer shadow"
                 >
                   {editingBuyerId ? 'Save Changes' : 'Save Buyer'}
                 </button>

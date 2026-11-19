@@ -133,11 +133,11 @@ export const AdminNotifications: React.FC = () => {
                 <div
                   key={notification.id}
                   className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
-                    unread ? 'bg-[#0B1220] border-[#C5A46D]/30' : 'bg-[#0B1220]/60 border-slate-800'
+                    unread ? 'bg-[#07141E] border-[#E7C878]/30' : 'bg-[#07141E]/60 border-slate-800'
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                    unread ? 'bg-[#C5A46D]/15 text-[#C5A46D]' : 'bg-slate-800 text-slate-500'
+                    unread ? 'bg-[#E7C878]/15 text-[#E7C878]' : 'bg-slate-800 text-slate-500'
                   }`}>
                     {unread ? <Bell className="w-4 h-4" /> : <Inbox className="w-4 h-4" />}
                   </div>
@@ -164,7 +164,7 @@ export const AdminNotifications: React.FC = () => {
                     {info.actionUrl && (
                       <a
                         href={info.actionUrl}
-                        className="text-[10px] font-semibold text-[#C5A46D] hover:underline"
+                        className="text-[10px] font-semibold text-[#E7C878] hover:underline"
                       >
                         Open
                       </a>

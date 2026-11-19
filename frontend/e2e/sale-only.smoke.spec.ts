@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const API_BASE = process.env.PLAYWRIGHT_API_URL || process.env.VITE_API_URL || 'http://127.0.0.1:8080/api';
+
 /**
  * Live smoke for the sale-only marketplace changes:
  * navbar cleanup, properties sale-only, legacy /projects redirect.
@@ -17,15 +19,22 @@ test.describe('Sale-only marketplace (live)', () => {
     await expect(nav.getByText('Agencies', { exact: true })).toBeVisible();
   });
 
-  test('properties page loads sale listings', async ({ page }) => {
+  test('properties page renders exactly the governed public sale listings', async ({ page, request }) => {
+    // The live API defines the public set: agency-owned + approved + public + sale.
+    const response = await request.get(`${API_BASE}/properties?purpose=sale&per_page=500`);
+    expect(response.ok()).toBeTruthy();
+    const rows = await response.json();
+    expect(Array.isArray(rows), 'the public properties contract must stay a raw list').toBe(true);
+
     await page.goto('/properties?purpose=sale');
     await expect(page.locator('main')).toBeVisible({ timeout: 20000 });
-    await page.waitForTimeout(1500);
-    const cards = await page.locator('main a, main article').count();
-    if (cards === 0) {
-      await expect(page.locator('main')).toContainText(/Found 0 matching properties|No public listings|No properties/i);
-    } else {
-      expect(cards).toBeGreaterThan(0);
+
+    // The UI must not silently show a different dataset (legacy catalog rows,
+    // test artefacts) or an empty state when the API has listings.
+    await expect(page.getByText(`Found ${rows.length} matching properties`)).toBeVisible({ timeout: 20000 });
+
+    for (const artifact of ['WORKFLOW-', 'PROBE-ONLY-', 'Load-test property']) {
+      await expect(page.locator('body')).not.toContainText(artifact);
     }
   });
 

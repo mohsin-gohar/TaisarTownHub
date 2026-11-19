@@ -92,12 +92,12 @@ class WorkspaceController extends Controller
 
     public function catalog()
     {
-        // array_filter preserves keys; without reindexing the JSON would
-        // degrade into an object whenever a row is skipped (draft/private/
-        // payload-deleted), which the frontend (Array.isArray) then drops —
-        // the public site would silently show zero listings. G-12.
+        // Public listings must be explicitly governed: agency-owned, approved,
+        // public and sale-only. Legacy BusinessRecord rows predate the
+        // enterprise workflow, so they no longer default into the public
+        // catalog — the governed Property API is the single public source.
         $listed = array_values(array_filter(
-            $this->publicRows('properties'),
+            $this->publicRows('properties', agencyOwnedOnly: true),
             fn ($row) => $this->publiclyListed($row)
         ));
 
@@ -585,10 +585,16 @@ class WorkspaceController extends Controller
     /* Reads                                                             */
     /* ================================================================ */
 
-    private function publicRows(string $collection): array
+    private function publicRows(string $collection, bool $agencyOwnedOnly = false): array
     {
-        return BusinessRecord::where('collection', $collection)
-            ->whereNull('deleted_at')
+        $query = BusinessRecord::where('collection', $collection)
+            ->whereNull('deleted_at');
+
+        if ($agencyOwnedOnly) {
+            $query->whereNotNull('agency_id');
+        }
+
+        return $query
             ->orderByDesc('updated_at')
             ->limit(1000)
             ->get()
@@ -604,17 +610,14 @@ class WorkspaceController extends Controller
             ->all();
     }
 
-/** Public catalog only lists approved + public properties. */
+    /** Public catalog only lists agency-owned, explicitly approved sale listings. */
     private function publiclyListed(array $row): bool
     {
-        // Legacy payloads predate the workflow: no explicit approval key
-        // defaults to approved (only explicitly rejected/draft rows are hidden).
-        $approval = $row['approval_status'] ?? 'approved';
-        $visibility = $row['visibility'] ?? 'public';
-        $purpose = $row['listing_purpose'] ?? 'sale';
-        return $approval === 'approved'
-            && $visibility === 'public'
-            && $purpose === 'sale';
+        // No defaults: missing governance keys mean the row is not publishable.
+        // The owning agency is enforced at the query level (agency_id column).
+        return ($row['approval_status'] ?? null) === 'approved'
+            && ($row['visibility'] ?? null) === 'public'
+            && ($row['listing_purpose'] ?? null) === 'sale';
     }
 
     /**

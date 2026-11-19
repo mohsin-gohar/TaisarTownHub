@@ -19,11 +19,27 @@ function record(check: string, ok: boolean, evidence: string) {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${check} — ${evidence}`);
 }
 
+// TEST-NET-3 addresses keep this probe's auth attempts out of the shared
+// 127.0.0.1 limiter bucket used by the E2E suite. The throttle probe needs a
+// second bucket because it deliberately exhausts the allowance.
+const PROBE_IP = '203.0.113.201';
+const THROTTLE_IP = '203.0.113.202';
+
 async function call(
   path: string,
-  options: { method?: string; token?: string; agency?: string; body?: unknown; form?: FormData } = {},
+  options: {
+    method?: string;
+    token?: string;
+    agency?: string;
+    body?: unknown;
+    form?: FormData;
+    ip?: string;
+  } = {},
 ) {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'X-Forwarded-For': options.ip || PROBE_IP,
+  };
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
   if (options.agency) headers['X-Agency-Id'] = options.agency;
   let body: BodyInit | undefined;
@@ -184,11 +200,12 @@ async function callWithBackoff(
     body: {
       name: 'Probe Lead',
       phone: '03009998888',
-      email: 'probe.lead@audit.test',
+      email: `probe.lead.${stamp}@audit.test`,
       message: 'cross tenant probe',
       agency_id: A.agencyId,
     },
   });
+  const leadId = lead.json?.lead?.id || lead.json?.id;
   const leadAgency = lead.json?.lead?.agency_id || lead.json?.agency_id;
   record(
     'client-supplied agency_id on a lead is ignored (server resolves tenancy)',
@@ -206,10 +223,11 @@ async function callWithBackoff(
   );
   const upload = await call('/agency/documents', { method: 'POST', token: A.token, form });
   const docId = upload.json?.document?.id || upload.json?.id;
+  const scanStatus = upload.json?.document?.scan_status as string | undefined;
   record(
     'tenant A uploads a private document',
     upload.status === 201 && !!docId,
-    `status=${upload.status} id=${docId} ${upload.status !== 201 ? upload.text.slice(0, 120) : ''}`,
+    `status=${upload.status} id=${docId} scan_status=${scanStatus} ${upload.status !== 201 ? upload.text.slice(0, 120) : ''}`,
   );
 
   if (docId) {
@@ -219,8 +237,23 @@ async function callWithBackoff(
       crossDoc.status === 404 || crossDoc.status === 403,
       `status=${crossDoc.status}`,
     );
+
+    // The download policy depends on the malware scanner. With a real scanner
+    // that returned a clean verdict the row is `scanned_clean` and the owner
+    // gets 200. Locally the scanner is disabled (fail-open): the row is stored
+    // as `skipped` / quarantined and the controller deliberately returns 423
+    // until a rescan runs — even for the owner. Assert the correct policy for
+    // the status the backend actually recorded instead of assuming 200.
     const ownDoc = await call(`/agency/documents/${docId}/download`, { token: A.token });
-    record("A can download its own private document", ownDoc.status === 200, `status=${ownDoc.status}`);
+    const quarantined = scanStatus !== 'scanned_clean';
+    const ownerPolicyOk = quarantined ? ownDoc.status === 423 : ownDoc.status === 200;
+    record(
+      quarantined
+        ? "A's quarantined document is download-blocked until rescan (fail-open, scanner unavailable)"
+        : 'A can download its own scanned-clean private document',
+      ownerPolicyOk,
+      `status=${ownDoc.status} scan_status=${scanStatus} expected=${quarantined ? 423 : 200}`,
+    );
   }
 
   // ---------- CNIC exposure (public surface) ----------
@@ -252,16 +285,20 @@ async function callWithBackoff(
   record('unauthenticated workspace access is rejected', anonWs.status === 401, `status=${anonWs.status}`);
 
   // ---------- login throttle ----------
+  // The auth limiter is 10/min per IP. Use a dedicated TEST-NET-3 bucket and
+  // 12 attempts so the expectation matches the configured production value.
   const throttleCodes: number[] = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 12; i++) {
     const res = await call('/auth/login', {
       method: 'POST',
+      ip: THROTTLE_IP,
       body: { email: `throttle.${stamp}@audit.test`, password: 'Whatever123!' },
     });
     throttleCodes.push(res.status);
+    if (res.status === 429) break;
   }
   record(
-    'login endpoint is rate limited (5/min)',
+    'login endpoint is rate limited (10/min)',
     throttleCodes.includes(429),
     `statuses=${throttleCodes.join(',')}`,
   );
@@ -287,15 +324,35 @@ async function callWithBackoff(
     `status=${foreignHistory.status} leaked=${foreignRows.includes(A.email)}`,
   );
 
-  // ---------- leave the dev data tidy (suspend, never delete) ----------
+  // ---------- leave the dev data tidy ----------
+  // Soft-delete generated records where the API supports it; hide the probe
+  // listing instead of deleting it; suspend (never delete) the probe agencies.
+  const cleanup: string[] = [];
+  if (propertyId) {
+    const hidden = await call(`/properties/${propertyId}/visibility`, {
+      method: 'POST',
+      token: A.token,
+      body: { visibility: 'private' },
+    });
+    cleanup.push(`listing ${propertyId} visibility=private (${hidden.status})`);
+  }
+  if (leadId) {
+    const removed = await call(`/agency/leads/${leadId}`, { method: 'DELETE', token: B.token });
+    cleanup.push(`lead ${leadId} deleted (${removed.status})`);
+  }
+  if (docId) {
+    const removed = await call(`/agency/documents/${docId}`, { method: 'DELETE', token: A.token });
+    cleanup.push(`document ${docId} soft-deleted (${removed.status})`);
+  }
   for (const agency of agencies) {
-    await call(`/admin/agencies/${agency.agencyId}/status`, {
+    const suspended = await call(`/admin/agencies/${agency.agencyId}/status`, {
       method: 'PUT',
       token: adminToken,
       body: { status: 'suspended' },
     });
+    cleanup.push(`agency ${agency.agencyId} suspended (${suspended.status})`);
   }
-  console.log(`\nprobe agencies suspended (not deleted): ${agencies.map((a) => a.agencyId).join(', ')}`);
+  console.log(`\nprobe cleanup:\n  ${cleanup.join('\n  ')}`);
 
   const failed = results.filter((r) => r.status === 'FAIL');
   console.log(`\n${results.length - failed.length}/${results.length} security probes passed`);

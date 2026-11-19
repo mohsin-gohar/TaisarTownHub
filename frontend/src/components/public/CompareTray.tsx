@@ -25,15 +25,15 @@ export const CompareTray: React.FC<CompareTrayProps> = ({
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 sm:px-6 sm:pb-5 pointer-events-none">
-      <div className="pointer-events-auto mx-auto max-w-5xl rounded-2xl border border-[#C5A46D]/40 bg-[#0E1724]/95 backdrop-blur-xl shadow-2xl shadow-black/50 animate-fadeInUp">
+      <div className="pointer-events-auto mx-auto max-w-5xl rounded-2xl border border-[#E7C878]/40 bg-[#0E1724]/95 backdrop-blur-xl shadow-2xl shadow-black/50 animate-fadeInUp">
         <div className="flex flex-col gap-3 p-3 sm:p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs font-bold text-white">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#E7C878]/15 text-[#E7C878] border border-[#E7C878]/30">
                 <Scale className="h-4 w-4" />
               </span>
               <span>Compare shortlist</span>
-              <span className="rounded-full bg-[#C5A46D] px-2 py-0.5 text-[10px] font-bold text-[#101C2C]">
+              <span className="rounded-full bg-[#E7C878] px-2 py-0.5 text-[10px] font-bold text-[#0B1220]">
                 {items.length}/4
               </span>
             </div>
@@ -41,7 +41,7 @@ export const CompareTray: React.FC<CompareTrayProps> = ({
               <button
                 type="button"
                 onClick={onShare}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:border-[#C5A46D]/50 hover:text-white"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:border-[#E7C878]/50 hover:text-white"
               >
                 <Share2 className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Share</span>
@@ -61,7 +61,7 @@ export const CompareTray: React.FC<CompareTrayProps> = ({
             {items.map((item) => (
               <div
                 key={item.id}
-                className="group relative flex min-w-[150px] max-w-[190px] flex-1 items-center gap-2 rounded-xl border border-slate-800 bg-[#0B1220] p-1.5"
+                className="group relative flex min-w-[150px] max-w-[190px] flex-1 items-center gap-2 rounded-xl border border-slate-800 bg-[#07141E] p-1.5"
               >
                 <ImageWithFallback
                   src={item.images?.[0]}
@@ -70,7 +70,7 @@ export const CompareTray: React.FC<CompareTrayProps> = ({
                 />
                 <div className="min-w-0 pr-4">
                   <p className="truncate text-[11px] font-semibold text-white">{item.title}</p>
-                  <p className="truncate text-[10px] text-[#C5A46D]">{item.formattedPrice}</p>
+                  <p className="truncate text-[10px] text-[#E7C878]">{item.formattedPrice}</p>
                 </div>
                 <button
                   type="button"
@@ -93,7 +93,7 @@ export const CompareTray: React.FC<CompareTrayProps> = ({
             type="button"
             onClick={onCompare}
             disabled={!canCompare}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C5A46D] px-4 py-2.5 text-xs font-bold text-[#101C2C] shadow-lg shadow-[#C5A46D]/20 transition hover:bg-[#D4AF37] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:shadow-none"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#E7C878] px-4 py-2.5 text-xs font-bold text-[#0B1220] shadow-lg shadow-[#E7C878]/20 transition hover:bg-[#F3C464] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:shadow-none"
           >
             <Scale className="h-4 w-4" />
             {canCompare ? `Compare ${items.length} properties` : 'Select at least 2 properties'}

@@ -65,7 +65,7 @@ export const ConfirmDialog: React.FC<{
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-message"
-        className="relative w-full max-w-md bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 shadow-2xl space-y-4"
+        className="relative w-full max-w-md bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 shadow-2xl space-y-4"
       >
         <button
           onClick={onCancel}
@@ -99,7 +99,7 @@ export const ConfirmDialog: React.FC<{
           <button
             ref={confirmRef}
             onClick={onConfirm}
-            className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] text-xs font-bold transition cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+            className="px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold transition cursor-pointer shadow-lg shadow-[#E7C878]/20"
           >
             {confirmLabel}
           </button>

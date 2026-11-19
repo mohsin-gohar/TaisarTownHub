@@ -133,12 +133,12 @@ export const MediaGallerySection: React.FC = () => {
   };
 
   return (
-    <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#0B1220] border-t border-[#C5A46D]/15">
+    <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#07141E] border-t border-[#E7C878]/15">
       <div className="max-w-7xl mx-auto space-y-12">
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-800">
           <div className="max-w-3xl space-y-3">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E7C878]/15 text-[#E7C878] border border-[#E7C878]/30">
               <Video className="w-3.5 h-3.5" /> Agency Video Tours & Reels
             </span>
             <h2 className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white">
@@ -154,7 +154,7 @@ export const MediaGallerySection: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsAddModalOpen(true)}
-              className="px-5 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition shadow-lg shadow-[#C5A46D]/20 flex items-center gap-2 cursor-pointer"
+              className="px-5 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs transition shadow-lg shadow-[#E7C878]/20 flex items-center gap-2 cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Add Agency Video Tour</span>
@@ -173,8 +173,8 @@ export const MediaGallerySection: React.FC = () => {
                 onClick={() => setSelectedPhase(phase)}
                 className={`px-5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-2 ${
                   isActive
-                    ? 'bg-[#C5A46D] text-[#101C2C] shadow-md shadow-[#C5A46D]/25 font-bold'
-                    : 'bg-[#101C2C] text-slate-300 hover:bg-slate-800 border border-slate-800'
+                    ? 'bg-[#E7C878] text-[#0B1220] shadow-md shadow-[#E7C878]/25 font-bold'
+                    : 'bg-[#0B1220] text-slate-300 hover:bg-slate-800 border border-slate-800'
                 }`}
               >
                 <Compass className="w-3.5 h-3.5" />
@@ -192,7 +192,7 @@ export const MediaGallerySection: React.FC = () => {
             return (
               <div
                 key={video.id}
-                className="bg-[#101C2C] rounded-2xl overflow-hidden border border-slate-800 hover:border-[#C5A46D]/50 transition-all duration-300 shadow-xl flex flex-col justify-between group"
+                className="bg-[#0B1220] rounded-2xl overflow-hidden border border-slate-800 hover:border-[#E7C878]/50 transition-all duration-300 shadow-xl flex flex-col justify-between group"
               >
                 <div>
                   {/* Thumbnail / Video Preview Surface */}
@@ -208,24 +208,24 @@ export const MediaGallerySection: React.FC = () => {
 
                     {/* Gradient Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-center justify-center">
-                      <div className="w-14 h-14 rounded-full bg-[#C5A46D] text-[#101C2C] flex items-center justify-center shadow-xl group-hover/thumb:scale-110 transition-transform">
+                      <div className="w-14 h-14 rounded-full bg-[#E7C878] text-[#0B1220] flex items-center justify-center shadow-xl group-hover/thumb:scale-110 transition-transform">
                         <Play className="w-6 h-6 fill-current ml-0.5" />
                       </div>
                     </div>
 
                     {/* Top Badges */}
                     <div className="absolute top-3 left-3 flex items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-black/80 text-[#F9E7BA] border border-[#C5A46D]/40 backdrop-blur-md">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-black/80 text-[#F6E3B4] border border-[#E7C878]/40 backdrop-blur-md">
                         {video.phase}
                       </span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#101C2C]/90 text-slate-300 border border-slate-700 backdrop-blur-md">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#0B1220]/90 text-slate-300 border border-slate-700 backdrop-blur-md">
                         {video.sector}
                       </span>
                     </div>
 
                     {/* Duration badge */}
                     <div className="absolute bottom-3 right-3 px-2 py-0.5 rounded bg-black/85 text-white text-[11px] font-mono flex items-center gap-1 backdrop-blur-md">
-                      <Clock className="w-3 h-3 text-[#C5A46D]" />
+                      <Clock className="w-3 h-3 text-[#E7C878]" />
                       <span>{video.duration}</span>
                     </div>
                   </div>
@@ -236,11 +236,11 @@ export const MediaGallerySection: React.FC = () => {
                       <img
                         src={video.dealerAvatar}
                         alt={video.dealerName}
-                        className="w-10 h-10 rounded-xl object-cover border border-[#C5A46D]/50 shrink-0"
+                        className="w-10 h-10 rounded-xl object-cover border border-[#E7C878]/50 shrink-0"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-white text-xs truncate group-hover:text-[#C5A46D] transition-colors">
+                          <span className="font-bold text-white text-xs truncate group-hover:text-[#E7C878] transition-colors">
                             {video.agencyName}
                           </span>
                           <span className="text-emerald-400 shrink-0" title="MDA Licensed Partner">
@@ -259,7 +259,7 @@ export const MediaGallerySection: React.FC = () => {
                     <div className="space-y-1.5">
                       <h3
                         onClick={() => setActiveVideo({ url: video.videoUrl, title: video.title })}
-                        className="font-serif-luxury font-bold text-white text-base hover:text-[#C5A46D] transition-colors cursor-pointer line-clamp-2 leading-snug"
+                        className="font-serif-luxury font-bold text-white text-base hover:text-[#E7C878] transition-colors cursor-pointer line-clamp-2 leading-snug"
                       >
                         {video.title}
                       </h3>
@@ -271,7 +271,7 @@ export const MediaGallerySection: React.FC = () => {
                 </div>
 
                 {/* Engagement Bar: Likes & Comments */}
-                <div className="px-5 py-3.5 bg-[#0B1220] border-t border-slate-800 space-y-3">
+                <div className="px-5 py-3.5 bg-[#07141E] border-t border-slate-800 space-y-3">
                   <div className="flex items-center justify-between text-xs text-slate-300">
                     <div className="flex items-center gap-4">
                       {/* Like Button */}
@@ -288,11 +288,11 @@ export const MediaGallerySection: React.FC = () => {
                         onClick={() => setActiveCommentsVideoId(isCommentsOpen ? null : video.id)}
                         className={`flex items-center gap-1.5 py-1 px-2.5 rounded-lg transition cursor-pointer border ${
                           isCommentsOpen
-                            ? 'bg-[#C5A46D]/20 text-[#F9E7BA] border-[#C5A46D]/40'
+                            ? 'bg-[#E7C878]/20 text-[#F6E3B4] border-[#E7C878]/40'
                             : 'bg-slate-800/80 hover:bg-slate-800 text-slate-200 border-slate-700/60'
                         }`}
                       >
-                        <MessageSquare className="w-4 h-4 text-[#C5A46D]" />
+                        <MessageSquare className="w-4 h-4 text-[#E7C878]" />
                         <span className="font-semibold text-[11px]">{video.comments.length} Comments</span>
                       </button>
                     </div>
@@ -323,12 +323,12 @@ export const MediaGallerySection: React.FC = () => {
                               key={comm.id}
                               className={`p-2.5 rounded-xl text-xs space-y-1 ${
                                 comm.isDealer
-                                  ? 'bg-[#C5A46D]/10 border border-[#C5A46D]/30'
+                                  ? 'bg-[#E7C878]/10 border border-[#E7C878]/30'
                                   : 'bg-slate-800/70 border border-slate-700/50'
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <span className={`font-bold text-[11px] ${comm.isDealer ? 'text-[#F9E7BA]' : 'text-white'}`}>
+                                <span className={`font-bold text-[11px] ${comm.isDealer ? 'text-[#F6E3B4]' : 'text-white'}`}>
                                   {comm.userName} {comm.isDealer && '★ (Agency Response)'}
                                 </span>
                                 <span className="text-[10px] text-slate-400">{comm.createdAt}</span>
@@ -348,7 +348,7 @@ export const MediaGallerySection: React.FC = () => {
                           value={commentAuthor}
                           onChange={(e) => setCommentAuthor(e.target.value)}
                           placeholder="Your Name (e.g. Asad Ali)"
-                          className="w-full bg-[#101C2C] text-white text-xs rounded-lg px-3 py-1.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                          className="w-full bg-[#0B1220] text-white text-xs rounded-lg px-3 py-1.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                         />
                         <div className="flex gap-2">
                           <input
@@ -356,11 +356,11 @@ export const MediaGallerySection: React.FC = () => {
                             value={commentText}
                             onChange={(e) => setCommentText(e.target.value)}
                             placeholder="Write a comment or ask a question..."
-                            className="flex-1 min-w-0 bg-[#101C2C] text-white text-xs rounded-lg px-3 py-1.5 border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                            className="flex-1 min-w-0 bg-[#0B1220] text-white text-xs rounded-lg px-3 py-1.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                           />
                           <button
                             type="submit"
-                            className="px-3 py-1.5 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition cursor-pointer flex items-center gap-1 shrink-0"
+                            className="px-3 py-1.5 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs transition cursor-pointer flex items-center gap-1 shrink-0"
                           >
                             <Send className="w-3.5 h-3.5" />
                             <span>Post</span>
@@ -393,10 +393,10 @@ export const MediaGallerySection: React.FC = () => {
               if (e.target === e.currentTarget) setIsAddModalOpen(false);
             }}
           >
-            <div className="bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-scaleUp">
-              <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-[#0B1220]">
+            <div className="bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-scaleUp">
+              <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-[#07141E]">
                 <div className="flex items-center gap-2">
-                  <Video className="w-5 h-5 text-[#C5A46D]" />
+                  <Video className="w-5 h-5 text-[#E7C878]" />
                   <h3 className="font-serif-luxury font-bold text-lg text-white">
                     Publish Agency Video Walkthrough
                   </h3>
@@ -417,7 +417,7 @@ export const MediaGallerySection: React.FC = () => {
                   <select
                     value={newVideo.agencyId}
                     onChange={(e) => setNewVideo({ ...newVideo, agencyId: e.target.value })}
-                    className="w-full bg-[#0B1220] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#E7C878] focus:outline-none"
                   >
                     {(dealers || []).map((d) => (
                       <option key={d.id} value={d.id}>
@@ -435,7 +435,7 @@ export const MediaGallerySection: React.FC = () => {
                     <select
                       value={newVideo.phase}
                       onChange={(e) => setNewVideo({ ...newVideo, phase: e.target.value as any })}
-                      className="w-full bg-[#0B1220] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#C5A46D] focus:outline-none"
+                      className="w-full bg-[#07141E] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#E7C878] focus:outline-none"
                     >
                       <option value="Phase 1">Phase 1</option>
                       <option value="Phase 2">Phase 2</option>
@@ -452,7 +452,7 @@ export const MediaGallerySection: React.FC = () => {
                       value={newVideo.sector}
                       onChange={(e) => setNewVideo({ ...newVideo, sector: e.target.value })}
                       placeholder="e.g. Sector 70-D, Block A"
-                      className="w-full bg-[#0B1220] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#C5A46D] focus:outline-none"
+                      className="w-full bg-[#07141E] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#E7C878] focus:outline-none"
                       required
                     />
                   </div>
@@ -467,7 +467,7 @@ export const MediaGallerySection: React.FC = () => {
                     value={newVideo.title}
                     onChange={(e) => setNewVideo({ ...newVideo, title: e.target.value })}
                     placeholder="e.g. 120 Sq Yd On-Ground Demarcation & Street Overview"
-                    className="w-full bg-[#0B1220] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#E7C878] focus:outline-none"
                     required
                   />
                 </div>
@@ -481,7 +481,7 @@ export const MediaGallerySection: React.FC = () => {
                     onChange={(e) => setNewVideo({ ...newVideo, description: e.target.value })}
                     rows={3}
                     placeholder="Share on-ground details, street width, water/electricity status, and possession clearance."
-                    className="w-full bg-[#0B1220] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full bg-[#07141E] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#E7C878] focus:outline-none"
                     required
                   />
                 </div>
@@ -495,7 +495,7 @@ export const MediaGallerySection: React.FC = () => {
                     value={newVideo.videoUrl}
                     onChange={(e) => setNewVideo({ ...newVideo, videoUrl: e.target.value })}
                     placeholder="https://..."
-                    className="w-full bg-[#0B1220] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-[#E7C878] focus:outline-none font-mono"
                     required
                   />
                 </div>
@@ -510,7 +510,7 @@ export const MediaGallerySection: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs transition cursor-pointer shadow-md shadow-[#C5A46D]/20"
+                    className="px-5 py-2 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs transition cursor-pointer shadow-md shadow-[#E7C878]/20"
                   >
                     Publish Video Tour
                   </button>

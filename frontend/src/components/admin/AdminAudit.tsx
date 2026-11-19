@@ -79,13 +79,13 @@ export const AdminAudit: React.FC = () => {
         <div className="flex gap-2">
           <button
             onClick={() => setTab('audit')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${tab === 'audit' ? 'bg-[#C5A46D] text-[#101C2C]' : 'bg-slate-800 text-slate-300'}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${tab === 'audit' ? 'bg-[#E7C878] text-[#0B1220]' : 'bg-slate-800 text-slate-300'}`}
           >
             Audit Log ({auditEntries.length})
           </button>
           <button
             onClick={() => setTab('trash')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${tab === 'trash' ? 'bg-[#C5A46D] text-[#101C2C]' : 'bg-slate-800 text-slate-300'}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${tab === 'trash' ? 'bg-[#E7C878] text-[#0B1220]' : 'bg-slate-800 text-slate-300'}`}
           >
             Recycle Bin ({totalTrashed})
           </button>
@@ -93,7 +93,7 @@ export const AdminAudit: React.FC = () => {
       </div>
 
       {tab === 'audit' && (
-        <div className="bg-[#101C2C] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+        <div className="bg-[#0B1220] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
           <div className="md:hidden divide-y divide-slate-800">
             {auditEntries.length === 0 && (
               <p className="py-6 text-center text-slate-500 text-xs">No audit entries yet.</p>
@@ -101,7 +101,7 @@ export const AdminAudit: React.FC = () => {
             {auditEntries.map((e: AuditEntry) => (
               <article key={e.id} className="p-4 space-y-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-[10px] text-[#C5A46D]">{e.action}</span>
+                  <span className="font-mono text-[10px] text-[#E7C878]">{e.action}</span>
                   <span className="font-mono text-[10px] text-slate-500">{e.at.replace('T', ' ').slice(0, 19)}</span>
                 </div>
                 <p className="text-xs text-slate-200">{e.actor} <span className="text-slate-500">({e.role})</span></p>
@@ -111,7 +111,7 @@ export const AdminAudit: React.FC = () => {
           </div>
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+              <thead className="bg-[#07141E] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
                 <tr>
                   <th className="py-3 px-4">When</th>
                   <th className="py-3 px-4">Actor</th>
@@ -130,7 +130,7 @@ export const AdminAudit: React.FC = () => {
                   <tr key={e.id} className="hover:bg-slate-800/40">
                     <td className="py-2.5 px-4 font-mono text-[10px] text-slate-400">{e.at.replace('T', ' ').slice(0, 19)}</td>
                     <td className="py-2.5 px-4 text-slate-200">{e.actor} <span className="text-slate-500">({e.role})</span></td>
-                    <td className="py-2.5 px-4 font-mono text-[10px] text-[#C5A46D]">{e.action}</td>
+                    <td className="py-2.5 px-4 font-mono text-[10px] text-[#E7C878]">{e.action}</td>
                     <td className="py-2.5 px-4 font-mono text-[10px] text-slate-400">{e.target || '—'}</td>
                     <td className="py-2.5 px-4 text-slate-300">{e.detail || '—'}</td>
                   </tr>
@@ -152,9 +152,9 @@ export const AdminAudit: React.FC = () => {
             { label: 'Media', icon: Image, items: trashedMedia.map((m) => ({ id: m.id, name: m.title, deletedAt: m.deletedAt, deletedBy: m.deletedBy, restore: () => restoreMediaItem(m.id) })) },
             { label: 'Property Documents', icon: FileText, items: trashedFiles.map((f) => ({ id: f.id, name: f.title, deletedAt: f.deletedAt, deletedBy: f.deletedBy, restore: () => restorePropertyFile(f.id) })) },
           ].map((group) => (
-            <div key={group.label} className="bg-[#101C2C] rounded-2xl border border-slate-800 shadow-xl p-5">
+            <div key={group.label} className="bg-[#0B1220] rounded-2xl border border-slate-800 shadow-xl p-5">
               <div className="flex items-center gap-2 mb-3">
-                <group.icon className="w-4 h-4 text-[#C5A46D]" />
+                <group.icon className="w-4 h-4 text-[#E7C878]" />
                 <h3 className="font-semibold text-white text-sm">{group.label} ({group.items.length})</h3>
               </div>
               {group.items.length === 0 ? (
@@ -162,7 +162,7 @@ export const AdminAudit: React.FC = () => {
               ) : (
                 <div className="space-y-2">
                   {group.items.map((it) => (
-                    <div key={it.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0B1220] border border-slate-800 text-xs">
+                    <div key={it.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#07141E] border border-slate-800 text-xs">
                       <div>
                         <div className="font-semibold text-slate-200">{it.name}</div>
                         <div className="text-[10px] text-slate-500">
@@ -171,7 +171,7 @@ export const AdminAudit: React.FC = () => {
                       </div>
                       <button
                         onClick={it.restore}
-                        className="px-2.5 py-1.5 rounded-lg bg-[#C5A46D]/20 hover:bg-[#C5A46D] text-[#C5A46D] hover:text-[#101C2C] text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1.5 rounded-lg bg-[#E7C878]/20 hover:bg-[#E7C878] text-[#E7C878] hover:text-[#0B1220] text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
                       >
                         <RotateCcw className="w-3.5 h-3.5" /> Restore
                       </button>

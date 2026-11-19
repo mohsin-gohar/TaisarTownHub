@@ -1,4 +1,4 @@
-﻿import { test } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -63,5 +63,5 @@ test('document deletion is a restorable soft delete', () => {
 test('media library uses the brand gold colour for its submit button', () => {
   const source = read('./AdminMediaLibrary.tsx');
   assert.equal(source.includes('bg-[#C5A4D]'), false);
-  assert.equal(source.includes('bg-[#C5A46D]'), true);
+  assert.equal(source.includes('bg-[#E7C878]'), true);
 });

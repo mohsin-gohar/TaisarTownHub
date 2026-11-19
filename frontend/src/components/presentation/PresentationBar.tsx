@@ -31,15 +31,15 @@ export const PresentationBar: React.FC = () => {
 
   return (
     <aside aria-label="Client Presentation Controls" className="fixed top-2 left-1/2 -translate-x-1/2 z-50 w-full max-w-5xl px-3 pointer-events-none">
-      <div className="pointer-events-auto bg-[#101C2C]/95 backdrop-blur-xl border-2 border-[#C5A46D] rounded-2xl shadow-2xl p-2.5 sm:p-3 text-white">
+      <div className="pointer-events-auto bg-[#0B1220]/95 backdrop-blur-xl border-2 border-[#E7C878] rounded-2xl shadow-2xl p-2.5 sm:p-3 text-white">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Header Badge */}
           <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-[#C5A46D] text-[#101C2C]">
+            <span className="p-1.5 rounded-lg bg-[#E7C878] text-[#0B1220]">
               <Presentation className="w-4 h-4" />
             </span>
             <div>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#C5A46D] uppercase tracking-wider">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#E7C878] uppercase tracking-wider">
                 <Sparkles className="w-3.5 h-3.5" /> Client Presentation Deck
               </div>
               <p className="text-[11px] text-slate-300 hidden sm:block">
@@ -59,7 +59,7 @@ export const PresentationBar: React.FC = () => {
                   onClick={() => setClientThemeId(theme.id as ClientThemeId)}
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
                     isActive
-                      ? 'bg-[#C5A46D] text-[#101C2C] font-bold shadow'
+                      ? 'bg-[#E7C878] text-[#0B1220] font-bold shadow'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800'
                   }`}
                   title={theme.description}
@@ -69,7 +69,7 @@ export const PresentationBar: React.FC = () => {
                     style={{ backgroundColor: theme.primaryAccent }}
                   />
                   <span>{theme.agencyName.split(' ')[0]}</span>
-                  {isActive && <Check className="w-3 h-3 text-[#101C2C]" />}
+                  {isActive && <Check className="w-3 h-3 text-[#0B1220]" />}
                 </button>
               );
             })}
@@ -81,7 +81,7 @@ export const PresentationBar: React.FC = () => {
               onClick={() => setDeviceViewport('desktop')}
               className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
                 deviceViewport === 'desktop'
-                  ? 'bg-[#C5A46D] text-white'
+                  ? 'bg-[#E7C878] text-white'
                   : 'text-slate-400 hover:text-white'
               }`}
               title="Desktop View (Full Screen)"
@@ -92,7 +92,7 @@ export const PresentationBar: React.FC = () => {
               onClick={() => setDeviceViewport('tablet')}
               className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
                 deviceViewport === 'tablet'
-                  ? 'bg-[#C5A46D] text-white'
+                  ? 'bg-[#E7C878] text-white'
                   : 'text-slate-400 hover:text-white'
               }`}
               title="Tablet Preview (768px)"
@@ -103,7 +103,7 @@ export const PresentationBar: React.FC = () => {
               onClick={() => setDeviceViewport('mobile')}
               className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
                 deviceViewport === 'mobile'
-                  ? 'bg-[#C5A46D] text-white'
+                  ? 'bg-[#E7C878] text-white'
                   : 'text-slate-400 hover:text-white'
               }`}
               title="Mobile Mockup Preview (390px)"
@@ -116,7 +116,7 @@ export const PresentationBar: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCurrentView('admin')}
-              className="px-2.5 py-1.5 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow"
+              className="px-2.5 py-1.5 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow"
               title="Show Client the CMS Back-Office"
             >
               <LayoutDashboard className="w-3.5 h-3.5" />

@@ -143,13 +143,13 @@ export const AdminSellers: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#101C2C] to-[#1A2638] border border-[#C5A46D]/30 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#0B1220] to-[#1A2638] border border-[#E7C878]/30 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-serif-luxury text-2xl font-bold text-white">
               Seller & Property Owner Directory
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A46D]/20 text-[#C5A46D] border border-[#C5A46D]/40">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E7C878]/20 text-[#E7C878] border border-[#E7C878]/40">
               ERP Registry
             </span>
           </div>
@@ -160,7 +160,7 @@ export const AdminSellers: React.FC = () => {
 
         <button
           onClick={handleOpenAdd}
-          className="px-4 py-2.5 rounded-xl bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#C5A46D]/20"
+          className="px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20"
         >
           <Plus className="w-4 h-4" />
           <span>Add New Seller</span>
@@ -168,7 +168,7 @@ export const AdminSellers: React.FC = () => {
       </div>
 
       {/* Filter and Search */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#101C2C] p-4 rounded-xl border border-slate-800">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0B1220] p-4 rounded-xl border border-slate-800">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -176,7 +176,7 @@ export const AdminSellers: React.FC = () => {
             placeholder="Search by name, CNIC or phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#0B1220] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+            className="w-full bg-[#07141E] text-white text-xs pl-9 pr-4 py-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
           />
         </div>
         <div className="text-xs text-slate-400 flex items-center gap-2">
@@ -198,19 +198,19 @@ export const AdminSellers: React.FC = () => {
           return (
             <div
               key={seller.id}
-              className="bg-[#101C2C] rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-[#C5A46D]/50 transition-all shadow-lg"
+              className="bg-[#0B1220] rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-[#E7C878]/50 transition-all shadow-lg"
             >
               <div className="space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#C5A46D]/20 to-[#101C2C] border border-[#C5A46D]/40 flex items-center justify-center font-serif-luxury font-bold text-[#F9E7BA] text-lg shadow">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#E7C878]/20 to-[#0B1220] border border-[#E7C878]/40 flex items-center justify-center font-serif-luxury font-bold text-[#F6E3B4] text-lg shadow">
                       {seller.fullName.charAt(0)}
                     </div>
                     <div>
                       <h3 className="font-bold text-white text-sm">
                         {seller.fullName}
                       </h3>
-                      <span className="text-[11px] text-[#C5A46D] font-mono">
+                      <span className="text-[11px] text-[#E7C878] font-mono">
                         ID: {seller.id}
                       </span>
                     </div>
@@ -235,7 +235,7 @@ export const AdminSellers: React.FC = () => {
 
                 {/* Seller Data Fields */}
                 <div className="space-y-2 text-xs pt-2 border-t border-slate-800/80">
-                  <div className="flex items-center justify-between bg-[#0B1220] p-2 rounded-lg">
+                  <div className="flex items-center justify-between bg-[#07141E] p-2 rounded-lg">
                     <span className="text-slate-400 flex items-center gap-1.5">
                       <CreditCard className="w-3.5 h-3.5 text-slate-500" />
                       CNIC:
@@ -250,7 +250,7 @@ export const AdminSellers: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => toggleCnicMask(seller.id)}
-                          className="text-slate-400 hover:text-[#C5A46D] cursor-pointer"
+                          className="text-slate-400 hover:text-[#E7C878] cursor-pointer"
                           title={isUnmasked ? 'Mask CNIC' : 'Reveal CNIC'}
                         >
                           {isUnmasked ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -280,13 +280,13 @@ export const AdminSellers: React.FC = () => {
                   )}
 
                   {seller.bankName && (
-                    <div className="p-2.5 rounded-lg bg-[#0B1220] border border-[#C5A46D]/30 text-[11px] text-slate-300 space-y-0.5">
-                      <div className="font-semibold text-[#C5A46D] flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-[#C5A46D]" />
+                    <div className="p-2.5 rounded-lg bg-[#07141E] border border-[#E7C878]/30 text-[11px] text-slate-300 space-y-0.5">
+                      <div className="font-semibold text-[#E7C878] flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-[#E7C878]" />
                         Bank Settlement Record
                       </div>
                       <div>{seller.bankName} - {seller.bankAccountTitle}</div>
-                      <div className="font-mono text-[10px] text-[#F9E7BA]">
+                      <div className="font-mono text-[10px] text-[#F6E3B4]">
                         {canViewSensitive ? seller.accountNumber : maskAccountNumber(seller.accountNumber)}
                       </div>
                     </div>
@@ -304,15 +304,15 @@ export const AdminSellers: React.FC = () => {
                       {sellerProperties.map((p) => (
                         <div
                           key={p.id}
-                          className="p-2 rounded-lg bg-[#0B1220] border border-slate-800 text-[11px] flex items-center justify-between"
+                          className="p-2 rounded-lg bg-[#07141E] border border-slate-800 text-[11px] flex items-center justify-between"
                         >
                           <div>
                             <span className="font-bold text-white block">
                               {p.plotNumber ? `Plot ${p.plotNumber}` : p.title}
                             </span>
-                            <span className="text-[10px] text-[#C5A46D]">{p.sector}</span>
+                            <span className="text-[10px] text-[#E7C878]">{p.sector}</span>
                           </div>
-                          <span className="font-bold text-[#C5A46D] text-xs">
+                          <span className="font-bold text-[#E7C878] text-xs">
                             {formatPKRCurrency(p.pricePKR)}
                           </span>
                         </div>
@@ -341,7 +341,7 @@ export const AdminSellers: React.FC = () => {
       {/* Add / Edit Seller Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-[#101C2C] border border-[#C5A46D]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-[#0B1220] border border-[#E7C878]/40 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-serif-luxury text-xl font-bold text-white mb-2">
               {editingSellerId ? 'Edit Seller Details' : 'Register New Property Seller'}
             </h3>
@@ -360,7 +360,7 @@ export const AdminSellers: React.FC = () => {
                   placeholder="e.g. Haji Abdul Rasheed"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -375,7 +375,7 @@ export const AdminSellers: React.FC = () => {
                     placeholder="42101-1234567-3"
                     value={formData.cnic}
                     onChange={(e) => setFormData({ ...formData, cnic: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
                 <div>
@@ -388,7 +388,7 @@ export const AdminSellers: React.FC = () => {
                     placeholder="0300-1234567"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none font-mono"
+                    className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -402,13 +402,13 @@ export const AdminSellers: React.FC = () => {
                   placeholder="Street / Area, Karachi"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
               {/* Bank Settlement Section */}
-              <div className="p-3.5 rounded-xl bg-[#0B1220] border border-slate-800 space-y-3">
-                <span className="font-bold text-slate-200 block text-[11px] uppercase tracking-wider text-[#C5A46D]">
+              <div className="p-3.5 rounded-xl bg-[#07141E] border border-slate-800 space-y-3">
+                <span className="font-bold text-slate-200 block text-[11px] uppercase tracking-wider text-[#E7C878]">
                   Bank Account for Sale Proceeds (Optional)
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -419,7 +419,7 @@ export const AdminSellers: React.FC = () => {
                       placeholder="Meezan Bank"
                       value={formData.bankName}
                       onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                      className="w-full bg-slate-900 text-white p-2 rounded border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs"
+                      className="w-full bg-slate-900 text-white p-2 rounded border border-slate-700 focus:border-[#E7C878] focus:outline-none text-xs"
                     />
                   </div>
                   <div>
@@ -429,7 +429,7 @@ export const AdminSellers: React.FC = () => {
                       placeholder="Haji Abdul Rasheed"
                       value={formData.bankAccountTitle}
                       onChange={(e) => setFormData({ ...formData, bankAccountTitle: e.target.value })}
-                      className="w-full bg-slate-900 text-white p-2 rounded border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs"
+                      className="w-full bg-slate-900 text-white p-2 rounded border border-slate-700 focus:border-[#E7C878] focus:outline-none text-xs"
                     />
                   </div>
                   <div>
@@ -439,7 +439,7 @@ export const AdminSellers: React.FC = () => {
                       placeholder="PK00MEZN00..."
                       value={formData.accountNumber}
                       onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-                      className="w-full bg-slate-900 text-white p-2 rounded border border-slate-700 focus:border-[#C5A46D] focus:outline-none text-xs font-mono"
+                      className="w-full bg-slate-900 text-white p-2 rounded border border-slate-700 focus:border-[#E7C878] focus:outline-none text-xs font-mono"
                     />
                   </div>
                 </div>
@@ -454,7 +454,7 @@ export const AdminSellers: React.FC = () => {
                   placeholder="Notes regarding seller, power of attorney, original file status..."
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full bg-[#0B1220] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full bg-[#07141E] text-white p-2.5 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                 />
               </div>
 
@@ -468,7 +468,7 @@ export const AdminSellers: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-[#C5A46D] hover:bg-[#D4AF37] text-[#101C2C] font-bold cursor-pointer shadow"
+                  className="px-5 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold cursor-pointer shadow"
                 >
                   {editingSellerId ? 'Save Changes' : 'Register Seller'}
                 </button>

@@ -302,7 +302,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px]">
+                  <thead className="bg-[#07141E] text-slate-400 uppercase tracking-wider text-[10px]">
                     <tr>
                       <th className="py-2.5 px-3 rounded-l-lg">Document</th>
                       <th className="py-2.5 px-3">Category</th>
@@ -316,7 +316,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
                       <tr key={document.id} className="hover:bg-slate-800/30 align-middle">
                         <td className="py-3 px-3 max-w-[260px]">
                           <div className="flex items-start gap-2">
-                            <FileText className="w-4 h-4 text-[#C5A46D] shrink-0 mt-0.5" />
+                            <FileText className="w-4 h-4 text-[#E7C878] shrink-0 mt-0.5" />
                             <div className="min-w-0">
                               <div className="font-semibold text-white truncate">{document.title || document.original_name}</div>
                               <div className="text-[10px] text-slate-500 truncate">
@@ -394,7 +394,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
             >
               <div className="space-y-2">
                 {(quarantine.quarantined ?? []).map((item: any) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg bg-[#0B1220] border border-amber-900/40">
+                  <div key={item.id} className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg bg-[#07141E] border border-amber-900/40">
                     <div className="min-w-0">
                       <div className="text-[11px] font-semibold text-white truncate">{item.title}</div>
                       <div className="text-[9px] text-amber-300/90">
@@ -412,7 +412,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
                   </div>
                 ))}
                 {(quarantine.rejected ?? []).map((item: any) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg bg-[#0B1220] border border-rose-900/40">
+                  <div key={item.id} className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg bg-[#07141E] border border-rose-900/40">
                     <div className="min-w-0">
                       <div className="text-[11px] font-semibold text-white truncate">{item.title}</div>
                       <div className="text-[9px] text-rose-300/90">
@@ -443,7 +443,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
                     ref={fileInputRef}
                     type="file"
                     onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    className="block w-full text-[11px] text-slate-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-[#C5A46D] file:text-[#101C2C] file:font-bold file:cursor-pointer"
+                    className="block w-full text-[11px] text-slate-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-[#E7C878] file:text-[#0B1220] file:font-bold file:cursor-pointer"
                     required
                   />
                   <p className="text-[10px] text-slate-500 mt-1">
@@ -500,7 +500,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
             ) : (
               <div className="space-y-1.5 mb-3 max-h-52 overflow-y-auto">
                 {folders.map((folder) => (
-                  <div key={folder.id} className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-[#0B1220] border border-slate-800">
+                  <div key={folder.id} className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-[#07141E] border border-slate-800">
                     <div className="min-w-0">
                       <div className="text-[11px] font-semibold text-white truncate">{folder.name}</div>
                       <div className="text-[9px] text-slate-500 truncate">{folder.path} · {folder.document_count ?? 0} file(s)</div>
@@ -537,7 +537,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
 
           <EnterpriseCard title="Private by design">
             <div className="flex items-start gap-2 text-[11px] text-slate-400">
-              <FileLock2 className="w-4 h-4 text-[#C5A46D] shrink-0 mt-0.5" />
+              <FileLock2 className="w-4 h-4 text-[#E7C878] shrink-0 mt-0.5" />
               <p>
                 Files live on the private `documents` disk. Downloads and previews always pass through the
                 authenticated API, and every access is written to the audit log.

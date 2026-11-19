@@ -8,7 +8,7 @@ export const ImageWithFallback: React.FC<Props> = ({ src, alt, fallback, classNa
   const [error, setError] = useState(false);
   const fallbackSrc =
     fallback ||
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="%23101C2C"/><text x="50%" y="50%" fill="%23C5A46D" font-family="sans-serif" font-size="18" text-anchor="middle" dominant-baseline="middle">Image unavailable</text></svg>';
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="%230B1220"/><text x="50%" y="50%" fill="%23E7C878" font-family="sans-serif" font-size="18" text-anchor="middle" dominant-baseline="middle">Image unavailable</text></svg>';
 
   if (error || !src) {
     return <img src={fallbackSrc} alt={alt || 'image'} className={className} {...rest} />;

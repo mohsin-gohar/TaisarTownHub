@@ -227,7 +227,7 @@ export const AdminStaffManager: React.FC<StaffManagerProps> = ({ canManage }) =>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#0B1220] text-slate-400 uppercase tracking-wider text-[10px]">
+                    <thead className="bg-[#07141E] text-slate-400 uppercase tracking-wider text-[10px]">
                       <tr>
                         <th className="py-2.5 px-3 rounded-l-lg">Member</th>
                         <th className="py-2.5 px-3">Role</th>
@@ -300,10 +300,10 @@ export const AdminStaffManager: React.FC<StaffManagerProps> = ({ canManage }) =>
               <div className="space-y-2 mb-4">
                 {roles.length === 0 && <EnterpriseEmpty title="No roles available" />}
                 {roles.map((role) => (
-                  <div key={role.id} className="px-3 py-2.5 rounded-xl bg-[#0B1220] border border-slate-800">
+                  <div key={role.id} className="px-3 py-2.5 rounded-xl bg-[#07141E] border border-slate-800">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-[#C5A46D]" />
+                        <Shield className="w-4 h-4 text-[#E7C878]" />
                         <span className="text-xs font-semibold text-white">{role.name}</span>
                         <span className="text-[10px] text-slate-500">{role.key}</span>
                         {role.is_system && <EnterpriseBadge tone="gold">System</EnterpriseBadge>}
@@ -357,13 +357,13 @@ export const AdminStaffManager: React.FC<StaffManagerProps> = ({ canManage }) =>
                       <button
                         type="button"
                         onClick={() => setShowRolePermissions((v) => !v)}
-                        className="text-[10px] font-semibold text-[#C5A46D] hover:underline cursor-pointer"
+                        className="text-[10px] font-semibold text-[#E7C878] hover:underline cursor-pointer"
                       >
                         {showRolePermissions ? 'Hide catalog' : 'Choose permissions'}
                       </button>
                     </div>
                     {showRolePermissions && (
-                      <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-800 bg-[#0B1220] p-3 space-y-3">
+                      <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-800 bg-[#07141E] p-3 space-y-3">
                         {Object.entries(permissionGroups).map(([group, keys]) => (
                           <div key={group}>
                             <span className="block text-[9px] uppercase tracking-wider text-slate-500 mb-1">{group}</span>
@@ -433,9 +433,9 @@ export const AdminStaffManager: React.FC<StaffManagerProps> = ({ canManage }) =>
               </form>
 
               {inviteToken && (
-                <div className="mt-3 p-3 rounded-xl bg-[#0B1220] border border-[#C5A46D]/30 space-y-2">
+                <div className="mt-3 p-3 rounded-xl bg-[#07141E] border border-[#E7C878]/30 space-y-2">
                   <span className="block text-[10px] text-slate-400">One-time invite token</span>
-                  <code className="block text-[10px] text-[#F9E7BA] break-all">{inviteToken}</code>
+                  <code className="block text-[10px] text-[#F6E3B4] break-all">{inviteToken}</code>
                   <EnterpriseButton variant="secondary" onClick={() => void copyToken()} className="w-full">
                     <Copy className="w-3.5 h-3.5" /> Copy token
                   </EnterpriseButton>
@@ -449,7 +449,7 @@ export const AdminStaffManager: React.FC<StaffManagerProps> = ({ canManage }) =>
               ) : (
                 <div className="space-y-2">
                   {invitations.map((invitation) => (
-                    <div key={invitation.id} className="p-2.5 rounded-xl bg-[#0B1220] border border-slate-800">
+                    <div key={invitation.id} className="p-2.5 rounded-xl bg-[#07141E] border border-slate-800">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-xs font-semibold text-white truncate">{invitation.email}</div>

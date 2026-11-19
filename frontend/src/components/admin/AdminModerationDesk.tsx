@@ -147,7 +147,7 @@ export const AdminModerationDesk: React.FC<ModerationDeskProps> = ({ canModerate
                       <span>·</span>
                       <span>{property.propertyType || property.type || 'Property'}</span>
                       <span>·</span>
-                      <span className="text-[#C5A46D] font-semibold">{formatPKR(property.price)}</span>
+                      <span className="text-[#E7C878] font-semibold">{formatPKR(property.price)}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
                       <span className="inline-flex items-center gap-1">
@@ -158,8 +158,8 @@ export const AdminModerationDesk: React.FC<ModerationDeskProps> = ({ canModerate
                     </div>
 
                     {changes.length > 0 && (
-                      <div className="rounded-xl bg-[#0B1220] border border-[#C5A46D]/25 p-3">
-                        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[#C5A46D] font-bold mb-1.5">
+                      <div className="rounded-xl bg-[#07141E] border border-[#E7C878]/25 p-3">
+                        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[#E7C878] font-bold mb-1.5">
                           <ShieldAlert className="w-3 h-3" /> Staged changes awaiting re-approval
                         </div>
                         <ul className="space-y-1 text-[11px] text-slate-300 list-disc pl-4">
@@ -175,7 +175,7 @@ export const AdminModerationDesk: React.FC<ModerationDeskProps> = ({ canModerate
                   </div>
 
                   <div className="lg:w-80 shrink-0 space-y-2">
-                    <div className="rounded-xl bg-[#0B1220] border border-slate-800 p-3 text-[11px] text-slate-300 space-y-1">
+                    <div className="rounded-xl bg-[#07141E] border border-slate-800 p-3 text-[11px] text-slate-300 space-y-1">
                       <div className="flex justify-between"><span className="text-slate-500">Area</span><span>{property.area ? `${property.area} ${property.areaUnit || 'sq.ft'}` : '—'}</span></div>
                       <div className="flex justify-between"><span className="text-slate-500">Category</span><span>{titleCase(property.category || property.propertyType || '—')}</span></div>
                       <div className="flex justify-between"><span className="text-slate-500">Approval</span><span>{titleCase(property.approval_status || 'pending')}</span></div>

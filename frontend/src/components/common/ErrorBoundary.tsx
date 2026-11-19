@@ -31,8 +31,8 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
       return (
-        <div className="min-h-screen bg-[#0B1220] text-slate-100 flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-[#101C2C] border border-rose-500/40 rounded-2xl p-6 text-center space-y-4">
+        <div className="min-h-screen bg-[#07141E] text-slate-100 flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-[#0B1220] border border-rose-500/40 rounded-2xl p-6 text-center space-y-4">
             <h1 className="text-xl font-bold text-rose-300">Something went wrong</h1>
             <p className="text-sm text-slate-300">
               The application hit an unexpected error. Your saved data is safe.
@@ -40,7 +40,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="text-xs text-slate-500 font-mono break-all">{this.state.message}</p>
             <button
               onClick={this.handleReset}
-              className="px-4 py-2 rounded-lg bg-[#C5A46D] text-[#101C2C] font-bold text-sm"
+              className="px-4 py-2 rounded-lg bg-[#E7C878] text-[#0B1220] font-bold text-sm"
             >
               Reload Application
             </button>

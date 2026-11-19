@@ -57,12 +57,12 @@ export const AboutSection: React.FC = () => {
   ];
 
   return (
-    <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#0B1220] border-t border-[#C5A46D]/15">
+    <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#07141E] border-t border-[#E7C878]/15">
       <div className="max-w-7xl mx-auto space-y-16">
         {/* Intro Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#C5A46D]/15 text-[#C5A46D] border border-[#C5A46D]/30">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E7C878]/15 text-[#E7C878] border border-[#E7C878]/30">
               <Sparkles className="w-3.5 h-3.5" /> Agency Overview
             </span>
             <h2 className="font-serif-luxury text-3xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight">
@@ -74,8 +74,8 @@ export const AboutSection: React.FC = () => {
 
             {/* Mission & Vision cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div className="p-5 rounded-xl bg-[#101C2C] border border-slate-800 space-y-2">
-                <div className="flex items-center gap-2 text-[#C5A46D] font-bold text-xs uppercase tracking-wider">
+              <div className="p-5 rounded-xl bg-[#0B1220] border border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 text-[#E7C878] font-bold text-xs uppercase tracking-wider">
                   <Target className="w-4 h-4" /> Our Mission
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
@@ -83,8 +83,8 @@ export const AboutSection: React.FC = () => {
                 </p>
               </div>
 
-              <div className="p-5 rounded-xl bg-[#101C2C] border border-slate-800 space-y-2">
-                <div className="flex items-center gap-2 text-[#C5A46D] font-bold text-xs uppercase tracking-wider">
+              <div className="p-5 rounded-xl bg-[#0B1220] border border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 text-[#E7C878] font-bold text-xs uppercase tracking-wider">
                   <Eye className="w-4 h-4" /> Our Vision
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
@@ -96,7 +96,7 @@ export const AboutSection: React.FC = () => {
 
           {/* Visual Showcase */}
           <Reveal className="relative" y={26}>
-            <div className="relative rounded-2xl overflow-hidden border border-[#C5A46D]/30 shadow-2xl">
+            <div className="relative rounded-2xl overflow-hidden border border-[#E7C878]/30 shadow-2xl">
               <ImageWithFallback
                 src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80"
                 alt="Luxury Modern Architecture"
@@ -104,12 +104,12 @@ export const AboutSection: React.FC = () => {
                 decoding="async"
                 className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#07141E] via-transparent to-transparent" />
             </div>
 
             {/* Floating Trust Badge */}
-            <div className="absolute -bottom-6 -left-4 sm:left-6 p-4 rounded-xl bg-[#101C2C]/95 border border-[#C5A46D]/40 shadow-xl backdrop-blur-md flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-[#C5A46D] text-[#101C2C] flex items-center justify-center font-bold text-xl">
+            <div className="absolute -bottom-6 -left-4 sm:left-6 p-4 rounded-xl bg-[#0B1220]/95 border border-[#E7C878]/40 shadow-xl backdrop-blur-md flex items-center gap-4">
+              <div className="w-12 h-12 rounded-lg bg-[#E7C878] text-[#0B1220] flex items-center justify-center font-bold text-xl">
                 100%
               </div>
               <div>
@@ -134,8 +134,8 @@ export const AboutSection: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {coreValues.map((val, i) => (
               <Reveal key={i} delay={i * 80} y={24} className="h-full">
-                <div className="p-6 rounded-xl bg-[#101C2C] border border-slate-800 space-y-3 h-full">
-                  <div className="w-8 h-8 rounded-lg bg-[#C5A46D]/15 text-[#C5A46D] flex items-center justify-center text-sm font-bold border border-[#C5A46D]/30">
+                <div className="p-6 rounded-xl bg-[#0B1220] border border-slate-800 space-y-3 h-full">
+                  <div className="w-8 h-8 rounded-lg bg-[#E7C878]/15 text-[#E7C878] flex items-center justify-center text-sm font-bold border border-[#E7C878]/30">
                     0{i + 1}
                   </div>
                   <h4 className="font-bold text-white text-sm">
@@ -165,20 +165,20 @@ export const AboutSection: React.FC = () => {
             {teamMembers.map((member, i) => (
               <Reveal key={i} delay={i * 90} y={24}>
                 <div
-                  className="bg-[#101C2C] rounded-2xl overflow-hidden border border-slate-800 text-center p-6 space-y-4 hover:border-[#C5A46D]/40 transition-colors"
+                  className="bg-[#0B1220] rounded-2xl overflow-hidden border border-slate-800 text-center p-6 space-y-4 hover:border-[#E7C878]/40 transition-colors"
                 >
                   <ImageWithFallback
                     src={member.image}
                     alt={member.name}
                     loading="lazy"
                     decoding="async"
-                    className="w-24 h-24 rounded-full mx-auto object-cover border-2 border-[#C5A46D]"
+                    className="w-24 h-24 rounded-full mx-auto object-cover border-2 border-[#E7C878]"
                   />
                   <div>
                     <h4 className="font-serif-luxury font-bold text-white text-base">
                       {member.name}
                     </h4>
-                    <div className="text-xs text-[#C5A46D] font-medium mt-1">
+                    <div className="text-xs text-[#E7C878] font-medium mt-1">
                       {member.role}
                     </div>
                     <div className="text-[11px] text-slate-400 mt-1">

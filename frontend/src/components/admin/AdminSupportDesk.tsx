@@ -278,9 +278,9 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-[#101C2C] p-5 shadow-xl sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-[#0B1220] p-5 shadow-xl sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#C5A46D]/30 bg-[#C5A46D]/10 text-[#C5A46D]">
+          <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#E7C878]/30 bg-[#E7C878]/10 text-[#E7C878]">
             <LifeBuoy className="h-5 w-5" />
           </span>
           <div>
@@ -296,7 +296,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
           <button
             type="button"
             onClick={() => void loadTickets()}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-[11px] font-semibold text-slate-200 transition hover:border-[#C5A46D]/50 hover:text-white"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-[11px] font-semibold text-slate-200 transition hover:border-[#E7C878]/50 hover:text-white"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -307,7 +307,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
               setCreateError(null);
               setCreateOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#C5A46D] px-3.5 py-2 text-[11px] font-bold text-[#101C2C] transition hover:bg-[#D4AF37]"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#E7C878] px-3.5 py-2 text-[11px] font-bold text-[#0B1220] transition hover:bg-[#F3C464]"
           >
             <Plus className="h-3.5 w-3.5" />
             Raise a ticket
@@ -334,17 +334,17 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(300px,0.9fr)_minmax(0,1.4fr)]">
         {/* Ticket list */}
-        <section className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#101C2C] shadow-xl">
+        <section className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#0B1220] shadow-xl">
           <div className="space-y-2.5 border-b border-slate-800 p-3.5">
             {canManage && (
-              <div className="flex rounded-lg border border-slate-800 bg-[#0B1220] p-0.5">
+              <div className="flex rounded-lg border border-slate-800 bg-[#07141E] p-0.5">
                 {(['all', 'mine'] as const).map((value) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setLane(value)}
                     className={`flex-1 rounded-md px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider transition ${
-                      lane === value ? 'bg-[#C5A46D] text-[#101C2C]' : 'text-slate-400 hover:text-white'
+                      lane === value ? 'bg-[#E7C878] text-[#0B1220]' : 'text-slate-400 hover:text-white'
                     }`}
                   >
                     {value === 'all' ? 'All tickets' : 'My agency'}
@@ -360,7 +360,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search ticket subject…"
                 aria-label="Search support tickets"
-                className="w-full rounded-lg border border-slate-700 bg-[#0B1220] py-2 pl-8 pr-2.5 text-[11px] text-white placeholder:text-slate-500 focus:border-[#C5A46D] focus:outline-none"
+                className="w-full rounded-lg border border-slate-700 bg-[#07141E] py-2 pl-8 pr-2.5 text-[11px] text-white placeholder:text-slate-500 focus:border-[#E7C878] focus:outline-none"
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -368,7 +368,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
                 aria-label="Filter by ticket status"
-                className="rounded-lg border border-slate-700 bg-[#0B1220] px-2 py-1.5 text-[10px] text-white focus:border-[#C5A46D] focus:outline-none"
+                className="rounded-lg border border-slate-700 bg-[#07141E] px-2 py-1.5 text-[10px] text-white focus:border-[#E7C878] focus:outline-none"
               >
                 <option value="all">All statuses</option>
                 {STATUSES.map((status) => (
@@ -379,7 +379,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                 value={categoryFilter}
                 onChange={(event) => setCategoryFilter(event.target.value)}
                 aria-label="Filter by ticket category"
-                className="rounded-lg border border-slate-700 bg-[#0B1220] px-2 py-1.5 text-[10px] text-white focus:border-[#C5A46D] focus:outline-none"
+                className="rounded-lg border border-slate-700 bg-[#07141E] px-2 py-1.5 text-[10px] text-white focus:border-[#E7C878] focus:outline-none"
               >
                 <option value="all">All categories</option>
                 {CATEGORIES.map((category) => (
@@ -392,7 +392,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
           <div className="flex-1 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center gap-2 p-8 text-xs text-slate-400">
-                <Loader2 className="h-4 w-4 animate-spin text-[#C5A46D]" /> Loading tickets…
+                <Loader2 className="h-4 w-4 animate-spin text-[#E7C878]" /> Loading tickets…
               </div>
             ) : loadError ? (
               <div className="m-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-[11px] text-rose-300">
@@ -426,12 +426,12 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                         type="button"
                         onClick={() => setSelectedId(ticket.id)}
                         className={`w-full px-3.5 py-3 text-left transition ${
-                          active ? 'bg-[#C5A46D]/10 border-l-2 border-[#C5A46D]' : 'border-l-2 border-transparent hover:bg-slate-800/40'
+                          active ? 'bg-[#E7C878]/10 border-l-2 border-[#E7C878]' : 'border-l-2 border-transparent hover:bg-slate-800/40'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <p className="line-clamp-2 text-[11px] font-bold text-white">{ticket.subject}</p>
-                          <ChevronRight className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${active ? 'text-[#C5A46D]' : 'text-slate-600'}`} />
+                          <ChevronRight className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${active ? 'text-[#E7C878]' : 'text-slate-600'}`} />
                         </div>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusStyle[ticket.status] || statusStyle.closed}`}>
@@ -458,7 +458,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
         </section>
 
         {/* Thread */}
-        <section className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#101C2C] shadow-xl">
+        <section className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#0B1220] shadow-xl">
           {!selectedId ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
               <MessageSquare className="h-8 w-8 text-slate-600" />
@@ -467,7 +467,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
             </div>
           ) : detailLoading ? (
             <div className="flex flex-1 items-center justify-center gap-2 text-xs text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin text-[#C5A46D]" /> Opening ticket…
+              <Loader2 className="h-4 w-4 animate-spin text-[#E7C878]" /> Opening ticket…
             </div>
           ) : detailError ? (
             <div className="m-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-[11px] text-rose-300">
@@ -504,7 +504,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                       onClick={() => void changeStatus(status)}
                       className={`rounded-lg border px-2.5 py-1 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                         detail.ticket.status === status
-                          ? 'border-[#C5A46D] bg-[#C5A46D]/15 text-[#C5A46D]'
+                          ? 'border-[#E7C878] bg-[#E7C878]/15 text-[#E7C878]'
                           : 'border-slate-700 text-slate-400 hover:text-white'
                       }`}
                     >
@@ -514,13 +514,13 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                 </div>
 
                 {canManage && staff.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-[#0B1220] p-2">
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-[#07141E] p-2">
                     <label htmlFor="support-assignee" className="text-[10px] font-semibold text-slate-400">Assign to</label>
                     <select
                       id="support-assignee"
                       value={assignedTo}
                       onChange={(event) => setAssignedTo(event.target.value)}
-                      className="min-w-[150px] flex-1 rounded-md border border-slate-700 bg-[#0E1724] px-2 py-1.5 text-[10px] text-white focus:border-[#C5A46D] focus:outline-none"
+                      className="min-w-[150px] flex-1 rounded-md border border-slate-700 bg-[#0E1724] px-2 py-1.5 text-[10px] text-white focus:border-[#E7C878] focus:outline-none"
                     >
                       <option value="">Unassigned</option>
                       {staff.map((member) => (
@@ -546,15 +546,15 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                     key={message.id}
                     className={`max-w-[88%] rounded-xl border p-3 ${
                       message.is_staff
-                        ? 'ml-auto border-[#C5A46D]/30 bg-[#C5A46D]/10'
-                        : 'border-slate-800 bg-[#0B1220]'
+                        ? 'ml-auto border-[#E7C878]/30 bg-[#E7C878]/10'
+                        : 'border-slate-800 bg-[#07141E]'
                     }`}
                   >
                     <div className="mb-1 flex items-center justify-between gap-4">
                       <span className="text-[10px] font-bold text-slate-200">
                         {message.author_name || (message.is_staff ? 'Support team' : 'Account')}
                         {message.is_staff && (
-                          <span className="ml-1.5 rounded bg-[#C5A46D]/20 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#C5A46D]">
+                          <span className="ml-1.5 rounded bg-[#E7C878]/20 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#E7C878]">
                             Staff
                           </span>
                         )}
@@ -581,12 +581,12 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                         : 'Write a reply to the support thread…'
                     }
                     disabled={detail.ticket.status === 'closed'}
-                    className="min-h-[44px] flex-1 resize-y rounded-lg border border-slate-700 bg-[#0B1220] px-3 py-2 text-[11px] text-white placeholder:text-slate-500 focus:border-[#C5A46D] focus:outline-none disabled:opacity-50"
+                    className="min-h-[44px] flex-1 resize-y rounded-lg border border-slate-700 bg-[#07141E] px-3 py-2 text-[11px] text-white placeholder:text-slate-500 focus:border-[#E7C878] focus:outline-none disabled:opacity-50"
                   />
                   <button
                     type="submit"
                     disabled={sendingReply || reply.trim().length < 2 || detail.ticket.status === 'closed'}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#C5A46D] px-3 py-2.5 text-[11px] font-bold text-[#101C2C] transition hover:bg-[#D4AF37] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#E7C878] px-3 py-2.5 text-[11px] font-bold text-[#0B1220] transition hover:bg-[#F3C464] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                   >
                     {sendingReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                     Send
@@ -613,11 +613,11 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
             role="dialog"
             aria-modal="true"
             aria-labelledby="new-ticket-title"
-            className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#C5A46D]/35 bg-[#101C2C] shadow-2xl"
+            className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#E7C878]/35 bg-[#0B1220] shadow-2xl"
           >
             <header className="flex items-start justify-between gap-3 border-b border-slate-800 px-5 py-4">
               <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#C5A46D]/30 bg-[#C5A46D]/10 text-[#C5A46D]">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#E7C878]/30 bg-[#E7C878]/10 text-[#E7C878]">
                   <LifeBuoy className="h-4 w-4" />
                 </span>
                 <div>
@@ -646,7 +646,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                   maxLength={190}
                   required
                   placeholder="Summarise the issue"
-                  className="w-full rounded-lg border border-slate-700 bg-[#0B1220] px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full rounded-lg border border-slate-700 bg-[#07141E] px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-[#E7C878] focus:outline-none"
                 />
               </label>
 
@@ -656,7 +656,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                   <select
                     value={newCategory}
                     onChange={(event) => setNewCategory(event.target.value)}
-                    className="w-full rounded-lg border border-slate-700 bg-[#0B1220] px-2.5 py-2 text-xs text-white focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full rounded-lg border border-slate-700 bg-[#07141E] px-2.5 py-2 text-xs text-white focus:border-[#E7C878] focus:outline-none"
                   >
                     {CATEGORIES.map((category) => (
                       <option key={category} value={category}>{label(category)}</option>
@@ -668,7 +668,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                   <select
                     value={newPriority}
                     onChange={(event) => setNewPriority(event.target.value)}
-                    className="w-full rounded-lg border border-slate-700 bg-[#0B1220] px-2.5 py-2 text-xs text-white focus:border-[#C5A46D] focus:outline-none"
+                    className="w-full rounded-lg border border-slate-700 bg-[#07141E] px-2.5 py-2 text-xs text-white focus:border-[#E7C878] focus:outline-none"
                   >
                     {PRIORITIES.map((priority) => (
                       <option key={priority} value={priority}>{label(priority)}</option>
@@ -687,7 +687,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
                   rows={5}
                   required
                   placeholder="What happened, which screen or document was involved, and what did you expect?"
-                  className="w-full resize-y rounded-lg border border-slate-700 bg-[#0B1220] px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-[#C5A46D] focus:outline-none"
+                  className="w-full resize-y rounded-lg border border-slate-700 bg-[#07141E] px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-[#E7C878] focus:outline-none"
                 />
               </label>
 
@@ -709,7 +709,7 @@ export const AdminSupportDesk: React.FC<{ canManage: boolean }> = ({ canManage }
               <button
                 type="submit"
                 disabled={creating}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#C5A46D] px-4 py-2 text-[11px] font-bold text-[#101C2C] transition hover:bg-[#D4AF37] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#E7C878] px-4 py-2 text-[11px] font-bold text-[#0B1220] transition hover:bg-[#F3C464] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
                 {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 {creating ? 'Creating…' : 'Create ticket'}

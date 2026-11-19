@@ -38,6 +38,10 @@ test('verify-email cold-load page reports a bad token as failed', async ({ page 
 
 test('public share endpoint rejects an unknown well-formed token', async ({ request }) => {
   const token = 'e2e'.repeat(16); // 48 chars, matches the route pattern
-  const response = await request.get(`${API_BASE}/shares/${token}/download`);
+  // Isolate this probe from the suite-wide guest bucket: 127.0.0.1 is the
+  // trusted proxy in local/test, so TEST-NET-2 gets its own limiter counter.
+  const response = await request.get(`${API_BASE}/shares/${token}/download`, {
+    headers: { 'X-Forwarded-For': '198.51.100.88' },
+  });
   expect(response.status()).toBe(410);
 });

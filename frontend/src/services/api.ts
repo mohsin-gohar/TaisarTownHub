@@ -11,6 +11,8 @@ import {
   initialTestimonials,
 } from '../data/publicSeed';
 import { initialAgencyVideos } from '../data/agencyVideosSeed';
+import type { Property } from '../types';
+import { mapApiProperty } from '../utils/apiProperty';
 
 // Production builds should set VITE_API_URL. If it is missing, fall back to the
 // same-origin `/api` reverse-proxy layout (the default in Dockerfile.prod) and
@@ -193,6 +195,37 @@ export const api = {
       const res = await apiFetch(`/properties${suffix}`);
       if (!res.ok) return null;
       return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getPublicProperties(): Promise<Property[] | null> {
+    // Static deployments have no API origin; the bundled seed is already
+    // sale-only and is the documented offline fallback.
+    if (!configuredApiUrl) return initialProperties.map((property) => ({ ...property }));
+
+    try {
+      const query = new URLSearchParams({ purpose: 'sale', per_page: '500' });
+      const res = await fetch(`${API_BASE_URL}/properties?${query.toString()}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return null;
+
+      const body = await res.json();
+      const rows: unknown[] = Array.isArray(body)
+        ? body
+        : Array.isArray(body?.properties)
+          ? body.properties
+          : [];
+
+      return rows
+        .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
+        .filter((row) => row.listing_purpose === undefined
+          || row.listing_purpose === null
+          || row.listing_purpose === 'sale')
+        .map(mapApiProperty)
+        .filter((property) => property.id !== '');
     } catch {
       return null;
     }
