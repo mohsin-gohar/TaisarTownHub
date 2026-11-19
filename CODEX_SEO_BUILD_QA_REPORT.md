@@ -48,16 +48,19 @@ Output directory: `C:\Users\mohsi\AppData\Local\Temp\opencode\qa-artifacts`
 
 14 routes were inspected for title, H1, canonical, robots, JSON-LD count and `lang`. All public routes carried `index, follow, ...`; `/login`, `/register`, `/agencies/<slug>` and the 404 route carried `noindex`/`noindex,follow` as designed.
 
-Interaction probes confirmed:
+Interaction probes confirmed (**final rerun with corrected selectors, run after the reference redesign** — full output saved to `C:\Users\mohsi\AppData\Local\Temp\opencode\qa-artifacts\qa-audit-fresh.json`):
 
 - property detail: title, price, 1 inquiry form, 2 gallery images, 7 buttons;
 - agencies directory: 2 rendered agency cards with listing counts;
-- gallery: 4 video tours with play controls and tabs;
-- contact: 6 inputs and 1 submit button.
+- gallery: 6 video tours with 6 play buttons and 4 phase tabs;
+- contact: 6 inputs and 1 submit button;
+- page errors: `[]` (empty).
+
+The homepage H1 reported by the fresh audit is `TaisarTownHub` + `Discover Premium Properties in Taisar Town`, confirming the reference-matching hero CMS copy renders server-side from `/api/catalog`.
 
 **Issue found and fixed:** `/admin-login` was receiving the homepage SEO shell. The fix is described in `CODEX_THEME_REDESIGN_REPORT.md` §2.6. **Re-verified after the fix** in the fresh browser audit: `/admin-login` now reports title `Agency Portal Access | TaisarTownHub`, canonical `https://taisartownhub.com/admin-login`, `robots=noindex, follow`, `lang=en` — not the homepage shell.
 
-A second finding during the fresh audit was **stale selectors in the audit script itself**, not a product regression: agency cards are buttons using `history.pushState` (not `<a href="/agencies/...">`), and gallery tours are clickable `.aspect-video` thumbnails (not `<video>`/`<iframe>` elements until opened). The script's interaction probes were corrected to count `view agency profile` buttons, `.aspect-video` thumbnails and phase buttons. A final rerun with the corrected selectors is in progress; the page-level 84 checks (title/H1/canonical/robots/JSON-LD/overflow/images/console errors) were unchanged and still pass.
+An earlier finding during the fresh audit was **stale selectors in the audit script itself**, not a product regression: agency cards are buttons using `history.pushState` (not `<a href="/agencies/...">`), and gallery tours are clickable `.aspect-video` thumbnails (not `<video>`/`<iframe>` elements until opened). The script's interaction probes were corrected to count `view agency profile` buttons, `.aspect-video` thumbnails and phase buttons, and the final rerun above passed with all interaction counts present.
 
 `scripts/qa-theme.mts` is a separate theme-specific Playwright probe; its results are in `CODEX_THEME_REDESIGN_REPORT.md` §3.
 

@@ -3,9 +3,10 @@ import { chromium } from 'playwright';
 const BASE = process.env.QA_BASE_URL || 'http://127.0.0.1:4173';
 const OUT = process.env.QA_OUT_DIR || 'C:/Users/mohsi/AppData/Local/Temp/opencode/theme-artifacts';
 const name = process.argv[2] || 'current-home';
+const width = Number(process.env.QA_WIDTH || 1440);
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+const page = await browser.newPage({ viewport: { width, height: 900 } });
 const errors: string[] = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 200)); });
 page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
