@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\BusinessRecord;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Shared, read-only ownership evidence resolver for the legacy
@@ -37,6 +38,9 @@ final class LegacyTenancyResolver
         'videos' => ['agency_videos', 'id'],
         'media' => ['media_files', 'id'],
     ];
+
+    /** @var array<string,string|null> resolved owner column per typed table */
+    private array $typedOwnerColumns = [];
 
     /** @var array<string,true>|null */
     private ?array $agencyIds = null;
@@ -101,14 +105,18 @@ final class LegacyTenancyResolver
         $twin = self::TYPED_TWINS[$row->collection] ?? null;
         if ($twin) {
             [$table, $column] = $twin;
+            $ownerColumn = $this->typedOwnerColumn($table);
             $typedAgency = match ($table) {
                 'properties' => $this->propertyAgencies()[$row->record_id] ?? null,
                 'inquiries' => $this->inquiryAgencies()[$row->record_id] ?? null,
                 'transactions' => $this->transactionAgencies()[$row->record_id] ?? null,
                 'dealers' => $this->dealerAgencies()[$row->record_id] ?? null,
-                default => DB::table($table)->where($column, $row->record_id)->value('agency_id'),
+                default => $ownerColumn
+                    ? DB::table($table)->where($column, $row->record_id)->value($ownerColumn)
+                    : null,
             };
-            $add($typedAgency ? (string) $typedAgency : null, "typed twin {$table}.{$row->record_id}.agency_id = {$typedAgency}");
+            $ownerLabel = $ownerColumn ?? 'owner';
+            $add($typedAgency ? (string) $typedAgency : null, "typed twin {$table}.{$row->record_id}.{$ownerLabel} = {$typedAgency}");
         }
 
         // 2) Dealer/agent references (including legacy videos' agencyId).
@@ -199,5 +207,32 @@ final class LegacyTenancyResolver
     private function transactionAgencies(): array
     {
         return $this->transactionAgencies ??= DB::table('transactions')->whereNotNull('agency_id')->pluck('agency_id', 'id')->all();
+    }
+
+    /**
+     * Resolve the canonical owner column for a typed twin. Most tables use
+     * `agency_id`; legacy `agency_videos` stores the owner in `agencyId`, and
+     * some twins (e.g. projects) carry no agency column at all. Schema-aware
+     * lookup avoids hard-coded assumptions and MySQL "unknown column" failures.
+     */
+    private function typedOwnerColumn(string $table): ?string
+    {
+        if (array_key_exists($table, $this->typedOwnerColumns)) {
+            return $this->typedOwnerColumns[$table];
+        }
+
+        try {
+            $columns = Schema::getColumnListing($table);
+        } catch (\Throwable) {
+            return $this->typedOwnerColumns[$table] = null;
+        }
+
+        foreach (['agency_id', 'agencyId'] as $candidate) {
+            if (in_array($candidate, $columns, true)) {
+                return $this->typedOwnerColumns[$table] = $candidate;
+            }
+        }
+
+        return $this->typedOwnerColumns[$table] = null;
     }
 }

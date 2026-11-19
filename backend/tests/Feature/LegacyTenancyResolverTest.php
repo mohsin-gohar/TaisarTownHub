@@ -224,6 +224,32 @@ class LegacyTenancyResolverTest extends TestCase
         $this->assertSame('agency-b', BusinessRecord::where('record_id', 'cm-2')->value('agency_id'));
     }
 
+    public function test_video_typed_twin_resolves_camel_case_owner_column(): void
+    {
+        DB::table('agency_videos')->insert([
+            'id' => 'vid-twin-1',
+            'title' => 'Twin Video',
+            'videoUrl' => 'https://example.test/video.mp4',
+            'agencyId' => 'agency-b',
+            'agencyName' => 'Agency B',
+            'phase' => 'Phase 1',
+            'duration' => '3:00',
+            'likes' => 0,
+            'views' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $row = BusinessRecord::put('videos', 'vid-twin-1', ['title' => 'Twin Video']);
+
+        $resolver = new LegacyTenancyResolver();
+        $this->assertSame('agency-b', $resolver->resolve($row));
+        $this->assertSame(['agency-b'], array_keys($resolver->candidates($row)));
+
+        $this->artisan('platform:legacy-audit')->assertExitCode(0);
+        $this->artisan('platform:legacy-ownership')->assertExitCode(0);
+    }
+
     private function tempPath(string $label): string
     {
         return sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'tth_' . $label . '_' . bin2hex(random_bytes(4));

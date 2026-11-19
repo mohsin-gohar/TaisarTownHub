@@ -23,6 +23,12 @@ frontend/playwright-report/
 backend/vendor/
 backend/node_modules/
 backend/.env
+# OS / editor scratch files
+Thumbs.db
+*.bak
+
+# Temporary scratch/artifact folders created by local tooling
+.tmp/
 backend/.env.backup
 backend/.env.production
 backend/storage/*.key
