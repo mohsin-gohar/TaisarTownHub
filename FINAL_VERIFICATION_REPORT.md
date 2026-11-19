@@ -1,15 +1,22 @@
 # Final Verification Report
 
-**Project:** TaisarTownHub · **Branch:** `fix/complete-audit-20261117` · **Date:** 2026-11-17
+> **Historical snapshot (superseded):** this report covers an earlier repair branch/date. For current verified status see `CODEX_FINAL_VERIFICATION_REPORT.md` and `CODEX_BLOCKERS_AND_UNVERIFIED_CLAIMS.md`.
 
-## 1. Starting point
+## Current status addendum (2026-11-19)
+- **Current HEAD:** `77cb8a5` on `main` (`a42c49a` docs refresh present locally during this pass). **CI:** [Run 44580103286](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/44580103286) — **4/4 PASS** including **MySQL 8 integration**.
+- **Current verified counts:** Backend **283 passed / 2311 assertions** (SQLite local + MySQL CI); Frontend **136 tests** pass; lint/build/prerender/bundle pass.
+- **Key recent fixes:** schema-aware `LegacyTenancyResolver` for `agency_videos.agencyId` (+ regression test), production seeder guards, composite legacy backfill with verified backup & rollback, Docker/Nginx multi-backend config (static). Runtime infra, production deploy, and exhaustive latest browser/perf evidence remain blocked/unverified.
+
+**Project:** TaisarTownHub · **Original branch:** `fix/complete-audit-20261117` · **Original date:** 2026-11-17
+
+## 1. Starting point (snapshot)
 
 - Baseline / latest `main`: `09a15b9356660e40ff849001546a0323233c74fc` (confirmed via `git fetch origin`; local HEAD matched).
 - Backup reference: tag `audit-baseline-20261117`.
 - Pre-existing uncommitted work preserved: modified `CODEBASE_AUDIT.md` and untracked `backend/database/migrations/2026_11_16_144458_create_bookings_table.php`.
 - Repair branch created from baseline; **no push to `main`**.
 
-## 2. Exact commits
+## 2. Exact commits (snapshot)
 
 - `a2a5068` — first security repair batch.
 - `b99ba74` — first final report.

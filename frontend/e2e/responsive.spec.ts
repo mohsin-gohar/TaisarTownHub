@@ -8,7 +8,9 @@ import { expect, test } from '@playwright/test';
 
 const viewports = [
   { name: 'mobile 360px', width: 360, height: 780 },
+  { name: 'mobile 390px', width: 390, height: 844 },
   { name: 'tablet 768px', width: 768, height: 1024 },
+  { name: 'tablet 1024px', width: 1024, height: 1366 },
   { name: 'desktop 1280px', width: 1280, height: 900 },
 ];
 

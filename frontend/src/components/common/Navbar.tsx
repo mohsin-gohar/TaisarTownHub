@@ -84,7 +84,7 @@ export const Navbar: React.FC = () => {
               </div>
               <div className="text-left leading-tight hidden sm:block">
                 <h1 className="font-brand-cinzel text-base lg:text-lg text-white whitespace-nowrap">
-                  <span className="text-white">TAISAR</span>
+                  <span className="text-white">TAISAR</span>{' '}
                   <span className="gold-gradient-text font-brand-cinzel">TOWN HUB</span>
                 </h1>
                 <p className="text-[11px] text-[#E7C878]">Find &middot; Sell &middot; Invest</p>
@@ -157,7 +157,7 @@ export const Navbar: React.FC = () => {
                   <img src="/logo.jpg" alt="" className="w-full h-full rounded-full object-contain" />
                 </div>
                 <span className="font-brand-cinzel text-white text-sm">
-                  <span className="text-white">TAISAR</span>
+                  <span className="text-white">TAISAR</span>{' '}
                   <span className="gold-gradient-text font-brand-cinzel">TOWN HUB</span>
                 </span>
               </div>
