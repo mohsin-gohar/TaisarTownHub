@@ -370,6 +370,7 @@ class WorkspaceApprovalTest extends EnterpriseTestCase
         $private = $this->makePublicProperty($agency, ['approval_status' => 'draft', 'visibility' => 'private']);
         $public = $this->makePublicProperty($this->makeAgency('Public agency'));
         $token = $this->tokenFor($user);
+        $this->assertTrue($user->hasPermission('properties.view', $agency->id));
         $this->getJson("/api/properties/{$private->id}", $this->authHeaders($token))->assertOk();
         $agency->update(['status' => 'suspended']);
         $this->asGuest();

@@ -162,6 +162,21 @@ class DocumentSharesTest extends EnterpriseTestCase
         $this->assertNotNull($row->last_downloaded_at);
     }
 
+    public function test_sensitive_category_cannot_be_downgraded_without_view_sensitive_permission(): void
+    {
+        $updater = $this->sharer(['documents.view', 'documents.update', 'documents.download']);
+        $doc = $this->makeDocument(true);
+
+        $this->patchJson('/api/agency/documents/' . $doc->id, [
+            'category' => 'other',
+        ], $this->authHeaders($this->tokenFor($updater)))
+            ->assertStatus(403);
+
+        $doc->refresh();
+        $this->assertTrue((bool) $doc->is_sensitive);
+        $this->assertSame('registry', $doc->category);
+    }
+
     public function test_expired_and_download_capped_links_stop_working(): void
     {
         $user = $this->sharer();

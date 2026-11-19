@@ -21,13 +21,11 @@ services:
     image: mysql:8.4
     container_name: taisartownhub-mysql
     restart: unless-stopped
-    ports:
-      - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in the deployment environment}
       MYSQL_DATABASE: ${DB_DATABASE:-taisartownhub}
       MYSQL_USER: ${DB_USERNAME:-taisar}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-taisar}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the deployment environment}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -46,9 +44,7 @@ services:
     image: redis:7-alpine
     container_name: taisartownhub-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redispassword} --appendonly yes
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment} --appendonly yes
     volumes:
       - redis_data:/data
     healthcheck:
@@ -101,13 +97,13 @@ services:
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-taisartownhub}
       DB_USERNAME: ${DB_USERNAME:-taisar}
-      DB_PASSWORD: ${DB_PASSWORD:-taisar}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the deployment environment}
       CACHE_STORE: redis
       SESSION_DRIVER: redis
       QUEUE_CONNECTION: redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-redispassword}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
       CORS_ALLOWED_ORIGINS: https://taisartownhub.com,https://www.taisartownhub.com
       SANCTUM_STATEFUL_DOMAINS: taisartownhub.com,www.taisartownhub.com
       STRIPE_KEY: ${STRIPE_KEY}
@@ -205,10 +201,10 @@ services:
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-taisartownhub}
       DB_USERNAME: ${DB_USERNAME:-taisar}
-      DB_PASSWORD: ${DB_PASSWORD:-taisar}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the deployment environment}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-redispassword}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
       QUEUE_CONNECTION: redis
       RUN_MIGRATIONS: "false"
       MALWARE_SCAN_ENABLED: "true"

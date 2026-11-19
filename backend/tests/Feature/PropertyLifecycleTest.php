@@ -38,7 +38,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
 
     public function test_member_creates_submits_and_moderator_approves_listing(): void
     {
-        [$agent] = $this->agencyUser($this->agentPermissions());
+        [$agent, $agency] = $this->agencyUser($this->agentPermissions());
         [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
 
         $create = $this->postJson('/api/properties', $this->basePayload([
@@ -78,6 +78,64 @@ class PropertyLifecycleTest extends EnterpriseTestCase
 
         // Audit trail captured the transition.
         $this->assertDatabaseHas('audit_logs', ['action' => 'property.approve', 'entity_id' => $id]);
+    }
+
+    public function test_public_marketplace_rejects_rent_and_hides_rental_records(): void
+    {
+        [$agent, $agency] = $this->agencyUser($this->agentPermissions());
+
+        $this->postJson('/api/properties', $this->basePayload([
+            'listing_purpose' => 'rent',
+        ]), $this->authHeaders($this->tokenFor($agent)))
+            ->assertStatus(422);
+
+        $rent = Property::create(array_merge($this->basePayload([
+            'title' => 'Historical Rental',
+            'listing_purpose' => 'rent',
+        ]), [
+            'id' => 'prop-rent-' . substr(md5(uniqid('', true)), 0, 8),
+            'agency_id' => $agency->id,
+            'approval_status' => 'approved',
+            'visibility' => 'public',
+        ]));
+
+        $this->app['auth']->forgetGuards();
+        $this->getJson("/api/properties/{$rent->id}")
+            ->assertStatus(404);
+        $this->getJson('/api/properties?purpose=rent')
+            ->assertOk()
+            ->assertJsonMissing(['title' => 'Historical Rental']);
+    }
+
+    public function test_public_property_detail_never_serializes_buyer_seller_or_internal_fields(): void
+    {
+        [, $agency] = $this->agencyUser($this->agentPermissions());
+
+        $property = Property::create(array_merge($this->basePayload([
+            'title' => 'Sale Privacy Test',
+            'listing_purpose' => 'sale',
+        ]), [
+            'id' => 'prop-public-' . substr(md5(uniqid('', true)), 0, 8),
+            'agency_id' => $agency->id,
+            'approval_status' => 'approved',
+            'visibility' => 'public',
+            'purchasePricePKR' => 1000000,
+            'sellingPricePKR' => 1500000,
+            'internalNotes' => 'Secret internal note',
+            'buyerId' => 'buyer-secret',
+            'buyerName' => 'Private Buyer',
+            'sellerId' => 'seller-secret',
+            'sellerName' => 'Private Seller',
+        ]));
+
+        $this->app['auth']->forgetGuards();
+        $response = $this->getJson("/api/properties/{$property->id}")
+            ->assertOk();
+
+        $body = $response->getContent();
+        foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'buyerId', 'buyerName', 'sellerId', 'sellerName', 'pending_changes'] as $key) {
+            $this->assertStringNotContainsString('"' . $key . '"', $body);
+        }
     }
 
     public function test_agent_cannot_approve_own_listing(): void

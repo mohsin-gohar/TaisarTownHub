@@ -394,7 +394,7 @@ class DocumentController extends Controller
             $sensitiveCategories = SystemSetting::get('document.sensitive_categories', []);
             $wasSensitive = $document->is_sensitive;
             $document->is_sensitive = in_array($request->category, $sensitiveCategories, true);
-            if ($document->is_sensitive && !$wasSensitive) {
+            if ($document->is_sensitive || $wasSensitive) {
                 $this->requirePermission($request, 'documents.view_sensitive');
             }
         }

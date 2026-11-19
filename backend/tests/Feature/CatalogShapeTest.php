@@ -45,19 +45,65 @@ class CatalogShapeTest extends EnterpriseTestCase
 
     public function test_catalog_collections_exclude_payload_deleted_rows_and_stay_lists(): void
     {
-        BusinessRecord::put('projects', 'live-1', ['id' => 'live-1', 'title' => 'Live Project']);
-        BusinessRecord::put('projects', 'gone-2', ['id' => 'gone-2', 'title' => 'Deleted Project', 'deletedAt' => '2026-01-02']);
         BusinessRecord::put('dealers', 'dl-1', ['id' => 'dl-1', 'fullName' => 'Dealer One']);
         BusinessRecord::put('dealers', 'gone-3', ['id' => 'gone-3', 'fullName' => 'Deleted Dealer', 'deletedAt' => '2026-01-02']);
 
         $response = $this->getJson('/api/catalog')->assertOk();
 
-        $projects = $response->json('projects');
-        $this->assertSame([0], array_keys($projects), 'projects must stay a list');
-        $this->assertSame('live-1', $projects[0]['id']);
+        $this->assertArrayNotHasKey('projects', $response->json());
 
         $dealers = $response->json('dealers');
         $this->assertSame([0], array_keys($dealers), 'dealers must stay a list');
         $this->assertSame('dl-1', $dealers[0]['id']);
+    }
+
+    public function test_catalog_does_not_publish_projects_or_private_media_payloads(): void
+    {
+        BusinessRecord::put('projects', 'legacy-project', [
+            'id' => 'legacy-project',
+            'title' => 'Legacy Project',
+        ]);
+        BusinessRecord::put('media', 'public-media', [
+            'id' => 'public-media',
+            'title' => 'Public Photo',
+            'visibility' => 'public',
+            'url' => 'https://example.com/photo.jpg',
+            'buyerName' => 'Should Be Removed',
+        ]);
+        BusinessRecord::put('media', 'private-media', [
+            'id' => 'private-media',
+            'title' => 'Private Document',
+            'visibility' => 'private',
+            'buyerName' => 'Private Buyer',
+        ]);
+
+        $response = $this->getJson('/api/catalog')->assertOk();
+
+        $this->assertArrayNotHasKey('projects', $response->json());
+        $this->assertSame(['public-media'], array_column($response->json('media'), 'id'));
+        $this->assertArrayNotHasKey('buyerName', $response->json('media.0'));
+    }
+
+    public function test_catalog_filters_legacy_rent_properties(): void
+    {
+        BusinessRecord::put('properties', 'legacy-sale', [
+            'id' => 'legacy-sale',
+            'title' => 'Legacy Sale',
+            'listing_purpose' => 'sale',
+            'approval_status' => 'approved',
+            'visibility' => 'public',
+        ]);
+        BusinessRecord::put('properties', 'legacy-rent', [
+            'id' => 'legacy-rent',
+            'title' => 'Legacy Rent',
+            'listing_purpose' => 'rent',
+            'approval_status' => 'approved',
+            'visibility' => 'public',
+        ]);
+
+        $response = $this->getJson('/api/catalog')->assertOk();
+        $ids = array_column($response->json('properties'), 'id');
+        $this->assertContains('legacy-sale', $ids);
+        $this->assertNotContains('legacy-rent', $ids);
     }
 }

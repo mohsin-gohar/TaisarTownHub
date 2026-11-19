@@ -102,7 +102,6 @@ class WorkspaceController extends Controller
         ));
 
         return response()->json([
-            'projects' => $this->publicRows('projects'),
             'properties' => array_values(array_map(
                 fn ($row) => $this->onlyKeys($row, self::PUBLIC_PROPERTY_KEYS),
                 $listed
@@ -110,7 +109,13 @@ class WorkspaceController extends Controller
             'dealers' => array_map(fn ($row) => $this->publicDealer($row), $this->publicRows('dealers')),
             'videos' => array_map(fn ($row) => $this->publicVideo($row), $this->publicRows('videos')),
             'plots' => array_map(fn ($row) => $this->publicPlot($row), $this->publicRows('plots')),
-            'media' => $this->publicRows('media'),
+            'media' => array_values(array_map(
+                fn (array $row) => $this->publicMedia($row),
+                array_filter(
+                    $this->publicRows('media'),
+                    fn (array $row) => ($row['visibility'] ?? 'private') === 'public'
+                )
+            )),
             'testimonials' => $this->publicRows('testimonials'),
             'cms' => $this->cmsPayload(),
         ]);
@@ -606,7 +611,10 @@ class WorkspaceController extends Controller
         // defaults to approved (only explicitly rejected/draft rows are hidden).
         $approval = $row['approval_status'] ?? 'approved';
         $visibility = $row['visibility'] ?? 'public';
-        return $approval === 'approved' && $visibility === 'public';
+        $purpose = $row['listing_purpose'] ?? 'sale';
+        return $approval === 'approved'
+            && $visibility === 'public'
+            && $purpose === 'sale';
     }
 
     /**
@@ -681,6 +689,15 @@ class WorkspaceController extends Controller
         unset($row['markerLabel'], $row['marker_label'], $row['ownerName'],
             $row['owner_name'], $row['internalNotes'], $row['notes']);
         return $row;
+    }
+
+    private function publicMedia(array $row): array
+    {
+        $allowed = [
+            'id', 'title', 'description', 'fileName', 'fileType', 'mimeType',
+            'url', 'thumbnailUrl', 'width', 'height', 'visibility',
+        ];
+        return $this->onlyKeys($row, $allowed);
     }
 
     /* ================================================================ */

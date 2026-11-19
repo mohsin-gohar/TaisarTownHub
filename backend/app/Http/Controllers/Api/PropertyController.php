@@ -39,6 +39,7 @@ class PropertyController extends Controller
 
         $isModerator = $user && $this->can($request, 'properties.approve');
         $canSeeOwn = $user && $agencyId && $this->can($request, 'properties.view');
+        $isPublicScope = !$user || $scope === 'public' || (!$agencyId && $scope !== 'all' && $scope !== 'moderation');
 
         if (($scope === 'all' || $scope === 'moderation') && $isModerator) {
             // platform-wide view (moderation / admin)
@@ -62,6 +63,14 @@ class PropertyController extends Controller
             }
         } else {
             $query->publiclyVisible();
+            $query->where('listing_purpose', 'sale');
+        }
+
+        // Public callers can never opt into rental listings. Internal/legacy
+        // rental records remain preserved for explicit internal workflows.
+        if ($isPublicScope) {
+            $request->merge(['purpose' => 'sale', 'listing_purpose' => 'sale']);
+            $query->where('listing_purpose', 'sale');
         }
 
         if ($request->filled('agency_id') && $scope === 'public') {
@@ -112,7 +121,9 @@ class PropertyController extends Controller
             $perPage = min((int) $request->get('per_page', 20), 100);
             $page = $query->paginate($perPage);
 
-            if ($request->boolean('with_meta')) {
+            if ($isPublicScope) {
+                $page->through(fn (Property $p) => $this->publicPropertyPayload($p));
+            } elseif ($request->boolean('with_meta')) {
                 $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
                 $page->through(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive));
             }
@@ -131,7 +142,9 @@ class PropertyController extends Controller
 
         $results = $query->limit(min((int) $request->get('per_page', 100), 500))->get();
 
-        if ($request->boolean('with_meta')) {
+        if ($isPublicScope) {
+            $results->transform(fn (Property $p) => $this->publicPropertyPayload($p));
+        } elseif ($request->boolean('with_meta')) {
             $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
             $results->transform(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive));
         }
@@ -152,6 +165,25 @@ class PropertyController extends Controller
         $isOwnerAgency = $agencyId !== null && $property->agency_id === $agencyId;
         $isModerator = $user && $this->can($request, 'properties.approve');
 
+        if ($isOwnerAgency
+            && $user
+            && !$user->hasPermission('properties.view', $agencyId)
+        ) {
+            $ownerAgency = Agency::find($agencyId);
+            if ($ownerAgency && $ownerAgency->status !== 'active') {
+                abort(404, 'Property not found.');
+            }
+            abort(403, 'Permission denied.');
+        }
+
+        if (!$property->isPubliclyVisible()
+            || $property->listing_purpose !== 'sale'
+        ) {
+            if (!$isOwnerAgency && !$isModerator) {
+                abort(404, 'Property not found.');
+            }
+        }
+
         if (!$property->isPubliclyVisible() && !$isOwnerAgency && !$isModerator) {
             abort(404, 'Property not found.');
         }
@@ -166,6 +198,8 @@ class PropertyController extends Controller
             $property->makeVisible(['disk_path'] ?? []);
         } elseif ($user && $this->can($request, 'view_sensitive_cnic')) {
             $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
+        } else {
+            return response()->json($this->publicPropertyPayload($property));
         }
 
         return response()->json($property);
@@ -200,7 +234,7 @@ class PropertyController extends Controller
             'roadWidthFeet' => 'nullable|numeric|min:0',
             'type' => 'nullable|string|max:50',
             'status' => 'nullable|max:50',
-            'listing_purpose' => 'nullable|in:sale,rent',
+            'listing_purpose' => 'nullable|in:sale',
             'isFeatured' => 'nullable|boolean',
             'possessionReady' => 'nullable|boolean',
             'mdaApproved' => 'nullable|boolean',
@@ -244,6 +278,7 @@ class PropertyController extends Controller
         $payload['createdDate'] = $now->toDateString();
         $payload['submitted_at'] = $request->boolean('submit') ? $now : null;
         $payload['slug'] = $this->uniqueSlug($data['title'], $propertyId);
+        $payload['listing_purpose'] = 'sale';
 
         $property = Property::create($payload);
 
@@ -294,7 +329,7 @@ class PropertyController extends Controller
             'roadWidthFeet' => 'nullable|numeric|min:0',
             'type' => 'nullable|string|max:50',
             'status' => 'nullable|max:50',
-            'listing_purpose' => 'sometimes|in:sale,rent',
+            'listing_purpose' => 'sometimes|in:sale',
             'isFeatured' => 'nullable|boolean',
             'possessionReady' => 'nullable|boolean',
             'mdaApproved' => 'nullable|boolean',
@@ -857,6 +892,26 @@ class PropertyController extends Controller
             $payload = $property->toArray();
         }
         return $payload;
+    }
+
+    private function publicPropertyPayload(Property $property): array
+    {
+        $payload = $property->toArray();
+        $allowed = [
+            'id', 'title', 'description', 'pricePKR', 'formattedPrice', 'location',
+            'phase', 'sector', 'block', 'streetNumber', 'plotNumber', 'fileNumber',
+            'sizeSqYards', 'sizeUnit', 'frontFeet', 'depthFeet', 'roadWidthFeet',
+            'roadWidthFt', 'type', 'status', 'isFeatured', 'images', 'videoUrl',
+            'features', 'bedrooms', 'bathrooms', 'possessionReady', 'mdaApproved',
+            'cornerPlot', 'westOpen', 'parkFacing', 'mainBoulevard', 'createdDate',
+            'contactPerson', 'contactPhone', 'contactWhatsApp', 'agencyName',
+            'listing_purpose', 'slug', 'expires_at',
+        ];
+
+        return collect($allowed)
+            ->filter(fn (string $key) => array_key_exists($key, $payload))
+            ->mapWithKeys(fn (string $key) => [$key => $payload[$key]])
+            ->all();
     }
 
     private function uniqueSlug(string $title, string $excludeId): string
