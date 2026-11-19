@@ -1,8 +1,8 @@
 # CODEX — Final Verification Report
 
 **Date:** 2026-11-19  
-**Branch:** `main`, HEAD `9a2646b` at the time of this update (was `dbada2c` at the start of this work)  
-**Git state:** working tree clean at session start; **no commit, no push, no force-push, no reset was made by the assistant.**
+**Branch:** `main`, HEAD `2270193` at the time of this update (was `9a2646b` at the start of this work)  
+**Git state:** working tree contains the uncommitted audit fixes listed below; **no commit, no push, no force-push, no reset was made by the assistant.**
 
 This is the honest master status. Supporting reports:
 
@@ -18,14 +18,14 @@ This is the honest master status. Supporting reports:
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend full suite | `php artisan test` | **271 passed / 2247 assertions** in 75.60 s |
-| Backend full suite — **rerun after the vault migration, this session** | `php artisan test` | **271 passed / 2247 assertions** in 157.19 s (identical baseline, zero regressions) |
+| Backend full suite — **final rerun after audit fixes, this session** | `php artisan test` | **276 passed / 2268 assertions** in 41.40 s (zero warnings) |
+| Backend legacy tenancy resolver (new) | `php artisan test --filter=LegacyTenancyResolverTest` | **5 passed / 21 assertions** |
 | Backend catalog + rate-limit targeted | `php artisan test --filter=CatalogShapeTest\|RateLimitTest` | **8 passed / 168 assertions** |
 | Backend file vault + plan + approval targeted | `php artisan test --filter=FileVaultSecurityTest\|PlanLimitEnforcementTest\|WorkspaceApprovalTest` | **51 passed / 930 assertions** |
 | Frontend unit tests | `npm test` | **136 passed / 0 failed**, 9 suites |
 | Frontend full gate | `npm run verify` | lint + tests + build + prerender + bundle privacy check: **pass** (re-run again after the reference redesign — pass) |
-| Playwright E2E | `npx playwright test --workers=2` | **67 passed / 0 failed** in 3.1 min |
-| Playwright E2E — **clean rerun after the reference redesign, this session** | `npx playwright test` | **67 passed / 0 failed** in 2.0 min |
+| Playwright E2E — **final rerun after adding 5 RBAC capability tests** | `npx playwright test --workers=2` | **72 passed / 0 failed** in 2.6 min |
+| RBAC role matrix (focused) | `npx playwright test e2e/role-based.spec.ts --workers=1` | **13 passed / 0 failed** |
 | Browser QA audit | `npx tsx scripts/qa-audit.mts` | **84 checks**, 0 console errors, 0 page errors, 0 failed requests, no overflow, no broken images |
 | Theme probe | `npx tsx scripts/qa-theme.mts` | light inventory band + white cards present, no horizontal overflow, 0 console errors |
 | Multi-tenant security probe | `npx tsx scripts/security-probe.mts` | **21 passed / 0 failed** against the live API |
@@ -58,6 +58,32 @@ Final fix:
 - the deliberate failed-login rate-limit probe already used its own TEST-NET bucket.
 
 No backend production limit was weakened to make tests pass.
+
+### CI 267-warning root cause found and fixed
+
+The last GitHub CI run at `2270193` was green but reported `Tests: 267 warnings, 4 passed (2247 assertions)`. The CI log (`ci-backend-log.txt`) showed every Feature test warning with a truncated `file_get_contents(/home/runner/work/TaisarTown…` message.
+
+**Root cause (reproduced locally):** a fresh CI checkout has no `.env` (it is gitignored). `vlucas/phpdotenv` calls `@file_get_contents(<repo>/.env)`, and PHPUnit 11 promotes that suppressed-warning PHP notice into one test warning per Laravel-booting Feature test — exactly 267 warnings. Removing `backend/.env` locally reproduced the same warning at `vendor/vlucas/phpdotenv/src/Store/File/Reader.php:73`.
+
+**Fix (`.github/workflows/ci.yml`):** both backend jobs now create a minimal `.env` before running tests (`echo "# CI test bootstrap: phpunit.xml supplies the test environment." > .env`). `phpunit.xml` remains authoritative. Copying `.env.example` was rejected after a local simulation failed 3 upload tests (`MALWARE_SCAN_ENABLED=true` / `MALWARE_SCAN_FAIL_CLOSED=true` → 422). The minimal-file simulation passed **271 passed / 2247 assertions, zero warnings** at the time; the final suite after all fixes is 276/2268. **CI has not been rerun because that requires a commit/push, for which explicit user permission is still required.**
+
+### Legacy ownership resolver unified across three commands
+
+ChatGPT's audit flagged inconsistent legacy `business_records` ownership. Investigation confirmed three commands disagreed: the audit read only the payload (showing `with_valid_agency_id = -6` for `videos` and hiding the 10 canonical column owners), while the ownership report read the column but missed `propertyId`/`agencyName` evidence.
+
+Added `backend/app/Support/LegacyTenancyResolver.php` as the single read-only evidence source and rewired `LegacyOwnershipReportCommand`, `BusinessRecordsAuditCommand` and `LegacyBackfillCommand` to use it. The canonical owner is `business_records.agency_id`; payload claims are fallback evidence only. The resolver never guesses — only stamped typed twins, stamped dealer/property references or exact agency names count, and conflicting evidence stays unresolved for human mapping.
+
+**Verified results (read-only, local DB not stamped):**
+- `platform:legacy-ownership`: unowned rows 113 → **evidence_confirmed 36, ambiguous 0, unresolved 77** (was 27 confirmed / 86 unresolved).
+- `platform:legacy-audit`: tenancy now reports `rows_with_agency:10`, `rows_without_agency:113`; bogus `videos` count corrected from -6 to 6.
+- `platform:legacy-backfill` dry run: would stamp 36 rows; **no `--apply` was run** and no ownership was written. A JSON evidence artifact was saved read-only to a temp path.
+- New `LegacyTenancyResolverTest`: 5 tests / 21 assertions proving column priority, evidence chains, no-guess behaviour, dry-run safety and backup gating.
+
+### RBAC capability-boundary coverage added
+
+Added 5 Playwright tests to `role-based.spec.ts` asserting the admin sidebar matches `RolePermissions.php` (super admin sees platform-only desks; admin/manager/dealer/operator boundaries). Backend `RolePermissionsTest` remains the authoritative server-enforcement proof. Focused run 13/13; full suite 72/72.
+
+The first full parallel run had 3 false-negative `main`-visibility failures — all stuck on "Verifying workspace access…" because the single-threaded local PHP dev server could not answer workspace calls within the 5 s default assertion window. The API login had already succeeded. Fixed by raising that one assertion's timeout to 20 s in `e2e/helpers/adminLogin.ts` (matching the existing URL wait); the rerun passed 72/72. No product or limiter code was changed.
 
 ---
 
@@ -94,4 +120,4 @@ Exact changes, the reversible CMS copy update and the intentional deltas vs the 
 - All locally runnable code, unit, integration, build, SEO and E2E gates pass.
 - The local stack behaves as a sale-only, agency-owned public marketplace.
 - **NOT claimed:** production readiness, 100% uptime, Docker/ClamAV/Redis/MySQL-multi-instance runtime proof, deployed Lighthouse/Core Web Vitals, backup/restore, or visual equivalence to the reference screenshot.
-- `QODER_*` reports are historical; where they conflict with this report (older HEAD, 133 vs 136 frontend tests, 2152 vs 2247 assertions, "no UI redesign"), the `CODEX_*` values are current. Details in `CODEX_BLOCKERS_AND_UNVERIFIED_CLAIMS.md`.
+- `QODER_*` reports are historical; where they conflict with this report (older HEAD, 133 vs 136 frontend tests, 2152 vs 2268 assertions, 67 vs 72 E2E tests, "no UI redesign"), the `CODEX_*` values are current. Details in `CODEX_BLOCKERS_AND_UNVERIFIED_CLAIMS.md`.

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\BusinessRecord;
+use App\Support\LegacyTenancyResolver;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -37,6 +38,7 @@ class BusinessRecordsAuditCommand extends Command
     public function handle(): int
     {
         $rows = BusinessRecord::orderBy('collection')->orderBy('record_id')->get();
+        $resolver = new LegacyTenancyResolver();
         $report = [
             'generated_at' => now()->toIso8601String(),
             'total_rows' => $rows->count(),
@@ -44,14 +46,9 @@ class BusinessRecordsAuditCommand extends Command
             'typed_counterparts' => self::TYPED_COUNTERPARTS,
         ];
 
-        // Owner resolution map: legacy rows point at dealers / properties /
-        // inquiries whose *typed* twin already carries an agency stamp.
-        $dealerAgencies = DB::table('dealers')->whereNotNull('agency_id')->pluck('agency_id', 'id')->all();
-        $propertyAgencies = DB::table('properties')->whereNotNull('agency_id')->pluck('agency_id', 'id')->all();
-        $inquiryAgencies = DB::table('inquiries')->whereNotNull('agency_id')->pluck('agency_id', 'id')->all();
-
         foreach ($rows->groupBy('collection') as $collection => $collectionRows) {
             $withAgency = 0;
+            $validAgency = 0;
             $withoutAgency = 0;
             $bogusAgency = 0;
             $softDeleted = 0;
@@ -65,39 +62,28 @@ class BusinessRecordsAuditCommand extends Command
 
             foreach ($collectionRows as $row) {
                 $payload = is_array($row->payload) ? $row->payload : [];
-                $agencyId = $payload['agencyId'] ?? $payload['agency_id'] ?? null;
+                // Canonical owner is the agency_id column; payload claims are a
+                // fallback and only count when they name a real agency.
+                $agencyId = $resolver->claimedOwner($row);
 
-                if ($agencyId) {
+                $bogus = $agencyId ? null : $resolver->bogusClaim($row);
+                if ($agencyId || $bogus !== null) {
                     $withAgency++;
-                    if (!DB::table('agencies')->where('id', $agencyId)->exists()) {
-                        $bogusAgency++;
-                        if (count($bogusExamples) < 10) {
-                            $bogusExamples[] = ['record_id' => $row->record_id, 'agency_id' => $agencyId];
-                        }
-                    }
                 } else {
                     $withoutAgency++;
                 }
-
-                // Derive the owner from an already-stamped sibling record.
-                $derived = null;
-                foreach (['dealerId', 'dealer_id', 'assignedDealerId', 'soldByDealerId', 'agentId', 'agent_id'] as $key) {
-                    $ref = $payload[$key] ?? null;
-                    if ($ref && isset($dealerAgencies[$ref])) {
-                        $derived = $dealerAgencies[$ref];
-                        break;
+                if ($agencyId) {
+                    $validAgency++;
+                } elseif ($bogus !== null) {
+                    $bogusAgency++;
+                    if (count($bogusExamples) < 10) {
+                        $bogusExamples[] = ['record_id' => $row->record_id, 'agency_id' => $bogus];
                     }
                 }
-                if (!$derived && isset($propertyAgencies[$row->record_id])) {
-                    $derived = $propertyAgencies[$row->record_id];
-                }
-                if (!$derived && isset($inquiryAgencies[$row->record_id])) {
-                    $derived = $inquiryAgencies[$row->record_id];
-                }
-                if (!$derived && isset($payload['agencyName'])) {
-                    $agency = DB::table('agencies')->where('name', $payload['agencyName'])->first();
-                    $derived = $agency->id ?? null;
-                }
+
+                // Derive a provable owner from stamped typed rows/references.
+                $candidates = $resolver->candidates($row);
+                $derived = count($candidates) === 1 ? array_key_first($candidates) : null;
                 if ($derived) {
                     $derivable++;
                     $derivableMap[$row->record_id] = $derived;
@@ -126,7 +112,7 @@ class BusinessRecordsAuditCommand extends Command
             $report['collections'][$collection] = [
                 'rows' => $collectionRows->count(),
                 'with_agency_id' => $withAgency,
-                'with_valid_agency_id' => $withAgency - $bogusAgency,
+                'with_valid_agency_id' => $validAgency,
                 'with_bogus_agency_id' => $bogusAgency,
                 'bogus_examples' => $bogusExamples,
                 'without_agency_id' => $withoutAgency,
@@ -142,9 +128,9 @@ class BusinessRecordsAuditCommand extends Command
 
         // Global tenancy picture
         $report['tenancy'] = [
-            'rows_with_agency' => $rows->filter(fn ($r) => !empty($r->payload['agencyId'] ?? $r->payload['agency_id'] ?? null))->count(),
-            'rows_without_agency' => $rows->filter(fn ($r) => empty($r->payload['agencyId'] ?? $r->payload['agency_id'] ?? null))->count(),
-            'distinct_agencies' => $rows->map(fn ($r) => $r->payload['agencyId'] ?? $r->payload['agency_id'] ?? null)->filter()->unique()->values()->all(),
+            'rows_with_agency' => $rows->filter(fn ($r) => $resolver->claimedOwner($r) !== null)->count(),
+            'rows_without_agency' => $rows->filter(fn ($r) => $resolver->claimedOwner($r) === null)->count(),
+            'distinct_agencies' => $rows->map(fn ($r) => $resolver->claimedOwner($r))->filter()->unique()->values()->all(),
         ];
 
         // Typed table reference counts for the same identifiers

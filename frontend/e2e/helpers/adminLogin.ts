@@ -56,5 +56,10 @@ export async function loginToAdminViaApi(
   await page.evaluate((value) => sessionStorage.setItem('tth_token', value), token);
   await page.goto('/admin', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/admin(\/.*)?$/, { timeout: 20000 });
-  await expect(page.locator('main')).toBeVisible();
+  // Under parallel load the single-threaded local PHP dev server can take
+  // several seconds to answer the workspace-verification calls that gate the
+  // admin shell (the page shows "Verifying workspace access…" meanwhile). The
+  // default 5s assertion timeout produces false negatives that do not occur
+  // when the same tests run with one worker or against a real server.
+  await expect(page.locator('main')).toBeVisible({ timeout: 20000 });
 }

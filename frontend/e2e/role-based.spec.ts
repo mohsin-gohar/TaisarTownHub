@@ -106,4 +106,59 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
       await expect(page.locator('main')).toBeVisible();
     });
   });
+
+  /**
+   * Capability boundaries. The sidebar is a cosmetic reflection of the domain
+   * permission matrix (backend/app/Support/RolePermissions.php and
+   * backend/tests/Unit/RolePermissionsTest.php prove server enforcement). These
+   * assertions catch a UI regression that would expose privileged desks to a
+   * role which the API would still reject.
+   */
+  test.describe('Capability boundaries - sidebar matches the permission matrix', () => {
+    const security = (page: Page) => page.getByRole('button', { name: /security & roles/i }).first();
+    const audit = (page: Page) => page.getByRole('button', { name: /audit & recycle bin/i }).first();
+    const approvals = (page: Page) => page.getByRole('button', { name: /agency approvals/i }).first();
+
+    test('super admin sees platform-only desks', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[0]);
+      await expect(security(page)).toBeVisible();
+      await expect(audit(page)).toBeVisible();
+      await expect(approvals(page)).toBeVisible();
+    });
+
+    test('agency admin has no platform user, audit or approval desks', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[1]);
+      await expect(security(page)).toHaveCount(0);
+      await expect(audit(page)).toHaveCount(0);
+      await expect(approvals(page)).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /website cms & builder/i }).first()).toBeVisible();
+      // manage_dealers is platform-only; admin may view commission but not the desk.
+      await expect(page.getByRole('button', { name: /dealers & commission/i }).first()).toHaveCount(0);
+    });
+
+    test('manager can verify files but cannot edit CMS or manage users', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[2]);
+      await expect(page.getByRole('button', { name: /file verification/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /deals & transactions/i }).first()).toBeVisible();
+      await expect(security(page)).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /website cms & builder/i }).first()).toHaveCount(0);
+    });
+
+    test('dealer sees only own-deal desks, not reports or staff tools', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[3]);
+      await expect(page.getByRole('button', { name: /deals & transactions/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /property listings/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /sellers & owners/i }).first()).toHaveCount(0);
+      await expect(security(page)).toHaveCount(0);
+    });
+
+    test('operator can upload but cannot verify or open staff desks', async ({ page, request }) => {
+      await loginAs(page, request, DEMO_ACCOUNTS[4]);
+      await expect(page.getByRole('button', { name: /file verification/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toBeVisible();
+      await expect(security(page)).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /media library/i }).first()).toHaveCount(0);
+    });
+  });
 });

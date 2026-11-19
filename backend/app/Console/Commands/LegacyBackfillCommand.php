@@ -3,17 +3,19 @@
 namespace App\Console\Commands;
 
 use App\Models\BusinessRecord;
+use App\Support\LegacyTenancyResolver;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 /**
  * SAFE (non-destructive) tenant backfill for the legacy `business_records` store.
  *
- * Phase 3 of the deployment plan. The command is **dry-run by default**: it
- * prints the exact rows it would stamp and writes nothing. Applying it
- * requires `--apply` **and** `--backup=<file>` pointing at a verified dump, and
- * it is strictly additive: it only adds an `agency_id` key to the JSON payload.
- * No row is ever deleted, and the row count is verified before and after.
+ * The command is **dry-run by default**: it prints the exact rows it would
+ * stamp and writes nothing. Applying it requires `--apply` **and**
+ * `--backup=<file>` pointing at a verified dump. It is strictly additive: it
+ * only writes the canonical `agency_id` COLUMN on rows that have no owner,
+ * and never overwrites an existing claim. No row is deleted, and the row count
+ * is verified before and after.
  */
 class LegacyBackfillCommand extends Command
 {
@@ -28,6 +30,7 @@ class LegacyBackfillCommand extends Command
     public function handle(): int
     {
         $apply = (bool) $this->option('apply');
+        $resolver = new LegacyTenancyResolver();
         $mapping = [];
 
         if ($mappingFile = $this->option('mapping')) {
@@ -46,33 +49,20 @@ class LegacyBackfillCommand extends Command
             ->get();
 
         $beforeCount = $rows->count();
-
-        // Derivable owners: a legacy row that references a dealer/property/
-        // inquiry whose typed twin already carries an agency stamp.
-        $dealerAgencies = DB::table('dealers')->whereNotNull('agency_id')->pluck('agency_id', 'id')->all();
-        $propertyAgencies = DB::table('properties')->whereNotNull('agency_id')->pluck('agency_id', 'id')->all();
-        $inquiryAgencies = DB::table('inquiries')->whereNotNull('agency_id')->pluck('agency_id', 'id')->all();
-
         $plan = [];
-        foreach ($rows as $row) {
-            $payload = is_array($row->payload) ? $row->payload : [];
-            $current = $payload['agencyId'] ?? $payload['agency_id'] ?? null;
-            $target = $mapping[$row->record_id] ?? null;
 
-            if (!$target) {
-                foreach (['dealerId', 'dealer_id', 'assignedDealerId', 'soldByDealerId', 'agentId', 'agent_id'] as $key) {
-                    $ref = $payload[$key] ?? null;
-                    if ($ref && isset($dealerAgencies[$ref])) {
-                        $target = $dealerAgencies[$ref];
-                        break;
-                    }
+        foreach ($rows as $row) {
+            $current = $resolver->claimedOwner($row);
+            $mapped = $mapping[$row->record_id] ?? null;
+            $target = $mapped && $resolver->isAgency((string) $mapped) ? (string) $mapped : null;
+
+            // Never auto-stamp a row with conflicting evidence: ambiguity is a
+            // manual-review item, not a coin flip.
+            if (!$target && $current === null) {
+                $candidates = $resolver->candidates($row);
+                if (count($candidates) === 1) {
+                    $target = array_key_first($candidates);
                 }
-            }
-            if (!$target && isset($propertyAgencies[$row->record_id])) {
-                $target = $propertyAgencies[$row->record_id];
-            }
-            if (!$target && isset($inquiryAgencies[$row->record_id])) {
-                $target = $inquiryAgencies[$row->record_id];
             }
 
             if (!$target) {
@@ -86,17 +76,12 @@ class LegacyBackfillCommand extends Command
 
                 continue;
             }
-            if (!DB::table('agencies')->where('id', $target)->exists()) {
-                $this->warn("row {$row->record_id}: derived agency '{$target}' does not exist — skipped");
-
-                continue;
-            }
 
             $plan[] = [
                 'collection' => $row->collection,
                 'record_id' => $row->record_id,
                 'agency_id' => $target,
-                'source' => isset($mapping[$row->record_id]) ? 'mapping file' : 'derived',
+                'source' => $mapped ? 'mapping file' : 'derived evidence',
             ];
         }
 
@@ -128,12 +113,10 @@ class LegacyBackfillCommand extends Command
                 $row = BusinessRecord::where('collection', $entry['collection'])
                     ->where('record_id', $entry['record_id'])
                     ->first();
-                if (!$row) {
+                if (!$row || $row->agency_id !== null) {
                     continue;
                 }
-                $payload = is_array($row->payload) ? $row->payload : [];
-                $payload['agency_id'] = $entry['agency_id'];
-                $row->payload = $payload;
+                $row->agency_id = $entry['agency_id'];
                 $row->save();
                 $stamped++;
             }
