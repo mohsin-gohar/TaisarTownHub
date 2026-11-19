@@ -101,3 +101,87 @@ Screenshots: `C:\Users\mohsi\AppData\Local\Temp\opencode\theme-artifacts\home-fu
 - The logo, brand name and navy/gold identity were **preserved**, not replaced.
 - No production Lighthouse score, accessibility audit or Core Web Vitals result is claimed here.
 - No commit or push was made.
+
+---
+
+## 5. Update — reference-matching redesign (2026-11-19, later session)
+
+In the later session the approved reference
+(`C:\Users\mohsi\AppData\Local\Temp\opencode\uploads\33d1d913-2606-4166-8fec-719fee21ba6b\download.png`)
+became directly viewable, so the homepage was refined against it **visually**, section by section.
+
+### 5.1 Hero (`frontend/src/components/public/HeroSection.tsx`)
+
+- Badge pill now uses a `MapPin` icon (reference "Taisar Town Properties Only" pill).
+- Headline logic: segments are split on `. `, trailing periods stripped, and the **last** segment
+  renders gold — so the CMS headline `Discover Premium Properties in. Taisar Town` renders as a
+  white line plus a gold "Taisar Town" line, exactly like the reference.
+- The white single-row search bar now sits directly under the subtitle (reference order) with
+  icon-prefixed selects (`Home`, `Building2`, `MapPin`, `Wallet`, `Ruler`) and visible labels
+  replaced by `aria-label`s. **Select DOM order is unchanged** (Type, Phase, Sector, Budget, Size),
+  preserving the E2E contract `select >> nth(2)` = Sector 70-D and the single `Search` submit button.
+- Quick CTAs (Explore Properties / Discover Agencies / Scheme 45 Master Plan) moved **below** the
+  search bar — the E2E-required buttons remain visible on the homepage.
+- The zero-height risk stats strip was replaced by the reference **trust indicator row**
+  (Trusted Platform / Premium Location / Secure Deals) with gold icon circles.
+- Slider control now has circular **prev/next arrows** flanking the existing dots
+  (`aria-label="Previous slide"` / `"Next slide"`).
+- The existing CSS gold wave (`.premium-hero::after`) already matches the reference divider.
+
+### 5.2 Homepage sections (`frontend/src/App.tsx`)
+
+- `WHY_CHOOSE_ITEMS` reduced to the reference's four columns (Verified Listings, Premium Location,
+  Secure Platform, Dedicated Support) and the section rebuilt with a gold-icon heading
+  "Why Choose TaisarTownHub?", the "Your Trusted Real Estate Partner in Taisar Town" subtitle and
+  **vertical gold-tinted dividers** between columns on `lg`.
+- The gradient CTA was replaced with the reference **image-left banner**: rounded dark card,
+  brand shot on the left, "List Your Properties with TaisarTownHub" + gold
+  **Register Your Agency →** button, secondary "Already have an agency? Login" link (now routes to
+  `/login`, not `/agencies`).
+- "How TaisarTownHub Works" gained the heading it was missing.
+- **`Reveal.tsx` wired across every homepage section** (Featured Agencies, Browse All Agencies,
+  Why Choose items with 90 ms stagger, Scheme 45, Video, How It Works, CTA, Contact) — this is the
+  "full animated" scroll-reveal layer. It honours `prefers-reduced-motion` (static content) and
+  falls back to visible when `IntersectionObserver` is unavailable.
+
+### 5.3 Navbar (`frontend/src/components/common/Navbar.tsx`)
+
+- Nav order now Home · Properties · Agencies · Services · About · Contact (reference order minus
+  the reference's `Projects`/`More` items, which the sale-only E2E forbids in the nav).
+- Tagline changed to "Find · Sell · Invest" (reference wordmark subtitle).
+- Added the circular **search icon** button (aria-label "Search properties" → `/properties`), and
+  the auth pair restyled as reference **Login** (gold outline) / **Register** (solid gold) buttons
+  in both desktop bar and mobile drawer.
+
+### 5.4 Footer (`frontend/src/components/common/Footer.tsx`)
+
+- Rebuilt to the reference five-column layout: brand + socials (Facebook, YouTube, LinkedIn, X,
+  Instagram) · **Quick Links** · **Services** (real service names linking to `/services`) ·
+  **Support** (Help & Support, Video Gallery, Scheme 45 Master Plan, Portal Login) ·
+  **Newsletter** ("Get the latest updates", `Enter your email` + gold arrow submit).
+- Removed the pre-footer advisory banner (the homepage CTA banner now occupies that slot).
+- Bottom bar: `© {year} TaisarTownHub. All rights reserved.` + **"Built with ❤️ for Taisar Town"**.
+- Disclaimer, newsletter API flow, back-to-top and the demo-only presentation toggle preserved.
+
+### 5.5 CMS copy (backend, reversible)
+
+`business_records` row `collection=cms, record_id=default` updated (single row, old values recorded
+in the session log and in the one-off script that was deleted after use):
+
+- `heroHeadline`: `Discover Your Place. Build Your Future.` → `Discover Premium Properties in. Taisar Town`
+- `heroSubtitle`: → `Explore verified properties for sale in Taisar Town from trusted agencies and owners.`
+
+Frontend seed (`publicSeed.ts`) mirrored for the same three fields plus
+`clientThemes[0].heroBadge` → `Taisar Town Properties Only`.
+
+### 5.6 Known intentional deltas vs the reference
+
+- The reference nav shows **Projects** and **More**; the sale-only E2E contract forbids both exact
+  labels in the nav, so they are omitted (test wins — changing this needs explicit user consent).
+- Reference search bar has 3 fields; ours keeps all 5 real filters (Type/Phase/Sector/Budget/Size)
+  in the same single-row white bar so no filtering capability is lost.
+- Reference card/section copy spells "Taisar Town"; established site copy uses "Taiser Town" in
+  places. No mass rename was performed to avoid breaking title/SEO contracts — visual design was
+  matched instead.
+- Stats counters (20,570 acres / 320+ properties / 1,450+ investors) were removed from the hero in
+  favour of the reference trust-indicator row; the values remain in the CMS.

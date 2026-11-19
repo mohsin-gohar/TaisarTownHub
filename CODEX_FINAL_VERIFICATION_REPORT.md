@@ -1,8 +1,8 @@
 # CODEX — Final Verification Report
 
 **Date:** 2026-11-19  
-**Branch:** `main`, HEAD `dbada2c` at the start of this work  
-**Git state:** working tree dirty; **no commit, no push, no force-push, no reset**.
+**Branch:** `main`, HEAD `9a2646b` at the time of this update (was `dbada2c` at the start of this work)  
+**Git state:** working tree clean at session start; **no commit, no push, no force-push, no reset was made by the assistant.**
 
 This is the honest master status. Supporting reports:
 
@@ -19,14 +19,28 @@ This is the honest master status. Supporting reports:
 | Gate | Command | Result |
 |---|---|---|
 | Backend full suite | `php artisan test` | **271 passed / 2247 assertions** in 75.60 s |
+| Backend full suite — **rerun after the vault migration, this session** | `php artisan test` | **271 passed / 2247 assertions** in 157.19 s (identical baseline, zero regressions) |
 | Backend catalog + rate-limit targeted | `php artisan test --filter=CatalogShapeTest\|RateLimitTest` | **8 passed / 168 assertions** |
 | Backend file vault + plan + approval targeted | `php artisan test --filter=FileVaultSecurityTest\|PlanLimitEnforcementTest\|WorkspaceApprovalTest` | **51 passed / 930 assertions** |
 | Frontend unit tests | `npm test` | **136 passed / 0 failed**, 9 suites |
-| Frontend full gate | `npm run verify` | lint + tests + build + prerender + bundle privacy check: **pass** |
+| Frontend full gate | `npm run verify` | lint + tests + build + prerender + bundle privacy check: **pass** (re-run again after the reference redesign — pass) |
 | Playwright E2E | `npx playwright test --workers=2` | **67 passed / 0 failed** in 3.1 min |
+| Playwright E2E — **clean rerun after the reference redesign, this session** | `npx playwright test` | **67 passed / 0 failed** in 2.0 min |
 | Browser QA audit | `npx tsx scripts/qa-audit.mts` | **84 checks**, 0 console errors, 0 page errors, 0 failed requests, no overflow, no broken images |
 | Theme probe | `npx tsx scripts/qa-theme.mts` | light inventory band + white cards present, no horizontal overflow, 0 console errors |
 | Multi-tenant security probe | `npx tsx scripts/security-probe.mts` | **21 passed / 0 failed** against the live API |
+
+### Contention flakes observed during this session (documented, not hidden)
+
+Two intermediate full E2E runs reported **64/67** while the backend test suite or the QA audit was
+running concurrently against the same single-threaded `php artisan serve` process. Different tests
+failed each time, and the failures were `main`-visibility **timeouts** after a successful API login
+(the admin shell was stuck on "Verifying workspace access…" past the 5 s assertion window), not auth
+rejections. Evidence they were environmental, not code defects:
+
+- the isolated `admin-pages.spec.ts` rerun passed **10/10**;
+- a full run with nothing else running passed **67/67** in 2.0 min;
+- no test, limiter or product code was changed between these runs.
 
 ### Security probe issues found and fixed
 
@@ -61,7 +75,17 @@ No backend production limit was weakened to make tests pass.
 
 ## 3. Theme work
 
-The user asked for a full UI redesign from the attached screenshot. This model cannot view images, so the palette was extracted programmatically. The approved navy/gold identity and logo were **preserved**; the palette was migrated to a deeper navy (`#050F19` / `#07141E`) with brighter gold (`#E7C878` / `#F3C464`), and a light ivory "Available for Sale" band with white cards was added between the dark hero and dark feature sections. See `CODEX_THEME_REDESIGN_REPORT.md` for exact tokens, files and verification. **Visual sign-off from the user is still required.**
+The user asked for a full UI redesign from the attached screenshot. In the earlier session the model
+could not view images, so the palette was extracted programmatically; **in this session the approved
+reference became directly viewable**, and the homepage was refined against it visually: reference
+hero (badge pill, gold last-line headline, single-row white search bar, compact CTAs, trust-indicator
+strip, slide arrows), a four-column "Why Choose TaisarTownHub?" band with vertical dividers, the
+image-left "List Your Properties with TaisarTownHub" CTA banner, the reference five-column footer
+with the "Built with ❤️ for Taisar Town" bottom bar, and the reference navbar order/tagline with
+Login/Register pill buttons. Scroll reveals were wired across every homepage section via the existing
+`Reveal.tsx` (reduced-motion safe). The approved navy/gold identity and logo were **preserved**.
+Exact changes, the reversible CMS copy update and the intentional deltas vs the reference are in
+`CODEX_THEME_REDESIGN_REPORT.md` §5. **Visual sign-off from the user is still required.**
 
 ---
 

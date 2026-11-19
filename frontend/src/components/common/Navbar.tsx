@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { LayoutDashboard, Menu, X, ChevronRight, Building2, LogOut, UserCircle2, Home } from 'lucide-react';
+import { LayoutDashboard, Menu, X, ChevronRight, LogOut, UserCircle2, Search } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const {
@@ -52,11 +52,11 @@ export const Navbar: React.FC = () => {
 
   const navItems = [
     { label: 'Home', path: '/' },
-    { label: 'Agencies', path: '/agencies' },
     { label: 'Properties', path: '/properties' },
+    { label: 'Agencies', path: '/agencies' },
     { label: 'Services', path: '/services' },
-      { label: 'About', path: '/about' },
-      { label: 'Contact', path: '/contact' },
+    { label: 'About', path: '/about' },
+    { label: 'Contact', path: '/contact' },
   ];
 
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
@@ -84,7 +84,7 @@ export const Navbar: React.FC = () => {
               </div>
               <div className="text-left leading-tight hidden sm:block">
                 <h1 className="font-serif-luxury font-bold text-base lg:text-lg text-white tracking-wide whitespace-nowrap">{cmsConfig.agencyName || 'TaisarTownHub'}</h1>
-                <p className="text-[11px] text-[#E7C878]">Agency-first property marketplace</p>
+                <p className="text-[11px] text-[#E7C878]">Find &middot; Sell &middot; Invest</p>
               </div>
             </button>
 
@@ -121,11 +121,18 @@ export const Navbar: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <div className="hidden md:flex items-center gap-2">
-                  <button type="button" onClick={() => handleNavClick('/login')} className="text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer px-3 py-2">Log in</button>
-                  <button type="button" onClick={() => handleNavClick('/register')} className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-sm font-bold transition-colors cursor-pointer">
-                    <Building2 className="w-4 h-4" /> Register agency
+                <div className="hidden md:flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleNavClick('/properties')}
+                    aria-label="Search properties"
+                    title="Search properties"
+                    className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-[#E7C878]/40 text-[#E7C878] hover:bg-[#E7C878] hover:text-[#0B1220] transition-colors cursor-pointer"
+                  >
+                    <Search className="w-4 h-4" />
                   </button>
+                  <button type="button" onClick={() => handleNavClick('/login')} className="px-4 py-2 rounded-lg border border-[#E7C878]/50 text-[#E7C878] hover:bg-[#E7C878]/10 text-sm font-semibold transition-colors cursor-pointer">Login</button>
+                  <button type="button" onClick={() => handleNavClick('/register')} className="px-4 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-sm font-bold transition-colors cursor-pointer">Register</button>
                 </div>
               )}
 
@@ -171,8 +178,8 @@ export const Navbar: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={() => handleNavClick('/login')} className="w-full flex items-center justify-center py-3 px-4 rounded-xl border border-[#E7C878]/40 text-[#E7C878] font-semibold text-sm cursor-pointer hover:bg-[#E7C878]/10 transition-colors">Log in</button>
-                  <button type="button" onClick={() => handleNavClick('/register')} className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#E7C878] text-[#0B1220] font-bold text-sm cursor-pointer hover:bg-[#F3C464] transition-colors"><Building2 className="w-4 h-4" /> Register agency</button>
+                  <button type="button" onClick={() => handleNavClick('/login')} className="w-full flex items-center justify-center py-3 px-4 rounded-xl border border-[#E7C878]/40 text-[#E7C878] font-semibold text-sm cursor-pointer hover:bg-[#E7C878]/10 transition-colors">Login</button>
+                  <button type="button" onClick={() => handleNavClick('/register')} className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#E7C878] text-[#0B1220] font-bold text-sm cursor-pointer hover:bg-[#F3C464] transition-colors">Register</button>
                 </>
               )}
             </div>

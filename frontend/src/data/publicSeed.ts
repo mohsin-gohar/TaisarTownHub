@@ -18,8 +18,8 @@ import {
 export const initialCMSConfig: CMSConfig = {
   agencyName: 'TaisarTownHub',
   tagline: 'Premier Real Estate Agency — Taiser Town, Scheme 45, Karachi',
-  heroHeadline: 'Discover Your Place. Build Your Future.',
-  heroSubtitle: 'Explore agency-listed residential plots, homes, and commercial properties for sale in Taiser Town Scheme 45, Karachi.',
+  heroHeadline: 'Discover Premium Properties in. Taisar Town',
+  heroSubtitle: 'Explore verified properties for sale in Taisar Town from trusted agencies and owners.',
   heroBackground: '/image.png',
   statsProjectsCount: '',
   statsPropertiesCount: '',
@@ -52,7 +52,7 @@ export const clientThemes: ClientTheme[] = [
     primaryColor: '#0B1220',
     primaryAccent: '#E7C878',
     headerBg: 'bg-[#0B1220]/90',
-    heroBadge: 'Exclusive Taiser Town Scheme 45 Portfolio',
+    heroBadge: 'Taisar Town Properties Only',
     description: 'Deep royal navy blue with warm champagne gold accents. Perfect for high-end luxury brokerages and institutional developers.'
   },
   {

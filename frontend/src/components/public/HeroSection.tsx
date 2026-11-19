@@ -5,10 +5,17 @@ import {
   Building2,
   ArrowRight,
   Compass,
-  ChevronDown
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  ShieldCheck,
+  Handshake,
+  Home,
+  Ruler,
+  Wallet
 } from 'lucide-react';
 import { PropertyType } from '../../types';
-import { StatsCounter } from '../common/StatsCounter';
 import { usePrefersReducedMotion } from '../common/usePrefersReducedMotion';
 
 interface HeroSectionProps {
@@ -77,7 +84,7 @@ const HERO_SLIDES: HeroSlide[] = [
 const HERO_SLIDE_INTERVAL_MS = 7000;
 
 export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
-  const { cmsConfig, currentTheme, setCurrentView, properties } = useApp();
+  const { cmsConfig, currentTheme, setCurrentView } = useApp();
 
   const [selectedType, setSelectedType] = useState<PropertyType | 'All'>('All');
   const [selectedPhase, setSelectedPhase] = useState<'Phase 1' | 'Phase 2' | 'Phase 3' | 'All'>('All');
@@ -138,13 +145,21 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
     setCurrentView('properties');
   };
 
-  const headlineParts = cmsConfig.heroHeadline.split('. ');
+  // Headline format: "Line one. Gold line." — the last segment renders in gold
+  // and trailing periods are stripped so the reveal matches the reference design.
+  const headlineParts = cmsConfig.heroHeadline
+    .split('. ')
+    .map((part) => part.replace(/\.$/, ''))
+    .filter(Boolean);
+  const goldHeadlineIndex = headlineParts.length - 1;
   const isStatic = !!reduceMotion;
-  const statistics = [
-    { value: cmsConfig.statsAcresPlanned, label: 'Acres Master-Planned' },
-    { value: cmsConfig.statsPropertiesCount, label: 'Verified Properties' },
-    { value: cmsConfig.statsSatisfiedClients, label: 'Satisfied Investors' },
-  ].filter((stat) => stat.value.trim());
+
+  /** Trust strip under the search bar (matches the approved reference hero). */
+  const TRUST_INDICATORS = [
+    { icon: ShieldCheck, title: 'Trusted Platform', subtitle: 'Verified Listings' },
+    { icon: Home, title: 'Premium Location', subtitle: 'Taisar Town' },
+    { icon: Handshake, title: 'Secure Deals', subtitle: '100% Safe' },
+  ];
 
   const scrollToNext = () => {
     window.scrollTo({ top: window.innerHeight * 0.92, behavior: reduceMotion ? 'auto' : 'smooth' });
@@ -190,7 +205,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
       >
         {/* Top Floating Pill */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0B1220]/80 border border-[#E7C878]/40 backdrop-blur-md mb-6 shadow-xl animate-fadeIn">
-          <span className="w-2 h-2 rounded-full bg-[#E7C878] animate-ping" />
+          <MapPin className="w-3.5 h-3.5 text-[#E7C878]" />
           <span className="text-xs uppercase tracking-widest text-[#F6E3B4] font-semibold">
             {currentTheme.heroBadge}
           </span>
@@ -200,7 +215,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
         <h1 className="font-serif-luxury text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white tracking-tight leading-[1.15] max-w-5xl">
           {headlineParts.map((part, index) => (
             <span key={index} className="block">
-              <StaggeredWords text={part} gold={index === 1} delay={0.15 + index * 0.45} isStatic={isStatic} />
+              <StaggeredWords text={part} gold={index === goldHeadlineIndex} delay={0.15 + index * 0.45} isStatic={isStatic} />
             </span>
           ))}
         </h1>
@@ -213,62 +228,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
           {cmsConfig.heroSubtitle}
         </p>
 
-        {/* Quick CTA Buttons */}
-        <div
-          className="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-4 animate-fadeInUp"
-          style={isStatic ? undefined : { animationDelay: '1.45s' }}
-        >
-          <button
-            onClick={() => setCurrentView('properties')}
-            className="px-7 py-3.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] active:scale-95 text-[#0B1220] font-bold text-sm tracking-wide transition-all duration-200 shadow-lg shadow-[#E7C878]/25 hover:shadow-[#E7C878]/40 flex items-center gap-2 cursor-pointer"
-          >
-            <span>Explore Properties</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setCurrentView('agencies')}
-            className="px-7 py-3.5 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 text-white font-semibold text-sm tracking-wide transition-all duration-200 backdrop-blur-md border border-white/20 flex items-center gap-2 cursor-pointer"
-          >
-            <span>Discover Agencies</span>
-            <Building2 className="w-4 h-4 text-[#E7C878]" />
-          </button>
-          <button
-            onClick={() => setCurrentView('guide')}
-            className="px-5 py-3.5 rounded-xl bg-[#0B1220]/80 hover:bg-[#0B1220] active:scale-95 text-slate-300 hover:text-white font-medium text-sm transition-all border border-[#E7C878]/30 flex items-center gap-2 cursor-pointer"
-          >
-            <Compass className="w-4 h-4 text-[#E7C878]" />
-            <span>Scheme 45 Master Plan</span>
-          </button>
-        </div>
-
         {/* Premium Property Search Interface */}
         <div
-          className="mt-12 w-full max-w-5xl lg:max-w-4xl animate-fadeInUp"
-          style={isStatic ? undefined : { animationDelay: '1.6s' }}
+          className="mt-8 w-full max-w-5xl lg:max-w-4xl animate-fadeInUp"
+          style={isStatic ? undefined : { animationDelay: '1.45s' }}
         >
           <div className="glass-panel p-4 sm:p-6 rounded-2xl shadow-2xl border border-[#E7C878]/30 text-left">
-            <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
-              <div className="flex items-center gap-2 text-white font-semibold text-sm">
-                <Search className="w-4 h-4 text-[#E7C878]" />
-                <span>Search Scheme 45 Real Estate Portfolio</span>
-              </div>
-              <span className="text-xs text-slate-400 hidden sm:inline">
-                Over {properties.filter((p) => !p.deletedAt).length} active plots & villas available
-              </span>
-            </div>
-
             <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5">
               {/* Property Type */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">
-                  Property Type
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedType}
-                    onChange={(e) => setSelectedType(e.target.value as PropertyType | 'All')}
-                    className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
-                  >
+              <div className="relative">
+                <Home aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B98A2F]" />
+                <select
+                  aria-label="Property type"
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value as PropertyType | 'All')}
+                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg pl-9 pr-3 py-3 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
+                >
                     <option value="All">All Property Types</option>
                     <option value="Residential Plot">Residential Plot</option>
                     <option value="Commercial Plot">Commercial Plot</option>
@@ -277,18 +252,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
                     <option value="Apartment">Apartment</option>
                     <option value="Farmhouse">Farmhouse</option>
                   </select>
-                </div>
               </div>
 
               {/* Taiser Town Phase */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-[#F6E3B4] uppercase tracking-wider block">
-                  Taiser Town Phase
-                </label>
+              <div className="relative">
+                <Building2 aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B98A2F]" />
                 <select
+                  aria-label="Taiser Town phase"
                   value={selectedPhase}
                   onChange={(e) => setSelectedPhase(e.target.value as 'Phase 1' | 'Phase 2' | 'Phase 3' | 'All')}
-                  className="w-full bg-[#07141E]/90 text-[#F6E3B4] font-medium text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-[#E7C878]/50 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
+                  className="w-full bg-[#07141E]/90 text-[#F6E3B4] font-medium text-xs sm:text-sm rounded-lg pl-9 pr-3 py-3 border border-[#E7C878]/50 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
                 >
                   <option value="All">All Phases (1, 2, 3)</option>
                   <option value="Phase 1">Phase 1 (Possession Ready)</option>
@@ -298,14 +271,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
               </div>
 
               {/* Sector */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">
-                  Sector / Location
-                </label>
+              <div className="relative">
+                <MapPin aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B98A2F]" />
                 <select
+                  aria-label="Sector or location"
                   value={selectedSector}
                   onChange={(e) => setSelectedSector(e.target.value)}
-                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
+                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg pl-9 pr-3 py-3 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
                 >
                   <option value="All">All Sectors</option>
                   <option value="Sector 70-D">Sector 70-D (Phase 1)</option>
@@ -321,14 +293,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
               </div>
 
               {/* Budget */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">
-                  Budget (PKR)
-                </label>
+              <div className="relative">
+                <Wallet aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B98A2F]" />
                 <select
+                  aria-label="Budget in PKR"
                   value={selectedBudget}
                   onChange={(e) => setSelectedBudget(e.target.value)}
-                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
+                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg pl-9 pr-3 py-3 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
                 >
                   <option value="All">Any Price Range</option>
                   <option value="under-25">Under 25 Lacs</option>
@@ -339,14 +310,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
               </div>
 
               {/* Size */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">
-                  Plot / Unit Size
-                </label>
+              <div className="relative">
+                <Ruler aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B98A2F]" />
                 <select
+                  aria-label="Plot or unit size"
                   value={selectedSize}
                   onChange={(e) => setSelectedSize(e.target.value)}
-                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg px-3 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
+                  className="w-full bg-[#07141E]/90 text-white text-xs sm:text-sm rounded-lg pl-9 pr-3 py-3 border border-slate-700 focus:border-[#E7C878] focus:outline-none appearance-none cursor-pointer"
                 >
                   <option value="All">All Sizes</option>
                   <option value="80">80 Sq. Yards</option>
@@ -371,37 +341,86 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
           </div>
         </div>
 
-        {/* Key Statistics Strip — animated count-up */}
-        {statistics.length > 0 && (
-          <div className="mt-16 grid grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-5xl lg:max-w-4xl pt-8 border-t border-slate-800/80">
-            {statistics.map((stat) => (
-              <div key={stat.label} className="space-y-1">
-                <div className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white">
-                  <StatsCounter value={stat.value} />
-                </div>
-                <div className="text-xs text-[#E7C878] uppercase tracking-wider font-semibold">
-                  {stat.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Quick CTA Buttons — kept compact under the search bar */}
+        <div
+          className="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-3 animate-fadeInUp"
+          style={isStatic ? undefined : { animationDelay: '1.6s' }}
+        >
+          <button
+            onClick={() => setCurrentView('properties')}
+            className="px-6 py-3 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] active:scale-95 text-[#0B1220] font-bold text-sm tracking-wide transition-all duration-200 shadow-lg shadow-[#E7C878]/25 hover:shadow-[#E7C878]/40 flex items-center gap-2 cursor-pointer"
+          >
+            <span>Explore Properties</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setCurrentView('agencies')}
+            className="px-6 py-3 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 text-white font-semibold text-sm tracking-wide transition-all duration-200 backdrop-blur-md border border-white/20 flex items-center gap-2 cursor-pointer"
+          >
+            <span>Discover Agencies</span>
+            <Building2 className="w-4 h-4 text-[#E7C878]" />
+          </button>
+          <button
+            onClick={() => setCurrentView('guide')}
+            className="px-5 py-3 rounded-xl bg-[#0B1220]/80 hover:bg-[#0B1220] active:scale-95 text-slate-300 hover:text-white font-medium text-sm transition-all border border-[#E7C878]/30 flex items-center gap-2 cursor-pointer"
+          >
+            <Compass className="w-4 h-4 text-[#E7C878]" />
+            <span>Scheme 45 Master Plan</span>
+          </button>
+        </div>
+
+        {/* Trust Indicators — reference hero footer strip */}
+        <div className="mt-10 flex flex-wrap items-center gap-x-10 gap-y-5 w-full max-w-5xl lg:max-w-4xl pt-7 border-t border-white/10">
+          {TRUST_INDICATORS.map(({ icon: Icon, title, subtitle }, index) => (
+            <div
+              key={title}
+              className={`flex items-center gap-3 ${isStatic ? '' : 'animate-fadeInUp'}`}
+              style={isStatic ? undefined : { animationDelay: `${1.75 + index * 0.12}s` }}
+            >
+              <span className="w-11 h-11 rounded-full bg-[#E7C878]/10 border border-[#E7C878]/40 flex items-center justify-center shrink-0">
+                <Icon className="w-5 h-5 text-[#E7C878]" />
+              </span>
+              <span className="text-left">
+                <span className="block text-white font-semibold text-sm">{title}</span>
+                <span className="block text-slate-400 text-xs">{subtitle}</span>
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Hero Slide Switcher Dots */}
-      <div className="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-2 bg-[#07141E]/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#E7C878]/30 shadow-lg">
-        {HERO_SLIDES.map((slide, idx) => (
-          <button
-            key={slide.id}
-            onClick={() => setActiveSlideIndex(idx)}
-            aria-label={`Switch to slide ${idx + 1}`}
-            className={`transition-all duration-300 rounded-full cursor-pointer ${
-              idx === activeSlideIndex
-                ? 'w-6 h-2 bg-[#E7C878] shadow-sm shadow-[#E7C878]/50'
-                : 'w-2 h-2 bg-slate-500 hover:bg-slate-300'
-            }`}
-          />
-        ))}
+      {/* Hero Slide Switcher — circular arrows + dots (reference style) */}
+      <div className="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setActiveSlideIndex((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length)}
+          aria-label="Previous slide"
+          className="w-9 h-9 rounded-full bg-[#07141E]/70 backdrop-blur-md border border-[#E7C878]/40 text-[#E7C878] hover:bg-[#E7C878] hover:text-[#0B1220] active:scale-95 transition-all cursor-pointer flex items-center justify-center shadow-lg"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <div className="flex items-center gap-2 bg-[#07141E]/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#E7C878]/30 shadow-lg">
+          {HERO_SLIDES.map((slide, idx) => (
+            <button
+              key={slide.id}
+              onClick={() => setActiveSlideIndex(idx)}
+              aria-label={`Switch to slide ${idx + 1}`}
+              className={`transition-all duration-300 rounded-full cursor-pointer ${
+                idx === activeSlideIndex
+                  ? 'w-6 h-2 bg-[#E7C878] shadow-sm shadow-[#E7C878]/50'
+                  : 'w-2 h-2 bg-slate-500 hover:bg-slate-300'
+              }`}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setActiveSlideIndex((prev) => (prev + 1) % HERO_SLIDES.length)}
+          aria-label="Next slide"
+          className="w-9 h-9 rounded-full bg-[#07141E]/70 backdrop-blur-md border border-[#E7C878]/40 text-[#E7C878] hover:bg-[#E7C878] hover:text-[#0B1220] active:scale-95 transition-all cursor-pointer flex items-center justify-center shadow-lg"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Scroll-down indicator */}

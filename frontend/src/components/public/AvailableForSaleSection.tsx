@@ -37,7 +37,7 @@ export const AvailableForSaleSection: React.FC = () => {
     <section className="sale-showcase surface-ivory py-20 sm:py-24 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
-          <div className="max-w-2xl">
+          <div className="max-w-3xl">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E7C878]/20 text-[#8A6A1F] border border-[#E7C878]/60">
               <BadgeCheck className="w-3.5 h-3.5" /> Available for Sale
             </span>

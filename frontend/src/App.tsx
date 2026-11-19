@@ -22,7 +22,8 @@ import { AboutSection } from './components/public/AboutSection';
 
 import { ContactSection } from './components/public/ContactSection';
 import { AgencyProfilePage } from './components/public/AgencyProfilePage';
-import { Building2, ArrowRight, ShieldCheck, MapPin, Ruler, Users, Phone, Mail, Video, Home } from 'lucide-react';
+import { Reveal } from './components/common/Reveal';
+import { Building2, ArrowRight, ShieldCheck, MapPin, Phone, Mail, Lock, Headphones } from 'lucide-react';
 import { AgencyAccessPage } from './components/public/AgencyAccessPage';
 import { AuthPage } from './components/public/AuthPage';
 import { NotFoundPage } from './components/public/NotFoundPage';
@@ -38,12 +39,10 @@ const AdminLayout = lazy(() => import('./components/admin/AdminLayout').then((m)
 const AdminLoginModal = lazy(() => import('./components/admin/AdminLoginModal').then((m) => ({ default: m.AdminLoginModal })));
 
 const WHY_CHOOSE_ITEMS = [
-  { icon: Building2, title: 'Agency-first discovery', description: 'Browse agency profiles and connect directly with teams working in Taiser Town.' },
-  { icon: MapPin, title: 'Taiser Town focus', description: 'Explore property information scoped to Taiser Town Scheme 45, Karachi.' },
-  { icon: Home, title: 'Properties for sale', description: 'The public marketplace is focused on homes, plots and commercial properties for sale.' },
-  { icon: ShieldCheck, title: 'Approval before publication', description: 'Listings must pass the platform approval workflow before public display.' },
-  { icon: Ruler, title: 'Clear listing details', description: 'Compare location, property type, size and asking price before contacting an agency.' },
-  { icon: Phone, title: 'Direct agency contact', description: 'Reach the listing agency to ask questions or arrange a site visit.' },
+  { icon: ShieldCheck, title: 'Verified Listings', description: 'Only genuine & verified properties — every listing passes platform approval before public display.' },
+  { icon: MapPin, title: 'Premium Location', description: 'In the heart of Taiser Town Scheme 45, Karachi — sectors, blocks and master-plan details in one place.' },
+  { icon: Lock, title: 'Secure Platform', description: 'Agency records stay private with role-based access, tenant isolation and a hardened document vault.' },
+  { icon: Headphones, title: 'Dedicated Support', description: 'Direct agency contact for questions, site visits and document guidance whenever you need help.' },
 ];
 
 interface FeaturedAgency {
@@ -383,7 +382,7 @@ const MainAppContent: React.FC = () => {
 
             {/* SECTION 3 — Featured Verified Agencies */}
             <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
-              <div className="max-w-7xl mx-auto">
+              <Reveal className="max-w-7xl mx-auto">
                 <h2 className="font-serif-luxury text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
                   Featured Agencies
                 </h2>
@@ -417,12 +416,12 @@ const MainAppContent: React.FC = () => {
                     </div>
                   )}
                 </div>
-              </div>
+              </Reveal>
             </section>
 
             {/* SECTION 4 — Browse All Agencies */}
             <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E] border-t border-[#E7C878]/10 border-b border-[#E7C878]/10">
-              <div className="max-w-7xl mx-auto">
+              <Reveal className="max-w-7xl mx-auto">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
                   <div>
                     <h2 className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white">
@@ -457,23 +456,38 @@ const MainAppContent: React.FC = () => {
                     <div className="text-slate-400 text-sm mt-1">Browse approved listings from verified agencies.</div>
                   </button>
                 </div>
-              </div>
+              </Reveal>
             </section>
 
             {/* SECTION 5 — Why Choose TaisarTownHub */}
             <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
               <div className="max-w-7xl mx-auto text-center">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {WHY_CHOOSE_ITEMS.map(({ icon: Icon, title, description }) => (
-                    <div key={title} className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-[#E7C878]/10 border border-[#E7C878]/30 flex items-center justify-center flex-shrink-0">
-                        <Icon className="w-4 h-4 text-[#E7C878]" />
-                      </div>
-                      <div>
+                <Reveal>
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <Building2 className="w-8 h-8 text-[#E7C878]" aria-hidden="true" />
+                    <h2 className="font-serif-luxury text-3xl sm:text-4xl lg:text-5xl font-bold text-white">
+                      Why Choose TaisarTownHub?
+                    </h2>
+                  </div>
+                  <p className="text-slate-400 text-base sm:text-lg mb-12">
+                    Your Trusted Real Estate Partner in Taisar Town
+                  </p>
+                </Reveal>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                  {WHY_CHOOSE_ITEMS.map(({ icon: Icon, title, description }, index) => (
+                    <Reveal key={title} delay={index * 90} className="h-full">
+                      <div
+                        className={`h-full px-6 py-8 flex flex-col items-center text-center gap-3 ${
+                          index > 0 ? 'lg:border-l lg:border-[#E7C878]/20' : ''
+                        }`}
+                      >
+                        <span className="w-14 h-14 rounded-full bg-[#E7C878]/10 border border-[#E7C878]/30 flex items-center justify-center">
+                          <Icon className="w-7 h-7 text-[#E7C878]" aria-hidden="true" />
+                        </span>
                         <h3 className="font-serif-luxury text-lg font-bold text-white">{title}</h3>
-                        <p className="text-slate-400 text-sm">{description}</p>
+                        <p className="text-slate-400 text-sm leading-relaxed">{description}</p>
                       </div>
-                    </div>
+                    </Reveal>
                   ))}
                 </div>
               </div>
@@ -481,7 +495,7 @@ const MainAppContent: React.FC = () => {
 
             {/* SECTION 6 — Understanding Taisar Town, Scheme 45 */}
             <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E] border-t border-[#E7C878]/10 border-b border-[#E7C878]/10">
-              <div className="max-w-7xl mx-auto">
+              <Reveal className="max-w-7xl mx-auto">
                 <h2 className="font-serif-luxury text-4xl sm:text-5xl font-bold text-white mb-8">
                   Understanding Taisar Town, Scheme 45
                 </h2>
@@ -509,12 +523,12 @@ const MainAppContent: React.FC = () => {
                     <p className="text-slate-400 text-sm mt-2">Connectivity: Major arterial links to Shahrah-e-Faisal, Jinnah International Airport proximity, and upcoming mass transit discussions.</p>
                   </div>
                 </div>
-              </div>
+              </Reveal>
             </section>
 
             {/* SECTION 7 — Taisar Town Video Walkthroughs */}
             <section id="video-walkthroughs" className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
-              <div className="max-w-7xl mx-auto">
+              <Reveal className="max-w-7xl mx-auto">
                 <h2 className="font-serif-luxury text-4xl sm:text-5xl font-bold text-white mb-8">
                   Taisar Town Video Walkthroughs
                 </h2>
@@ -525,12 +539,15 @@ const MainAppContent: React.FC = () => {
                   <p className="text-slate-400 text-sm">No public video walkthroughs are available right now.</p>
                   <button onClick={() => { window.history.pushState({}, '', '/gallery'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="mt-3 inline-flex items-center gap-2 text-sm text-[#E7C878] hover:text-[#F6E3B4]">Browse video gallery <ArrowRight className="w-4 h-4" /></button>
                 </div>
-              </div>
+              </Reveal>
             </section>
 
             {/* SECTION 8 — How TaisarTownHub Works */}
             <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
-              <div className="max-w-7xl mx-auto">
+              <Reveal className="max-w-7xl mx-auto">
+                <h2 className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white mb-10 text-center">
+                  How TaisarTownHub Works
+                </h2>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   <div>
                     <h3 className="font-serif-luxury text-2xl font-bold text-white mb-4">1</h3>
@@ -554,38 +571,55 @@ const MainAppContent: React.FC = () => {
                     </p>
                   </div>
                 </div>
-              </div>
+              </Reveal>
             </section>
 
-            {/* SECTION 9 — Agency Registration CTA */}
-            <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-[#0B1220] via-[#1A2638] to-[#0B1220]">
-              <div className="max-w-4xl mx-auto text-center">
-                <h2 className="font-serif-luxury text-4xl sm:text-5xl font-bold text-white mb-6">
-                  Grow Your Real Estate Business with TaisarTownHub
-                </h2>
-                <p className="text-slate-400 text-lg mb-8 max-w-2xl">
-                  Partner with Pakistan's premier agency-first marketplace. Launch your profile, publish eligible Taisar Town sale properties, and manage your team through our secure dashboard.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mx-auto">
-                  <button
-                    onClick={() => { window.history.pushState({}, '', '/register'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="w-full py-3 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm transition-shadow shadow-lg shadow-[#E7C878]/20"
-                  >
-                    Register Your Agency
-                  </button>
-                  <button
-                    onClick={() => { window.history.pushState({}, '', '/agencies'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-                    className="w-full py-3 rounded-xl border border-[#E7C878]/30 bg-transparent hover:bg-[#E7C878]/10 text-[#E7C878] font-bold text-sm transition-shadow"
-                  >
-                    Already have an agency? Log in
-                  </button>
+            {/* SECTION 9 — Agency Registration CTA (reference banner) */}
+            <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
+              <Reveal className="max-w-7xl mx-auto">
+                <div className="rounded-3xl overflow-hidden border border-[#E7C878]/25 bg-gradient-to-r from-[#0B1220] via-[#0E1826] to-[#0B1220] flex flex-col md:flex-row items-stretch shadow-2xl shadow-black/40">
+                  <div className="relative md:w-64 lg:w-80 shrink-0 min-h-[160px]">
+                    <img
+                      src="/image.png"
+                      alt=""
+                      aria-hidden="true"
+                      loading="lazy"
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-[#0B1220]/20 via-[#0B1220]/40 to-[#0B1220]" />
+                  </div>
+                  <div className="flex-1 p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-5">
+                    <div className="text-center sm:text-left">
+                      <h2 className="font-serif-luxury text-2xl sm:text-3xl font-bold text-white">
+                        List Your Properties with TaisarTownHub
+                      </h2>
+                      <p className="text-slate-400 text-sm mt-2 max-w-xl">
+                        Showcase your properties and reach genuine buyers in Taisar Town.
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => { window.history.pushState({}, '', '/register'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+                        className="px-6 py-3 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] active:scale-95 text-[#0B1220] font-bold text-sm transition-all shadow-lg shadow-[#E7C878]/20 flex items-center gap-2 cursor-pointer"
+                      >
+                        Register Your Agency
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => { window.history.pushState({}, '', '/login'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+                        className="text-xs text-[#E7C878] hover:text-[#F6E3B4] hover:underline cursor-pointer"
+                      >
+                        Already have an agency? Login
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </Reveal>
             </section>
 
             {/* SECTION 11 — Contact & Office Information */}
             <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
-              <div className="max-w-7xl mx-auto">
+              <Reveal className="max-w-7xl mx-auto">
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                   <div>
                     <h2 className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white mb-6">
@@ -631,7 +665,7 @@ const MainAppContent: React.FC = () => {
                     </ul>
                   </div>
                 </div>
-              </div>
+              </Reveal>
             </section>
 
             {/* SECTION 12 — Premium Footer */}
