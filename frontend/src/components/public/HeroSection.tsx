@@ -66,6 +66,7 @@ interface HeroSlide {
 
 /** Auto-rotating hero slides — uploaded brand shot first, then premium property scenes. */
 const HERO_SLIDES: HeroSlide[] = [
+  { id: 'uploaded', background: '/image.png', alt: 'TaisarTownHub — Taiser Town Scheme 45 signature vista' },
   { id: 'modern-villa', background: '/hero-slide-2.jpg', alt: 'Modern luxury villa with pool at Taiser Town' },
   { id: 'residential', background: '/hero-slide-3.jpg', alt: 'Premium residential home exterior' },
   { id: 'classic-home', background: '/hero-slide-4.jpg', alt: 'Classic family home in Scheme 45' },
