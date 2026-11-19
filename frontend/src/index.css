@@ -264,6 +264,115 @@
   will-change: opacity;
 }
 
+/* Homepage art direction: premium, editorial real-estate rather than a
+   collection of generic dashboard blocks. Scoped so app/admin pages retain
+   their information-dense layout. */
+.luxury-home {
+  background: #07141e;
+}
+
+.premium-hero::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  right: -8%;
+  bottom: -68px;
+  left: -8%;
+  height: 110px;
+  pointer-events: none;
+  background: #f9f9f9;
+  border-radius: 50% 50% 0 0 / 35% 35% 0 0;
+  box-shadow: 0 -11px 0 rgba(231, 200, 120, 0.85), 0 -18px 0 #07141e;
+}
+
+.premium-hero h1 {
+  max-width: 760px;
+  text-shadow: 0 3px 22px rgba(0, 0, 0, .3);
+}
+
+.premium-hero .glass-panel {
+  background: rgba(248, 249, 250, .96);
+  border-color: rgba(231, 200, 120, .8);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .32);
+}
+
+.premium-hero .glass-panel label,
+.premium-hero .glass-panel div,
+.premium-hero .glass-panel span {
+  color: #334155;
+}
+
+.premium-hero .glass-panel .text-white,
+.premium-hero .glass-panel .text-\[\#F6E3B4\] {
+  color: #0b1220;
+}
+
+.premium-hero .glass-panel select,
+.premium-hero .glass-panel input {
+  background: #fff;
+  border-color: #e2ddd2;
+  color: #0b1220;
+}
+
+.premium-hero .glass-panel button[type='submit'] {
+  background: linear-gradient(135deg, #f5cf57, #c99628);
+  box-shadow: 0 8px 18px rgba(185, 138, 47, .25);
+}
+
+.sale-showcase {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 80% 0%, rgba(231,200,120,.16), transparent 24rem),
+    #f9f9f9;
+}
+
+.sale-card {
+  border-color: rgba(185, 138, 47, .24);
+  box-shadow: 0 16px 38px -24px rgba(7, 20, 30, .48);
+}
+
+.sale-card:hover {
+  box-shadow: 0 24px 44px -22px rgba(7, 20, 30, .48);
+}
+
+.luxury-home > section:not(.sale-showcase) {
+  position: relative;
+  overflow: hidden;
+}
+
+.luxury-home > section:not(.sale-showcase)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 8% 25%, rgba(231, 200, 120, .08), transparent 25rem);
+}
+
+.luxury-home > section > div { position: relative; }
+
+.luxury-home > section:nth-of-type(2) a,
+.luxury-home > section:nth-of-type(3) button,
+.luxury-home > section:nth-of-type(4) > div > div > div {
+  box-shadow: 0 14px 34px -24px rgba(0,0,0,.7);
+}
+
+.luxury-home > section:nth-of-type(2) a:hover,
+.luxury-home > section:nth-of-type(3) button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 38px -22px rgba(231, 200, 120, .38);
+}
+
+@media (min-width: 1024px) {
+  .premium-hero > .relative.z-10 { padding-left: max(2rem, calc((100vw - 80rem) / 2)); padding-right: 2rem; }
+  .premium-hero .glass-panel { border-radius: 1rem; }
+}
+
+@media (max-width: 639px) {
+  .premium-hero::after { height: 65px; bottom: -38px; box-shadow: 0 -7px 0 rgba(231,200,120,.85), 0 -12px 0 #07141e; }
+  .premium-hero .glass-panel { padding: 1rem; }
+}
+
 /* Print: receipt/memo only */
 @media print {
   body { background: #fff !important; color: #000 !important; }

@@ -34,7 +34,7 @@ export const AvailableForSaleSection: React.FC = () => {
   };
 
   return (
-    <section className="surface-ivory py-20 sm:py-24 px-4 sm:px-6 lg:px-8">
+    <section className="sale-showcase surface-ivory py-20 sm:py-24 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
           <div className="max-w-2xl">
@@ -68,7 +68,7 @@ export const AvailableForSaleSection: React.FC = () => {
             return (
               <article
                 key={property.id}
-                className="card-light rounded-2xl overflow-hidden flex flex-col transition-transform duration-300 hover:-translate-y-1"
+                className="sale-card card-light rounded-2xl overflow-hidden flex flex-col transition-transform duration-300 hover:-translate-y-1"
               >
                 <a
                   href={href}

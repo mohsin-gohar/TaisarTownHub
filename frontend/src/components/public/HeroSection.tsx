@@ -66,7 +66,6 @@ interface HeroSlide {
 
 /** Auto-rotating hero slides — uploaded brand shot first, then premium property scenes. */
 const HERO_SLIDES: HeroSlide[] = [
-  { id: 'uploaded', background: '/image.png', alt: 'TaisarTownHub — Taiser Town Scheme 45 signature vista' },
   { id: 'modern-villa', background: '/hero-slide-2.jpg', alt: 'Modern luxury villa with pool at Taiser Town' },
   { id: 'residential', background: '/hero-slide-3.jpg', alt: 'Premium residential home exterior' },
   { id: 'classic-home', background: '/hero-slide-4.jpg', alt: 'Classic family home in Scheme 45' },
@@ -151,7 +150,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
   };
 
   return (
-    <div ref={heroRef} className="relative min-h-0 sm:min-h-[92vh] flex flex-col justify-center overflow-hidden">
+    <div ref={heroRef} className="premium-hero relative min-h-0 sm:min-h-[92vh] flex flex-col justify-center overflow-hidden">
       {/* Background Slideshow — cross-fade between premium property visuals every 6-8s */}
       <div className="absolute inset-0 z-0">
         {HERO_SLIDES.map((slide, index) => {
@@ -179,13 +178,14 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
             </div>
           );
         })}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#07141E] via-[#07141E]/65 to-[#07141E]/25" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#050F19]/95 via-[#07141E]/68 to-[#07141E]/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07141E] via-transparent to-[#07141E]/30" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#07141E]/30 to-[#07141E]/75" />
       </div>
 
       <div
         ref={contentRef}
-        className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28 flex flex-col items-center text-center"
+        className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28 flex flex-col items-center text-center lg:items-start lg:text-left"
       >
         {/* Top Floating Pill */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0B1220]/80 border border-[#E7C878]/40 backdrop-blur-md mb-6 shadow-xl animate-fadeIn">
@@ -214,7 +214,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
 
         {/* Quick CTA Buttons */}
         <div
-          className="mt-8 flex flex-wrap items-center justify-center gap-4 animate-fadeInUp"
+          className="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-4 animate-fadeInUp"
           style={isStatic ? undefined : { animationDelay: '1.45s' }}
         >
           <button
@@ -242,7 +242,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
 
         {/* Premium Property Search Interface */}
         <div
-          className="mt-12 w-full max-w-5xl animate-fadeInUp"
+          className="mt-12 w-full max-w-5xl lg:max-w-4xl animate-fadeInUp"
           style={isStatic ? undefined : { animationDelay: '1.6s' }}
         >
           <div className="glass-panel p-4 sm:p-6 rounded-2xl shadow-2xl border border-[#E7C878]/30 text-left">
@@ -372,7 +372,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
 
         {/* Key Statistics Strip — animated count-up */}
         {statistics.length > 0 && (
-          <div className="mt-16 grid grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-5xl pt-8 border-t border-slate-800/80">
+          <div className="mt-16 grid grid-cols-2 md:grid-cols-3 gap-6 w-full max-w-5xl lg:max-w-4xl pt-8 border-t border-slate-800/80">
             {statistics.map((stat) => (
               <div key={stat.label} className="space-y-1">
                 <div className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white">

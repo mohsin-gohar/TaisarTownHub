@@ -371,7 +371,7 @@ const MainAppContent: React.FC = () => {
               </Suspense>
             ) : null}
 
-            {resolvedView === 'home' && <>
+            {resolvedView === 'home' && <div className="luxury-home">
             {/* SECTION 1 — Premium Navbar (included via Navbar component) */}
             {/* Already rendered by Navbar above */}
 
@@ -635,7 +635,7 @@ const MainAppContent: React.FC = () => {
             </section>
 
             {/* SECTION 12 — Premium Footer */}
-            </>}
+            </div>}
           </main>
 
           <Footer />
