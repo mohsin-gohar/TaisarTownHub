@@ -11,9 +11,10 @@ use Illuminate\Support\Facades\Storage;
 use Tests\Feature\EnterpriseTestCase;
 
 /**
- * 5 GB default workspace + platform storage oversight.
+ * Storage is monitored for oversight in this release; it is not quota-enforced.
  *
- * The quota is always enforced by the API, not just shown in the browser.
+ * These tests lock in both halves: usage is still measured accurately, and no
+ * configured storage value can block an upload or suspend an agency.
  */
 class AgencyStorageOversightTest extends EnterpriseTestCase
 {
@@ -70,17 +71,21 @@ class AgencyStorageOversightTest extends EnterpriseTestCase
         $this->assertSame(1, AgencySubscription::where('agency_id', $agency->id)->count());
     }
 
-    public function test_storage_usage_endpoint_reports_enforced_quota_and_bytes(): void
+    public function test_storage_usage_endpoint_reports_monitoring_bytes_without_a_quota(): void
     {
         $agency = $this->makeAgency('Quota Agency');
         $this->activeDocument($agency->id, 2048);
         [$user] = $this->agencyUser(['documents.view'], 'document_manager', $agency);
 
-        $this->getJson('/api/agency/documents/storage-usage', $this->authHeaders($this->tokenFor($user)))
+        $body = $this->getJson('/api/agency/documents/storage-usage', $this->authHeaders($this->tokenFor($user)))
             ->assertStatus(200)
             ->assertJsonPath('success', true)
             ->assertJsonPath('storage_bytes', 2048)
-            ->assertJsonPath('unlimited', true);
+            ->assertJsonPath('unlimited', true)
+            ->assertJsonPath('monitoring_only', true)
+            ->json();
+
+        $this->assertArrayNotHasKey('storage_mb_limit', $body);
     }
 
     public function test_uploads_are_not_rejected_by_removed_storage_quota(): void
@@ -113,9 +118,10 @@ class AgencyStorageOversightTest extends EnterpriseTestCase
 
         $row = collect($list['agencies'])->firstWhere('id', $agency->id);
         $this->assertNotNull($row);
-        $this->assertNull($row['storage_limit_mb']);
         $this->assertSame(4096, $row['storage_used_bytes']);
-        $this->assertFalse($row['over_quota']);
+        $this->assertArrayNotHasKey('storage_limit_mb', $row);
+        $this->assertArrayNotHasKey('over_quota', $row);
+        $this->assertSame('monitor_only', $list['summary']['storage_mode']);
 
         $detail = $this->getJson("/api/admin/agencies-oversight/{$agency->id}", $headers)
             ->assertStatus(200)
@@ -125,14 +131,16 @@ class AgencyStorageOversightTest extends EnterpriseTestCase
         $this->assertSame(4096, $detail['storage']['document_bytes']);
         $this->assertSame($document->id, $detail['documents'][0]['id']);
         $this->assertArrayNotHasKey('disk_path', $detail['documents'][0]);
+        $this->assertArrayNotHasKey('quota_history', $detail);
+        $this->assertArrayNotHasKey('storage_limit_mb', $detail['storage']);
 
         $this->assertDatabaseHas('documents', ['id' => $document->id]);
         // Quota extension is intentionally unavailable in this release.
     }
 
-    public function test_over_quota_agency_is_flagged_and_upload_still_blocked(): void
+    public function test_legacy_plan_storage_value_never_blocks_uploads_or_suspends_the_agency(): void
     {
-        [$admin, $headers] = $this->platformAdmin();
+        Storage::fake('documents');
         $agency = $this->makeAgency('Over Quota Agency');
         $plan = SubscriptionPlan::create([
             'key' => 'over_' . bin2hex(random_bytes(3)),
@@ -147,12 +155,15 @@ class AgencyStorageOversightTest extends EnterpriseTestCase
         ]);
         $this->activeDocument($agency->id, 2 * 1024 * 1024);
 
-        $detail = $this->getJson("/api/admin/agencies-oversight/{$agency->id}", $headers)
-            ->assertStatus(200)
-            ->json();
+        [$user] = $this->agencyUser(['documents.view', 'documents.upload'], 'document_manager', $agency);
+        $headers = $this->authHeaders($this->tokenFor($user));
 
-        // Monitoring may still report the configured limit, but this release
-        // does not enforce it or block uploads.
+        $file = UploadedFile::fake()->create('over-legacy-limit.pdf', 1536, 'application/pdf');
+        $this->post('/api/agency/documents', ['file' => $file, 'title' => 'Still allowed'], $headers)
+            ->assertStatus(201)
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(2, Document::where('agency_id', $agency->id)->count());
         $this->assertSame('active', $agency->fresh()->status, 'storage state never suspends the agency automatically');
         $this->assertDatabaseHas('documents', ['agency_id' => $agency->id]);
     }

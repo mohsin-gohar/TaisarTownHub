@@ -12,11 +12,12 @@ use App\Support\PlanLimits;
 use Illuminate\Http\Request;
 
 /**
- * Platform oversight of agency storage.
+ * Platform oversight of agency storage — read-only monitoring.
  *
- * Super admins can see the same byte counters the upload gates enforce, review
- * file metadata (never file contents), and extend an agency's quota. Extending
- * a quota never deletes or downgrades data.
+ * Super admins can see the same byte counters the upload pipeline records and
+ * review file metadata (never file contents). This release has no storage
+ * quota, trial or quota-extension control: files are never deleted or blocked
+ * by the numbers on this screen.
  */
 class AdminAgencyOversightController extends Controller
 {
@@ -44,13 +45,11 @@ class AdminAgencyOversightController extends Controller
         }
 
         $page = $query->orderBy('name')->paginate(min((int) $request->get('per_page', 25), 100));
-        $overQuota = 0;
+        $storageOnPage = 0;
 
-        $agencies = collect($page->items())->map(function (Agency $agency) use (&$overQuota) {
+        $agencies = collect($page->items())->map(function (Agency $agency) use (&$storageOnPage) {
             $row = $this->storageRow($agency);
-            if ($row['over_quota']) {
-                $overQuota++;
-            }
+            $storageOnPage += (int) $row['storage_used_bytes'];
 
             return array_merge([
                 'id' => $agency->id,
@@ -82,7 +81,8 @@ class AdminAgencyOversightController extends Controller
             ],
             'summary' => [
                 'agencies_on_page' => $agencies->count(),
-                'over_quota_on_page' => $overQuota,
+                'storage_used_bytes_on_page' => $storageOnPage,
+                'storage_mode' => 'monitor_only',
             ],
         ]);
     }
@@ -128,33 +128,17 @@ class AdminAgencyOversightController extends Controller
             ]),
             'documents' => $documents,
             'media' => $media,
-            'quota_history' => \App\Models\AuditLog::query()
-                ->where('action', 'agency.quota.extend')
-                ->where('entity_id', $agency->id)
-                ->orderByDesc('created_at')
-                ->limit(20)
-                ->get(['id', 'actor', 'detail', 'metadata', 'created_at']),
+            'storage_mode' => 'monitor_only',
         ]);
     }
 
-    /** Shared storage shape for list + detail. */
+    /** Shared read-only storage shape for list + detail. */
     private function storageRow(Agency $agency): array
     {
         $usage = PlanLimits::usage($agency);
-        $used = (int) $usage['storage_bytes'];
-        $limitMb = $agency->limits()['storage_mb'] ?? null;
-        $limitMb = $limitMb !== null && (int) $limitMb > 0 ? (int) $limitMb : null;
-        $limitBytes = $limitMb !== null ? $limitMb * 1048576 : null;
 
         return [
-            'storage_used_bytes' => $used,
-            'storage_limit_mb' => $limitMb,
-            'storage_limit_bytes' => $limitBytes,
-            'storage_percent' => $limitBytes !== null && $limitBytes > 0
-                ? round(min(100, ($used / $limitBytes) * 100), 1)
-                : 0,
-            'storage_remaining_bytes' => $limitBytes !== null ? max(0, $limitBytes - $used) : null,
-            'over_quota' => $limitBytes !== null && $used > $limitBytes,
+            'storage_used_bytes' => (int) $usage['storage_bytes'],
         ];
     }
 }

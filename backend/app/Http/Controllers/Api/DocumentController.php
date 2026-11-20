@@ -295,11 +295,9 @@ class DocumentController extends Controller
             $this->requirePermission($request, 'documents.view_sensitive');
         }
 
-        // G-8: plan limit — vault storage quota is enforced server-side.
-        // A per-agency cache lock serialises concurrent uploads so they cannot
-        // collectively exceed the quota.
-        // Storage quota/trial enforcement removed for this release. Individual
-        // file size, type and malware checks above still apply.
+        // Storage quota/trial enforcement is not part of this release.
+        // Individual file size, type, malware and authorization checks above
+        // and below still apply.
 
         if ($request->folder_id) {
             DocumentFolder::where('agency_id', $agencyId)->where('id', $request->folder_id)->firstOrFail();
@@ -493,14 +491,12 @@ class DocumentController extends Controller
         $storedName = $document->id . '_v' . ($document->version + 1) . '.' . $check['ext'];
         $relativePath = $agencyId . '/' . now()->format('Y/m') . '/' . $storedName;
 
-        // Quota: a new version adds its bytes on top of every stored version.
-        // Storage quota/trial enforcement removed for this release. Individual
-        // file size, type and malware checks above still apply.
-
-            // Write the bytes first (encrypted at rest); only then flip the DB
-            // pointers inside a transaction so the document never points at
-            // bytes that were not stored.
-            SecureFileStore::storeUpload('documents', $relativePath, $file);
+        // Storage quota/trial enforcement is not part of this release.
+        // Individual file size, type, malware and authorization checks above
+        // still apply. Write the bytes first (encrypted at rest); only then
+        // flip the DB pointers inside a transaction so the document never
+        // points at bytes that were not stored.
+        SecureFileStore::storeUpload('documents', $relativePath, $file);
 
         $previous = [
             'version' => $document->version,
@@ -953,9 +949,11 @@ class DocumentController extends Controller
     }
 
     /**
-     * GET /api/agency/documents/storage-usage — server-side usage counters
-     * (same source the quota gates read) so the UI can never drift from what
-     * the API enforces.
+     * GET /api/agency/documents/storage-usage — read-only byte counters.
+     *
+     * Storage quotas are not enforced in this release; the numbers are kept
+     * for monitoring and audit. Per-file upload limits and malware checks are
+     * applied on the upload endpoints instead.
      */
     public function usage(Request $request)
     {
@@ -964,13 +962,12 @@ class DocumentController extends Controller
 
         $agency = Agency::findOrFail($agencyId);
         $usage = PlanLimits::usage($agency);
-        $limitMb = $agency->limits()['storage_mb'] ?? null;
 
         return response()->json([
             'success' => true,
             'storage_bytes' => $usage['storage_bytes'],
-            'storage_mb_limit' => $limitMb !== null && (int) $limitMb > 0 ? (int) $limitMb : null,
-            'unlimited' => $limitMb === null || (int) $limitMb <= 0,
+            'unlimited' => true,
+            'monitoring_only' => true,
             'usage' => $usage,
         ]);
     }

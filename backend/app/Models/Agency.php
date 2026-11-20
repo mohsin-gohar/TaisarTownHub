@@ -118,9 +118,9 @@ class Agency extends Model
     /** Effective limits: subscription plan limits merged with per-agency overrides. */
     public function limits(): array
     {
-        // Every agency starts with a 5 GB workspace unless a platform
-        // administrator assigns a larger plan/override. The quota is enforced
-        // server-side on vault + media uploads.
+        // Every agency starts with an unlimited workspace in this release.
+        // Platform administrators may still assign a plan/override for other
+        // limits (listings, staff, leads); storage bytes are monitored only.
         $defaults = [
             'listings' => 10, 'staff' => 2, 'storage_mb' => 0,
             'dealer_files' => 100, 'featured_credits' => 0, 'listing_days' => 30,

@@ -74,7 +74,7 @@ export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
   const { confirmAction } = useApp();
   const [media, setMedia] = useState<any[]>([]);
   const [pagination, setPagination] = useState<any>(null);
-  const [storage, setStorage] = useState<any | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -97,10 +97,7 @@ export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
-    const [body, storageBody] = await Promise.all([
-      api.getMediaItems(),
-      api.getAgencyDocumentStorageUsage(),
-    ]);
+    const body = await api.getMediaItems();
     if (!body || body.success === false) {
       setError(body?.message || 'Could not load the media library. An agency membership is required.');
       setMedia([]);
@@ -109,7 +106,6 @@ export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
       setMedia(Array.isArray(body.media) ? body.media : []);
       setPagination(body.pagination ?? null);
     }
-    setStorage(storageBody && storageBody.success !== false ? storageBody : null);
     setLoading(false);
   }, []);
 
@@ -237,53 +233,6 @@ export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
     >
       {error && <EnterpriseNote tone="error">{error}</EnterpriseNote>}
       {notice && <EnterpriseNote tone="success">{notice}</EnterpriseNote>}
-
-      {storage && (() => {
-        const limitBytes = storage.storage_mb_limit ? Number(storage.storage_mb_limit) * 1024 * 1024 : null;
-        const used = Number(storage.storage_bytes ?? 0);
-        const percent = limitBytes ? Math.min(100, Math.round((used / limitBytes) * 100)) : 0;
-        const blocked = Boolean(limitBytes && used >= limitBytes);
-        return (
-          <div className={`rounded-xl border p-4 ${
-            blocked
-              ? 'border-rose-700/70 bg-rose-950/30'
-              : percent >= 90
-                ? 'border-amber-700/60 bg-amber-950/25'
-                : 'border-slate-800 bg-[#0B1220]'
-          }`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <div className="text-xs font-bold uppercase tracking-wider text-slate-200">Workspace Storage</div>
-                <div className="text-[11px] text-slate-400 mt-0.5">
-                  {formatBytes(used)} of {storage.unlimited ? 'unlimited' : `${storage.storage_mb_limit} MB`} used
-                  {percent > 0 && !storage.unlimited ? ` · ${percent}%` : ''}
-                </div>
-              </div>
-              {blocked ? (
-                <EnterpriseBadge tone="red">Limit reached</EnterpriseBadge>
-              ) : percent >= 90 ? (
-                <EnterpriseBadge tone="gold">Nearly full</EnterpriseBadge>
-              ) : (
-                <EnterpriseBadge tone="green">Healthy</EnterpriseBadge>
-              )}
-            </div>
-            {!storage.unlimited && (
-              <div className="mt-3 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${blocked ? 'bg-rose-500' : percent >= 90 ? 'bg-amber-400' : 'bg-[#E7C878]'}`}
-                  style={{ width: `${Math.max(2, percent)}%` }}
-                />
-              </div>
-            )}
-            {blocked && (
-              <p className="mt-3 text-[11px] text-rose-300">
-                Storage limit reached. New media uploads are rejected by the server; existing files were not removed.
-                Delete unneeded assets or ask a platform administrator to extend the agency quota.
-              </p>
-            )}
-          </div>
-        );
-      })()}
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         <div className="xl:col-span-8 space-y-4">
@@ -451,7 +400,7 @@ export const AdminMediaStudio: React.FC<MediaStudioProps> = ({ canUpload }) => {
                 />
                 <EnterpriseButton
                   type="submit"
-                  disabled={busy === 'upload' || Boolean(storage?.storage_mb_limit && Number(storage.storage_bytes ?? 0) >= Number(storage.storage_mb_limit) * 1024 * 1024)}
+                  disabled={busy === 'upload'}
                   className="w-full"
                 >
                   <Upload className="w-3.5 h-3.5" /> {busy === 'upload' ? 'Saving…' : 'Save media'}

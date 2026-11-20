@@ -201,10 +201,9 @@ class MediaController extends Controller
 
             $storedPath = 'media/' . $agencyId . '/' . now()->format('Y/m') . '/' . $mediaId . '.' . $ext;
 
-            // G-8: media bytes count against the same storage quota the
-            // vault enforces (they live on the same private disk). A per-agency
-            // lock serialises concurrent uploads.
-            // Storage quota/trial enforcement removed for this release.
+            // Storage quota/trial enforcement is not part of this release.
+            // The per-file size limit, content checks and malware scan above
+            // still apply before anything is written to the private disk.
             SecureFileStore::storeUpload('documents', $storedPath, $file);
 
             $originalName = UploadSecurity::sanitizeOriginalName($file->getClientOriginalName());

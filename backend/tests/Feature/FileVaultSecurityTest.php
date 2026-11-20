@@ -409,11 +409,12 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->get("/api/media/{$media['id']}/file")->assertStatus(200);
     }
 
-    /* ============ Quota accounting ============ */
+    /* ============ Storage monitoring (no quota) ============ */
 
     public function test_storage_quota_is_not_enforced_for_this_release(): void
     {
-        // Trashed bytes are retained for audit — trashing must NOT free quota.
+        // Trashed bytes are retained for monitoring/audit — trashing does NOT
+        // reduce the reported workspace total, but it never blocks an upload.
         [$agency] = $this->agencyWithLimits(['storage_mb' => 1]);
         [$user] = $this->agencyUser([
             'documents.view', 'documents.upload', 'documents.download', 'documents.delete',
@@ -428,7 +429,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
             'title' => 'Second',
         ], $headers)->assertStatus(201);
 
-        // Media bytes share the same storage quota as vault documents.
+        // Media bytes share the same monitored total as vault documents.
         [$agency2] = $this->agencyWithLimits(['storage_mb' => 1]);
         [$user2] = $this->agencyUser([
             'documents.view', 'documents.upload', 'manage_media', 'upload_media',
@@ -445,11 +446,11 @@ class FileVaultSecurityTest extends EnterpriseTestCase
             'title' => 'Doc fits',
         ], $headers2)->assertStatus(201);
 
-        // 500 KB media + 500 KB doc + 100 KB doc = 1100 KB > 1 MB — even
-        // though ACTIVE documents alone are only 500 KB.
+        // 500 KB media + 500 KB doc + 100 KB doc = 1100 KB, over the legacy
+        // 1 MB value — the upload must still succeed.
         $this->post('/api/agency/documents', [
             'file' => UploadedFile::fake()->createWithContent('doc2.pdf', $this->pdfBytes(100)),
-            'title' => 'Doc over quota',
+            'title' => 'Doc over legacy limit',
         ], $headers2)->assertStatus(201);
     }
 

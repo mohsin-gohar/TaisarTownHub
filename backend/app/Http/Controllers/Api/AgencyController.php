@@ -34,6 +34,8 @@ class AgencyController extends Controller
             ], 403);
         }
 
+        $request->merge(['email' => mb_strtolower(trim((string) $request->email))]);
+
         $request->validate([
             'name' => 'required|string|min:3|max:120',
             'contactName' => 'required|string|min:3|max:120',
@@ -91,8 +93,9 @@ class AgencyController extends Controller
                     'status' => 'active',
                 ]);
 
-                // A real quota row from day one (database-enforced 5 GB starter
-                // workspace). No file is ever removed when this term changes.
+                // A real subscription row from day one. Storage is not quota-
+                // enforced in this release; no existing file is ever removed
+                // when this term changes.
                 \App\Services\AgencyOnboarding::ensureStarterSubscription($agency, $user->id);
 
                 $token = $user->createToken('auth-token')->plainTextToken;
@@ -204,20 +207,21 @@ class AgencyController extends Controller
 
         $payload = $this->publicAgencyPayload($agency);
 
-        $listingsQuery = $agency->properties()->publiclyVisible();
-
-        if ($request->filled('purpose') && in_array($request->purpose, ['sale', 'rent'], true)) {
-            $listingsQuery->where('listing_purpose', $request->purpose);
-        }
+        // Sale-only marketplace: the public profile has never exposed
+        // rental listings, even for legacy internal rental rows.
+        $listingsQuery = $agency->properties()->publiclyVisible()
+            ->where('listing_purpose', 'sale');
 
         if ($request->filled('type')) {
             $listingsQuery->where('type', $request->type);
         }
 
+        $saleListings = $agency->properties()->publiclyVisible()->where('listing_purpose', 'sale');
+
         $payload['stats'] = [
-            'public_listings' => $agency->properties()->publiclyVisible()->count(),
-            'sale_listings' => $agency->properties()->publiclyVisible()->where('listing_purpose', 'sale')->count(),
-            'rent_listings' => $agency->properties()->publiclyVisible()->where('listing_purpose', 'rent')->count(),
+            'public_listings' => (clone $saleListings)->count(),
+            'sale_listings' => (clone $saleListings)->count(),
+            'rent_listings' => 0,
             'team_members' => $agency->activeMembers()->count(),
         ];
 
@@ -347,7 +351,8 @@ class AgencyController extends Controller
 
     private function publicAgencyPayload(Agency $agency): array
     {
-        $publicListings = $agency->properties()->publiclyVisible();
+        $publicListings = $agency->properties()->publiclyVisible()
+            ->where('listing_purpose', 'sale');
 
         return [
             'id' => $agency->id,
@@ -366,8 +371,8 @@ class AgencyController extends Controller
             'status' => $agency->status,
             'member_count' => $agency->activeMembers()->count(),
             'listing_count' => (clone $publicListings)->count(),
-            'sale_listing_count' => (clone $publicListings)->where('listing_purpose', 'sale')->count(),
-            'rent_listing_count' => (clone $publicListings)->where('listing_purpose', 'rent')->count(),
+            'sale_listing_count' => (clone $publicListings)->count(),
+            'rent_listing_count' => 0,
             'since' => optional($agency->created_at)->format('Y'),
             'created_at' => optional($agency->created_at)?->toIso8601String(),
         ];

@@ -24,7 +24,7 @@ class Permissions
         'agency.view' => ['View agency profile', 'agency', false],
         'agency.update' => ['Update agency profile', 'agency', false],
         'agency.manage_staff' => ['Manage staff & roles', 'agency', false],
-        'agency.manage_settings' => ['Manage agency settings & quotas', 'agency', false],
+        'agency.manage_settings' => ['Manage agency settings', 'agency', false],
         'agency.subscribe' => ['Manage subscription & billing', 'agency', false],
 
         // Properties

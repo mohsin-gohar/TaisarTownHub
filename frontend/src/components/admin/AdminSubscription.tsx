@@ -16,7 +16,7 @@ import {
   titleCase,
 } from './AdminEnterpriseUi';
 
-const LIMIT_KEYS = ['listings', 'staff', 'storage_mb', 'images', 'videos', 'featured_credits', 'listing_days'] as const;
+const LIMIT_KEYS = ['listings', 'staff', 'images', 'videos', 'featured_credits', 'listing_days'] as const;
 
 const UsageMeter: React.FC<{ label: string; used: number; limit: number | null; remaining: number | null; suffix?: string }> = ({
   label, used, limit, remaining, suffix = '',
@@ -76,14 +76,13 @@ export const AdminSubscription: React.FC = () => {
 
   const usedFor = (key: string): number => {
     if (key === 'staff') return Number(usage.members ?? 0);
-    if (key === 'storage_mb') return Math.round(Number(usage.storage_bytes ?? 0) / (1024 * 1024));
     return Number(usage[key] ?? 0);
   };
 
   return (
     <EnterprisePage
       title="Subscription & Usage"
-      subtitle="Plan limits are enforced by the API on every upload, invite and listing creation."
+      subtitle="Listing, staff and lead limits are enforced by the API. Storage is monitored for reporting only and never blocks an upload."
       actions={
         <EnterpriseButton variant="secondary" onClick={() => void load()}>
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
@@ -105,7 +104,7 @@ export const AdminSubscription: React.FC = () => {
             />
             <EnterpriseStat label="Status" value={titleCase(status)} hint={subscription?.ends_at ? `Ends ${formatDate(subscription.ends_at)}` : 'No end date'} />
             <EnterpriseStat label="Staff Used" value={`${usage.members ?? 0} / ${limits.staff ?? '∞'}`} hint="Active agency memberships" />
-            <EnterpriseStat label="Storage Used" value={formatBytes(usage.storage_bytes)} hint={`Limit: ${limits.storage_mb ?? '∞'} MB`} />
+            <EnterpriseStat label="Storage Used" value={formatBytes(usage.storage_bytes)} hint="Monitoring only — no storage quota" />
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -138,19 +137,19 @@ export const AdminSubscription: React.FC = () => {
                   limit={limits.leads ?? null}
                   remaining={remaining.leads ?? null}
                 />
-                <UsageMeter
-                  label="Storage"
-                  used={usedFor('storage_mb')}
-                  limit={limits.storage_mb ?? null}
-                  remaining={limits.storage_mb != null && usage.storage_bytes != null
-                    ? Math.max(0, Number(limits.storage_mb) - usedFor('storage_mb'))
-                    : null}
-                  suffix=" MB"
-                />
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] text-slate-300">
+                    <span>Storage</span>
+                    <span className="text-slate-400">{formatBytes(usage.storage_bytes)}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    Monitoring only — this release has no storage quota or trial expiry.
+                  </div>
+                </div>
               </div>
 
               <div className="grid sm:grid-cols-2 gap-2 mt-5 pt-4 border-t border-slate-800 text-[11px] text-slate-400">
-                {LIMIT_KEYS.filter((key) => key !== 'listings' && key !== 'staff' && key !== 'storage_mb').map((key) => (
+                {LIMIT_KEYS.filter((key) => key !== 'listings' && key !== 'staff').map((key) => (
                   <div key={key} className="flex justify-between gap-2">
                     <span>{titleCase(key)}</span>
                     <span className="font-semibold text-slate-200">{limits[key] ?? '—'}</span>
@@ -159,7 +158,6 @@ export const AdminSubscription: React.FC = () => {
               </div>
 
               <div className="mt-4 text-[10px] text-slate-500 space-y-1">
-                {subscription?.trial_ends_at && <p>Trial ends: {formatDate(subscription.trial_ends_at)}</p>}
                 {subscription?.starts_at && <p>Started: {formatDate(subscription.starts_at)}</p>}
                 {!plan && (
                   <p>

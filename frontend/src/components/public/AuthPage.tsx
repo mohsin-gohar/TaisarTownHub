@@ -22,6 +22,41 @@ interface AuthPageProps {
   initialTab?: 'signin' | 'register';
 }
 
+const GOOGLE_NONCE_KEY = 'taisar.google.oauth.nonce';
+
+/**
+ * Per-tab CSRF binding for the Google OAuth round trip. The backend hashes
+ * this value into its one-time state and echoes the hash back on the callback;
+ * a callback started in another browser will not match this tab's value.
+ */
+const createGoogleNonce = (): string => {
+  const bytes = new Uint8Array(24);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+};
+
+const googleErrorMessage = (code: string): string => {
+  switch (code) {
+    case 'access_denied':
+      return 'Google sign-in was cancelled.';
+    case 'account_disabled':
+      return 'This account is suspended or inactive. Contact support.';
+    case 'account_locked':
+      return 'This account is temporarily locked. Please try again later.';
+    case 'email_unverified':
+      return 'Google did not confirm a verified email address for this account.';
+    case 'invalid_state':
+      return 'Your Google sign-in session expired. Please try again.';
+    case 'oauth_failed':
+      return 'Google sign-in could not be completed. Please try again.';
+    default:
+      return 'Google sign-in failed. Please try again.';
+  }
+};
+
 export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => {
   const {
     loginWithCredentials,
@@ -65,32 +100,70 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
     const challenge = params.get('google_challenge');
     const expires = params.get('expires');
     const googleError = params.get('google_error');
+    const nonceFromUrl = params.get('google_nonce');
+
+    const expectedNonceHash = (() => {
+      try {
+        return sessionStorage.getItem(GOOGLE_NONCE_KEY);
+      } catch {
+        return null;
+      }
+    })();
+    const clearNonce = () => {
+      try {
+        sessionStorage.removeItem(GOOGLE_NONCE_KEY);
+      } catch {
+        /* sessionStorage can be unavailable in hardened browsers */
+      }
+    };
+    const clearParams = () => window.history.replaceState({}, '', window.location.pathname);
+    const nonceMatches = Boolean(nonceFromUrl && expectedNonceHash && nonceFromUrl === expectedNonceHash);
 
     if (googleError) {
-      setFormError('Google sign-in was cancelled or failed. Please try again.');
-      window.history.replaceState({}, '', window.location.pathname);
+      clearNonce();
+      clearParams();
+      setFormError(nonceMatches ? googleErrorMessage(googleError) : googleErrorMessage('invalid_state'));
       return;
     }
 
+    if (!code && !challenge) return;
+
+    // A callback that was not started in this tab is a login-CSRF attempt:
+    // never show its MFA form and never exchange its code.
+    if (!nonceMatches) {
+      clearNonce();
+      clearParams();
+      setFormError('Google sign-in could not be verified in this browser. Please try again.');
+      return;
+    }
+
+    clearNonce();
+
     if (challenge) {
+      clearParams();
       setMfaChallenge({ challenge, expiresIn: Number(expires || 300) });
-      window.history.replaceState({}, '', window.location.pathname);
       return;
     }
 
     if (code) {
+      // Remove the one-time code from the address bar before the network call
+      // so it cannot leak through history, screenshots or referrers.
+      clearParams();
       setBusy(true);
-      void api.exchangeGoogleCode(code).then((result: any) => {
-        if (result.success && result.token) {
-          setAuthToken(result.token);
-          window.history.replaceState({}, '', window.location.pathname);
-          setCurrentView('admin');
-        } else {
-          setFormError(result.error || 'Google sign-in failed. Please try again.');
-          window.history.replaceState({}, '', window.location.pathname);
-        }
-        setBusy(false);
-      });
+      void api.exchangeGoogleCode(code)
+        .then((result: any) => {
+          if (result.success && result.token) {
+            setAuthToken(result.token);
+            setCurrentView('admin');
+          } else {
+            setFormError(result.error || 'Google sign-in failed. Please try again.');
+          }
+          setBusy(false);
+        })
+        .catch(() => {
+          setFormError('Google sign-in failed. Please try again.');
+          setBusy(false);
+        });
     }
   }, [initialTab, setCurrentView]);
 
@@ -323,14 +396,27 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
               onClick={() => {
                 setFormError('');
                 setBusy(true);
-                void api.getGoogleRedirectUrl().then((result: any) => {
-                  if (result.success && result.url) {
-                    window.location.href = result.url;
-                  } else {
-                    setFormError(result.error || 'Google Sign-In is not available.');
+                const nonce = createGoogleNonce();
+                void api.getGoogleRedirectUrl(nonce)
+                  .then((result: any) => {
+                    if (result.success && result.url && result.nonce_hash) {
+                      try {
+                        sessionStorage.setItem(GOOGLE_NONCE_KEY, String(result.nonce_hash));
+                      } catch {
+                        setFormError('Your browser does not allow the secure Google sign-in flow. Enable site storage and try again.');
+                        setBusy(false);
+                        return;
+                      }
+                      window.location.href = result.url;
+                    } else {
+                      setFormError(result.error || 'Google Sign-In is not available.');
+                      setBusy(false);
+                    }
+                  })
+                  .catch(() => {
+                    setFormError('Cannot reach the API. Please try again.');
                     setBusy(false);
-                  }
-                });
+                  });
               }}
               className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-100 active:scale-[0.99] text-[#1f1f1f] font-semibold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-300 disabled:opacity-60"
             >

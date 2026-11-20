@@ -4,7 +4,6 @@ import {
   ArrowUp,
   Award,
   CalendarClock,
-  CreditCard,
   Plus,
   RefreshCw,
   Settings2,
@@ -25,7 +24,6 @@ import {
   EnterpriseStat,
   enterpriseInputClass,
   formatDate,
-  formatPKR,
   titleCase,
 } from './AdminEnterpriseUi';
 
@@ -36,9 +34,6 @@ interface Placement {
   position: number;
   starts_at?: string | null;
   ends_at?: string | null;
-  price?: string | number;
-  payment_status: string;
-  payment_method?: string | null;
   notes?: string | null;
   agency?: { id: string; name: string; city?: string | null } | null;
   package?: { id: number; name: string } | null;
@@ -48,7 +43,6 @@ interface PromotionPackage {
   id: number;
   key: string;
   name: string;
-  price: string | number;
   duration_days: number;
   is_active: boolean;
 }
@@ -70,13 +64,6 @@ const toLocalInput = (value?: string | null): string => {
   if (Number.isNaN(date.getTime())) return '';
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
-};
-
-const paymentTone = (status: string): 'green' | 'gold' | 'red' | 'slate' => {
-  if (status === 'paid') return 'green';
-  if (status === 'pending') return 'gold';
-  if (status === 'refunded') return 'red';
-  return 'slate';
 };
 
 const statusTone = (status: string): 'green' | 'gold' | 'red' | 'slate' | 'blue' => {
@@ -105,14 +92,12 @@ export const AdminFeaturedPromotions: React.FC = () => {
     duration_days: '',
     position: '',
     starts_at: '',
-    price: '',
-    payment_status: 'waived',
     notes: '',
   });
 
   const [settingsDraft, setSettingsDraft] = useState<Settings>({ max_slots: 10, default_duration_days: 30 });
   const [packageForm, setPackageForm] = useState({
-    key: '', name: '', duration_days: '30', price: '0', description: '',
+    key: '', name: '', duration_days: '30', description: '',
   });
   const [packageEdit, setPackageEdit] = useState<Record<string, string>>({});
 
@@ -161,15 +146,12 @@ export const AdminFeaturedPromotions: React.FC = () => {
     setBusy('create');
     setError('');
     setNotice('');
-    const price = Number(form.price || 0);
     const result = await api.createAdminFeaturedAgency({
       agency_id: form.agency_id,
       package_id: form.package_id ? Number(form.package_id) : undefined,
       duration_days: form.duration_days ? Number(form.duration_days) : undefined,
       position: form.position ? Number(form.position) : undefined,
       starts_at: form.starts_at || undefined,
-      price,
-      payment_status: form.payment_status,
       notes: form.notes || undefined,
       status: 'active',
     });
@@ -181,7 +163,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
     setNotice(`${result.body?.placement?.agency?.name || 'Agency'} is now on the featured roster.`);
     setForm({
       agency_id: '', package_id: '', duration_days: '', position: '',
-      starts_at: '', price: '', payment_status: 'waived', notes: '',
+      starts_at: '', notes: '',
     });
     await load();
   };
@@ -192,8 +174,6 @@ export const AdminFeaturedPromotions: React.FC = () => {
       ...previous,
       package_id: value,
       duration_days: selected ? String(selected.duration_days) : previous.duration_days,
-      price: selected ? String(selected.price) : previous.price,
-      payment_status: selected && Number(selected.price) > 0 ? 'pending' : 'waived',
     }));
   };
 
@@ -256,9 +236,6 @@ export const AdminFeaturedPromotions: React.FC = () => {
       position: String(placement.position),
       starts_at: toLocalInput(placement.starts_at),
       ends_at: toLocalInput(placement.ends_at),
-      price: String(placement.price ?? 0),
-      payment_status: placement.payment_status,
-      payment_method: placement.payment_method || '',
       notes: placement.notes || '',
     });
   };
@@ -274,9 +251,6 @@ export const AdminFeaturedPromotions: React.FC = () => {
       position: editDraft.position ? Number(editDraft.position) : undefined,
       starts_at: editDraft.starts_at || null,
       ends_at: editDraft.ends_at || null,
-      price: Number(editDraft.price || 0),
-      payment_status: editDraft.payment_status,
-      payment_method: editDraft.payment_method || undefined,
       notes: editDraft.notes || undefined,
     });
     setBusy('');
@@ -317,7 +291,6 @@ export const AdminFeaturedPromotions: React.FC = () => {
       name: packageForm.name,
       description: packageForm.description || undefined,
       duration_days: Number(packageForm.duration_days || 30),
-      price: Number(packageForm.price || 0),
       is_active: true,
     });
     setBusy('');
@@ -325,8 +298,8 @@ export const AdminFeaturedPromotions: React.FC = () => {
       setError(result.body?.message || 'Package could not be created.');
       return;
     }
-    setNotice('Promotion package created.');
-    setPackageForm({ key: '', name: '', duration_days: '30', price: '0', description: '' });
+    setNotice('Duration preset created.');
+    setPackageForm({ key: '', name: '', duration_days: '30', description: '' });
     await load();
   };
 
@@ -352,7 +325,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
   return (
     <EnterprisePage
       title="Featured Agencies"
-      subtitle="Paid or complimentary homepage placements. Only approved, verified and active agencies are eligible."
+      subtitle="Free homepage placements selected and ordered by the platform. Only approved, verified and active agencies are eligible."
       actions={
         <EnterpriseButton variant="secondary" onClick={() => void load()}>
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
@@ -367,8 +340,8 @@ export const AdminFeaturedPromotions: React.FC = () => {
         <EnterpriseStat label="Max slots" value={String(stats.max_slots ?? settings.max_slots)} hint="Configurable below" />
         <EnterpriseStat label="Scheduled" value={String(stats.scheduled ?? 0)} hint="Future start date" />
         <EnterpriseStat label="Expiring (7d)" value={String(stats.expiring_7d ?? 0)} hint="Renewal follow-up" />
-        <EnterpriseStat label="Pending payment" value={String(stats.pending_payments ?? 0)} hint="Super-admin reconciliation" />
-        <EnterpriseStat label="Recorded revenue" value={formatPKR(stats.revenue_pkr ?? 0)} hint="Paid placements only" />
+        <EnterpriseStat label="Total placements" value={String(stats.total_placements ?? placements.length)} hint="Including scheduled and ended" />
+        <EnterpriseStat label="Billing" value="Free launch" hint="No payment required" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -392,13 +365,13 @@ export const AdminFeaturedPromotions: React.FC = () => {
                             <span className="text-[10px] font-bold text-[#E7C878]">#{placement.position}</span>
                             <span className="text-sm font-bold text-white truncate">{placement.agency?.name || placement.agency_id}</span>
                             <EnterpriseBadge tone={statusTone(placement.status)}>{titleCase(placement.status)}</EnterpriseBadge>
-                            <EnterpriseBadge tone={paymentTone(placement.payment_status)}>{titleCase(placement.payment_status)}</EnterpriseBadge>
+                            <EnterpriseBadge tone="gold">Featured</EnterpriseBadge>
                             {placement.package && <EnterpriseBadge tone="slate">{placement.package.name}</EnterpriseBadge>}
                           </div>
                           <div className="mt-1 text-[10px] text-slate-500 flex flex-wrap gap-x-3 gap-y-1">
                             <span>Starts {placement.starts_at ? formatDate(placement.starts_at) : 'immediately'}</span>
                             <span>Ends {placement.ends_at ? formatDate(placement.ends_at) : 'no end date'}</span>
-                            <span>{formatPKR(placement.price ?? 0)}</span>
+                            <span>Free placement — no payment</span>
                           </div>
                           {placement.notes && <div className="mt-1 text-[10px] text-slate-500 line-clamp-2">{placement.notes}</div>}
                         </div>
@@ -440,19 +413,6 @@ export const AdminFeaturedPromotions: React.FC = () => {
                               Resume
                             </EnterpriseButton>
                           )}
-                          {placement.payment_status !== 'paid' && (
-                            <EnterpriseButton
-                              variant="secondary"
-                              title="Record a manual payment"
-                              disabled={busy === `placement-${placement.id}`}
-                              onClick={() => void quickUpdate(placement, {
-                                payment_status: 'paid',
-                                payment_method: 'manual',
-                              }, 'Payment recorded as paid (manual).')}
-                            >
-                              <CreditCard className="w-3.5 h-3.5" /> Mark paid
-                            </EnterpriseButton>
-                          )}
                           <EnterpriseButton variant="secondary" onClick={() => openEditor(placement)}>
                             Edit
                           </EnterpriseButton>
@@ -476,7 +436,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
           </EnterpriseCard>
 
           {editing && (
-            <EnterpriseCard title={`Edit placement · ${editing.agency?.name || editing.agency_id}`} subtitle="Status, dates, position and payment state">
+            <EnterpriseCard title={`Edit placement · ${editing.agency?.name || editing.agency_id}`} subtitle="Status, dates and homepage priority">
               <form onSubmit={saveEditor} className="grid sm:grid-cols-2 gap-3">
                 <label className="text-[10px] text-slate-400">
                   Status
@@ -518,28 +478,6 @@ export const AdminFeaturedPromotions: React.FC = () => {
                     onChange={(e) => setEditDraft((d) => ({ ...d, ends_at: e.target.value }))}
                   />
                 </label>
-                <label className="text-[10px] text-slate-400">
-                  Price (PKR)
-                  <input
-                    type="number"
-                    min={0}
-                    className={`${enterpriseInputClass} mt-1`}
-                    value={editDraft.price}
-                    onChange={(e) => setEditDraft((d) => ({ ...d, price: e.target.value }))}
-                  />
-                </label>
-                <label className="text-[10px] text-slate-400">
-                  Payment status
-                  <select
-                    className={`${enterpriseInputClass} mt-1`}
-                    value={editDraft.payment_status}
-                    onChange={(e) => setEditDraft((d) => ({ ...d, payment_status: e.target.value }))}
-                  >
-                    {['waived', 'pending', 'paid', 'refunded'].map((value) => (
-                      <option key={value} value={value}>{titleCase(value)}</option>
-                    ))}
-                  </select>
-                </label>
                 <label className="text-[10px] text-slate-400 sm:col-span-2">
                   Notes
                   <textarea
@@ -558,7 +496,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
             </EnterpriseCard>
           )}
 
-          <EnterpriseCard title="Promotion packages" subtitle="Durations and prices are database-driven; free launch packages are allowed">
+          <EnterpriseCard title="Duration presets" subtitle="Free placements — presets only choose a default run length">
             <div className="space-y-2 mb-4">
               {packages.map((pkg) => (
                 <div key={pkg.id} className="rounded-lg border border-slate-800 bg-[#07141E] p-2.5">
@@ -566,18 +504,11 @@ export const AdminFeaturedPromotions: React.FC = () => {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-bold text-white">{pkg.name}</span>
                       <EnterpriseBadge tone={pkg.is_active ? 'green' : 'slate'}>{pkg.is_active ? 'Active' : 'Hidden'}</EnterpriseBadge>
-                      <span className="text-[10px] text-slate-500">{pkg.duration_days} days · {formatPKR(pkg.price)}</span>
+                      <span className="text-[10px] text-slate-500">{pkg.duration_days} days · free</span>
                     </div>
                     <div className="flex items-center gap-2">
                       {packageEdit[String(pkg.id)] === 'open' ? (
                         <>
-                          <input
-                            type="number"
-                            min={0}
-                            className={`${enterpriseInputClass} !w-24`}
-                            value={packageEdit[`price-${pkg.id}`] ?? String(pkg.price)}
-                            onChange={(e) => setPackageEdit((d) => ({ ...d, [`price-${pkg.id}`]: e.target.value }))}
-                          />
                           <input
                             type="number"
                             min={1}
@@ -589,7 +520,6 @@ export const AdminFeaturedPromotions: React.FC = () => {
                             variant="secondary"
                             disabled={busy === `package-${pkg.id}`}
                             onClick={() => void savePackage(pkg, {
-                              price: Number(packageEdit[`price-${pkg.id}`] ?? pkg.price),
                               duration_days: Number(packageEdit[`days-${pkg.id}`] ?? pkg.duration_days),
                             })}
                           >
@@ -598,7 +528,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
                         </>
                       ) : (
                         <EnterpriseButton variant="secondary" onClick={() => setPackageEdit((d) => ({ ...d, [String(pkg.id)]: 'open' }))}>
-                          Edit price
+                          Edit duration
                         </EnterpriseButton>
                       )}
                       <EnterpriseButton
@@ -613,7 +543,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
                 </div>
               ))}
             </div>
-            <form onSubmit={createPackage} className="grid sm:grid-cols-5 gap-2">
+            <form onSubmit={createPackage} className="grid sm:grid-cols-4 gap-2">
               <input
                 className={enterpriseInputClass}
                 placeholder="key"
@@ -637,16 +567,8 @@ export const AdminFeaturedPromotions: React.FC = () => {
                 onChange={(e) => setPackageForm((f) => ({ ...f, duration_days: e.target.value }))}
                 required
               />
-              <input
-                type="number"
-                min={0}
-                className={enterpriseInputClass}
-                placeholder="Price PKR"
-                value={packageForm.price}
-                onChange={(e) => setPackageForm((f) => ({ ...f, price: e.target.value }))}
-              />
               <EnterpriseButton type="submit" disabled={busy === 'package-create'}>
-                <Plus className="w-3.5 h-3.5" /> Add package
+                <Plus className="w-3.5 h-3.5" /> Add preset
               </EnterpriseButton>
             </form>
           </EnterpriseCard>
@@ -675,7 +597,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
                   </select>
                 </label>
                 <label className="block text-[10px] text-slate-400">
-                  Package
+                  Duration preset
                   <select
                     className={`${enterpriseInputClass} mt-1`}
                     value={form.package_id}
@@ -683,7 +605,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
                   >
                     <option value="">Custom duration</option>
                     {packages.filter((pkg) => pkg.is_active).map((pkg) => (
-                      <option key={pkg.id} value={pkg.id}>{pkg.name} · {pkg.duration_days}d · {formatPKR(pkg.price)}</option>
+                      <option key={pkg.id} value={pkg.id}>{pkg.name} · {pkg.duration_days}d · free</option>
                     ))}
                   </select>
                 </label>
@@ -722,46 +644,20 @@ export const AdminFeaturedPromotions: React.FC = () => {
                     onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
                   />
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="block text-[10px] text-slate-400">
-                    Price (PKR)
-                    <input
-                      type="number"
-                      min={0}
-                      className={`${enterpriseInputClass} mt-1`}
-                      value={form.price}
-                      onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-                      placeholder="0 = complimentary"
-                    />
-                  </label>
-                  <label className="block text-[10px] text-slate-400">
-                    Payment
-                    <select
-                      className={`${enterpriseInputClass} mt-1`}
-                      value={form.payment_status}
-                      onChange={(e) => setForm((f) => ({ ...f, payment_status: e.target.value }))}
-                    >
-                      {['waived', 'pending', 'paid'].map((value) => (
-                        <option key={value} value={value}>{titleCase(value)}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
                 <label className="block text-[10px] text-slate-400">
                   Notes
                   <textarea
                     className={`${enterpriseInputClass} mt-1 min-h-[64px]`}
                     value={form.notes}
                     onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                    placeholder="Payment reference, promotion rationale, approval notes…"
+                    placeholder="Promotion rationale or approval notes (optional)…"
                   />
                 </label>
                 <EnterpriseButton type="submit" disabled={busy === 'create'} className="w-full">
-                  <Sparkles className="w-3.5 h-3.5" /> Create placement
+                  <Sparkles className="w-3.5 h-3.5" /> Create free placement
                 </EnterpriseButton>
                 <p className="text-[10px] text-slate-500">
-                  The homepage labels a placement “Sponsored” only when a real payment is recorded;
-                  complimentary placements show “Featured”.
+                  Every featured placement is free and labelled “Featured” on the homepage. There is no payment step or Sponsored badge in this release.
                 </p>
               </form>
             )}

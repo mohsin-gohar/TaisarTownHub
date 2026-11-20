@@ -34,7 +34,7 @@ class AdminFeaturedAgencyController extends Controller
         $query = AgencyPromotion::query()
             ->with([
                 'agency:id,name,slug,logo_url,city,status,verification_status,office_address',
-                'package:id,name,key,duration_days,price,currency',
+                'package:id,name,key,duration_days',
             ])
             ->orderByRaw("CASE WHEN status = 'active' THEN 0 WHEN status = 'pending' THEN 1 ELSE 2 END")
             ->orderBy('position')
@@ -42,9 +42,6 @@ class AdminFeaturedAgencyController extends Controller
 
         if ($request->filled('status') && in_array($request->status, AgencyPromotion::STATUSES, true)) {
             $query->where('status', $request->status);
-        }
-        if ($request->filled('payment_status') && in_array($request->payment_status, AgencyPromotion::PAYMENT_STATUSES, true)) {
-            $query->where('payment_status', $request->payment_status);
         }
         if ($request->filled('agency_id')) {
             $query->where('agency_id', $request->agency_id);
@@ -88,11 +85,6 @@ class AdminFeaturedAgencyController extends Controller
             'starts_at' => 'nullable|date',
             'ends_at' => 'nullable|date|after:starts_at',
             'position' => 'nullable|integer|min:1|max:100',
-            'price' => 'nullable|numeric|min:0|max:99999999',
-            'currency' => 'nullable|string|size:3',
-            'payment_status' => ['nullable', Rule::in(AgencyPromotion::PAYMENT_STATUSES)],
-            'payment_method' => 'nullable|string|max:40',
-            'payment_reference' => 'nullable|string|max:120',
             'notes' => 'nullable|string|max:2000',
             'status' => ['nullable', Rule::in(['active', 'pending'])],
         ]);
@@ -109,7 +101,7 @@ class AdminFeaturedAgencyController extends Controller
             $request,
             'featured_agency.create',
             (string) $promotion->id,
-            "Featured placement created for {$agency->name} (position {$promotion->position}, {$promotion->payment_status})",
+            "Featured placement created for {$agency->name} (position {$promotion->position})",
             [
                 'agency_id' => $agency->id,
                 'entity_type' => 'agency_promotion',
@@ -119,8 +111,7 @@ class AdminFeaturedAgencyController extends Controller
                     'position' => $promotion->position,
                     'starts_at' => optional($promotion->starts_at)->toIso8601String(),
                     'ends_at' => optional($promotion->ends_at)->toIso8601String(),
-                    'price' => (float) $promotion->price,
-                    'payment_status' => $promotion->payment_status,
+                    'free_launch' => true,
                 ],
             ]
         );
@@ -144,11 +135,6 @@ class AdminFeaturedAgencyController extends Controller
             'position' => 'nullable|integer|min:1|max:100',
             'starts_at' => 'nullable|date',
             'ends_at' => 'nullable|date',
-            'price' => 'sometimes|numeric|min:0|max:99999999',
-            'currency' => 'sometimes|string|size:3',
-            'payment_status' => ['sometimes', Rule::in(AgencyPromotion::PAYMENT_STATUSES)],
-            'payment_method' => 'nullable|string|max:40',
-            'payment_reference' => 'nullable|string|max:120',
             'notes' => 'nullable|string|max:2000',
         ]);
 
@@ -170,7 +156,6 @@ class AdminFeaturedAgencyController extends Controller
                 'cross_agency' => true,
                 'metadata' => [
                     'status' => $promotion->status,
-                    'payment_status' => $promotion->payment_status,
                     'position' => $promotion->position,
                 ],
             ]
@@ -261,8 +246,6 @@ class AdminFeaturedAgencyController extends Controller
             'key' => 'required|string|max:60|unique:promotion_packages,key',
             'name' => 'required|string|max:120',
             'description' => 'nullable|string|max:2000',
-            'price' => 'nullable|numeric|min:0|max:99999999',
-            'currency' => 'nullable|string|size:3',
             'duration_days' => 'required|integer|min:1|max:3650',
             'is_active' => 'nullable|boolean',
             'sort_order' => 'nullable|integer|min:0|max:9999',
@@ -272,14 +255,14 @@ class AdminFeaturedAgencyController extends Controller
             'key' => $data['key'],
             'name' => $data['name'],
             'description' => $data['description'] ?? null,
-            'price' => $data['price'] ?? 0,
-            'currency' => $data['currency'] ?? 'PKR',
+            'price' => 0,
+            'currency' => 'PKR',
             'duration_days' => $data['duration_days'],
             'is_active' => $data['is_active'] ?? true,
             'sort_order' => $data['sort_order'] ?? 0,
         ]);
 
-        $this->writeAudit($request, 'featured_package.create', $package->key, "Featured package created: {$package->name}", [
+        $this->writeAudit($request, 'featured_package.create', $package->key, "Featured duration preset created: {$package->name}", [
             'entity_type' => 'promotion_package',
             'entity_id' => (string) $package->id,
             'cross_agency' => true,
@@ -298,8 +281,6 @@ class AdminFeaturedAgencyController extends Controller
         $data = $request->validate([
             'name' => 'sometimes|string|max:120',
             'description' => 'nullable|string|max:2000',
-            'price' => 'sometimes|numeric|min:0|max:99999999',
-            'currency' => 'sometimes|string|size:3',
             'duration_days' => 'sometimes|integer|min:1|max:3650',
             'is_active' => 'sometimes|boolean',
             'sort_order' => 'sometimes|integer|min:0|max:9999',
@@ -307,7 +288,7 @@ class AdminFeaturedAgencyController extends Controller
 
         $package->fill($data)->save();
 
-        $this->writeAudit($request, 'featured_package.update', $package->key, "Featured package updated: {$package->name}", [
+        $this->writeAudit($request, 'featured_package.update', $package->key, "Featured duration preset updated: {$package->name}", [
             'entity_type' => 'promotion_package',
             'entity_id' => (string) $package->id,
             'cross_agency' => true,

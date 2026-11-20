@@ -74,6 +74,28 @@ class User extends Authenticatable
         return $this->mfa_enabled_at !== null && $this->mfa_secret !== null;
     }
 
+    /**
+     * Account states that must never obtain a usable authentication session.
+     *
+     * Pending accounts may sign in to see their approval status, but suspended,
+     * inactive and rejected accounts are refused at the credential boundary
+     * (password and Google OAuth alike) instead of only at the workspace gate.
+     *
+     * @return 'suspended'|'inactive'|'rejected'|null
+     */
+    public function authenticationBlockedReason(): ?string
+    {
+        return in_array($this->status, ['suspended', 'inactive', 'rejected'], true)
+            ? $this->status
+            : null;
+    }
+
+    /** Emails are stored lower-case so OAuth linking cannot create duplicates. */
+    public function setEmailAttribute(mixed $value): void
+    {
+        $this->attributes['email'] = mb_strtolower(trim((string) $value));
+    }
+
     /** Append-only sign-in trail for this account. */
     public function loginHistories()
     {

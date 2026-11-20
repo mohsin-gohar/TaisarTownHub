@@ -53,7 +53,8 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $user = User::where('email', $request->email)->first();
+        $email = mb_strtolower(trim((string) $request->email));
+        $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
 
         if (!$user) {
             $this->recordLoginAttempt($request, null, (string) $request->email, false, false, 'unknown_account');
@@ -73,12 +74,16 @@ class AuthController extends Controller
             ]);
         }
 
-        if ($user->status === 'suspended') {
-            $this->recordLoginAttempt($request, $user, $user->email, false, false, 'account_suspended');
+        if (($blocked = $user->authenticationBlockedReason()) !== null) {
+            $this->recordLoginAttempt($request, $user, $user->email, false, false, 'account_' . $blocked);
 
-            throw ValidationException::withMessages([
-                'email' => ['This account has been suspended. Contact support.'],
-            ]);
+            $message = $blocked === 'suspended'
+                ? 'This account has been suspended. Contact support.'
+                : ($blocked === 'rejected'
+                    ? 'This account has been rejected. Contact support.'
+                    : 'This account is inactive. Contact support.');
+
+            throw ValidationException::withMessages(['email' => [$message]]);
         }
 
         if (!Hash::check($request->password, $user->password)) {
@@ -138,6 +143,8 @@ class AuthController extends Controller
     /** Legacy input adapter: every self-registration requires agency approval. */
     public function register(Request $request)
     {
+        $request->merge(['email' => mb_strtolower(trim((string) $request->email))]);
+
         $data = $request->validate([
             'fullName' => 'required|string|min:3|max:120',
             'email' => 'required|email|unique:users,email',
@@ -199,6 +206,7 @@ class AuthController extends Controller
      */
     public function forgotPassword(Request $request)
     {
+        $request->merge(['email' => mb_strtolower(trim((string) $request->email))]);
         $request->validate(['email' => 'required|email']);
 
         $status = Password::sendResetLink(['email' => $request->email]);
@@ -218,6 +226,7 @@ class AuthController extends Controller
      */
     public function resetPassword(Request $request)
     {
+        $request->merge(['email' => mb_strtolower(trim((string) $request->email))]);
         $request->validate([
             'token' => 'required|string',
             'email' => 'required|email',
@@ -729,15 +738,34 @@ class AuthController extends Controller
             ], 503);
         }
 
-        $url = Socialite::driver('google')
-            ->stateless()
-            ->scopes(['openid', 'profile', 'email'])
-            ->redirect()
-            ->getTargetUrl();
+        // The SPA supplies a per-tab nonce. Its hash travels with the OAuth
+        // state and is echoed back only after a successful server-side
+        // callback, which lets the SPA reject a login-CSRF callback that was
+        // started in a different browser (double-submit binding).
+        $data = $request->validate([
+            'nonce' => ['required', 'string', 'min:16', 'max:128', 'regex:/^[A-Za-z0-9_-]+$/'],
+        ]);
+
+        $state = Str::random(40);
+        $nonceHash = hash('sha256', $data['nonce']);
+        Cache::put('auth:google:state:' . $state, [
+            'nonce_hash' => $nonceHash,
+        ], now()->addMinutes(10));
+
+        $params = http_build_query([
+            'client_id' => (string) config('services.google.client_id'),
+            'redirect_uri' => (string) config('services.google.redirect'),
+            'response_type' => 'code',
+            'scope' => 'openid profile email',
+            'state' => $state,
+            'access_type' => 'online',
+            'prompt' => 'select_account',
+        ]);
 
         return response()->json([
             'success' => true,
-            'url' => $url,
+            'url' => 'https://accounts.google.com/o/oauth2/v2/auth?' . $params,
+            'nonce_hash' => $nonceHash,
         ]);
     }
 
@@ -749,10 +777,24 @@ class AuthController extends Controller
      */
     public function googleCallback(Request $request)
     {
-        $frontend = rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/');
+        $frontend = rtrim((string) config('app.frontend_url'), '/');
+
+        // One-time, server-side state validation. The cached payload also
+        // carries the browser nonce hash so the SPA can prove this callback
+        // belongs to a flow it started.
+        $state = (string) $request->get('state', '');
+        $statePayload = $state !== '' ? Cache::pull('auth:google:state:' . $state) : null;
+        if (!is_array($statePayload) || empty($statePayload['nonce_hash'])) {
+            return redirect()->to($frontend . '/login?google_error=invalid_state');
+        }
+
+        $nonceHash = (string) $statePayload['nonce_hash'];
+        $redirectWithNonce = static function (string $query) use ($frontend, $nonceHash): string {
+            return $frontend . '/login?' . $query . '&google_nonce=' . urlencode($nonceHash);
+        };
 
         if ($request->filled('error')) {
-            return redirect()->to($frontend . '/login?google_error=' . urlencode((string) $request->get('error')));
+            return redirect()->to($redirectWithNonce('google_error=' . urlencode((string) $request->get('error'))));
         }
 
         try {
@@ -760,23 +802,40 @@ class AuthController extends Controller
         } catch (\Throwable $e) {
             Log::warning('Google OAuth callback failed', ['error' => $e->getMessage()]);
 
-            return redirect()->to($frontend . '/login?google_error=oauth_failed');
+            return redirect()->to($redirectWithNonce('google_error=oauth_failed'));
         }
 
-        $email = strtolower((string) $googleUser->getEmail());
-        if ($email === '' || !$googleUser->user['email_verified'] ?? false) {
-            return redirect()->to($frontend . '/login?google_error=email_unverified');
+        $email = mb_strtolower(trim((string) $googleUser->getEmail()));
+        $emailVerified = (bool) ($googleUser->user['email_verified'] ?? false);
+
+        if ($email === '' || !$emailVerified) {
+            return redirect()->to($redirectWithNonce('google_error=email_unverified'));
         }
 
-        $user = User::where('google_id', $googleUser->getId())->first();
+        $googleId = (string) $googleUser->getId();
+        $user = User::where('google_id', $googleId)->first();
 
         if (!$user) {
-            $user = User::where('email', $email)->first();
+            $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
 
             if ($user) {
+                // Reject before mutating the account: a suspended/inactive/
+                // rejected account must never gain a Google link.
+                if (($blocked = $user->authenticationBlockedReason()) !== null) {
+                    $this->recordLoginAttempt($request, $user, $user->email, false, false, 'google_account_' . $blocked);
+
+                    return redirect()->to($redirectWithNonce('google_error=account_disabled'));
+                }
+
+                if ($user->locked_until !== null && $user->locked_until->isFuture()) {
+                    $this->recordLoginAttempt($request, $user, $user->email, false, false, 'account_locked');
+
+                    return redirect()->to($redirectWithNonce('google_error=account_locked'));
+                }
+
                 // Link the Google identity to the existing verified-email account.
                 $user->forceFill([
-                    'google_id' => $googleUser->getId(),
+                    'google_id' => $googleId,
                     'google_avatar' => $googleUser->getAvatar(),
                     'email_verified_at' => $user->email_verified_at ?? now(),
                 ])->save();
@@ -784,7 +843,7 @@ class AuthController extends Controller
                 $this->writeAudit($request, 'auth.google_linked', (string) $user->id, 'Google account linked by verified email.', [
                     'entity_type' => 'user',
                     'entity_id' => (string) $user->id,
-                    'metadata' => ['google_id' => $googleUser->getId()],
+                    'metadata' => ['google_id' => $googleId],
                 ]);
             } else {
                 $user = User::create([
@@ -793,10 +852,13 @@ class AuthController extends Controller
                     'password' => Hash::make(Str::random(48)),
                     'role' => 'dealer',
                     'status' => 'pending',
-                    'email_verified_at' => now(),
-                    'google_id' => $googleUser->getId(),
+                    'google_id' => $googleId,
                     'google_avatar' => $googleUser->getAvatar(),
                 ]);
+
+                // email_verified_at is intentionally excluded from $fillable;
+                // Google has proven mailbox ownership, so stamp it explicitly.
+                $user->forceFill(['email_verified_at' => now()])->save();
 
                 $this->writeAudit($request, 'auth.google_registered', (string) $user->id, 'Account created via Google Sign-In.', [
                     'entity_type' => 'user',
@@ -805,12 +867,25 @@ class AuthController extends Controller
             }
         }
 
+        if (($blocked = $user->authenticationBlockedReason()) !== null) {
+            $this->recordLoginAttempt($request, $user, $user->email, false, false, 'google_account_' . $blocked);
+
+            return redirect()->to($redirectWithNonce('google_error=account_disabled'));
+        }
+
+        if ($user->locked_until !== null && $user->locked_until->isFuture()) {
+            $this->recordLoginAttempt($request, $user, $user->email, false, false, 'account_locked');
+
+            return redirect()->to($redirectWithNonce('google_error=account_locked'));
+        }
+
         // Second factor must still be satisfied.
         if ($user->hasMfaEnabled()) {
             $challenge = $this->createMfaChallenge($user);
 
-            return redirect()->to($frontend . '/login?google_challenge=' . urlencode($challenge)
-                . '&expires=' . self::MFA_CHALLENGE_TTL);
+            return redirect()->to($redirectWithNonce(
+                'google_challenge=' . urlencode($challenge) . '&expires=' . self::MFA_CHALLENGE_TTL
+            ));
         }
 
         User::where('id', $user->id)->update(['last_login_at' => now()]);
@@ -821,7 +896,7 @@ class AuthController extends Controller
 
         $this->recordLoginAttempt($request, $user, $user->email, true, false, 'google');
 
-        return redirect()->to($frontend . '/login?google_code=' . urlencode($code));
+        return redirect()->to($redirectWithNonce('google_code=' . urlencode($code)));
     }
 
     /**

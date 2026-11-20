@@ -32,8 +32,6 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
             'agency_id' => $eligible->id,
             'duration_days' => 30,
             'position' => 1,
-            'price' => 0,
-            'payment_status' => 'waived',
             'notes' => 'Free launch spotlight',
         ], $headers)
             ->assertStatus(201)
@@ -84,11 +82,13 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
         $this->assertSame(1, AgencyPromotion::count());
     }
 
-    public function test_paid_placement_is_labelled_sponsored_and_payment_is_recorded(): void
+    public function test_payment_fields_are_neutralised_during_the_free_launch(): void
     {
         [$admin, $headers] = $this->platformAdmin();
         $agency = $this->makeAgency('Paying Agency');
 
+        // A caller may still send legacy payment fields. They must never turn
+        // a free placement into a paid advertisement or a Sponsored badge.
         $placement = $this->postJson('/api/admin/featured-agencies', [
             'agency_id' => $agency->id,
             'duration_days' => 7,
@@ -100,7 +100,16 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
             ->assertStatus(201)
             ->json('placement');
 
-        $this->assertSame('paid', $placement['payment_status']);
+        $this->assertSame('0.00', (string) $placement['price']);
+        $this->assertSame('waived', $placement['payment_status']);
+        $this->assertNull($placement['payment_method']);
+        $this->assertNull($placement['payment_reference']);
+
+        $stored = AgencyPromotion::findOrFail($placement['id']);
+        $this->assertSame(0.0, (float) $stored->price);
+        $this->assertSame('waived', $stored->payment_status);
+        $this->assertNull($stored->payment_method);
+        $this->assertNull($stored->payment_reference);
 
         $this->asGuest();
         $public = $this->getJson('/api/agencies/featured')->assertStatus(200)->json();

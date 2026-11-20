@@ -74,8 +74,7 @@ class DealerFilesController extends Controller
         ]);
 
         // Legacy dealer files are URL registrations. Enforce the plan's file
-        // count AND count the declared bytes against the storage quota so the
-        // legacy endpoint cannot bypass the vault's storage_mb limit.
+        // count only; storage quotas are not part of this release.
         $agencyId = $this->agencyId($request);
         if ($agencyId !== null) {
             $agency = Agency::findOrFail($agencyId);
@@ -86,10 +85,6 @@ class DealerFilesController extends Controller
             )->count();
             if ($block = PlanLimits::block($agency, 'dealer_files', $used)) {
                 return PlanLimits::deny('Dealer file limit reached for your subscription plan.', $block);
-            }
-            $incomingBytes = (int) round((float) $validated['file_size_kb'] * 1024);
-            if ($block = PlanLimits::storageBlock($agency, $incomingBytes)) {
-                return PlanLimits::deny('Storage limit reached for your subscription plan.', $block);
             }
         }
 

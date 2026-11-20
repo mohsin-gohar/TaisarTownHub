@@ -408,12 +408,12 @@ export const api = {
     }
   },
 
-  async getGoogleRedirectUrl(): Promise<{ success: boolean; url?: string; error?: string }> {
+  async getGoogleRedirectUrl(nonce: string): Promise<{ success: boolean; url?: string; nonce_hash?: string; error?: string }> {
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/google/redirect`);
+      const res = await fetch(`${API_BASE_URL}/auth/google/redirect?nonce=${encodeURIComponent(nonce)}`);
       const body = await res.json().catch(() => ({}));
       if (!res.ok) return { success: false, error: body?.message || 'Google Sign-In is not available.' };
-      return { success: true, url: body.url };
+      return { success: true, url: body.url, nonce_hash: body.nonce_hash };
     } catch {
       return { success: false, error: 'Cannot reach the API.' };
     }
@@ -1155,19 +1155,6 @@ export const api = {
       return await res.json();
     } catch {
       return null;
-    }
-  },
-
-  async extendAgencyStorageQuota(id: string, data: { storage_mb: number; reason?: string }): Promise<{ ok: boolean; status: number; body: any }> {
-    try {
-      const res = await apiFetch(`/admin/agencies-oversight/${encodeURIComponent(id)}/quota`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      });
-      const body = await res.json().catch(() => ({}));
-      return { ok: res.ok, status: res.status, body };
-    } catch {
-      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
     }
   },
 

@@ -249,9 +249,9 @@ const MainAppContent: React.FC = () => {
     let active = true;
     void api.getFeaturedAgencies({ limit: 6 }).then((body) => {
       if (!active) return;
-      // The public endpoint returns paid/scheduled placements first and a
+      // The public endpoint returns Super-Admin-selected live placements and a
       // verified-agency fallback with `featured: false`; fallback cards never
-      // carry a Featured/Sponsored badge.
+      // carry a Featured badge.
       const agencies = Array.isArray(body?.agencies)
         ? body.agencies
         : Array.isArray(body?.agencies?.data)

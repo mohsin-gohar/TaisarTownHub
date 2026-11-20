@@ -42,11 +42,6 @@ interface OversightAgency {
   documents_count: number;
   media_count: number;
   storage_used_bytes: number;
-  storage_limit_mb: number | null;
-  storage_limit_bytes: number | null;
-  storage_percent: number;
-  storage_remaining_bytes: number | null;
-  over_quota: boolean;
 }
 
 interface Pagination {
@@ -56,26 +51,12 @@ interface Pagination {
   per_page: number;
 }
 
-const StorageMeter: React.FC<{ agency: OversightAgency }> = ({ agency }) => {
-  const percent = Number(agency.storage_percent ?? 0);
-  return (
-    <div className="min-w-[150px]">
-      <div className="flex items-center justify-between text-[10px] text-slate-400">
-        <span>{formatBytes(agency.storage_used_bytes)}</span>
-        <span>{agency.storage_limit_mb ? `${agency.storage_limit_mb} MB` : 'Unlimited'}</span>
-      </div>
-      <div className="mt-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-        <div
-          className={`h-full rounded-full ${agency.over_quota ? 'bg-rose-500' : percent >= 90 ? 'bg-amber-400' : 'bg-[#E7C878]'}`}
-          style={{ width: `${Math.max(2, Math.min(100, percent))}%` }}
-        />
-      </div>
-      <div className="mt-1 text-[9px] text-slate-500">
-        {agency.over_quota ? 'Over quota — uploads blocked' : `${percent}% used`}
-      </div>
-    </div>
-  );
-};
+const StorageMeter: React.FC<{ agency: OversightAgency }> = ({ agency }) => (
+  <div className="min-w-[130px]">
+    <div className="text-[11px] font-semibold text-slate-200">{formatBytes(agency.storage_used_bytes)}</div>
+    <div className="mt-0.5 text-[9px] uppercase tracking-wider text-slate-500">Monitoring only</div>
+  </div>
+);
 
 export const AdminAgencyOversight: React.FC = () => {
   const { confirmAction } = useApp();
@@ -92,8 +73,6 @@ export const AdminAgencyOversight: React.FC = () => {
 
   const [detail, setDetail] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [quotaMb, setQuotaMb] = useState('');
-  const [quotaReason, setQuotaReason] = useState('');
   const [decisionReason, setDecisionReason] = useState('');
 
   const load = useCallback(async () => {
@@ -132,35 +111,7 @@ export const AdminAgencyOversight: React.FC = () => {
       return;
     }
     setDetail(body);
-    setQuotaMb(String(body.storage?.storage_limit_mb ?? ''));
-    setQuotaReason('');
     setDecisionReason('');
-  };
-
-  const saveQuota = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!detail?.agency?.id) return;
-    const value = Number(quotaMb);
-    if (!Number.isFinite(value) || value < 1) {
-      setError('Enter a storage quota of at least 1 MB.');
-      return;
-    }
-    setBusy('quota');
-    setError('');
-    setNotice('');
-    const result = await api.extendAgencyStorageQuota(String(detail.agency.id), {
-      storage_mb: Math.round(value),
-      reason: quotaReason || undefined,
-    });
-    setBusy('');
-    if (!result.ok) {
-      setError(result.body?.message || 'Storage quota could not be updated.');
-      return;
-    }
-    setNotice('Storage quota updated. No existing file was deleted or downgraded.');
-    setQuotaReason('');
-    await openDetail(detail.agency);
-    await load();
   };
 
   const changeStatus = async (nextStatus: 'suspended' | 'active') => {
@@ -194,7 +145,7 @@ export const AdminAgencyOversight: React.FC = () => {
   return (
     <EnterprisePage
       title="Agency Oversight"
-      subtitle="Storage usage, file metadata, subscription status and quota controls. File contents are never exposed here."
+      subtitle="Read-only storage monitoring, file metadata and subscription status. File contents are never exposed here."
       actions={
         <EnterpriseButton variant="secondary" onClick={() => void load()}>
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
@@ -208,14 +159,14 @@ export const AdminAgencyOversight: React.FC = () => {
         <EnterpriseStat label="Agencies" value={String(pagination?.total ?? 0)} hint="All workspaces" />
         <EnterpriseStat label="On this page" value={String(summary.agencies_on_page ?? agencies.length)} hint="Current page" />
         <EnterpriseStat
-          label="Over quota"
-          value={String(summary.over_quota_on_page ?? agencies.filter((agency) => agency.over_quota).length)}
-          hint="Uploads blocked"
+          label="Storage on page"
+          value={formatBytes(summary.storage_used_bytes_on_page ?? 0)}
+          hint="Documents + versions + media"
         />
         <EnterpriseStat label="Storage mode" value="Monitor only" hint="No quota enforcement" />
       </div>
 
-      <EnterpriseCard title="Agency storage" subtitle="Server-side counters used by upload enforcement">
+      <EnterpriseCard title="Agency storage" subtitle="Read-only counters for monitoring and audit — uploads are never blocked by these numbers">
         <div className="grid sm:grid-cols-3 gap-2 mb-4">
           <div className="relative sm:col-span-2">
             <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -313,7 +264,7 @@ export const AdminAgencyOversight: React.FC = () => {
       {(detailLoading || detail) && (
         <EnterpriseCard
           title={detail ? `Review · ${detail.agency?.name || detail.agency?.id}` : 'Loading agency detail…'}
-          subtitle="Quota extension is additive: existing files are never deleted or downgraded."
+          subtitle="Read-only monitoring. Files are never modified or deleted from this screen."
           actions={
             <EnterpriseButton variant="secondary" onClick={() => setDetail(null)}>
               <X className="w-3.5 h-3.5" /> Close
@@ -326,17 +277,10 @@ export const AdminAgencyOversight: React.FC = () => {
             <div className="space-y-5">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <EnterpriseStat label="Used" value={formatBytes(detail.storage?.storage_used_bytes)} hint="Documents + versions + media" />
-                <EnterpriseStat label="Quota" value={detail.storage?.storage_limit_mb ? `${detail.storage.storage_limit_mb} MB` : 'Unlimited'} hint="Editable below" />
-                <EnterpriseStat label="Percent" value={`${detail.storage?.storage_percent ?? 0}%`} hint={detail.storage?.over_quota ? 'Over quota' : 'Within quota'} />
-                <EnterpriseStat label="Files" value={String((detail.documents?.length ?? 0) + (detail.media?.length ?? 0))} hint="Metadata rows shown" />
+                <EnterpriseStat label="Documents" value={String(detail.documents?.length ?? 0)} hint="Metadata rows shown" />
+                <EnterpriseStat label="Media" value={String(detail.media?.length ?? 0)} hint="Metadata rows shown" />
+                <EnterpriseStat label="Storage mode" value="Monitor only" hint="No quota enforcement" />
               </div>
-
-              {detail.storage?.over_quota && (
-                <EnterpriseNote tone="error">
-                  This agency is over its storage quota. Uploads are already being rejected by the API.
-                  Existing files remain available; extend the quota below or ask the agency to remove files.
-                </EnterpriseNote>
-              )}
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="rounded-xl border border-slate-800 bg-[#07141E] p-3">
@@ -441,21 +385,6 @@ export const AdminAgencyOversight: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              {(detail.quota_history ?? []).length > 0 && (
-                <div className="rounded-xl border border-slate-800 bg-[#07141E] p-3">
-                  <h3 className="text-xs font-bold text-white">Quota change history</h3>
-                  <div className="mt-2 space-y-1">
-                    {(detail.quota_history ?? []).map((entry: any) => (
-                      <div key={entry.id} className="text-[10px] text-slate-400 flex flex-wrap gap-x-2">
-                        <span className="text-slate-300">{entry.actor}</span>
-                        <span>{entry.detail}</span>
-                        <span className="text-slate-600">{formatDate(entry.created_at)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </EnterpriseCard>

@@ -9,12 +9,10 @@ use App\Models\SubscriptionPlan;
 /**
  * Safe starter-workspace assignment.
  *
- * A newly registered agency must have a real quota row so the database — not
- * the browser — decides how much data it may store. This service only creates
- * a missing subscription; it never downgrades or overwrites an existing plan.
- *
- * The public UI does not advertise a free/trial period. Trial metadata is kept
- * only for future billing decisions and can never trigger file deletion.
+ * A newly registered agency receives a real subscription row so the database
+ * decides the active plan and its non-storage limits. Storage is not quota-
+ * enforced in this release; bytes are monitored for reporting only and no file
+ * is ever deleted because of them.
  */
 class AgencyOnboarding
 {
@@ -40,7 +38,7 @@ class AgencyOnboarding
             $plan = SubscriptionPlan::create([
                 'key' => 'starter-workspace',
                 'name' => 'Starter Workspace',
-                'description' => 'Default agency workspace (storage quota managed in a future release).',
+                'description' => 'Default agency workspace (storage unlimited in this release).',
                 'price' => 0,
                 'currency' => 'PKR',
                 'interval' => 'month',
@@ -58,8 +56,8 @@ class AgencyOnboarding
             ]);
         }
 
-        // No storage trial/quota is assigned in this release; keep the plan's
-        // own storage setting (0 = unlimited) without overriding it.
+        // Storage is unlimited for this launch; no trial or quota is assigned.
+        // Future billing can reintroduce limits here if needed.
         return AgencySubscription::create([
             'agency_id' => $agency->id,
             'plan_id' => $plan->id,

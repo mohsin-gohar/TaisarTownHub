@@ -77,9 +77,11 @@ class EnterpriseSeeder extends Seeder
         }
 
         /* ---------- 4. Subscription plans (prices/limits configurable, not hardcoded in code) ---------- */
-        // Launch workspace: 5 GB quota, no public trial marketing. Paid plans
-        // stay in the catalogue so the platform team can assign larger quotas
-        // from the dashboard whenever commercial launch begins.
+        // Launch workspace: unlimited storage, no public trial marketing.
+        // Other limits (listings, staff, leads, featured slots) remain
+        // configurable for the platform team.
+        // Starter plan keeps a legacy storage field (0 = unlimited), but quota
+        // is not enforced anywhere in this release.
         $plans = [
             ['trial', 'Starter Workspace', 0, 'month', 1, 1, ['listings' => 10, 'staff' => 2, 'storage_mb' => 0, 'featured_credits' => 0, 'listing_days' => 30],
                 ['Private agency workspace', 'Community support']],

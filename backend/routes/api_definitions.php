@@ -183,7 +183,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
     /* ---------- Document vault (private disk streaming, auth required) ---------- */
     Route::get('/agency/documents', [DocumentController::class, 'index'])->middleware('auth:sanctum');
     // Upload endpoints get their own limiter so bulk-abusive clients cannot
-    // ride the general 60/min API budget (quota is still enforced per plan).
+    // ride the general 60/min API budget (per-file limits still apply).
     Route::post('/agency/documents', [DocumentController::class, 'store'])->middleware('auth:sanctum', 'throttle:20,1');
     Route::match(['put', 'patch'], '/agency/documents/{id}', [DocumentController::class, 'update'])->middleware('auth:sanctum');
     Route::delete('/agency/documents/{id}', [DocumentController::class, 'destroy'])->middleware('auth:sanctum');

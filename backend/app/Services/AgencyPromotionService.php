@@ -104,7 +104,6 @@ class AgencyPromotionService
             ->whereNotNull('ends_at')
             ->where('ends_at', '<=', $now->copy()->addDays(7))
             ->count();
-        $paidRows = AgencyPromotion::query()->where('payment_status', 'paid');
 
         return [
             'live' => $liveCount,
@@ -112,11 +111,7 @@ class AgencyPromotionService
             'expiring_7d' => $expiring,
             'max_slots' => $this->maxSlots(),
             'available_slots' => max(0, $this->maxSlots() - $liveCount),
-            'revenue_pkr' => (float) (clone $paidRows)->sum('price'),
-            'pending_payments' => AgencyPromotion::query()
-                ->where('payment_status', 'pending')
-                ->where('price', '>', 0)
-                ->count(),
+            'free_launch' => true,
             'total_placements' => AgencyPromotion::query()->count(),
         ];
     }
@@ -151,10 +146,8 @@ class AgencyPromotionService
                 throw new \DomainException('The promotion end date must be after its start date.');
             }
 
-            $price = array_key_exists('price', $data)
-                ? (float) $data['price']
-                : (float) ($package?->price ?? 0);
-            $paymentStatus = $data['payment_status'] ?? ($price > 0 ? 'pending' : 'waived');
+            $price = 0; // Free launch: placement is never billed or sold.
+            $paymentStatus = 'waived';
             $requestedPosition = isset($data['position']) ? (int) $data['position'] : null;
 
             $promotion = AgencyPromotion::create([
@@ -166,10 +159,10 @@ class AgencyPromotionService
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
                 'price' => $price,
-                'currency' => $data['currency'] ?? $package?->currency ?? 'PKR',
+                'currency' => 'PKR',
                 'payment_status' => $paymentStatus,
-                'payment_method' => $data['payment_method'] ?? null,
-                'payment_reference' => $data['payment_reference'] ?? null,
+                'payment_method' => null,
+                'payment_reference' => null,
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $actor->id,
                 'approved_by' => $actor->id,
@@ -212,10 +205,16 @@ class AgencyPromotionService
                 throw new \DomainException('The promotion end date must be after its start date.');
             }
 
-            foreach (['payment_status', 'payment_method', 'payment_reference', 'notes', 'price', 'currency'] as $field) {
-                if (array_key_exists($field, $data)) {
-                    $promotion->{$field} = $data[$field];
-                }
+            // Free launch: payment metadata is retained in the schema for a
+            // future billing release, but it is not writable now and the public
+            // roster never labels a placement as Sponsored.
+            $promotion->price = 0;
+            $promotion->currency = 'PKR';
+            $promotion->payment_status = 'waived';
+            $promotion->payment_method = null;
+            $promotion->payment_reference = null;
+            if (array_key_exists('notes', $data)) {
+                $promotion->notes = $data['notes'];
             }
 
             $promotion->status = $status;

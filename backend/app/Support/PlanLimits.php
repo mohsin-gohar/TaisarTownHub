@@ -29,8 +29,8 @@ class PlanLimits
         // Storage accounting must cover EVERY byte the agency keeps on the
         // private disks: live + trashed vault documents (trashed bytes are
         // retained for audit until permanent delete), every archived
-        // version, and the media studio files. Counting only `active`
-        // documents let an agency bypass the quota via trash or media.
+        // version, and the media studio files. In this release the total is
+        // used for monitoring and reporting only — it never blocks an upload.
         $documentBytes = (int) Document::withTrashed()
             ->where('agency_id', $agency->id)
             ->sum('size_bytes');
@@ -69,25 +69,6 @@ class PlanLimits
 
         if ($used + 1 > (int) $limit) {
             return ['limit' => (int) $limit, 'used' => $used];
-        }
-
-        return null;
-    }
-
-    /** Byte-based guard for vault storage (`storage_mb` limit). */
-    public static function storageBlock(Agency $agency, int $incomingBytes): ?array
-    {
-        $limitMb = $agency->limits()['storage_mb'] ?? null;
-
-        if ($limitMb === null || (int) $limitMb <= 0) {
-            return null; // unlimited
-        }
-
-        $used = self::usage($agency)['storage_bytes'];
-        $limitBytes = (int) $limitMb * 1048576;
-
-        if ($used + $incomingBytes > $limitBytes) {
-            return ['limit' => (int) $limitMb, 'used' => $used];
         }
 
         return null;
