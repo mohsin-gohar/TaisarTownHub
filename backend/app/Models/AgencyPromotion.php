@@ -96,16 +96,14 @@ class AgencyPromotion extends Model
             && ($this->ends_at === null || $this->ends_at->isFuture());
     }
 
-    /** Public badge. Only a recorded payment earns the word "Sponsored". */
+    /** Free launch: all placements are complimentary and labelled Featured. */
     public function publicBadge(): string
     {
-        return $this->payment_status === 'paid' && (float) $this->price > 0
-            ? 'Sponsored'
-            : 'Featured';
+        return 'Featured';
     }
 
     public function isPaid(): bool
     {
-        return $this->payment_status === 'paid' && (float) $this->price > 0;
+        return false;
     }
 }

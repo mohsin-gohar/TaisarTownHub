@@ -212,7 +212,7 @@ export const AdminAgencyOversight: React.FC = () => {
           value={String(summary.over_quota_on_page ?? agencies.filter((agency) => agency.over_quota).length)}
           hint="Uploads blocked"
         />
-        <EnterpriseStat label="Default quota" value="5 GB" hint="Starter workspace" />
+        <EnterpriseStat label="Storage mode" value="Monitor only" hint="No quota enforcement" />
       </div>
 
       <EnterpriseCard title="Agency storage" subtitle="Server-side counters used by upload enforcement">
@@ -351,35 +351,14 @@ export const AdminAgencyOversight: React.FC = () => {
                   </ul>
                 </div>
 
-                <form onSubmit={saveQuota} className="rounded-xl border border-slate-800 bg-[#07141E] p-3 space-y-2">
+                <div className="rounded-xl border border-slate-800 bg-[#07141E] p-3 space-y-2">
                   <h3 className="text-xs font-bold text-white flex items-center gap-2">
-                    <HardDrive className="w-4 h-4 text-[#E7C878]" /> Extend storage quota
+                    <HardDrive className="w-4 h-4 text-[#E7C878]" /> Storage monitoring only
                   </h3>
-                  <label className="block text-[10px] text-slate-400">
-                    Quota (MB)
-                    <input
-                      type="number"
-                      min={1}
-                      max={1048576}
-                      className={`${enterpriseInputClass} mt-1`}
-                      value={quotaMb}
-                      onChange={(e) => setQuotaMb(e.target.value)}
-                      required
-                    />
-                  </label>
-                  <input
-                    className={enterpriseInputClass}
-                    placeholder="Reason (audited)"
-                    value={quotaReason}
-                    onChange={(e) => setQuotaReason(e.target.value)}
-                  />
-                  <EnterpriseButton type="submit" disabled={busy === 'quota'} className="w-full">
-                    Save quota (5 GB = 5120 MB)
-                  </EnterpriseButton>
                   <p className="text-[10px] text-slate-500">
-                    Setting a smaller quota also never deletes files; it only blocks new uploads until usage is reduced.
+                    This release does not enforce a storage quota or trial. Upload limits and security validation remain in effect; usage is shown for monitoring and audit.
                   </p>
-                </form>
+                </div>
               </div>
 
               <div className="rounded-xl border border-slate-800 bg-[#07141E] p-3">

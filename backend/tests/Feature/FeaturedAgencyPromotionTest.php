@@ -104,20 +104,7 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
 
         $this->asGuest();
         $public = $this->getJson('/api/agencies/featured')->assertStatus(200)->json();
-        $this->assertSame('Sponsored', $public['agencies'][0]['badge']);
-        $this->assertTrue($public['agencies'][0]['is_paid']);
-
-        // Recording payment later flips the public badge from Featured to
-        // Sponsored only after the payment state is genuinely paid.
-        $this->putJson("/api/admin/featured-agencies/{$placement['id']}", [
-            'payment_status' => 'pending',
-            'payment_reference' => null,
-        ], $headers)
-            ->assertStatus(200)
-            ->assertJsonPath('placement.payment_status', 'pending');
-
-        $this->asGuest();
-        $public = $this->getJson('/api/agencies/featured')->assertStatus(200)->json();
+        // Free launch: every placement is complimentary and labelled Featured.
         $this->assertSame('Featured', $public['agencies'][0]['badge']);
         $this->assertFalse($public['agencies'][0]['is_paid']);
     }

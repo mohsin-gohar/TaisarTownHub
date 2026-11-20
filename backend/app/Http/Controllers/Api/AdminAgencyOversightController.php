@@ -137,54 +137,6 @@ class AdminAgencyOversightController extends Controller
         ]);
     }
 
-    /** PUT /api/admin/agencies-oversight/{id}/quota */
-    public function extendQuota(Request $request, string $id)
-    {
-        $this->requireAny($request, ['admin.manage_subscriptions']);
-
-        $data = $request->validate([
-            'storage_mb' => 'required|integer|min:1|max:1048576',
-            'reason' => 'nullable|string|max:1000',
-        ]);
-
-        $agency = Agency::findOrFail($id);
-
-        $subscription = AgencySubscription::where('agency_id', $agency->id)->first();
-        if (!$subscription) {
-            $subscription = \App\Services\AgencyOnboarding::ensureStarterSubscription($agency, $request->user()->id);
-        }
-
-        $override = $subscription->limits_override ?? [];
-        $previous = $agency->limits()['storage_mb'] ?? null;
-        $override['storage_mb'] = (int) $data['storage_mb'];
-        $subscription->limits_override = $override;
-        $subscription->save();
-
-        $this->writeAudit(
-            $request,
-            'agency.quota.extend',
-            $agency->id,
-            "Storage quota for {$agency->name} changed from {$previous} MB to {$data['storage_mb']} MB",
-            [
-                'agency_id' => $agency->id,
-                'entity_type' => 'agency',
-                'entity_id' => $agency->id,
-                'cross_agency' => true,
-                'metadata' => [
-                    'previous_storage_mb' => $previous,
-                    'new_storage_mb' => (int) $data['storage_mb'],
-                    'reason' => $data['reason'] ?? null,
-                ],
-            ]
-        );
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Storage quota updated. Existing files were not modified.',
-            'storage' => $this->storageRow($agency->fresh(['subscription.plan'])),
-        ]);
-    }
-
     /** Shared storage shape for list + detail. */
     private function storageRow(Agency $agency): array
     {

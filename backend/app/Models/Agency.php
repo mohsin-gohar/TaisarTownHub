@@ -122,7 +122,7 @@ class Agency extends Model
         // administrator assigns a larger plan/override. The quota is enforced
         // server-side on vault + media uploads.
         $defaults = [
-            'listings' => 10, 'staff' => 2, 'storage_mb' => 5120,
+            'listings' => 10, 'staff' => 2, 'storage_mb' => 0,
             'dealer_files' => 100, 'featured_credits' => 0, 'listing_days' => 30,
         ];
         $subscription = $this->subscription;

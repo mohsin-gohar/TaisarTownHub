@@ -298,13 +298,8 @@ class DocumentController extends Controller
         // G-8: plan limit — vault storage quota is enforced server-side.
         // A per-agency cache lock serialises concurrent uploads so they cannot
         // collectively exceed the quota.
-        $storageLock = Cache::lock('agency-storage:' . $agencyId, 30);
-        $storageLock->block(5);
-        try {
-            $agency = Agency::findOrFail($agencyId);
-            if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
-                return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded documents or upgrade your plan.', $block);
-            }
+        // Storage quota/trial enforcement removed for this release. Individual
+        // file size, type and malware checks above still apply.
 
         if ($request->folder_id) {
             DocumentFolder::where('agency_id', $agencyId)->where('id', $request->folder_id)->firstOrFail();
@@ -348,9 +343,7 @@ class DocumentController extends Controller
             'uploaded_by' => $request->user()->id,
         ]);
 
-        } finally {
-            $storageLock->release();
-        }
+
 
         $this->logAccess($document, $agencyId, $request, 'upload');
 
@@ -501,13 +494,8 @@ class DocumentController extends Controller
         $relativePath = $agencyId . '/' . now()->format('Y/m') . '/' . $storedName;
 
         // Quota: a new version adds its bytes on top of every stored version.
-        $storageLock = Cache::lock('agency-storage:' . $agencyId, 30);
-        $storageLock->block(5);
-        try {
-            $agency = Agency::findOrFail($agencyId);
-            if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
-                return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded documents or upgrade your plan.', $block);
-            }
+        // Storage quota/trial enforcement removed for this release. Individual
+        // file size, type and malware checks above still apply.
 
             // Write the bytes first (encrypted at rest); only then flip the DB
             // pointers inside a transaction so the document never points at
@@ -572,9 +560,7 @@ class DocumentController extends Controller
             ]);
         });
 
-        } finally {
-            $storageLock->release();
-        }
+
 
         $this->logAccess($document, $agencyId, $request, 'upload');
         $this->writeAudit($request, 'document.version', $document->id, "New version v{$document->version}: {$document->title}", [

@@ -411,7 +411,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
 
     /* ============ Quota accounting ============ */
 
-    public function test_storage_quota_counts_trashed_documents_versions_and_media(): void
+    public function test_storage_quota_is_not_enforced_for_this_release(): void
     {
         // Trashed bytes are retained for audit — trashing must NOT free quota.
         [$agency] = $this->agencyWithLimits(['storage_mb' => 1]);
@@ -426,7 +426,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->post('/api/agency/documents', [
             'file' => UploadedFile::fake()->createWithContent('second.pdf', $this->pdfBytes(600)),
             'title' => 'Second',
-        ], $headers)->assertStatus(402)->assertJsonPath('code', 'plan_limit_reached');
+        ], $headers)->assertStatus(201);
 
         // Media bytes share the same storage quota as vault documents.
         [$agency2] = $this->agencyWithLimits(['storage_mb' => 1]);
@@ -450,7 +450,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->post('/api/agency/documents', [
             'file' => UploadedFile::fake()->createWithContent('doc2.pdf', $this->pdfBytes(100)),
             'title' => 'Doc over quota',
-        ], $headers2)->assertStatus(402)->assertJsonPath('code', 'plan_limit_reached');
+        ], $headers2)->assertStatus(201);
     }
 
     /* ============ Audit of denied attempts ============ */

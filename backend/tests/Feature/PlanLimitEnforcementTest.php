@@ -85,7 +85,7 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
         }
     }
 
-    public function test_storage_limit_blocks_document_uploads(): void
+    public function test_storage_quota_does_not_block_document_uploads(): void
     {
         Storage::fake('documents');
         [$agency] = $this->agencyWithLimits(['storage_mb' => 1]);
@@ -100,12 +100,10 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
 
         $second = UploadedFile::fake()->create('report2.pdf', 600, 'application/pdf');
         $this->post('/api/agency/documents', ['file' => $second, 'title' => 'Report Two'], $h())
-            ->assertStatus(402)
-            ->assertJsonPath('code', 'plan_limit_reached');
+            ->assertStatus(201);
 
-        // Nothing beyond the first file landed on the disk.
         $this->assertSame(
-            1,
+            2,
             \App\Models\Document::where('agency_id', $agency->id)->count()
         );
     }

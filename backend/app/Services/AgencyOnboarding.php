@@ -18,8 +18,8 @@ use App\Models\SubscriptionPlan;
  */
 class AgencyOnboarding
 {
-    public const DEFAULT_STORAGE_MB = 5120; // 5 GB
-    public const DEFAULT_TRIAL_DAYS = 30;
+    public const DEFAULT_STORAGE_MB = 0; // No storage trial/quota in this release
+    public const DEFAULT_TRIAL_DAYS = 0;
 
     public static function ensureStarterSubscription(Agency $agency, ?int $createdBy = null): AgencySubscription
     {
@@ -40,14 +40,14 @@ class AgencyOnboarding
             $plan = SubscriptionPlan::create([
                 'key' => 'starter-workspace',
                 'name' => 'Starter Workspace',
-                'description' => 'Default agency workspace with a 5 GB storage quota.',
+                'description' => 'Default agency workspace (storage quota managed in a future release).',
                 'price' => 0,
                 'currency' => 'PKR',
                 'interval' => 'month',
                 'limits' => [
                     'listings' => 10,
                     'staff' => 2,
-                    'storage_mb' => self::DEFAULT_STORAGE_MB,
+                    'storage_mb' => 0,
                     'featured_credits' => 0,
                     'listing_days' => 30,
                 ],
@@ -58,16 +58,14 @@ class AgencyOnboarding
             ]);
         }
 
-        $limits = $plan->limits ?? [];
-        $limits['storage_mb'] = max(self::DEFAULT_STORAGE_MB, (int) ($limits['storage_mb'] ?? 0));
-
+        // No storage trial/quota is assigned in this release; keep the plan's
+        // own storage setting (0 = unlimited) without overriding it.
         return AgencySubscription::create([
             'agency_id' => $agency->id,
             'plan_id' => $plan->id,
             'status' => 'active',
             'starts_at' => now(),
-            'trial_ends_at' => now()->addDays(self::DEFAULT_TRIAL_DAYS),
-            'limits_override' => ['storage_mb' => $limits['storage_mb']],
+            'trial_ends_at' => null,
             'created_by' => $createdBy,
         ]);
     }

@@ -81,13 +81,13 @@ class EnterpriseSeeder extends Seeder
         // stay in the catalogue so the platform team can assign larger quotas
         // from the dashboard whenever commercial launch begins.
         $plans = [
-            ['trial', 'Starter Workspace', 0, 'month', 1, 1, ['listings' => 10, 'staff' => 2, 'storage_mb' => 5120, 'featured_credits' => 0, 'listing_days' => 30],
-                ['Private agency workspace', '5 GB document & media storage', 'Community support']],
-            ['basic', 'Basic Agency', 4999, 'month', 0, 2, ['listings' => 50, 'staff' => 5, 'storage_mb' => 5120, 'featured_credits' => 1, 'listing_days' => 60],
+            ['trial', 'Starter Workspace', 0, 'month', 1, 1, ['listings' => 10, 'staff' => 2, 'storage_mb' => 0, 'featured_credits' => 0, 'listing_days' => 30],
+                ['Private agency workspace', 'Community support']],
+            ['basic', 'Basic Agency', 4999, 'month', 0, 2, ['listings' => 50, 'staff' => 5, 'storage_mb' => 0, 'featured_credits' => 1, 'listing_days' => 60],
                 ['Standard listing management', 'Email support', 'Public agency profile']],
-            ['professional', 'Professional Agency', 12999, 'month', 0, 3, ['listings' => 250, 'staff' => 15, 'storage_mb' => 20480, 'featured_credits' => 5, 'listing_days' => 90],
+            ['professional', 'Professional Agency', 12999, 'month', 0, 3, ['listings' => 250, 'staff' => 15, 'storage_mb' => 0, 'featured_credits' => 5, 'listing_days' => 90],
                 ['Everything in Basic', 'Featured listing credits', 'Priority support', 'Advanced reports']],
-            ['enterprise', 'Enterprise Agency', 29999, 'month', 0, 4, ['listings' => 100000, 'staff' => 100, 'storage_mb' => 102400, 'featured_credits' => 20, 'listing_days' => 180],
+            ['enterprise', 'Enterprise Agency', 29999, 'month', 0, 4, ['listings' => 100000, 'staff' => 100, 'storage_mb' => 0, 'featured_credits' => 20, 'listing_days' => 180],
                 ['Everything in Professional', 'Dedicated account manager', 'Custom limits', 'API access']],
         ];
         foreach ($plans as [$key, $name, $price, $interval, $isDefault, $sort, $limits, $features]) {

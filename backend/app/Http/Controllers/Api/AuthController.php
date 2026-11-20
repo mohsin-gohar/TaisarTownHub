@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
@@ -710,6 +711,142 @@ class AuthController extends Controller
                 'metadata' => ['ip' => $ip, 'reason' => $reason],
             ]);
         }
+    }
+
+    /* ==================== Google OAuth (Socialite) ==================== */
+
+    /**
+     * GET /api/auth/google/redirect
+     * Returns the Google consent URL. The frontend opens it; Google then
+     * redirects back to /api/auth/google/callback.
+     */
+    public function googleRedirect(Request $request)
+    {
+        if (!config('services.google.client_id') || !config('services.google.client_secret') || !config('services.google.redirect')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Google Sign-In is not configured.',
+            ], 503);
+        }
+
+        $url = Socialite::driver('google')
+            ->stateless()
+            ->scopes(['openid', 'profile', 'email'])
+            ->redirect()
+            ->getTargetUrl();
+
+        return response()->json([
+            'success' => true,
+            'url' => $url,
+        ]);
+    }
+
+    /**
+     * GET /api/auth/google/callback
+     * Google redirects here with ?code=... Socialite verifies the code
+     * server-side. On success we either link or create the account, issue a
+     * Sanctum token, and redirect to the SPA with a one-time exchange code.
+     */
+    public function googleCallback(Request $request)
+    {
+        $frontend = rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/');
+
+        if ($request->filled('error')) {
+            return redirect()->to($frontend . '/login?google_error=' . urlencode((string) $request->get('error')));
+        }
+
+        try {
+            $googleUser = Socialite::driver('google')->stateless()->user();
+        } catch (\Throwable $e) {
+            Log::warning('Google OAuth callback failed', ['error' => $e->getMessage()]);
+
+            return redirect()->to($frontend . '/login?google_error=oauth_failed');
+        }
+
+        $email = strtolower((string) $googleUser->getEmail());
+        if ($email === '' || !$googleUser->user['email_verified'] ?? false) {
+            return redirect()->to($frontend . '/login?google_error=email_unverified');
+        }
+
+        $user = User::where('google_id', $googleUser->getId())->first();
+
+        if (!$user) {
+            $user = User::where('email', $email)->first();
+
+            if ($user) {
+                // Link the Google identity to the existing verified-email account.
+                $user->forceFill([
+                    'google_id' => $googleUser->getId(),
+                    'google_avatar' => $googleUser->getAvatar(),
+                    'email_verified_at' => $user->email_verified_at ?? now(),
+                ])->save();
+
+                $this->writeAudit($request, 'auth.google_linked', (string) $user->id, 'Google account linked by verified email.', [
+                    'entity_type' => 'user',
+                    'entity_id' => (string) $user->id,
+                    'metadata' => ['google_id' => $googleUser->getId()],
+                ]);
+            } else {
+                $user = User::create([
+                    'name' => $googleUser->getName() ?: $email,
+                    'email' => $email,
+                    'password' => Hash::make(Str::random(48)),
+                    'role' => 'dealer',
+                    'status' => 'pending',
+                    'email_verified_at' => now(),
+                    'google_id' => $googleUser->getId(),
+                    'google_avatar' => $googleUser->getAvatar(),
+                ]);
+
+                $this->writeAudit($request, 'auth.google_registered', (string) $user->id, 'Account created via Google Sign-In.', [
+                    'entity_type' => 'user',
+                    'entity_id' => (string) $user->id,
+                ]);
+            }
+        }
+
+        // Second factor must still be satisfied.
+        if ($user->hasMfaEnabled()) {
+            $challenge = $this->createMfaChallenge($user);
+
+            return redirect()->to($frontend . '/login?google_challenge=' . urlencode($challenge)
+                . '&expires=' . self::MFA_CHALLENGE_TTL);
+        }
+
+        User::where('id', $user->id)->update(['last_login_at' => now()]);
+
+        $token = $user->createToken('auth-token')->plainTextToken;
+        $code = Str::random(48);
+        Cache::put('auth:google:exchange:' . $code, $token, now()->addMinutes(2));
+
+        $this->recordLoginAttempt($request, $user, $user->email, true, false, 'google');
+
+        return redirect()->to($frontend . '/login?google_code=' . urlencode($code));
+    }
+
+    /**
+     * POST /api/auth/google/exchange
+     * Trades the one-time code from the callback for a Sanctum token.
+     */
+    public function googleExchange(Request $request)
+    {
+        $data = $request->validate([
+            'code' => 'required|string|min:20|max:120',
+        ]);
+
+        $token = Cache::pull('auth:google:exchange:' . $data['code']);
+
+        if (!is_string($token) || $token === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This Google sign-in session expired. Please try again.',
+            ], 401);
+        }
+
+        return response()->json([
+            'success' => true,
+            'token' => $token,
+        ]);
     }
 
     /**

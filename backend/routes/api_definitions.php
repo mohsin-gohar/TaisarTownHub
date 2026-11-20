@@ -59,6 +59,9 @@ Route::get('/health', [HealthController::class, 'index']);
 */
 Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:api.auth');
 Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:api.auth');
+Route::get('/auth/google/redirect', [AuthController::class, 'googleRedirect'])->middleware('throttle:api.auth');
+Route::get('/auth/google/callback', [AuthController::class, 'googleCallback'])->middleware('throttle:api.auth');
+Route::post('/auth/google/exchange', [AuthController::class, 'googleExchange'])->middleware('throttle:api.auth');
 Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:api.auth');
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:api.auth');
 Route::match(['get', 'post'], '/auth/email/verify', [AuthController::class, 'verifyEmail'])->middleware('throttle:api.auth');
@@ -305,7 +308,6 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
     /* ---------- Admin: agency storage oversight (auth required) ---------- */
     Route::get('/admin/agencies-oversight', [AdminAgencyOversightController::class, 'index'])->middleware('auth:sanctum');
     Route::get('/admin/agencies-oversight/{id}', [AdminAgencyOversightController::class, 'show'])->middleware('auth:sanctum');
-    Route::put('/admin/agencies-oversight/{id}/quota', [AdminAgencyOversightController::class, 'extendQuota'])->middleware('auth:sanctum');
 
     /* ---------- Admin: subscription invoices (auth required) ---------- */
     Route::get('/admin/subscription-invoices', [AdminAgencyController::class, 'invoicesIndex'])->middleware('auth:sanctum');

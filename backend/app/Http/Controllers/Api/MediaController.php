@@ -146,9 +146,7 @@ class MediaController extends Controller
         $scanStatus = null;
         $scannedAt = null;
 
-        $storageLock = null;
-        try {
-            if ($request->hasFile('file')) {
+        if ($request->hasFile('file')) {
             $file = $request->file('file');
             $ext = strtolower($file->getClientOriginalExtension());
 
@@ -206,14 +204,7 @@ class MediaController extends Controller
             // G-8: media bytes count against the same storage quota the
             // vault enforces (they live on the same private disk). A per-agency
             // lock serialises concurrent uploads.
-            $storageLock = Cache::lock('agency-storage:' . $agencyId, 30);
-            $storageLock->block(5);
-
-            $agency = Agency::findOrFail($agencyId);
-            if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
-                return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded media or upgrade your plan.', $block);
-            }
-
+            // Storage quota/trial enforcement removed for this release.
             SecureFileStore::storeUpload('documents', $storedPath, $file);
 
             $originalName = UploadSecurity::sanitizeOriginalName($file->getClientOriginalName());
@@ -273,12 +264,7 @@ class MediaController extends Controller
             'message' => 'Media saved.',
             'media' => $payload,
         ], 201);
-    } finally {
-        if ($storageLock) {
-            $storageLock->release();
-        }
     }
-}
 
     public function update(Request $request, string $id)
     {
@@ -535,3 +521,4 @@ class MediaController extends Controller
         }
     }
 }
+

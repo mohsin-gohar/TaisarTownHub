@@ -408,6 +408,31 @@ export const api = {
     }
   },
 
+  async getGoogleRedirectUrl(): Promise<{ success: boolean; url?: string; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/google/redirect`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.message || 'Google Sign-In is not available.' };
+      return { success: true, url: body.url };
+    } catch {
+      return { success: false, error: 'Cannot reach the API.' };
+    }
+  },
+
+  async exchangeGoogleCode(code: string): Promise<{ success: boolean; token?: string; error?: string }> {
+    try {
+      const res = await apiFetch('/auth/google/exchange', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.message || 'Google sign-in failed.' };
+      return { success: true, token: body.token };
+    } catch {
+      return { success: false, error: 'Cannot reach the API.' };
+    }
+  },
+
   /**
    * Sign-in that understands the second factor (Phase 6).
    *
