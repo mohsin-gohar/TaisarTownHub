@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Agency;
 use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
@@ -43,22 +42,24 @@ class PaymentController extends Controller
         ]);
 
         $plan = SubscriptionPlan::findOrFail($request->plan_id);
-        $agency = Agency::findOrFail($agencyId);
 
-        // Idempotency: if an active subscription already exists, return its checkout link
-        $existing = AgencySubscription::where('agency_id', $agencyId)
-            ->where('status', 'active')
+        // Every agency already has a starter subscription (5 GB workspace), so
+        // an existing row must never block an upgrade. Payment is optional
+        // during the free launch; platform admins can also assign plans
+        // directly from the dashboard.
+        $existingPending = SubscriptionInvoice::where('agency_id', $agencyId)
+            ->where('plan_id', $plan->id)
+            ->where('status', 'pending')
+            ->whereNotNull('stripe_session_id')
+            ->where('created_at', '>=', now()->subHours(24))
+            ->latest()
             ->first();
 
-        if ($existing) {
+        if ($existingPending) {
             return response()->json([
                 'success' => true,
-                'message' => 'Agency already has an active subscription.',
-                'subscription' => [
-                    'id' => $existing->id,
-                    'status' => $existing->status,
-                    'plan' => $existing->plan ? $existing->plan->key : null,
-                ],
+                'message' => 'A recent checkout session already exists for this plan. Complete it or wait for it to expire before retrying.',
+                'session_id' => $existingPending->stripe_session_id,
             ], 409);
         }
 
@@ -91,13 +92,21 @@ class PaymentController extends Controller
                 ],
             ]);
 
-            // Create pending invoice
+            // Create a pending invoice using the canonical schema columns.
+            $amount = (int) round((float) $plan->price);
             SubscriptionInvoice::create([
-                'id' => Str::uuid(),
+                'id' => (string) Str::uuid(),
+                'invoice_number' => SubscriptionInvoice::nextNumber(),
                 'agency_id' => $agencyId,
                 'plan_id' => $plan->id,
-                'amount' => $plan->price,
+                'amount_pkr' => $amount,
+                'tax_pkr' => 0,
+                'total_pkr' => $amount,
                 'currency' => $plan->currency ?? 'PKR',
+                'period_start' => now()->toDateString(),
+                'period_end' => $plan->interval === 'year'
+                    ? now()->addYear()->toDateString()
+                    : now()->addMonth()->toDateString(),
                 'status' => 'pending',
                 'stripe_session_id' => $session->id,
                 'due_at' => now()->addDays(7),
@@ -389,6 +398,8 @@ class PaymentController extends Controller
                 'ends_at' => $endsAt,
                 'auto_renew' => true,
                 'stripe_subscription_id' => $invoice->stripe_subscription_id,
+                'provider' => $invoice->stripe_subscription_id ? 'stripe' : 'manual',
+                'cancelled_at' => null,
                 'updated_at' => now(),
             ]
         );

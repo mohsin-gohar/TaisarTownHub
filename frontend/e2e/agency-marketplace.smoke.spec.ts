@@ -9,7 +9,10 @@ test.describe('Agency-first marketplace (live)', () => {
   test('homepage shows agency-first marketplace section', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('main')).toBeVisible();
-    await expect(page.getByText('Featured Agencies')).toBeVisible();
+    // The heading is truthful: "Featured Agencies" only while a paid or
+    // complimentary placement is live; otherwise the verified fallback roster
+    // is labelled "Verified Agencies".
+    await expect(page.locator('main')).toContainText(/Featured Agencies|Verified Agencies/);
     await expect(page.getByRole('button', { name: /discover agencies/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /explore properties/i })).toBeVisible();
     await expect(page.locator('main').getByText(/for rent/i)).toHaveCount(0);

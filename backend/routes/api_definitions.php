@@ -12,7 +12,9 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AdminAgencyController;
+use App\Http\Controllers\Api\AdminAgencyOversightController;
 use App\Http\Controllers\Api\AdminDashboardController;
+use App\Http\Controllers\Api\AdminFeaturedAgencyController;
 use App\Http\Controllers\Api\AdminSystemController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AgencyController;
@@ -23,6 +25,7 @@ use App\Http\Controllers\Api\DealerController;
 use App\Http\Controllers\Api\DealerFilesController;
 use App\Http\Controllers\Api\DocumentController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\FeaturedAgencyController;
 use App\Http\Controllers\Api\FinanceController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\InquiryController;
@@ -65,7 +68,9 @@ Route::post('/auth/mfa/verify', [AuthController::class, 'mfaVerify'])->middlewar
 Route::post('/agency/register', [AgencyController::class, 'register'])->middleware('throttle:api.auth');
 Route::post('/agency/invitations/accept', [AgencyStaffController::class, 'acceptInvitation'])->middleware('throttle:api.auth');
 
-// Public directory of verified agencies
+// Public directory of verified agencies. The featured roster must be
+// registered before the `{id}` wildcard so it is never treated as an id.
+Route::get('/agencies/featured', [FeaturedAgencyController::class, 'index'])->middleware('throttle:api.public');
 Route::get('/agencies', [AgencyController::class, 'index'])->middleware('throttle:api.public');
 Route::get('/agencies/{id}', [AgencyController::class, 'show'])->middleware('throttle:api.public');
 
@@ -285,6 +290,22 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
     Route::post('/admin/plans', [AdminAgencyController::class, 'storePlan'])->middleware('auth:sanctum');
     Route::match(['put', 'patch'], '/admin/plans/{id}', [AdminAgencyController::class, 'updatePlan'])->middleware('auth:sanctum');
     Route::put('/admin/agencies/{id}/subscription', [AdminAgencyController::class, 'assignSubscription'])->middleware('auth:sanctum');
+
+    /* ---------- Admin: featured-agency placements (auth required) ---------- */
+    // Static segments are registered before the `{id}` route.
+    Route::get('/admin/featured-agencies', [AdminFeaturedAgencyController::class, 'index'])->middleware('auth:sanctum');
+    Route::post('/admin/featured-agencies', [AdminFeaturedAgencyController::class, 'store'])->middleware('auth:sanctum');
+    Route::put('/admin/featured-agencies/order', [AdminFeaturedAgencyController::class, 'reorder'])->middleware('auth:sanctum');
+    Route::put('/admin/featured-agencies/settings', [AdminFeaturedAgencyController::class, 'updateSettings'])->middleware('auth:sanctum');
+    Route::post('/admin/featured-agencies/packages', [AdminFeaturedAgencyController::class, 'storePackage'])->middleware('auth:sanctum');
+    Route::put('/admin/featured-agencies/packages/{id}', [AdminFeaturedAgencyController::class, 'updatePackage'])->middleware('auth:sanctum');
+    Route::match(['put', 'patch'], '/admin/featured-agencies/{id}', [AdminFeaturedAgencyController::class, 'update'])->middleware('auth:sanctum');
+    Route::post('/admin/featured-agencies/{id}/cancel', [AdminFeaturedAgencyController::class, 'cancel'])->middleware('auth:sanctum');
+
+    /* ---------- Admin: agency storage oversight (auth required) ---------- */
+    Route::get('/admin/agencies-oversight', [AdminAgencyOversightController::class, 'index'])->middleware('auth:sanctum');
+    Route::get('/admin/agencies-oversight/{id}', [AdminAgencyOversightController::class, 'show'])->middleware('auth:sanctum');
+    Route::put('/admin/agencies-oversight/{id}/quota', [AdminAgencyOversightController::class, 'extendQuota'])->middleware('auth:sanctum');
 
     /* ---------- Admin: subscription invoices (auth required) ---------- */
     Route::get('/admin/subscription-invoices', [AdminAgencyController::class, 'invoicesIndex'])->middleware('auth:sanctum');

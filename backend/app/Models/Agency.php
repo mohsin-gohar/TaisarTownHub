@@ -80,6 +80,26 @@ class Agency extends Model
         return $this->hasOne(AgencySubscription::class, 'agency_id');
     }
 
+    /** Every placement (history included) — use the service for active slots. */
+    public function promotions(): HasMany
+    {
+        return $this->hasMany(AgencyPromotion::class, 'agency_id');
+    }
+
+    /** Currently live homepage placement, if any. */
+    public function activePromotion(): HasOne
+    {
+        return $this->hasOne(AgencyPromotion::class, 'agency_id')
+            ->where('status', 'active')
+            ->where(function ($q) {
+                $q->whereNull('starts_at')->orWhere('starts_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
+            })
+            ->orderBy('position');
+    }
+
     public function invitations(): HasMany
     {
         return $this->hasMany(AgencyInvitation::class, 'agency_id');
@@ -98,8 +118,11 @@ class Agency extends Model
     /** Effective limits: subscription plan limits merged with per-agency overrides. */
     public function limits(): array
     {
+        // Every agency starts with a 5 GB workspace unless a platform
+        // administrator assigns a larger plan/override. The quota is enforced
+        // server-side on vault + media uploads.
         $defaults = [
-            'listings' => 10, 'staff' => 2, 'storage_mb' => 512,
+            'listings' => 10, 'staff' => 2, 'storage_mb' => 5120,
             'dealer_files' => 100, 'featured_credits' => 0, 'listing_days' => 30,
         ];
         $subscription = $this->subscription;

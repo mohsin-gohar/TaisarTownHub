@@ -246,6 +246,22 @@ export const api = {
     }
   },
 
+  /** Homepage featured-agency roster (falls back to verified agencies). */
+  async getFeaturedAgencies(params: Record<string, string | number | undefined> = {}): Promise<any | null> {
+    try {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== '') query.set(key, String(value));
+      }
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const res = await fetch(`${API_BASE_URL}/agencies/featured${suffix}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
   async getPublicAgency(idOrSlug: string, params: Record<string, string | number | undefined> = {}): Promise<any | null> {
     try {
       const query = new URLSearchParams();
@@ -987,6 +1003,146 @@ export const api = {
       return res.ok;
     } catch {
       return false;
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Featured-agency placements (platform admin)
+  // ------------------------------------------------------------------
+
+  async getAdminFeaturedAgencies(params: Record<string, string | number | undefined> = {}): Promise<any | null> {
+    try {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== '') query.set(key, String(value));
+      }
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const res = await apiFetch(`/admin/featured-agencies${suffix}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async createAdminFeaturedAgency(data: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch('/admin/featured-agencies', { method: 'POST', body: JSON.stringify(data) });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
+    }
+  },
+
+  async updateAdminFeaturedAgency(id: string | number, data: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch(`/admin/featured-agencies/${encodeURIComponent(String(id))}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
+    }
+  },
+
+  async cancelAdminFeaturedAgency(id: string | number, reason?: string): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch(`/admin/featured-agencies/${encodeURIComponent(String(id))}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
+    }
+  },
+
+  async reorderAdminFeaturedAgencies(ids: Array<string | number>): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch('/admin/featured-agencies/order', {
+        method: 'PUT',
+        body: JSON.stringify({ ids }),
+      });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
+    }
+  },
+
+  async updateAdminPromotionSettings(data: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch('/admin/featured-agencies/settings', { method: 'PUT', body: JSON.stringify(data) });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
+    }
+  },
+
+  async createAdminPromotionPackage(data: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch('/admin/featured-agencies/packages', { method: 'POST', body: JSON.stringify(data) });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
+    }
+  },
+
+  async updateAdminPromotionPackage(id: number, data: Record<string, unknown>): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch(`/admin/featured-agencies/packages/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Agency storage oversight (platform admin)
+  // ------------------------------------------------------------------
+
+  async getAdminAgencyOversight(params: Record<string, string | number | undefined> = {}): Promise<any | null> {
+    try {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== '') query.set(key, String(value));
+      }
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const res = await apiFetch(`/admin/agencies-oversight${suffix}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getAdminAgencyOversightDetail(id: string): Promise<any | null> {
+    try {
+      const res = await apiFetch(`/admin/agencies-oversight/${encodeURIComponent(id)}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async extendAgencyStorageQuota(id: string, data: { storage_mb: number; reason?: string }): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await apiFetch(`/admin/agencies-oversight/${encodeURIComponent(id)}/quota`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      const body = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, body };
+    } catch {
+      return { ok: false, status: 0, body: { message: 'Cannot reach the API.' } };
     }
   },
 

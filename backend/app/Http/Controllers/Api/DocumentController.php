@@ -17,6 +17,7 @@ use App\Services\MalwareScanner;
 use App\Services\SecureFileStore;
 use App\Support\UploadSecurity;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -295,10 +296,15 @@ class DocumentController extends Controller
         }
 
         // G-8: plan limit — vault storage quota is enforced server-side.
-        $agency = Agency::findOrFail($agencyId);
-        if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
-            return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded documents or upgrade your plan.', $block);
-        }
+        // A per-agency cache lock serialises concurrent uploads so they cannot
+        // collectively exceed the quota.
+        $storageLock = Cache::lock('agency-storage:' . $agencyId, 30);
+        $storageLock->block(5);
+        try {
+            $agency = Agency::findOrFail($agencyId);
+            if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
+                return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded documents or upgrade your plan.', $block);
+            }
 
         if ($request->folder_id) {
             DocumentFolder::where('agency_id', $agencyId)->where('id', $request->folder_id)->firstOrFail();
@@ -341,6 +347,10 @@ class DocumentController extends Controller
             'tags' => $request->get('tags'),
             'uploaded_by' => $request->user()->id,
         ]);
+
+        } finally {
+            $storageLock->release();
+        }
 
         $this->logAccess($document, $agencyId, $request, 'upload');
 
@@ -491,15 +501,18 @@ class DocumentController extends Controller
         $relativePath = $agencyId . '/' . now()->format('Y/m') . '/' . $storedName;
 
         // Quota: a new version adds its bytes on top of every stored version.
-        $agency = Agency::findOrFail($agencyId);
-        if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
-            return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded documents or upgrade your plan.', $block);
-        }
+        $storageLock = Cache::lock('agency-storage:' . $agencyId, 30);
+        $storageLock->block(5);
+        try {
+            $agency = Agency::findOrFail($agencyId);
+            if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
+                return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded documents or upgrade your plan.', $block);
+            }
 
-        // Write the bytes first (encrypted at rest); only then flip the DB
-        // pointers inside a transaction so the document never points at
-        // bytes that were not stored.
-        SecureFileStore::storeUpload('documents', $relativePath, $file);
+            // Write the bytes first (encrypted at rest); only then flip the DB
+            // pointers inside a transaction so the document never points at
+            // bytes that were not stored.
+            SecureFileStore::storeUpload('documents', $relativePath, $file);
 
         $previous = [
             'version' => $document->version,
@@ -558,6 +571,10 @@ class DocumentController extends Controller
                 'created_at' => now(),
             ]);
         });
+
+        } finally {
+            $storageLock->release();
+        }
 
         $this->logAccess($document, $agencyId, $request, 'upload');
         $this->writeAudit($request, 'document.version', $document->id, "New version v{$document->version}: {$document->title}", [

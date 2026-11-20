@@ -25,6 +25,7 @@ class Permissions
         'agency.update' => ['Update agency profile', 'agency', false],
         'agency.manage_staff' => ['Manage staff & roles', 'agency', false],
         'agency.manage_settings' => ['Manage agency settings & quotas', 'agency', false],
+        'agency.subscribe' => ['Manage subscription & billing', 'agency', false],
 
         // Properties
         'properties.view' => ['View properties', 'properties', false],
@@ -63,6 +64,7 @@ class Permissions
 
         // Platform administration
         'admin.manage_agencies' => ['Manage agencies & verification', 'admin', true],
+        'admin.manage_promotions' => ['Manage featured agency placements', 'admin', true],
         'admin.manage_users' => ['Manage platform users', 'admin', true],
         'admin.manage_roles' => ['Manage roles & permissions', 'admin', true],
         'admin.manage_subscriptions' => ['Manage plans & subscriptions', 'admin', true],
@@ -118,7 +120,7 @@ class Permissions
     /** System agency role key => enterprise permission keys (aliases appended by grants()). */
     public const AGENCY_ROLE_GRANTS = [
         'agency_owner' => [
-            'agency.view', 'agency.update', 'agency.manage_staff', 'agency.manage_settings',
+            'agency.view', 'agency.update', 'agency.manage_staff', 'agency.manage_settings', 'agency.subscribe',
             'properties.view', 'properties.create', 'properties.update', 'properties.delete',
             'properties.publish', 'properties.assign', 'properties.feature',
             'documents.view', 'documents.upload', 'documents.update', 'documents.download',

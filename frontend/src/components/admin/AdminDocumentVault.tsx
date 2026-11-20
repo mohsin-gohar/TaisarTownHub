@@ -51,6 +51,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
   const [search, setSearch] = useState('');
 
   const [quarantine, setQuarantine] = useState<any | null>(null);
+  const [storage, setStorage] = useState<any | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -69,7 +70,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
-    const [documentsBody, foldersBody, quarantineBody] = await Promise.all([
+    const [documentsBody, foldersBody, quarantineBody, storageBody] = await Promise.all([
       api.getAgencyDocuments({
         page,
         folder_id: folderFilter || undefined,
@@ -78,6 +79,7 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
       }),
       api.getDocumentFolders(),
       api.getAgencyDocumentQuarantine(),
+      api.getAgencyDocumentStorageUsage(),
     ]);
 
     if (!documentsBody || documentsBody.success === false) {
@@ -94,8 +96,14 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
     // Null = no manage_permissions clearance (403) — the quarantine panel is
     // simply not rendered for plain users.
     setQuarantine(quarantineBody && quarantineBody.success !== false ? quarantineBody : null);
+    setStorage(storageBody && storageBody.success !== false ? storageBody : null);
     setLoading(false);
   }, [page, folderFilter, categoryFilter, search, canUpload]);
+
+  const storageLimitBytes = storage?.storage_mb_limit ? Number(storage.storage_mb_limit) * 1024 * 1024 : null;
+  const storageUsedBytes = Number(storage?.storage_bytes ?? 0);
+  const storagePercent = storageLimitBytes ? Math.min(100, Math.round((storageUsedBytes / storageLimitBytes) * 100)) : 0;
+  const storageBlocked = Boolean(storageLimitBytes && storageUsedBytes >= storageLimitBytes);
 
   useEffect(() => {
     void load();
@@ -253,6 +261,55 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
     >
       {error && <EnterpriseNote tone="error">{error}</EnterpriseNote>}
       {notice && <EnterpriseNote tone="success">{notice}</EnterpriseNote>}
+
+      {storage && (
+        <div className={`rounded-xl border p-4 ${
+          storageBlocked
+            ? 'border-rose-700/70 bg-rose-950/30'
+            : storagePercent >= 90
+              ? 'border-amber-700/60 bg-amber-950/25'
+              : 'border-slate-800 bg-[#0B1220]'
+        }`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                Workspace Storage
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                {formatBytes(storageUsedBytes)} of {storage.unlimited ? 'unlimited' : `${storage.storage_mb_limit} MB`} used
+                {storagePercent > 0 && !storage.unlimited ? ` · ${storagePercent}%` : ''}
+              </div>
+            </div>
+            {storageBlocked ? (
+              <EnterpriseBadge tone="red">Limit reached</EnterpriseBadge>
+            ) : storagePercent >= 90 ? (
+              <EnterpriseBadge tone="gold">Nearly full</EnterpriseBadge>
+            ) : (
+              <EnterpriseBadge tone="green">Healthy</EnterpriseBadge>
+            )}
+          </div>
+          {!storage.unlimited && (
+            <div className="mt-3 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+              <div
+                className={`h-full rounded-full ${storageBlocked ? 'bg-rose-500' : storagePercent >= 90 ? 'bg-amber-400' : 'bg-[#E7C878]'}`}
+                style={{ width: `${Math.max(2, storagePercent)}%` }}
+              />
+            </div>
+          )}
+          {storageBlocked && (
+            <p className="mt-3 text-[11px] text-rose-300">
+              Storage limit reached. New uploads and new document versions are rejected by the server.
+              Delete unneeded files to free space; your existing files were not removed. A platform
+              administrator can also extend this agency&apos;s quota from Agency Oversight.
+            </p>
+          )}
+          {!storageBlocked && storagePercent >= 90 && (
+            <p className="mt-3 text-[11px] text-amber-300">
+              You are close to your storage limit. Uploads will be rejected once the quota is full.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         <div className="xl:col-span-8 space-y-6">
@@ -437,6 +494,11 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
               <EnterpriseNote tone="info">`documents.upload` is required to add files.</EnterpriseNote>
             ) : (
               <form onSubmit={handleUpload} className="space-y-3">
+                {storageBlocked && (
+                  <EnterpriseNote tone="error">
+                    Uploads are disabled because this workspace has reached its storage limit. Delete files or ask a platform administrator to extend the quota.
+                  </EnterpriseNote>
+                )}
                 <div>
                   <label className="block text-[10px] text-slate-400 mb-1">File</label>
                   <input
@@ -487,8 +549,8 @@ export const AdminDocumentVault: React.FC<DocumentVaultProps> = ({ canUpload, ca
                     placeholder="registry, 2026, sector-a"
                   />
                 </div>
-                <EnterpriseButton type="submit" disabled={busy === 'upload'} className="w-full">
-                  <Upload className="w-3.5 h-3.5" /> {busy === 'upload' ? 'Uploading…' : 'Upload to vault'}
+                <EnterpriseButton type="submit" disabled={busy === 'upload' || storageBlocked} className="w-full">
+                  <Upload className="w-3.5 h-3.5" /> {busy === 'upload' ? 'Uploading…' : storageBlocked ? 'Storage full' : 'Upload to vault'}
                 </EnterpriseButton>
               </form>
             )}

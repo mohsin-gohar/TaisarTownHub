@@ -100,6 +100,12 @@ class AdminAgencyController extends Controller
 
         $agency->save();
 
+        // Approval is the safe moment to guarantee a quota row for legacy
+        // agencies that were created before onboarding provisioning existed.
+        if ($request->verification_status === 'verified') {
+            \App\Services\AgencyOnboarding::ensureStarterSubscription($agency, $request->user()->id);
+        }
+
         $this->writeAudit($request, 'agency.verify', $agency->id, "Agency {$from} → {$request->verification_status}: {$agency->name}", [
             'agency_id' => $agency->id,
             'entity_type' => 'agency',

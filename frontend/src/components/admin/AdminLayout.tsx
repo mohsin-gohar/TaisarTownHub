@@ -25,7 +25,9 @@ import {
   Shield,
   Menu,
   X,
-  LifeBuoy
+  LifeBuoy,
+  Sparkles,
+  HardDrive
 } from 'lucide-react';
 
 const AdminOverview = lazy(() => import('./AdminOverview').then((m) => ({ default: m.AdminOverview })));
@@ -53,6 +55,8 @@ const AdminSupportDesk = lazy(() => import('./AdminSupportDesk').then((m) => ({ 
 const AdminSubscription = lazy(() => import('./AdminSubscription').then((m) => ({ default: m.AdminSubscription })));
 const AdminLocations = lazy(() => import('./AdminLocations').then((m) => ({ default: m.AdminLocations })));
 const AdminMediaStudio = lazy(() => import('./AdminMediaStudio').then((m) => ({ default: m.AdminMediaStudio })));
+const AdminFeaturedPromotions = lazy(() => import('./AdminFeaturedPromotions').then((m) => ({ default: m.AdminFeaturedPromotions })));
+const AdminAgencyOversight = lazy(() => import('./AdminAgencyOversight').then((m) => ({ default: m.AdminAgencyOversight })));
 
 export const AdminLayout: React.FC = () => {
   const {
@@ -117,6 +121,8 @@ export const AdminLayout: React.FC = () => {
 
   const hasEnterprise = (permission: string) => enterprisePermissions.includes(permission);
   const canManageAgencies = hasEnterprise('admin.manage_agencies');
+  const canManagePromotions = hasEnterprise('admin.manage_promotions');
+  const canOverseeAgencies = canManageAgencies || hasEnterprise('admin.manage_subscriptions');
   const hasAgencyContext = agencyMemberships.length > 0 || Boolean(agencyContextId);
   const canApproveListings = hasEnterprise('properties.approve');
   const canManageStaff = hasEnterprise('agency.manage_staff');
@@ -179,6 +185,12 @@ export const AdminLayout: React.FC = () => {
     { id: 'audit', label: 'Audit & Recycle Bin', icon: Shield, permission: 'manage_users' },
     ...(canManageAgencies
       ? [{ id: 'agency_approvals', label: 'Agency approvals', icon: ShieldCheck }]
+      : []),
+    ...(canManagePromotions
+      ? [{ id: 'featured_agencies', label: 'Featured Agencies', icon: Sparkles }]
+      : []),
+    ...(canOverseeAgencies
+      ? [{ id: 'agency_oversight', label: 'Agency Oversight', icon: HardDrive }]
       : []),
     ...(hasAgencyContext && hasEnterprise('agency.view')
       ? [
@@ -436,6 +448,8 @@ export const AdminLayout: React.FC = () => {
             {adminTab === 'security' && <AdminSecurityRoles />}
             {adminTab === 'audit' && <AdminAudit />}
             {adminTab === 'agency_approvals' && canManageAgencies && <AdminAgencyApprovals />}
+            {adminTab === 'featured_agencies' && canManagePromotions && <AdminFeaturedPromotions />}
+            {adminTab === 'agency_oversight' && canOverseeAgencies && <AdminAgencyOversight />}
             {adminTab === 'agency_dashboard' && <AdminAgencyDashboard onNavigate={handleSelectTab} />}
             {adminTab === 'staff' && <AdminStaffManager canManage={canManageStaff} />}
             {adminTab === 'documents' && (

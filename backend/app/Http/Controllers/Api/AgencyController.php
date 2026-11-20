@@ -91,6 +91,10 @@ class AgencyController extends Controller
                     'status' => 'active',
                 ]);
 
+                // A real quota row from day one (database-enforced 5 GB starter
+                // workspace). No file is ever removed when this term changes.
+                \App\Services\AgencyOnboarding::ensureStarterSubscription($agency, $user->id);
+
                 $token = $user->createToken('auth-token')->plainTextToken;
 
                 return [$user, $agency, $token];

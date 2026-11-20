@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\AgencyPromotion;
 use App\Models\BusinessRecord;
 use App\Models\Dealer;
 use App\Models\Property;
@@ -108,6 +109,31 @@ class PropertyController extends Controller
                     ->orWhere('sector', 'like', "%{$s}%")
                     ->orWhere('fileNumber', 'like', "%{$s}%");
             });
+        }
+
+        // Promoted agencies get priority placement for their approved public
+        // listings. The badge is truthful (Featured vs Sponsored) and the
+        // ordering falls back to recency for everyone else.
+        if ($isPublicScope) {
+            $now = now();
+            // Scalar subquery: promoted listings sort by their live slot
+            // position (1 = first), everyone else falls back to the sentinel
+            // below and keeps recency order. Agency status is re-checked so a
+            // later suspension removes the priority immediately.
+            $promotionPrioritySql = 'COALESCE((SELECT MIN(ap.position)
+                FROM agency_promotions ap
+                INNER JOIN agencies ag ON ag.id = ap.agency_id
+                WHERE ap.agency_id = properties.agency_id
+                  AND ap.status = ?
+                  AND (ap.starts_at IS NULL OR ap.starts_at <= ?)
+                  AND (ap.ends_at IS NULL OR ap.ends_at > ?)
+                  AND ag.status = ?
+                  AND ag.verification_status = ?), 1000000)';
+            $query->orderByRaw(
+                $promotionPrioritySql,
+                ['active', $now, $now, 'active', 'verified']
+            );
+            $query->with(['agency:id,name,slug,status,verification_status', 'agency.activePromotion']);
         }
 
         // Deterministic ordering: `created_at` only has second precision, so a
@@ -906,7 +932,19 @@ class PropertyController extends Controller
             'cornerPlot', 'westOpen', 'parkFacing', 'mainBoulevard', 'createdDate',
             'contactPerson', 'contactPhone', 'contactWhatsApp', 'agencyName',
             'listing_purpose', 'slug', 'expires_at', 'created_at',
+            'agency_featured_badge',
         ];
+
+        $agency = $property->relationLoaded('agency') ? $property->agency : null;
+        $promotion = $agency?->relationLoaded('activePromotion') ? $agency->activePromotion : null;
+        if ($agency
+            && $agency->status === 'active'
+            && $agency->verification_status === 'verified'
+            && $promotion
+            && $promotion->isLive()
+        ) {
+            $payload['agency_featured_badge'] = $promotion->publicBadge();
+        }
 
         return collect($allowed)
             ->filter(fn (string $key) => array_key_exists($key, $payload))

@@ -12,6 +12,7 @@ use App\Services\SecureFileStore;
 use App\Support\PlanLimits;
 use App\Support\UploadSecurity;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -145,7 +146,9 @@ class MediaController extends Controller
         $scanStatus = null;
         $scannedAt = null;
 
-        if ($request->hasFile('file')) {
+        $storageLock = null;
+        try {
+            if ($request->hasFile('file')) {
             $file = $request->file('file');
             $ext = strtolower($file->getClientOriginalExtension());
 
@@ -201,7 +204,11 @@ class MediaController extends Controller
             $storedPath = 'media/' . $agencyId . '/' . now()->format('Y/m') . '/' . $mediaId . '.' . $ext;
 
             // G-8: media bytes count against the same storage quota the
-            // vault enforces (they live on the same private disk).
+            // vault enforces (they live on the same private disk). A per-agency
+            // lock serialises concurrent uploads.
+            $storageLock = Cache::lock('agency-storage:' . $agencyId, 30);
+            $storageLock->block(5);
+
             $agency = Agency::findOrFail($agencyId);
             if ($block = PlanLimits::storageBlock($agency, (int) $file->getSize())) {
                 return PlanLimits::deny('Storage limit reached for your plan. Delete unneeded media or upgrade your plan.', $block);
@@ -266,7 +273,12 @@ class MediaController extends Controller
             'message' => 'Media saved.',
             'media' => $payload,
         ], 201);
+    } finally {
+        if ($storageLock) {
+            $storageLock->release();
+        }
     }
+}
 
     public function update(Request $request, string $id)
     {

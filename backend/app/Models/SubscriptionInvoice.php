@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class SubscriptionInvoice extends Model
 {
-    public const STATUSES = ['pending', 'paid', 'void'];
+    public const STATUSES = ['pending', 'paid', 'failed', 'void'];
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -21,6 +21,8 @@ class SubscriptionInvoice extends Model
         'id', 'invoice_number', 'agency_id', 'plan_id', 'amount_pkr', 'tax_pkr',
         'total_pkr', 'currency', 'period_start', 'period_end', 'status',
         'paid_at', 'payment_method', 'payment_reference', 'verified_by', 'notes',
+        'stripe_session_id', 'stripe_payment_intent_id', 'stripe_subscription_id',
+        'flutterwave_tx_ref', 'flutterwave_tx_id', 'due_at',
     ];
 
     protected function casts(): array
@@ -32,6 +34,7 @@ class SubscriptionInvoice extends Model
             'period_start' => 'date',
             'period_end' => 'date',
             'paid_at' => 'datetime',
+            'due_at' => 'datetime',
         ];
     }
 

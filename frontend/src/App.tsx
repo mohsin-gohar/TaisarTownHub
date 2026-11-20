@@ -56,6 +56,9 @@ interface FeaturedAgency {
   logo_url?: string | null;
   description?: string | null;
   sale_listing_count?: number;
+  badge?: 'Featured' | 'Sponsored' | string | null;
+  position?: number | null;
+  is_paid?: boolean;
 }
 
 // SEO utilities from the single source of truth
@@ -240,17 +243,22 @@ const MainAppContent: React.FC = () => {
   const [featuredAgencies, setFeaturedAgencies] = useState<FeaturedAgency[]>([]);
   const [featuredAgenciesLoading, setFeaturedAgenciesLoading] = useState(true);
   const [featuredAgenciesError, setFeaturedAgenciesError] = useState(false);
+  const [hasFeaturedPlacements, setHasFeaturedPlacements] = useState(false);
 
   useEffect(() => {
     let active = true;
-    void api.getPublicAgencies({ sort: 'listings', page: 1, per_page: 3 }).then((body) => {
+    void api.getFeaturedAgencies({ limit: 6 }).then((body) => {
       if (!active) return;
-      const agencies = Array.isArray(body?.agencies?.data)
-        ? body.agencies.data
-        : Array.isArray(body?.agencies)
-          ? body.agencies
+      // The public endpoint returns paid/scheduled placements first and a
+      // verified-agency fallback with `featured: false`; fallback cards never
+      // carry a Featured/Sponsored badge.
+      const agencies = Array.isArray(body?.agencies)
+        ? body.agencies
+        : Array.isArray(body?.agencies?.data)
+          ? body.agencies.data
           : [];
-      setFeaturedAgencies(agencies.slice(0, 3));
+      setFeaturedAgencies(agencies.slice(0, 6));
+      setHasFeaturedPlacements(body?.featured === true);
       setFeaturedAgenciesError(!body || body.success === false);
       setFeaturedAgenciesLoading(false);
     });
@@ -388,10 +396,12 @@ const MainAppContent: React.FC = () => {
             <section className="py-24 sm:py-32 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
               <Reveal className="max-w-7xl mx-auto">
                 <h2 className="font-serif-luxury text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
-                  Featured Agencies
+                  {hasFeaturedPlacements ? 'Featured Agencies' : 'Verified Agencies'}
                 </h2>
                 <p className="text-slate-400 text-lg sm:text-base mb-8 max-w-2xl">
-                  Public agencies with Taiser Town properties for sale.
+                  {hasFeaturedPlacements
+                    ? 'Spotlight placements from approved, verified agencies with Taiser Town properties for sale.'
+                    : 'Public agencies with Taiser Town properties for sale.'}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {featuredAgenciesLoading ? (
@@ -408,7 +418,18 @@ const MainAppContent: React.FC = () => {
                         <Building2 aria-hidden="true" className="w-12 h-12 p-3 rounded-lg bg-[#07141E] text-[#E7C878]" />
                       )}
                       <span className="min-w-0">
-                        <span className="block text-white font-semibold">{agency.name}</span>
+                        <span className="flex items-center gap-2 flex-wrap">
+                          <span className="text-white font-semibold">{agency.name}</span>
+                          {agency.badge && (
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                              agency.badge === 'Sponsored'
+                                ? 'border-[#E7C878]/60 bg-[#E7C878]/10 text-[#F6E3B4]'
+                                : 'border-slate-600 bg-slate-800/60 text-slate-200'
+                            }`}>
+                              {agency.badge}
+                            </span>
+                          )}
+                        </span>
                         <span className="block mt-1 text-slate-400 text-sm line-clamp-2">{agency.description || 'View agency profile and sale listings.'}</span>
                         {typeof agency.sale_listing_count === 'number' && <span className="block mt-2 text-xs text-[#E7C878]">{agency.sale_listing_count} sale listings</span>}
                       </span>

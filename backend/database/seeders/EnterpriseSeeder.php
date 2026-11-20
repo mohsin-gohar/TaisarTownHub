@@ -77,9 +77,12 @@ class EnterpriseSeeder extends Seeder
         }
 
         /* ---------- 4. Subscription plans (prices/limits configurable, not hardcoded in code) ---------- */
+        // Launch workspace: 5 GB quota, no public trial marketing. Paid plans
+        // stay in the catalogue so the platform team can assign larger quotas
+        // from the dashboard whenever commercial launch begins.
         $plans = [
-            ['trial', 'Free Trial', 0, 'month', 1, 1, ['listings' => 10, 'staff' => 2, 'storage_mb' => 512, 'featured_credits' => 0, 'listing_days' => 30],
-                ['14-day full access', 'Community support']],
+            ['trial', 'Starter Workspace', 0, 'month', 1, 1, ['listings' => 10, 'staff' => 2, 'storage_mb' => 5120, 'featured_credits' => 0, 'listing_days' => 30],
+                ['Private agency workspace', '5 GB document & media storage', 'Community support']],
             ['basic', 'Basic Agency', 4999, 'month', 0, 2, ['listings' => 50, 'staff' => 5, 'storage_mb' => 5120, 'featured_credits' => 1, 'listing_days' => 60],
                 ['Standard listing management', 'Email support', 'Public agency profile']],
             ['professional', 'Professional Agency', 12999, 'month', 0, 3, ['listings' => 250, 'staff' => 15, 'storage_mb' => 20480, 'featured_credits' => 5, 'listing_days' => 90],
@@ -100,6 +103,24 @@ class EnterpriseSeeder extends Seeder
             );
         }
 
+        /* ---------- 4b. Featured placement packages (free launch) ---------- */
+        $promotionPackages = [
+            ['featured-7', '7-Day Spotlight', 'Seven days in the homepage featured roster.', 0, 7, 1],
+            ['featured-30', '30-Day Spotlight', 'Thirty days in the homepage featured roster.', 0, 30, 2],
+            ['featured-90', '90-Day Spotlight', 'Ninety days in the homepage featured roster.', 0, 90, 3],
+        ];
+        foreach ($promotionPackages as [$key, $name, $description, $price, $days, $sort]) {
+            DB::table('promotion_packages')->updateOrInsert(
+                ['key' => $key],
+                [
+                    'name' => $name, 'description' => $description,
+                    'price' => $price, 'currency' => 'PKR', 'duration_days' => $days,
+                    'is_active' => 1, 'sort_order' => $sort,
+                    'updated_at' => $now, 'created_at' => $now,
+                ]
+            );
+        }
+
         /* ---------- 5. Platform system settings ---------- */
         $settings = [
             ['platform.name', 'TaisarTownHub', 'general', 'Public platform name'],
@@ -112,6 +133,8 @@ class EnterpriseSeeder extends Seeder
             ['security.login_max_attempts', 5, 'security', 'Failed logins before temporary lockout'],
             ['security.login_lockout_minutes', 15, 'security', 'Lockout duration in minutes'],
             ['security.mfa_required_for_admins', false, 'security', 'Require MFA for platform admins and agency owners/managers'],
+            ['promotions.max_slots', 10, 'promotions', 'Maximum live homepage featured-agency slots'],
+            ['promotions.default_duration_days', 30, 'promotions', 'Default featured placement duration in days'],
             ['notifications.email_enabled', false, 'integrations', 'Email notifications (requires mail credentials)'],
             ['notifications.sms_enabled', false, 'integrations', 'SMS notifications (requires provider credentials)'],
             ['notifications.whatsapp_enabled', false, 'integrations', 'WhatsApp notifications (requires provider credentials)'],
