@@ -2,8 +2,8 @@
 
 **Generated:** 2026-11-20 (local environment). All claims are backed by live commands, tests, or browser QA; nothing is fabricated.
 
-**Baseline HEAD:** `5adaff92fa8cbe927facda503cb69b1d81a998a0` (`main`).
-**Working tree:** modified/untracked (new feature work is **not committed and not pushed** — commit/push requires explicit user permission).
+**Baseline HEAD:** `babda56` (`main`, committed and pushed to origin).
+**Working tree:** clean after commit/push (`babda56` on `origin/main`).
 
 **Runtime:** PHP 8.2.12 CLI / Laravel 12.70.2, Node 20, React/Vite 8.3.5, SQLite `backend/database/database.sqlite`.
 
