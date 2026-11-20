@@ -32,23 +32,22 @@ Backend feature suites added/updated:
 ### 3.1 Featured-agency paid placement (Super Admin curated)
 - Dedicated tables `promotion_packages` + `agency_promotions` (history-bearing; cancel/expire, never delete).
 - `AgencyPromotionService`: eligibility (approved + verified + active only), slot caps (10/20/30/custom up to 100), priority ordering, durations 7/30/90/custom, auto-expiry, truthful badges.
-- "Sponsored" only when a real payment is recorded; complimentary placements show "Featured".
+- Free launch: all placements are complimentary and labelled "Featured"; no payment collection or Sponsored badge in this release.
 - Public `/api/agencies/featured` returns live placements and falls back to verified agencies with no badge and the heading "Verified Agencies".
 - Admin API + UI: `AdminFeaturedPromotions` tab (create, edit, cancel, reorder, packages, slot settings).
 - Promoted agency listings get priority placement in `/api/properties` with `agency_featured_badge`.
 - Audit logging for every create/update/cancel/reorder/settings/package change.
 
-### 3.2 5 GB storage quota enforcement
-- Starter workspace default = **5120 MB** (`AgencyOnboarding`, `Agency` limits default, `EnterpriseSeeder`).
-- Quota covers vault documents, document versions, and media bytes (`PlanLimits::usage`).
-- Uploads are rejected with `402 plan_limit_reached` when full; no files are deleted on quota/trial expiry.
-- `AdminDocumentVault` and `AdminMediaStudio` show a Workspace Storage progress banner, near-full warnings, and disable uploads when full.
-- Public/admin API: `/api/agency/documents/storage-usage`.
+### 3.2 Storage trial/quota removed for this release
+- No default 5 GB or 30-day storage offer, trial countdown, expiry restriction, quota enforcement, storage upload rejection, or upgrade prompts.
+- Existing File Vault, media, documents, versions, validation, malware scanning, secure storage, and permissions remain functional.
+- Storage usage remains available for monitoring only; quota extension is removed.
+- `AdminDocumentVault` and `AdminMediaStudio` no longer show storage quota banners or disable uploads due to quota.
 
 ### 3.3 Super Admin agency oversight
 - `AdminAgencyOversight` tab: agency list with storage meters, filters, over-quota count.
-- Detail view: storage breakdown, file/media metadata only (no file contents), quota history, quota extension, suspend/reactivate controls.
-- Quota extension is additive; smaller quotas only block new uploads and never delete data.
+- Detail view: storage breakdown, file/media metadata only (no file contents), suspend/reactivate controls, audit logs.
+- No quota extension or quota-based subscription enforcement in this release.
 - Audit log action `agency.quota.extend` and `agency.status`.
 
 ### 3.4 Billing lifecycle hardening
@@ -92,7 +91,7 @@ Performed against `http://127.0.0.1:3000` (backend `:8080`) with the seeded loca
 
 ## 6. Test counts (final)
 
-- Backend: **299 passed, 2431 assertions** (`php artisan test`).
+- Backend: **299 passed, 2411 assertions** (`php artisan test`).
 - Frontend: `npm run verify` **PASS** (lint + unit + build + bundle).
 - Playwright: **79 passed, 0 failed**.
 - New feature tests: 14 (7 promotion + 7 storage/oversight).
