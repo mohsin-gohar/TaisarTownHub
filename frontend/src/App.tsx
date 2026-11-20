@@ -29,12 +29,16 @@ import { AuthPage } from './components/public/AuthPage';
 import { NotFoundPage } from './components/public/NotFoundPage';
 import { api } from './services/api';
 
-// Code-split sub-pages & modals
-const PropertyDetailPage = lazy(() => import('./components/public/PropertyDetailPage').then((m) => ({ default: m.PropertyDetailPage })));
-const PropertiesListingPage = lazy(() => import('./components/public/PropertiesListingPage').then((m) => ({ default: m.PropertiesListingPage })));
-const AgenciesDirectoryPage = lazy(() => import('./components/public/AgenciesDirectoryPage').then((m) => ({ default: m.AgenciesDirectoryPage })));
+// Static imports for public pages used inside the main public route.
+// NOTE: converting these from React.lazy to static imports fixes a class of
+// stuck-on-navigation issues where new tabs and SPA navigations to
+// /agencies, /properties, /property-detail stayed on the Suspense fallback
+// forever (lazy import never resolving on the first navigation of a tab).
+import { PropertyDetailPage } from './components/public/PropertyDetailPage';
+import { PropertiesListingPage } from './components/public/PropertiesListingPage';
+import { AgenciesDirectoryPage } from './components/public/AgenciesDirectoryPage';
 
-// Admin views
+// Admin views (code-split)
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
 const AdminLoginModal = lazy(() => import('./components/admin/AdminLoginModal').then((m) => ({ default: m.AdminLoginModal })));
 
@@ -693,13 +697,9 @@ const MainAppContent: React.FC = () => {
   );
 };
 
-/** Cold-load pages for backend token-based mail links. */
-const ResetPasswordPage = lazy(() =>
-  import('./pages/AuthFlowPages').then((m) => ({ default: m.ResetPasswordPage })),
-);
-const VerifyEmailPage = lazy(() =>
-  import('./pages/AuthFlowPages').then((m) => ({ default: m.VerifyEmailPage })),
-);
+/** Static pages for backend token-based mail links (lazy caused stuck-on-first-load). */
+import { ResetPasswordPage } from './pages/AuthFlowPages';
+import { VerifyEmailPage } from './pages/AuthFlowPages';
 
 const AUTH_FLOW_PATHS = new Set(['/reset-password', '/verify-email']);
 
