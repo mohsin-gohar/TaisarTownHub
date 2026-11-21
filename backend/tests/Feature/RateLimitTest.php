@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Support\Facades\Cache;
+
 /**
  * API rate limiting (Phase 2).
  *
@@ -14,6 +16,16 @@ namespace Tests\Feature;
  */
 class RateLimitTest extends EnterpriseTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Full-suite determinism: the `api.auth` limiter is IP-keyed and
+        // shared per minute (10/min); other tests also hit /api/auth/login,
+        // so clear the shared rate-limit/cache store before each test.
+        Cache::flush();
+    }
+
     public function test_login_rejects_abuse_with_429(): void
     {
         $this->makeUser('operator', ['email' => 'ratelimit@example.test']);
