@@ -398,6 +398,26 @@ class FinanceIsolationTest extends EnterpriseTestCase
         $this->postJson("/api/agency/transactions/{$deal['id']}/approve", [], $headers())->assertStatus(422);
     }
 
+    public function test_platform_super_admin_can_update_a_commission_without_agency_context(): void
+    {
+        [$agencyUser] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($agencyUser);
+        $commission = $this->postJson(
+            "/api/agency/transactions/{$deal['id']}/commissions",
+            ['amount' => 1000],
+            $this->authHeaders($this->tokenFor($agencyUser))
+        )->assertStatus(201)->json('commission');
+
+        // Regression: updateCommission filtered `agency_id = NULL` for platform
+        // users, so commissions() listed every row but every payout was a 404.
+        $admin = $this->makeUser('super_admin');
+        $this->putJson(
+            "/api/agency/commissions/{$commission['id']}",
+            ['status' => 'paid'],
+            $this->authHeaders($this->tokenFor($admin))
+        )->assertStatus(200)->assertJsonPath('commission.status', 'paid');
+    }
+
     public function test_commission_rows_are_agency_scoped(): void
     {
         [$userA, $agencyA] = $this->agencyUser($this->financePermissions());

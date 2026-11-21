@@ -186,7 +186,7 @@ class ProductionCheck extends Command
             (!$production || app()->routesAreCached()) ? 'PASS' : 'WARN',
             'Run php artisan optimize on the production server.');
 
-        $rounds = (int) env('BCRYPT_ROUNDS', 12);
+        $rounds = (int) config('hashing.bcrypt.rounds', 12);
         $this->add('bcrypt', 'BCRYPT_ROUNDS', (string) $rounds,
             ($production && $rounds < 10) ? 'FAIL' : 'PASS',
             'Keep bcrypt cost >= 10 in production.');

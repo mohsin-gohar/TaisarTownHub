@@ -131,6 +131,28 @@ class DealerFilesAuthorizationTest extends EnterpriseTestCase
         $this->assertArrayHasKey('profit_kbr', $report[0]);
     }
 
+    public function test_short_buyer_cnic_is_fully_masked_on_sale(): void
+    {
+        // Regression: 7-8 digit buyer CNIC produced a negative str_repeat()
+        // length in the mask helper (ValueError/500 instead of a sale).
+        $dealer = $this->makeDealer('Short CNIC Buyer');
+        [$user] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $file = DealerFile::create([
+            'title' => 'Short CNIC File', 'type' => 'image', 'url' => 'https://example.test/s.jpg',
+            'folder' => 'Properties', 'file_size_kb' => 100,
+            'dealer_id' => $dealer->id, 'uploaded_by' => $dealer->id, 'status' => 'available',
+        ]);
+
+        $this->postJson("/api/dealer-files/{$file->id}/sell", [
+            'selling_price_kbr' => 9000,
+            'buyer_name' => 'Short CNIC Buyer',
+            'buyer_phone' => '0300-1234567',
+            'buyer_cnic' => '1234567',
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertSame('*******', $file->fresh()->buyer_cnic);
+    }
+
     public function test_dealer_file_quota_blocks_uploads_past_the_limit(): void
     {
         [$user, $agency] = $this->agencyUser(['documents.view', 'documents.upload'], 'manager');

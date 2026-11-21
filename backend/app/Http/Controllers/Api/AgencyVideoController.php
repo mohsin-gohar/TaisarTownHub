@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\AgencyVideo;
 use App\Models\BusinessRecord;
+use App\Models\Dealer;
 use App\Models\VideoComment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -68,6 +70,57 @@ class AgencyVideoController extends Controller
         // Sanitize
         $data['title'] = strip_tags($data['title']);
         $data['description'] = strip_tags($data['description'] ?? '');
+
+        // Attribution is derived from real records, never from client text.
+        // Legacy videos store a dealer id in `agencyId` (see
+        // LegacyTenancyResolver), so accept either a dealer or an agency id.
+        // This prevents an agency publisher from labelling a video with
+        // another agency's/dealer's identity.
+        $actingAgencyId = $this->agencyId($request);
+        $claimedId = $data['agencyId'] ?? null;
+        $dealer = null;
+        $claimedAgency = null;
+
+        if (is_string($claimedId) && $claimedId !== '') {
+            $dealer = Dealer::find($claimedId);
+            $claimedAgency = $dealer === null ? Agency::find($claimedId) : null;
+
+            if ($dealer === null && $claimedAgency === null) {
+                abort(422, 'Unknown dealer or agency for this video tour.');
+            }
+
+            if ($actingAgencyId !== null && $dealer !== null && $dealer->agency_id !== $actingAgencyId) {
+                abort(422, 'Dealer belongs to another agency.');
+            }
+            if ($actingAgencyId !== null && $claimedAgency !== null && $claimedAgency->id !== $actingAgencyId) {
+                abort(422, 'Video tours can only be published for your own agency.');
+            }
+        } elseif ($request->user()->dealer_id) {
+            $candidate = Dealer::find($request->user()->dealer_id);
+            if ($candidate !== null && ($actingAgencyId === null || $candidate->agency_id === $actingAgencyId)) {
+                $dealer = $candidate;
+            }
+        }
+
+        if ($actingAgencyId !== null) {
+            $agency = Agency::findOrFail($actingAgencyId);
+            $data['agencyName'] = $agency->name;
+            $data['agencyId'] = $dealer?->id;
+            $data['dealerName'] = $dealer?->fullName ?? $request->user()->name;
+            $data['dealerAvatar'] = $dealer?->avatar;
+        } elseif ($dealer !== null) {
+            $dealerAgency = $dealer->agency_id ? Agency::find($dealer->agency_id) : null;
+            $data['agencyId'] = $dealer->id;
+            $data['dealerName'] = $dealer->fullName;
+            $data['dealerAvatar'] = $dealer->avatar;
+            if ($dealerAgency !== null) {
+                $data['agencyName'] = $dealerAgency->name;
+            }
+        } elseif ($claimedAgency !== null) {
+            // Platform publisher named an agency rather than a dealer.
+            $data['agencyName'] = $claimedAgency->name;
+            $data['agencyId'] = null;
+        }
 
         $video = AgencyVideo::create($data);
 

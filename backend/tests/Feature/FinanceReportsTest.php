@@ -4,8 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Commission;
 use App\Models\Expense;
+use App\Models\Inquiry;
+use App\Models\SubscriptionInvoice;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
+use Illuminate\Support\Str;
 use Tests\Feature\EnterpriseTestCase;
 
 /**
@@ -121,6 +124,84 @@ class FinanceReportsTest extends EnterpriseTestCase
             ->assertOk();
         $this->assertSame(999999.0, (float) $other->json('deals.agreed_pkr'));
         $this->assertSame(0.0, (float) $other->json('collected_pkr'));
+    }
+
+    public function test_agency_report_never_includes_platform_or_foreign_agency_totals(): void
+    {
+        [$user, $agency] = $this->agencyUser(['finance.view', 'finance.view_reports'], 'accountant');
+        [, $foreign] = $this->agencyUser(['finance.view', 'finance.view_reports'], 'accountant');
+
+        // Foreign-agency activity in the same window.
+        $this->makeDeal($foreign->id, ['agreementAmountPKR' => 900000]);
+        $this->makePublicProperty($foreign);
+        Inquiry::create([
+            'id' => 'inq-' . Str::uuid(),
+            'fullName' => 'Foreign Lead',
+            'phone' => '03001112222',
+            'message' => 'Foreign inquiry',
+            'agency_id' => $foreign->id,
+        ]);
+        SubscriptionInvoice::create([
+            'id' => (string) Str::uuid(),
+            'invoice_number' => SubscriptionInvoice::nextNumber(),
+            'agency_id' => $foreign->id,
+            'amount_pkr' => 7000,
+            'total_pkr' => 7000,
+            'currency' => 'PKR',
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+        SubscriptionInvoice::create([
+            'id' => (string) Str::uuid(),
+            'invoice_number' => SubscriptionInvoice::nextNumber(),
+            'agency_id' => $foreign->id,
+            'amount_pkr' => 1000,
+            'total_pkr' => 1000,
+            'currency' => 'PKR',
+            'status' => 'pending',
+        ]);
+
+        // The acting agency's own activity.
+        $this->makePublicProperty($agency);
+        Inquiry::create([
+            'id' => 'inq-' . Str::uuid(),
+            'fullName' => 'Own Lead',
+            'phone' => '03003334444',
+            'message' => 'Own inquiry',
+            'agency_id' => $agency->id,
+        ]);
+        SubscriptionInvoice::create([
+            'id' => (string) Str::uuid(),
+            'invoice_number' => SubscriptionInvoice::nextNumber(),
+            'agency_id' => $agency->id,
+            'amount_pkr' => 2500,
+            'total_pkr' => 2500,
+            'currency' => 'PKR',
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+
+        $today = now()->toDateString();
+        $report = $this->getJson(
+            '/api/agency/reports?from=' . $today . '&to=' . $today,
+            $this->authHeaders($this->tokenFor($user))
+        )->assertOk();
+
+        // Platform-wide agency counts must not leak into an agency report.
+        $this->assertSame(1, $report->json('agencies.total'));
+        $this->assertSame(1, $report->json('agencies.verified'));
+        $this->assertSame(1, $report->json('listings.created_in_range'));
+        $this->assertSame(1, $report->json('listings.public'));
+        $this->assertSame(1, $report->json('leads_in_range'));
+
+        // Invoices are the agency's own billing only.
+        $this->assertSame(2500.0, (float) $report->json('invoices.paid_pkr'));
+        $this->assertSame(1, $report->json('invoices.paid_count'));
+        $this->assertSame(0.0, (float) $report->json('invoices.outstanding_pkr'));
+
+        // Deals/collected remain tenant-scoped as before.
+        $this->assertSame(0, $report->json('deals.count'));
+        $this->assertSame(0.0, (float) $report->json('collected_pkr'));
     }
 
     public function test_platform_report_requires_admin_view_reports_and_reports_all_agencies(): void

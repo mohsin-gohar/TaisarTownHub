@@ -19,7 +19,9 @@ class TrustProxies extends BaseTrustProxies
 
     public function __construct()
     {
-        $raw = (string) env('TRUSTED_PROXIES', '127.0.0.1');
+        // Read via config, never env(): env() returns null once the production
+        // config cache is built, which silently disabled trusted-proxy handling.
+        $raw = (string) config('app.trusted_proxies', '127.0.0.1');
         if ($raw !== '') {
             $this->proxies = array_unique(array_map('trim', explode(',', $raw)));
         }

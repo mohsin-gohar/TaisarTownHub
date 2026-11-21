@@ -94,6 +94,13 @@ Route::get('/media/{id}/file', [MediaController::class, 'publicFile'])->middlewa
 // expiry/revocation/download-cap enforced server-side, no auth.
 Route::get('/shares/{token}/download', [DocumentController::class, 'sharedDownload'])->middleware('throttle:30,1');
 
+// Payment gateway webhooks MUST stay public: the gateways call them without a
+// Sanctum token. Authenticity is enforced inside the controller (Stripe
+// signature verification / Flutterwave verif-hash) and both are throttled.
+// Registering them inside the auth group made every real delivery a 401.
+Route::post('/payments/webhook/stripe', [PaymentController::class, 'stripeWebhook'])->middleware('throttle:60,1');
+Route::post('/payments/webhook/flutterwave', [PaymentController::class, 'flutterwaveWebhook'])->middleware('throttle:60,1');
+
 // Public lead capture (property-scoped leads get agency-attached server-side)
 Route::post('inquiries', [InquiryController::class, 'store'])->middleware('throttle:api.write');
 
@@ -275,10 +282,9 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
     Route::post('/support/tickets/{id}/status', [SupportController::class, 'updateStatus'])->middleware('auth:sanctum');
 
     /* ---------- Payments (Stripe / Flutterwave) ---------- */
+    // Webhooks are registered in the public section above (gateways have no token).
     Route::post('/payments/subscription/checkout', [PaymentController::class, 'subscriptionCheckout'])->middleware('auth:sanctum', 'throttle:10,1');
-    Route::post('/payments/webhook/stripe', [PaymentController::class, 'stripeWebhook'])->middleware('throttle:60,1');
-    Route::post('/payments/webhook/flutterwave', [PaymentController::class, 'flutterwaveWebhook'])->middleware('throttle:60,1');
-    Route::get('/payments/flutterwave/verify/{tx_ref}', [PaymentController::class, 'flutterwaveVerify'])->middleware('throttle:30,1');
+    Route::get('/payments/flutterwave/verify/{tx_ref}', [PaymentController::class, 'flutterwaveVerify'])->middleware('auth:sanctum', 'throttle:30,1');
 
     /* ---------- Admin: dashboard analytics (auth required) ---------- */
     Route::get('/admin/dashboard', [AdminDashboardController::class, 'index'])->middleware('auth:sanctum');

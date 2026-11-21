@@ -83,7 +83,21 @@ class DealerController extends Controller
             'commissionRate' => 'nullable|numeric|min:0|max:100',
             'status' => 'nullable|string|max:50',
             'avatar' => 'nullable|string',
+            'agencyId' => 'nullable|string|max:64|exists:agencies,id',
         ]);
+
+        // Link the dealer to an agency. Without this the row was created with
+        // agency_id = NULL and could never be assigned to an agency property
+        // (PropertyController::assertDealerInAgency rejects unlinked dealers).
+        // Agency-scoped publishers may only create dealers for their own
+        // agency; a platform publisher must name the agency explicitly.
+        $actingAgencyId = $this->agencyId($request);
+        if ($actingAgencyId !== null) {
+            $data['agency_id'] = $actingAgencyId;
+        } elseif (!empty($data['agencyId'])) {
+            $data['agency_id'] = $data['agencyId'];
+        }
+        unset($data['agencyId']);
 
         // Persist the masked copy for display, but NEVER overwrite the raw CNIC
         // column with its own masked form — that permanently destroys the
@@ -120,7 +134,23 @@ class DealerController extends Controller
             'commissionRate' => 'nullable|numeric|min:0|max:100',
             'status' => 'nullable|string|max:50',
             'avatar' => 'nullable|string',
+            'agencyId' => 'nullable|string|max:64|exists:agencies,id',
         ]);
+
+        // Tenancy: an agency-scoped publisher can only touch dealers that
+        // already belong to that agency, and cannot move them elsewhere.
+        // Platform publishers may re-link a dealer (or pass null to unlink).
+        $actingAgencyId = $this->agencyId($request);
+        if ($actingAgencyId !== null) {
+            if ($dealer->agency_id !== $actingAgencyId) {
+                abort(404);
+            }
+            unset($data['agencyId']);
+            $data['agency_id'] = $actingAgencyId;
+        } elseif (array_key_exists('agencyId', $data)) {
+            $data['agency_id'] = $data['agencyId'];
+            unset($data['agencyId']);
+        }
 
         // Persist the masked copy for display, but never overwrite the raw CNIC
         // column with its own masked form (data destruction).
@@ -151,10 +181,16 @@ class DealerController extends Controller
     private function maskCnic(string $cnic): string
     {
         $clean = preg_replace('/[^0-9]/', '', $cnic);
-        if (strlen($clean) < 7) {
-            return str_repeat('*', strlen($clean));
+
+        // Keep the familiar 13-digit mask (42101****5671). Anything shorter is
+        // fully masked: it may be a partial CNIC, and computing
+        // strlen($clean) - 9 for 7-8 digit input produced a negative
+        // str_repeat() length, which throws ValueError on PHP 8.
+        if (strlen($clean) === 13) {
+            return substr($clean, 0, 5) . str_repeat('*', 4) . substr($clean, -4);
         }
-        return substr($clean, 0, 5) . str_repeat('*', strlen($clean) - 9) . substr($clean, -4);
+
+        return str_repeat('*', strlen($clean));
     }
 }
 

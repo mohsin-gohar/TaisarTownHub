@@ -56,6 +56,24 @@ class EncryptionAtRestTest extends EnterpriseTestCase
         $this->assertStringNotContainsString('"cnic"', $response->getContent());
     }
 
+    public function test_short_cnic_is_fully_masked_instead_of_crashing(): void
+    {
+        // Regression: masking computed strlen($clean) - 9, so a 7- or 8-digit
+        // CNIC produced a negative str_repeat() length and a ValueError/500.
+        [$user] = $this->agencyUser(['manage_dealers']);
+
+        foreach ([['1234567', '*******'], ['12345678', '********']] as [$cnic, $expected]) {
+            $response = $this->postJson('/api/dealers', [
+                'id' => 'dlr_' . Str::random(10),
+                'fullName' => 'Short CNIC Dealer',
+                'phone' => '0300-0000004',
+                'cnic' => $cnic,
+            ], $this->authHeaders($this->tokenFor($user)))->assertStatus(201);
+
+            $this->assertSame($expected, $response->json('cnicMasked'));
+        }
+    }
+
     public function test_store_via_api_masks_cnic_and_keeps_full_value_encrypted(): void
     {
         [$user] = $this->agencyUser(['manage_dealers']);

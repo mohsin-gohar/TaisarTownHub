@@ -22,7 +22,7 @@ class Dealer extends Model
     ];
 
     protected $fillable = [
-        'id', 'fullName', 'cnic', 'cnicMasked', 'phone', 'email',
+        'id', 'fullName', 'cnic', 'cnicMasked', 'phone', 'email', 'agency_id',
         'agencyAffiliation', 'agencyOrBranch', 'role', 'commissionType',
         'commissionRate', 'totalEarnedPKR', 'pendingCommissionPKR',
         'assignedPropertiesCount', 'completedDealsCount', 'dealsClosed',

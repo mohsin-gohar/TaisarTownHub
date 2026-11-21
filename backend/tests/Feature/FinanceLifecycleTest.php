@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Dealer;
 use App\Models\Transaction;
+use Illuminate\Support\Str;
 
 /**
  * Finance state machine + tenancy: forward transitions, one-step-back only,
@@ -137,6 +139,43 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->patchStatus($user, $deal['id'], 'Negotiation')
             ->assertStatus(422)
             ->assertJsonFragment(['message' => 'Deal is cancelled — the record is read-only for bookkeeping.']);
+    }
+
+    public function test_seeded_agency_manager_can_create_and_update_a_deal(): void
+    {
+        // Regression: store/update required `manage_deals`, a key that exists
+        // in no permission catalogue, so the seeded agency roles (which hold
+        // finance.create_transaction / finance.update_transaction) could not
+        // work with deals at all.
+        $grants = \App\Support\Permissions::agencyRoleGrants('agency_manager');
+        $this->assertNotContains('manage_deals', $grants);
+
+        [$user] = $this->agencyUser($grants, 'agency_manager');
+        $deal = $this->createDeal($user);
+
+        $this->patchJson(
+            "/api/agency/transactions/{$deal['id']}",
+            ['buyerName' => 'Updated Buyer'],
+            $this->authHeaders($this->tokenFor($user))
+        )->assertStatus(200)->assertJsonPath('transaction.buyerName', 'Updated Buyer');
+    }
+
+    public function test_linked_dealer_without_user_account_can_be_attached_to_a_deal(): void
+    {
+        [$user, $agency] = $this->agencyUser($this->financePermissions());
+
+        // A dealer row linked to the agency can be assigned even without a
+        // user account; legacy membership-based ownership remains a fallback.
+        $dealer = Dealer::create([
+            'id' => 'dlr_' . Str::random(10),
+            'fullName' => 'Linked Dealer',
+            'phone' => '03001234567',
+            'agency_id' => $agency->id,
+        ]);
+
+        $deal = $this->createDeal($user, ['dealerId' => $dealer->id]);
+
+        $this->assertSame($dealer->id, $deal['dealerId']);
     }
 
     public function test_agency_cannot_read_another_agencys_deal(): void

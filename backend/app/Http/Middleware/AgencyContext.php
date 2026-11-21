@@ -24,7 +24,14 @@ class AgencyContext
             $request->attributes->set('workspace_access', $access);
 
             $protected = in_array('auth:sanctum', $request->route()?->gatherMiddleware() ?? [], true);
-            $statusOrLogout = $request->is('api/auth/me', 'api/auth/logout', 'api/auth/logout-all');
+            $statusOrLogout = $request->is(
+                'api/auth/me',
+                'api/auth/logout',
+                'api/auth/logout-all',
+                'api/v1/auth/me',
+                'api/v1/auth/logout',
+                'api/v1/auth/logout-all'
+            );
 
             if ($protected && !$statusOrLogout && !$access['allowed']) {
                 return response()->json([

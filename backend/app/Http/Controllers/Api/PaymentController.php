@@ -8,6 +8,7 @@ use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -199,42 +200,99 @@ class PaymentController extends Controller
         $secretHash = $request->header('verif-hash');
         $expectedHash = config('services.flutterwave.webhook_secret');
 
-        if ($secretHash !== $expectedHash) {
+        // A missing server-side secret must never accept an unsigned request:
+        // null === null would otherwise be treated as a valid match.
+        if (!is_string($expectedHash) || $expectedHash === ''
+            || !is_string($secretHash) || !hash_equals($expectedHash, $secretHash)) {
             Log::warning('Flutterwave webhook signature mismatch');
+
             return response()->json(['success' => false, 'message' => 'Invalid signature.'], 400);
         }
 
-        $status = $payload['status'] ?? '';
-        $txRef = $payload['tx_ref'] ?? '';
+        $status = (string) ($payload['status'] ?? '');
+        $txRef = (string) ($payload['tx_ref'] ?? '');
         $transactionId = $payload['id'] ?? null;
+
+        if ($txRef === '') {
+            return response()->json(['success' => false, 'message' => 'Missing transaction reference.'], 422);
+        }
 
         Log::info('Flutterwave webhook received', ['status' => $status, 'tx_ref' => $txRef]);
 
-        DB::transaction(function () use ($payload, $txRef, $transactionId, $status) {
-            // Find invoice by reference
-            $invoice = SubscriptionInvoice::where('flutterwave_tx_ref', $txRef)->first();
+        $outcome = DB::transaction(function () use ($payload, $txRef, $transactionId, $status): string {
+            $invoice = SubscriptionInvoice::where('flutterwave_tx_ref', $txRef)
+                ->lockForUpdate()
+                ->first();
 
             if (!$invoice) {
                 Log::warning('Flutterwave webhook: invoice not found', ['tx_ref' => $txRef]);
-                return;
+
+                return 'not_found';
             }
 
-            if ($status === 'successful' && $invoice->status === 'pending') {
+            if ($status === 'successful') {
+                if ($invoice->status === 'paid') {
+                    return 'already_paid';
+                }
+                if ($invoice->status !== 'pending') {
+                    Log::warning('Flutterwave webhook ignored for non-pending invoice', [
+                        'tx_ref' => $txRef,
+                        'status' => $invoice->status,
+                    ]);
+
+                    return 'not_pending';
+                }
+
+                $amount = $payload['amount'] ?? null;
+                $currency = strtoupper((string) ($payload['currency'] ?? ''));
+                if ($amount !== null && (int) round((float) $amount) !== (int) $invoice->total_pkr) {
+                    Log::error('Flutterwave webhook amount mismatch', [
+                        'tx_ref' => $txRef,
+                        'expected' => (int) $invoice->total_pkr,
+                        'received' => $amount,
+                    ]);
+
+                    return 'amount_mismatch';
+                }
+                if ($currency !== '' && strtoupper((string) $invoice->currency) !== $currency) {
+                    Log::error('Flutterwave webhook currency mismatch', [
+                        'tx_ref' => $txRef,
+                        'expected' => (string) $invoice->currency,
+                        'received' => $currency,
+                    ]);
+
+                    return 'currency_mismatch';
+                }
+
                 $invoice->update([
                     'status' => 'paid',
-                    'flutterwave_tx_id' => $transactionId,
+                    'payment_method' => 'flutterwave',
+                    'payment_reference' => $txRef,
+                    'flutterwave_tx_id' => $transactionId !== null ? (string) $transactionId : null,
                     'paid_at' => now(),
                     'updated_at' => now(),
                 ]);
 
                 $this->activateSubscriptionFromInvoice($invoice);
-            } elseif (in_array($status, ['failed', 'cancelled'])) {
+
+                return 'activated';
+            }
+
+            if (in_array($status, ['failed', 'cancelled'], true) && $invoice->status === 'pending') {
                 $invoice->update([
                     'status' => 'failed',
                     'updated_at' => now(),
                 ]);
+
+                return 'failed';
             }
+
+            return 'ignored';
         });
+
+        if (in_array($outcome, ['amount_mismatch', 'currency_mismatch'], true)) {
+            return response()->json(['success' => false, 'message' => 'Payment does not match the invoice.'], 422);
+        }
 
         return response()->json(['success' => true, 'message' => 'Webhook processed.']);
     }
@@ -244,9 +302,27 @@ class PaymentController extends Controller
     /** GET /api/payments/flutterwave/verify/{tx_ref} — verify a Flutterwave transaction. */
     public function flutterwaveVerify(Request $request, string $txRef)
     {
+        // Only an agency member with billing rights may verify, and only a
+        // reference that belongs to the acting agency — otherwise any signed-in
+        // user could read/activate another agency's payment.
+        $agencyId = $this->requireAgency($request);
+        $this->requirePermission($request, 'agency.subscribe');
+
+        $invoice = SubscriptionInvoice::where('agency_id', $agencyId)
+            ->where('flutterwave_tx_ref', $txRef)
+            ->first();
+
+        // Cross-agency references are indistinguishable from missing ones.
+        if (!$invoice) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment reference not found.',
+            ], 404);
+        }
+
         $secretKey = config('services.flutterwave.secret_key');
 
-        if (!$secretKey) {
+        if (!is_string($secretKey) || $secretKey === '') {
             return response()->json([
                 'success' => false,
                 'message' => 'Flutterwave not configured.',
@@ -254,37 +330,92 @@ class PaymentController extends Controller
         }
 
         try {
-            $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'Authorization' => "Bearer {$secretKey}",
-            ])->get("https://api.flutterwave.com/v3/transactions/{$txRef}/verify");
+            // Flutterwave's verify-by-reference endpoint (tx_ref is a query
+            // parameter, not the numeric transaction id used by /transactions/{id}).
+            $response = Http::withToken($secretKey)
+                ->acceptJson()
+                ->timeout(15)
+                ->get('https://api.flutterwave.com/v3/transactions/verify_by_reference', [
+                    'tx_ref' => $txRef,
+                ]);
 
             $data = $response->json();
+            $remote = is_array($data) ? ($data['data'] ?? null) : null;
+            $status = is_array($remote) ? strtolower((string) ($remote['status'] ?? '')) : '';
 
-            if ($response->successful() && ($data['status'] === 'successful')) {
-                // Mark invoice paid
-                $invoice = SubscriptionInvoice::where('flutterwave_tx_ref', $txRef)->first();
-                if ($invoice && $invoice->status === 'pending') {
+            if (!$response->successful() || !is_array($remote) || $status !== 'successful') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment not successful.',
+                ], 422);
+            }
+
+            $remoteAmount = (int) round((float) ($remote['amount'] ?? 0));
+            $remoteCurrency = strtoupper((string) ($remote['currency'] ?? ''));
+
+            if ($remoteCurrency !== strtoupper((string) $invoice->currency)
+                || $remoteAmount !== (int) $invoice->total_pkr) {
+                Log::warning('Flutterwave verification amount/currency mismatch', [
+                    'agency_id' => $agencyId,
+                    'tx_ref' => $txRef,
+                    'expected_amount' => (int) $invoice->total_pkr,
+                    'received_amount' => $remoteAmount,
+                    'expected_currency' => (string) $invoice->currency,
+                    'received_currency' => $remoteCurrency,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment does not match the invoice.',
+                ], 422);
+            }
+
+            $activated = false;
+            if ($invoice->status === 'pending') {
+                DB::transaction(function () use ($invoice, $remote, $txRef): void {
                     $invoice->update([
                         'status' => 'paid',
-                        'flutterwave_tx_id' => $data['data']['id'] ?? null,
+                        'payment_method' => 'flutterwave',
+                        'payment_reference' => $txRef,
+                        'flutterwave_tx_id' => isset($remote['id']) ? (string) $remote['id'] : null,
                         'paid_at' => now(),
                     ]);
                     $this->activateSubscriptionFromInvoice($invoice);
-                }
+                });
+                $activated = true;
+            }
 
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Payment verified.',
-                    'data' => $data['data'] ?? [],
-                ]);
+            if ($activated) {
+                $this->writeAudit(
+                    $request,
+                    'billing.invoice.verify',
+                    'invoice:' . $invoice->id,
+                    'Flutterwave payment verified',
+                    [
+                        'agency_id' => $agencyId,
+                        'entity_type' => 'subscription_invoice',
+                        'entity_id' => $invoice->id,
+                        'metadata' => ['tx_ref' => $txRef],
+                    ]
+                );
             }
 
             return response()->json([
-                'success' => false,
-                'message' => 'Payment not successful.',
-            ], 400);
+                'success' => true,
+                'message' => 'Payment verified.',
+                // Only fields the agency already owns — never the gateway's
+                // full customer/card payload.
+                'data' => [
+                    'tx_ref' => $txRef,
+                    'status' => 'successful',
+                    'amount' => (float) ($remote['amount'] ?? 0),
+                    'currency' => (string) ($remote['currency'] ?? ''),
+                    'transaction_id' => isset($remote['id']) ? (string) $remote['id'] : null,
+                ],
+            ]);
         } catch (\Throwable $e) {
             Log::error('Flutterwave verification failed', ['tx_ref' => $txRef, 'error' => $e->getMessage()]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Verification failed.',

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Dealer;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -88,8 +89,8 @@ class TransactionController extends Controller
             'dealStatus' => 'nullable|string|in:Draft,Negotiation,Agreement Signed,Token Paid,Advance Received,Payment Pending,Partially Paid,Fully Paid,Under Transfer,Completed,Cancelled',
         ]);
 
-        // Dealers have no agency_id column; ownership is derived from active
-        // memberships. Never accept a dealer from a different agency.
+        // Prefer dealers.agency_id (the real ownership link); membership
+        // remains the fallback for legacy rows.
         if (!empty($data['dealerId']) && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
             throw ValidationException::withMessages([
                 'dealerId' => ['Dealer does not belong to the acting agency.'],
@@ -148,6 +149,14 @@ class TransactionController extends Controller
     /** Dealer ids are valid here only when linked to an active member of the agency. */
     private function dealerBelongsToAgency(string $dealerId, string $agencyId): bool
     {
+        $dealer = Dealer::find($dealerId);
+        if ($dealer === null) {
+            return false;
+        }
+        if ($dealer->agency_id !== null) {
+            return $dealer->agency_id === $agencyId;
+        }
+
         return User::where('dealer_id', $dealerId)
             ->whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
             ->exists();

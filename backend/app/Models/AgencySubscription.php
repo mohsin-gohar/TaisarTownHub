@@ -10,7 +10,8 @@ class AgencySubscription extends Model
     protected $table = 'agency_subscriptions';
     protected $fillable = [
         'agency_id', 'plan_id', 'status', 'starts_at', 'ends_at',
-        'trial_ends_at', 'limits_override', 'notes', 'created_by',
+        'trial_ends_at', 'auto_renew', 'cancelled_at', 'stripe_subscription_id',
+        'provider', 'limits_override', 'notes', 'created_by',
     ];
 
     protected function casts(): array
@@ -20,6 +21,8 @@ class AgencySubscription extends Model
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'trial_ends_at' => 'datetime',
+            'auto_renew' => 'boolean',
+            'cancelled_at' => 'datetime',
         ];
     }
 

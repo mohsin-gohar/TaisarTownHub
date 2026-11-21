@@ -127,7 +127,15 @@ public function index(Request $request)
 public function store(Request $request)
     {
         $agencyId = $this->agencyId($request);
-        $this->requireAny($request, ['manage_deals', 'finance.manage_deals']);
+        // Creating a deal is a finance operation. The previous gate used
+        // `manage_deals` / `finance.manage_deals`, which exist in no role or
+        // permission catalogue, so no real agency role could ever create a
+        // deal. Accept the canonical + legacy finance keys (and keep the old
+        // keys for custom integrations).
+        $this->requireAny($request, [
+            'finance.create_transaction', 'create_transactions',
+            'manage_deals', 'finance.manage_deals',
+        ]);
 
         $data = $request->validate([
             'propertyId' => [
@@ -161,17 +169,14 @@ public function store(Request $request)
             ], 422);
         }
 
-        // A dealer must belong to the acting agency. Dealer ownership is
-        // derived from active memberships (dealers has no agency_id column).
-        if (!empty($data['dealerId']) && $agencyId !== null) {
-            $dealerInAgency = User::where('dealer_id', $data['dealerId'])
-                ->whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
-                ->exists();
-            if (!$dealerInAgency) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'dealerId' => ['Dealer does not belong to the acting agency.'],
-                ]);
-            }
+        // A dealer must belong to the acting agency. Prefer the explicit
+        // dealers.agency_id link (set by DealerController); fall back to an
+        // active membership for legacy rows that predate the link.
+        if (!empty($data['dealerId']) && $agencyId !== null
+            && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'dealerId' => ['Dealer does not belong to the acting agency.'],
+            ]);
         }
 
         // Calculate remaining balance and defaults before creating the deal.
@@ -265,7 +270,12 @@ public function store(Request $request)
 public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        $this->requireAny($request, ['manage_deals', 'finance.manage_deals']);
+        // Same catalogue gap as store(): use the real update-transaction
+        // grants, plus the legacy keys for custom integrations.
+        $this->requireAny($request, [
+            'finance.update_transaction', 'update_transactions',
+            'manage_deals', 'finance.manage_deals',
+        ]);
 
         $transaction = $this->findScoped($agencyId, $id, $request->user());
 
@@ -289,17 +299,13 @@ public function update(Request $request, string $id)
             'transactionDate' => 'nullable|date',
         ]);
 
-        // Reject a dealer from another agency (dealers has no agency_id, so
-        // derive ownership from active memberships).
-        if (!empty($data['dealerId']) && $agencyId !== null) {
-            $dealerInAgency = User::where('dealer_id', $data['dealerId'])
-                ->whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
-                ->exists();
-            if (!$dealerInAgency) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'dealerId' => ['Dealer does not belong to the acting agency.'],
-                ]);
-            }
+        // Reject a dealer from another agency. Prefer dealers.agency_id and
+        // fall back to active memberships for legacy unlinked rows.
+        if (!empty($data['dealerId']) && $agencyId !== null
+            && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'dealerId' => ['Dealer does not belong to the acting agency.'],
+            ]);
         }
 
         // Handle dealStatus transition with state machine validation
@@ -630,7 +636,10 @@ public function update(Request $request, string $id)
     public function destroy(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        $this->requireAny($request, ['manage_deals', 'finance.manage_deals']);
+        $this->requireAny($request, [
+            'finance.update_transaction', 'update_transactions',
+            'manage_deals', 'finance.manage_deals',
+        ]);
 
         $transaction = $this->findScoped($agencyId, $id, $request->user());
 
@@ -969,8 +978,12 @@ public function update(Request $request, string $id)
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments', 'pay_commissions']);
 
+        // Agency users are confined to their own ledger. A platform user (no
+        // agency context) may act on any commission: `commissions()` already
+        // lists platform-wide rows for them, and filtering by `agency_id IS
+        // NULL` here made every platform payout a 404.
         $commission = Commission::where('id', $id)
-            ->where('agency_id', $agencyId)
+            ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
             ->firstOrFail();
 
         $request->validate([
@@ -1016,7 +1029,24 @@ public function update(Request $request, string $id)
         return $this->expensesStore($request);
     }
 
-public function reports(Request $request)
+    private function dealerBelongsToAgency(string $dealerId, string $agencyId): bool
+    {
+        $dealer = Dealer::find($dealerId);
+        if ($dealer === null) {
+            return false;
+        }
+        if ($dealer->agency_id !== null) {
+            return $dealer->agency_id === $agencyId;
+        }
+
+        // Legacy rows have no agency_id; their only ownership evidence is an
+        // active membership carrying the dealer identity.
+        return User::where('dealer_id', $dealerId)
+            ->whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
+            ->exists();
+    }
+
+    public function reports(Request $request)
     {
         // Agency reports require finance.view_reports; platform reports require admin.view_reports
         $this->requireAny($request, ['finance.view_reports', 'admin.view_reports']);
@@ -1032,17 +1062,12 @@ public function reports(Request $request)
         $to = now()->parse($data['to'] ?? now()->toDateString())->endOfDay();
 
         // Scope to agency if one is set, otherwise platform-wide
-        $agencyQuery = function ($q) use ($agencyId) {
-            if ($agencyId !== null) {
-                $q->where('agency_id', $agencyId);
-            }
-            return $q;
-        };
-
         $agencies = [
-            'total' => Agency::count(),
-            'verified' => Agency::where('verification_status', 'verified')->count(),
-            'new_in_range' => Agency::whereBetween('created_at', [$from, $to])->count(),
+            'total' => Agency::query()->when($agencyId !== null, fn ($q) => $q->where('id', $agencyId))->count(),
+            'verified' => Agency::query()->when($agencyId !== null, fn ($q) => $q->where('id', $agencyId))
+                ->where('verification_status', 'verified')->count(),
+            'new_in_range' => Agency::query()->when($agencyId !== null, fn ($q) => $q->where('id', $agencyId))
+                ->whereBetween('created_at', [$from, $to])->count(),
         ];
 
         $deals = Transaction::whereBetween('created_at', [$from, $to]);
@@ -1097,20 +1122,42 @@ public function reports(Request $request)
             ->groupBy('category')
             ->pluck('total', 'category');
 
-        $invoices = [
-            'paid_pkr' => (float) \App\Models\SubscriptionInvoice::where('status', 'paid')
-                ->whereBetween('paid_at', [$from, $to])->sum('total_pkr'),
-            'paid_count' => \App\Models\SubscriptionInvoice::where('status', 'paid')
-                ->whereBetween('paid_at', [$from, $to])->count(),
-            'outstanding_pkr' => (float) \App\Models\SubscriptionInvoice::where('status', 'pending')->sum('total_pkr'),
-        ];
+        // Subscription billing is platform revenue: only platform staff may
+        // see it. Agency users get their own invoice figures instead of the
+        // platform-wide totals (which were previously leaked here).
+        if ($agencyId === null) {
+            $invoices = [
+                'paid_pkr' => (float) SubscriptionInvoice::where('status', 'paid')
+                    ->whereBetween('paid_at', [$from, $to])->sum('total_pkr'),
+                'paid_count' => SubscriptionInvoice::where('status', 'paid')
+                    ->whereBetween('paid_at', [$from, $to])->count(),
+                'outstanding_pkr' => (float) SubscriptionInvoice::where('status', 'pending')->sum('total_pkr'),
+            ];
+        } else {
+            $invoices = [
+                'paid_pkr' => (float) SubscriptionInvoice::where('status', 'paid')
+                    ->where('agency_id', $agencyId)
+                    ->whereBetween('paid_at', [$from, $to])->sum('total_pkr'),
+                'paid_count' => SubscriptionInvoice::where('status', 'paid')
+                    ->where('agency_id', $agencyId)
+                    ->whereBetween('paid_at', [$from, $to])->count(),
+                'outstanding_pkr' => (float) SubscriptionInvoice::where('status', 'pending')
+                    ->where('agency_id', $agencyId)->sum('total_pkr'),
+            ];
+        }
 
         $listings = [
-            'created_in_range' => Property::whereNull('deleted_at')->whereBetween('created_at', [$from, $to])->count(),
-            'public' => Property::whereNull('deleted_at')->where('approval_status', 'approved')->where('visibility', 'public')->count(),
+            'created_in_range' => Property::whereNull('deleted_at')
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->whereBetween('created_at', [$from, $to])->count(),
+            'public' => Property::whereNull('deleted_at')
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->where('approval_status', 'approved')->where('visibility', 'public')->count(),
         ];
 
-        $leads = Inquiry::whereBetween('created_at', [$from, $to])->count();
+        $leads = Inquiry::whereBetween('created_at', [$from, $to])
+            ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+            ->count();
 
         return response()->json([
             'success' => true,

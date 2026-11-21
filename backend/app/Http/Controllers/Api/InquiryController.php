@@ -188,9 +188,15 @@ class InquiryController extends Controller
     private function maskCnic(string $cnic): string
     {
         $clean = preg_replace('/[^0-9]/', '', $cnic);
-        if (strlen($clean) < 7) {
-            return str_repeat('*', strlen($clean));
+
+        // Keep the familiar 13-digit mask (42101****5671). Anything shorter is
+        // fully masked: it may be a partial CNIC, and computing
+        // strlen($clean) - 9 for 7-8 digit input produced a negative
+        // str_repeat() length, which throws ValueError on PHP 8.
+        if (strlen($clean) === 13) {
+            return substr($clean, 0, 5) . str_repeat('*', 4) . substr($clean, -4);
         }
-        return substr($clean, 0, 5) . str_repeat('*', strlen($clean) - 9) . substr($clean, -4);
+
+        return str_repeat('*', strlen($clean));
     }
 }

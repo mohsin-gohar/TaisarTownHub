@@ -364,6 +364,26 @@ class WorkspaceApprovalTest extends EnterpriseTestCase
         $this->assertSame(0, $user->tokens()->count());
     }
 
+    public function test_v1_status_and_logout_routes_remain_available_to_pending_users(): void
+    {
+        // The v1 prefix shares the same controllers/middleware as the legacy
+        // API; the workspace gate must exempt both path shapes.
+        [$user, $agency] = $this->agencyUser($this->ownerPermissions());
+        $agency->update(['status' => 'pending', 'verification_status' => 'unverified']);
+        $token = $this->tokenFor($user);
+        $headers = $this->authHeaders($token);
+
+        $this->getJson('/api/v1/auth/me', $headers)->assertOk()
+            ->assertJsonPath('user.workspace_access.allowed', false)
+            ->assertJsonPath('user.workspace_access.status', 'pending');
+        $this->getJson('/api/v1/agency/profile', $headers)->assertForbidden()
+            ->assertJsonPath('workspace_access.status', 'pending');
+
+        $this->asGuest();
+        $this->postJson('/api/v1/auth/logout', [], $headers)->assertOk();
+        $this->assertSame(0, $user->tokens()->count());
+    }
+
     public function test_denied_user_sees_only_public_listings_not_the_privileged_agency_view(): void
     {
         [$user, $agency] = $this->agencyUser($this->ownerPermissions());

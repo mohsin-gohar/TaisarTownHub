@@ -13,10 +13,12 @@ import {
   FileEdit,
   Save,
   Filter,
-  AlertCircle
+  AlertCircle,
+  Download
 } from 'lucide-react';
 import { Inquiry, InquiryStatus } from '../../types';
 import { generateWhatsAppLink } from '../../utils/logic';
+import { exportCsv } from '../../utils/exportCsv';
 import { EmptyState } from '../common/EmptyState';
 
 export const AdminInquiries: React.FC = () => {
@@ -31,6 +33,7 @@ export const AdminInquiries: React.FC = () => {
 
   const [activeFilter, setActiveFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [exporting, setExporting] = useState(false);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [tempNotes, setTempNotes] = useState('');
 
@@ -76,6 +79,28 @@ export const AdminInquiries: React.FC = () => {
     }
   };
 
+  const handleExport = () => {
+    if (exporting || filteredInquiries.length === 0) return;
+    setExporting(true);
+    exportCsv(
+      `taisartownhub-inquiries-${new Date().toISOString().slice(0, 10)}.csv`,
+      filteredInquiries.map((inq) => ({
+        id: inq.id,
+        name: inq.fullName,
+        phone: inq.phone,
+        email: inq.email ?? '',
+        subject: inq.subject,
+        status: inq.status,
+        preferredPropertyOrProject: inq.preferredPropertyOrProject ?? '',
+        budgetRange: inq.budgetRange ?? '',
+        message: inq.message,
+        adminNotes: inq.adminNotes ?? '',
+      }))
+    );
+    showToast('success', `Exported ${filteredInquiries.length} inquiries to CSV.`);
+    setExporting(false);
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header bar */}
@@ -98,6 +123,15 @@ export const AdminInquiries: React.FC = () => {
             {inquiries.filter((i) => i.status === 'Pending').length}
           </strong>
         </div>
+
+        <button
+          onClick={handleExport}
+          disabled={exporting || filteredInquiries.length === 0}
+          className="whitespace-nowrap px-3.5 py-1.5 rounded-lg bg-[#E7C878]/15 hover:bg-[#E7C878] text-[#F6E3B4] hover:text-[#0B1220] transition-colors border border-[#E7C878]/40 font-semibold text-xs flex items-center gap-2 disabled:opacity-50"
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span>Export CSV</span>
+        </button>
       </div>
 
       {/* Filter and Search Bar */}
