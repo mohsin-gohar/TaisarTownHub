@@ -1637,6 +1637,29 @@ export const api = {
     }
   },
 
+  async bulkCreateMaps(items: Array<Record<string, unknown>>): Promise<any | null> {
+    try {
+      const fd = new FormData();
+      items.forEach((item, index) => {
+        fd.append(`images[${index}]`, item.file as File);
+        fd.append(`titles[${index}]`, String(item.title ?? ''));
+        fd.append(`categories[${index}]`, String(item.category ?? 'sector_map'));
+        fd.append(`sectors[${index}]`, String(item.sector ?? ''));
+        fd.append(`phases[${index}]`, String(item.phase ?? ''));
+        fd.append(`descriptions[${index}]`, String(item.description ?? ''));
+        fd.append(`featured[${index}]`, item.isFeatured ? 'true' : 'false');
+      });
+      const res = await apiFetch('/admin/maps/bulk', {
+        method: 'POST',
+        body: fd,
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
   async updateMap(id: string, data: Record<string, unknown>): Promise<any | null> {
     try {
       const res = await apiFetch(`/admin/maps/${id}`, {

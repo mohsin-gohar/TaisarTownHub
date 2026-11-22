@@ -150,6 +150,84 @@ class MapController extends Controller
         ], 201);
     }
 
+    /** POST /api/admin/maps/bulk — bulk create maps from uploaded images. */
+    public function bulk(Request $request)
+    {
+        $this->requirePermission($request, 'admin.manage_platform_settings');
+
+        $request->validate([
+            'images' => ['required', 'array', 'min:1'],
+            'images.*' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'titles' => ['nullable', 'array', 'max:50'],
+            'titles.*' => ['nullable', 'string', 'max:255'],
+            'categories' => ['nullable', 'array', 'max:50'],
+            'categories.*' => ['required', 'string', 'in:' . implode(',', array_keys(Map::CATEGORIES))],
+            'sectors' => ['nullable', 'array', 'max:50'],
+            'sectors.*' => ['nullable', 'string', 'max:120'],
+            'phases' => ['nullable', 'array', 'max:50'],
+            'phases.*' => ['nullable', 'string', 'max:60'],
+            'descriptions' => ['nullable', 'array', 'max:50'],
+            'descriptions.*' => ['nullable', 'string', 'max:5000'],
+            'featured' => ['nullable', 'array', 'max:50'],
+            'featured.*' => ['nullable', 'boolean'],
+        ]);
+
+        /** @var array<int, \Illuminate\Http\UploadedFile> $files */
+        $files = $request->file('images');
+        $titles = (array) $request->input('titles', []);
+        $categories = (array) $request->input('categories', []);
+        $sectors = (array) $request->input('sectors', []);
+        $phases = (array) $request->input('phases', []);
+        $descriptions = (array) $request->input('descriptions', []);
+        $featured = (array) $request->input('featured', []);
+
+        if (empty($files) || count($files) < 1) {
+            return response()->json(['success' => false, 'message' => 'No images were uploaded.'], 422);
+        }
+
+        $created = [];
+        foreach ($files as $index => $file) {
+            $ext = strtolower($file->getClientOriginalExtension());
+            $storedName = 'map_' . bin2hex(random_bytes(8)) . '.' . $ext;
+            $relativePath = 'maps/' . now()->format('Y/m') . '/' . $storedName;
+            $file->storeAs('maps/' . now()->format('Y/m'), $storedName, 'public');
+
+            $map = Map::create([
+                'title' => trim((string) ($titles[$index] ?? '')) ?: 'Taiser Town Map ' . ($index + 1),
+                'sector' => $sectors[$index] ?? null,
+                'phase' => $phases[$index] ?? null,
+                'category' => $categories[$index] ?? 'sector_map',
+                'description' => $descriptions[$index] ?? null,
+                'image_path' => $relativePath,
+                'image_disk' => 'public',
+                'image_mime' => $file->getMimeType(),
+                'image_size_bytes' => $file->getSize(),
+                'image_width' => @getimagesize($file->getRealPath())[0] ?? null,
+                'image_height' => @getimagesize($file->getRealPath())[1] ?? null,
+                'image_checksum' => hash_file('sha256', $file->getRealPath()),
+                'display_order' => count($created),
+                'is_active' => true,
+                'is_featured' => filter_var($featured[$index] ?? false, FILTER_VALIDATE_BOOLEAN),
+                'created_by' => $request->user()->id,
+            ]);
+            $created[] = $map;
+        }
+
+        $this->writeAudit($request, 'map.bulk_create', 'maps', "Bulk created " . count($created) . " maps", [
+            'entity_type' => 'map',
+            'entity_id' => 'maps',
+            'cross_agency' => true,
+            'metadata' => ['count' => count($created)],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Maps created successfully.',
+            'created' => count($created),
+            'maps' => $created,
+        ], 201);
+    }
+
     /** PUT /api/admin/maps/{id} — update map details (no image). */
     public function update(Request $request, string $id)
     {
@@ -230,15 +308,16 @@ class MapController extends Controller
         $width = $dims ? $dims[0] : null;
         $height = $dims ? $dims[1] : null;
 
-        // Delete old image file
-        if ($map->image_path && Storage::disk($map->image_disk ?: 'public')->exists($map->image_path)) {
-            Storage::disk($map->image_disk ?: 'public')->delete($map->image_path);
-        }
-
         $storedName = $map->id . '.' . $ext;
         $relativePath = 'maps/' . now()->format('Y/m') . '/' . $storedName;
 
+        // Upload + verify the replacement BEFORE retiring the old file, so a
+        // failed upload never leaves the map pointing at a missing image.
         $file->storeAs('maps/' . now()->format('Y/m'), $storedName, 'public');
+
+        if ($map->image_path && Storage::disk($map->image_disk ?: 'public')->exists($map->image_path)) {
+            Storage::disk($map->image_disk ?: 'public')->delete($map->image_path);
+        }
 
         $map->update([
             'image_path' => $relativePath,
