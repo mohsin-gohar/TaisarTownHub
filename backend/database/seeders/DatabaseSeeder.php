@@ -497,6 +497,7 @@ class DatabaseSeeder extends Seeder
             $this->call(DemoStaffSeeder::class);
         }
         $this->call(EnterpriseSeeder::class);
+        $this->call(MapSeeder::class);
         $this->call(EnterpriseDemoSeeder::class);
     }
 

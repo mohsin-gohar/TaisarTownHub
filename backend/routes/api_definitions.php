@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\InquiryController;
 use App\Http\Controllers\Api\LeadController;
 use App\Http\Controllers\Api\LocationController;
+use App\Http\Controllers\Api\MapController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentController;
@@ -88,6 +89,10 @@ Route::get('projects', [ProjectController::class, 'index'])->middleware('throttl
 Route::get('projects/{id}', [ProjectController::class, 'show'])->middleware('throttle:api.public');
 Route::get('/plans', [SubscriptionController::class, 'plans'])->middleware('throttle:api.public');
 Route::get('/locations', [LocationController::class, 'index'])->middleware('throttle:api.public');
+
+  // Public maps
+  Route::get('/maps', [MapController::class, 'publicIndex'])->middleware('throttle:api.public');
+  Route::get('/maps/{slug}', [MapController::class, 'publicShow'])->middleware('throttle:api.public');
 Route::get('/media/{id}/file', [MediaController::class, 'publicFile'])->middleware('throttle:api.public');
 
 // G-10: public share links — the URL token is a capability; hashed lookup,
@@ -312,6 +317,16 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
     Route::put('/admin/featured-agencies/packages/{id}', [AdminFeaturedAgencyController::class, 'updatePackage'])->middleware('auth:sanctum');
     Route::match(['put', 'patch'], '/admin/featured-agencies/{id}', [AdminFeaturedAgencyController::class, 'update'])->middleware('auth:sanctum');
     Route::post('/admin/featured-agencies/{id}/cancel', [AdminFeaturedAgencyController::class, 'cancel'])->middleware('auth:sanctum');
+
+  /* ---------- Admin: map management (super admin only) ---------- */
+  Route::get('/admin/maps', [MapController::class, 'adminIndex'])->middleware('auth:sanctum');
+  Route::post('/admin/maps', [MapController::class, 'store'])->middleware('auth:sanctum');
+  Route::put('/admin/maps/reorder', [MapController::class, 'reorder'])->middleware('auth:sanctum');
+  Route::post('/admin/maps/{id}/replace-image', [MapController::class, 'replaceImage'])->middleware('auth:sanctum');
+  Route::post('/admin/maps/{id}/toggle', [MapController::class, 'toggle'])->middleware('auth:sanctum');
+  Route::post('/admin/maps/{id}/feature', [MapController::class, 'feature'])->middleware('auth:sanctum');
+  Route::match(['put', 'patch'], '/admin/maps/{id}', [MapController::class, 'update'])->middleware('auth:sanctum');
+  Route::delete('/admin/maps/{id}', [MapController::class, 'destroy'])->middleware('auth:sanctum');
 
     /* ---------- Admin: agency storage oversight (auth required) ---------- */
     Route::get('/admin/agencies-oversight', [AdminAgencyOversightController::class, 'index'])->middleware('auth:sanctum');

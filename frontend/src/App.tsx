@@ -19,6 +19,7 @@ import { Scheme45Guide } from './components/public/Scheme45Guide';
 import { ServicesSection } from './components/public/ServicesSection';
 import { MediaGallerySection } from './components/public/MediaGallerySection';
 import { VideoWalkthroughSection } from './components/public/VideoWalkthroughSection';
+import { MapsPage } from './components/public/MapsPage';
 import { AboutSection } from './components/public/AboutSection';
 
 import { ContactSection } from './components/public/ContactSection';
@@ -122,6 +123,7 @@ const KNOWN_PUBLIC_PATHS = new Set([
   '/scheme45-guide',
   '/gallery',
   '/media-gallery',
+  '/maps',
   '/services',
   '/about',
   '/contact',
@@ -375,6 +377,7 @@ const MainAppContent: React.FC = () => {
                 )}
                 {resolvedView === 'guide' && <Scheme45Guide />}
                 {resolvedView === 'gallery' && <MediaGallerySection />}
+                {resolvedView === 'maps' && <MapsPage />}
                 {resolvedView === 'services' && <ServicesSection />}
                 {resolvedView === 'about' && <AboutSection />}
                 {resolvedView === 'contact' && <ContactSection />}

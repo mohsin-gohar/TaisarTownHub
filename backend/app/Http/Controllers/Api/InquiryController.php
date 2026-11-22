@@ -177,6 +177,11 @@ class InquiryController extends Controller
         $from = $inquiry->status;
         $inquiry->update(['status' => $request->status]);
 
+        // Keep the legacy BusinessRecord mirror in sync.
+        \App\Models\BusinessRecord::where('collection', 'inquiries')
+            ->where('record_id', $inquiry->id)
+            ->update(['status' => $request->status]);
+
         $this->writeAudit($request, 'inquiry.status', (string) $inquiry->id,
             "Inquiry {$from} → {$request->status}", [
                 'agency_id' => $agencyId,
@@ -209,6 +214,11 @@ class InquiryController extends Controller
 
         $inquiry->update(['adminNotes' => $request->input('notes', '')]);
 
+        // Keep the legacy BusinessRecord mirror in sync.
+        \App\Models\BusinessRecord::where('collection', 'inquiries')
+            ->where('record_id', $inquiry->id)
+            ->update(['adminNotes' => $request->input('notes', '')]);
+
         $this->writeAudit($request, 'inquiry.notes', (string) $inquiry->id,
             "Inquiry notes updated", [
                 'agency_id' => $agencyId,
@@ -233,6 +243,12 @@ class InquiryController extends Controller
             $query->where('agency_id', $agencyId);
         }
         $inquiry = $query->findOrFail($id);
+
+        // Keep the legacy BusinessRecord mirror in sync so no orphaned
+        // rows remain after deletion.
+        \App\Models\BusinessRecord::where('collection', 'inquiries')
+            ->where('record_id', $inquiry->id)
+            ->delete();
 
         $inquiry->delete();
 

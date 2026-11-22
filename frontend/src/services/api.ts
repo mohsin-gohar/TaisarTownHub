@@ -1589,6 +1589,125 @@ export const api = {
     }
   },
 
+  async getMaps(category?: string, sector?: string, search?: string): Promise<any | null> {
+    try {
+      const params = new URLSearchParams();
+      if (category && category !== 'All') params.set('category', category);
+      if (sector && sector !== 'All') params.set('sector', sector);
+      if (search) params.set('search', search);
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE_URL}/maps${qs ? '?' + qs : ''}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getMap(slug: string): Promise<any | null> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/maps/${encodeURIComponent(slug)}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getAdminMaps(): Promise<any | null> {
+    try {
+      const res = await apiFetch('/admin/maps');
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async createMap(formData: FormData): Promise<any | null> {
+    try {
+      const res = await apiFetch('/admin/maps', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async updateMap(id: string, data: Record<string, unknown>): Promise<any | null> {
+    try {
+      const res = await apiFetch(`/admin/maps/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async replaceMapImage(id: string, file: File): Promise<any | null> {
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await apiFetch(`/admin/maps/${id}/replace-image`, {
+        method: 'POST',
+        body: fd,
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async toggleMap(id: string): Promise<any | null> {
+    try {
+      const res = await apiFetch(`/admin/maps/${id}/toggle`, { method: 'POST' });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async featureMap(id: string): Promise<any | null> {
+    try {
+      const res = await apiFetch(`/admin/maps/${id}/feature`, { method: 'POST' });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async deleteMap(id: string): Promise<any | null> {
+    try {
+      const res = await apiFetch(`/admin/maps/${id}`, { method: 'DELETE' });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async reorderMaps(order: string[]): Promise<any | null> {
+    try {
+      const res = await apiFetch('/admin/maps/reorder', {
+        method: 'PUT',
+        body: JSON.stringify({ order }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
   async getLocations(): Promise<any | null> {
     try {
       const res = await apiFetch('/locations');

@@ -1176,13 +1176,34 @@ class DocumentController extends Controller
             ->with('document')
             ->first();
 
+        if (!$share) {
+            return response()->json(['success' => false, 'message' => 'This share link is no longer available.'], 410);
+        }
+
+        $document = $share->document;
+
+        // Pre-checks BEFORE consuming a download counter. Missing files, failed
+        // authorization, incomplete malware scans and revoked/expired links must
+        // never count as a successful download.
+        if ($document === null || $document->status !== 'active') {
+            return response()->json(['success' => false, 'message' => 'This document is no longer available.'], 410);
+        }
+
+        if ($document->scan_status !== 'scanned_clean') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This document has not cleared malware verification yet.',
+            ], 423);
+        }
+
+        if (!Storage::disk('documents')->exists($document->disk_path)) {
+            Log::warning('Shared document file missing on disk', ['document_id' => $document->id]);
+            return response()->json(['success' => false, 'message' => 'File is no longer available on storage.'], 410);
+        }
+
         // Counter increment + availability check must be atomic under a row
         // lock so concurrent downloads cannot overshoot max_downloads.
-        $share = DB::transaction(function () use ($share, $token): array {
-            if (!$share) {
-                return ['share' => null, 'reason' => 'not_found'];
-            }
-
+        $result = DB::transaction(function () use ($share, $token): array {
             $locked = DocumentShare::where('id', $share->id)
                 ->where('token_hash', hash('sha256', $token))
                 ->lockForUpdate()
@@ -1209,33 +1230,14 @@ class DocumentController extends Controller
             return ['share' => $locked, 'reason' => null];
         });
 
-        if ($share['share'] === null) {
+        if ($result['share'] === null) {
             return response()->json([
                 'success' => false,
                 'message' => 'This share link is no longer available.',
             ], 410);
         }
 
-        $lockedShare = $share['share'];
-        $document = $lockedShare->document;
-
-        if (!$document || $document->status !== 'active') {
-            return response()->json(['success' => false, 'message' => 'This document is no longer available.'], 410);
-        }
-
-        // Lifecycle gate: public share links must never serve a document
-        // that has not cleared malware verification.
-        if ($document->scan_status !== 'scanned_clean') {
-            return response()->json([
-                'success' => false,
-                'message' => 'This document has not cleared malware verification yet.',
-            ], 423);
-        }
-
-        if (!Storage::disk('documents')->exists($document->disk_path)) {
-            Log::warning('Shared document file missing on disk', ['document_id' => $document->id]);
-            return response()->json(['success' => false, 'message' => 'File is no longer available on storage.'], 410);
-        }
+        $lockedShare = $result['share'];
 
         $this->logAccess($document, $lockedShare->agency_id, $request, 'share_download');
 
