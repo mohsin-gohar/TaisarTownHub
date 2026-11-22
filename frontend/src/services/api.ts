@@ -1637,6 +1637,20 @@ export const api = {
     }
   },
 
+  async bulkCreateMaps(formData: FormData): Promise<any | null> {
+    try {
+      const res = await apiFetch('/admin/maps/bulk', {
+        method: 'POST',
+        body: formData,
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) return body ?? null;
+      return body;
+    } catch {
+      return null;
+    }
+  },
+
   async updateMap(id: string, data: Record<string, unknown>): Promise<any | null> {
     try {
       const res = await apiFetch(`/admin/maps/${id}`, {

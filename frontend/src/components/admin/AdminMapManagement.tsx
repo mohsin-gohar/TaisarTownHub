@@ -14,6 +14,7 @@ import {
   GripVertical,
   Eye,
   AlertTriangle,
+  Upload,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import {
@@ -84,8 +85,14 @@ export const AdminMapManagement: React.FC = () => {
   const [replaceFile, setReplaceFile] = useState<File | null>(null);
   const [deleting, setDeleting] = useState<MapItem | null>(null);
 
+  // Bulk upload
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkFiles, setBulkFiles] = useState<File[]>([]);
+  const [bulkCategory, setBulkCategory] = useState('sector_map');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  const bulkInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -217,6 +224,41 @@ export const AdminMapManagement: React.FC = () => {
     await load();
   };
 
+  const handleBulkChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const invalid = files.find((f) => !f.type.startsWith('image/') || f.size > 10 * 1024 * 1024);
+    if (invalid) {
+      setError(`${invalid.name}: only images up to 10MB are allowed.`);
+      return;
+    }
+    setBulkFiles(files);
+    setError('');
+  };
+
+  const handleBulkSubmit = async () => {
+    if (bulkFiles.length === 0) {
+      setError('Select at least one image to upload.');
+      return;
+    }
+    setBusy('bulk');
+    setError('');
+    setNotice('');
+    const fd = new FormData();
+    bulkFiles.forEach((file) => fd.append('images[]', file));
+    fd.append('category', bulkCategory);
+    const result = await api.bulkCreateMaps(fd);
+    setBusy('');
+    if (!result || result.success === false) {
+      setError(result?.message || 'Bulk upload failed.');
+      return;
+    }
+    setNotice(result.message || `${bulkFiles.length} map(s) uploaded.`);
+    setBulkOpen(false);
+    setBulkFiles([]);
+    await load();
+  };
+
   const handleReplaceImage = async () => {
     if (!replacingImage || !replaceFile) return;
     setBusy('replace');
@@ -324,9 +366,14 @@ export const AdminMapManagement: React.FC = () => {
       title="Map Management"
       subtitle="Upload, organize, and publish Taiser Town maps. Changes appear on the public website immediately."
       actions={
-        <EnterpriseButton onClick={openCreate} disabled={busy !== ''}>
-          <Plus className="w-4 h-4" /> Upload Map
-        </EnterpriseButton>
+        <div className="flex items-center gap-2">
+          <EnterpriseButton variant="secondary" onClick={() => { setBulkFiles([]); setBulkOpen(true); }} disabled={busy !== ''}>
+            <Upload className="w-4 h-4" /> Bulk Upload
+          </EnterpriseButton>
+          <EnterpriseButton onClick={openCreate} disabled={busy !== ''}>
+            <Plus className="w-4 h-4" /> Upload Map
+          </EnterpriseButton>
+        </div>
       }
     >
       {notice && <EnterpriseNote tone="success">{notice}</EnterpriseNote>}
@@ -669,6 +716,62 @@ export const AdminMapManagement: React.FC = () => {
               </EnterpriseButton>
               <EnterpriseButton onClick={handleDelete} disabled={busy !== ''} variant="danger">
                 {busy === 'delete' ? 'Deleting…' : 'Delete Map'}
+              </EnterpriseButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Upload Modal */}
+      {bulkOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80" onClick={() => setBulkOpen(false)}>
+          <div className="w-full max-w-lg bg-[#0a1a26] border border-slate-800 rounded-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-serif-luxury text-lg font-bold text-white">Bulk Upload Maps</h2>
+              <button onClick={() => setBulkOpen(false)} className="text-slate-400 hover:text-white" aria-label="Close">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-slate-400 text-xs mb-4">
+              Select up to 50 images. Each image becomes a map titled after its file name; edit details after upload.
+            </p>
+            <div className="mb-4">
+              <label className="block text-xs text-slate-400 mb-1.5">Category for all uploads</label>
+              <select value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} className={enterpriseInputClass}>
+                {Object.entries(CATEGORIES).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <input
+              ref={bulkInputRef}
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleBulkChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => bulkInputRef.current?.click()}
+              className="w-full py-8 rounded-xl border-2 border-dashed border-slate-700 text-slate-400 hover:border-[#E7C878]/50 hover:text-[#E7C878] transition-colors text-sm"
+            >
+              <Upload className="w-6 h-6 mx-auto mb-2" />
+              {bulkFiles.length > 0 ? `${bulkFiles.length} image(s) selected` : 'Click to select images'}
+            </button>
+            {bulkFiles.length > 0 && (
+              <ul className="mt-3 max-h-32 overflow-y-auto text-[11px] text-slate-400 space-y-1">
+                {bulkFiles.map((f) => (
+                  <li key={f.name} className="truncate">{f.name}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-3 mt-4">
+              <EnterpriseButton variant="secondary" onClick={() => setBulkOpen(false)} disabled={busy !== ''}>
+                Cancel
+              </EnterpriseButton>
+              <EnterpriseButton onClick={handleBulkSubmit} disabled={bulkFiles.length === 0 || busy !== ''}>
+                {busy === 'bulk' ? 'Uploading…' : `Upload ${bulkFiles.length || ''}`.trim()}
               </EnterpriseButton>
             </div>
           </div>

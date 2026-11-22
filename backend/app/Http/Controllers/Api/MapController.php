@@ -94,7 +94,20 @@ class MapController extends Controller
         ]);
 
         $file = $request->file('image');
-        $ext = strtolower($file->getClientOriginalExtension());
+
+        // Derive the stored extension from the verified MIME type, never from
+        // the client-supplied filename (a PNG named `payload.php` must not be
+        // written as an executable file on the public disk).
+        $mime = $file->getMimeType();
+        $extByMime = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+        if (!isset($extByMime[$mime])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unsupported image type. Allowed: JPEG, PNG, WebP.',
+            ], 422);
+        }
+        $ext = $extByMime[$mime];
+
         $dims = @getimagesize($file->getRealPath());
         $width = $dims ? $dims[0] : null;
         $height = $dims ? $dims[1] : null;
@@ -102,16 +115,6 @@ class MapController extends Controller
         $mapId = 'map_' . bin2hex(random_bytes(8));
         $storedName = $mapId . '.' . $ext;
         $relativePath = 'maps/' . now()->format('Y/m') . '/' . $storedName;
-
-        // Validate MIME type properly
-        $mime = $file->getMimeType();
-        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-        if (!in_array($mime, $allowedMimes, true)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unsupported image type. Allowed: JPEG, PNG, WebP.',
-            ], 422);
-        }
 
         // Store on public disk
         $file->storeAs('maps/' . now()->format('Y/m'), $storedName, 'public');
@@ -157,7 +160,10 @@ class MapController extends Controller
 
         $map = Map::findOrFail($id);
 
-        $request->validate([
+        // Keep explicit nulls: they are how the admin clears an optional
+        // field (sector/phase/description). Only keys actually present in the
+        // request are forwarded, so an omitted field is left untouched.
+        $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
             'sector' => 'nullable|string|max:120',
             'phase' => 'nullable|string|max:60',
@@ -168,17 +174,17 @@ class MapController extends Controller
             'is_featured' => 'nullable|boolean',
         ]);
 
-        $payload = $request->only(['title', 'sector', 'phase', 'category', 'description', 'display_order', 'is_active', 'is_featured']);
-        $payload = array_filter($payload, fn ($v) => $v !== null);
+        $payload = [];
+        foreach (['title', 'sector', 'phase', 'category', 'description', 'display_order', 'is_active', 'is_featured'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $payload[$field] = $validated[$field];
+            }
+        }
 
-        if (isset($payload['title'])) {
-            $payload['title'] = strip_tags($payload['title']);
-        }
-        if (isset($payload['sector'])) {
-            $payload['sector'] = strip_tags($payload['sector']);
-        }
-        if (isset($payload['description'])) {
-            $payload['description'] = strip_tags($payload['description']);
+        foreach (['title', 'sector', 'description'] as $textField) {
+            if (array_key_exists($textField, $payload) && $payload[$textField] !== null) {
+                $payload[$textField] = strip_tags($payload[$textField]);
+            }
         }
 
         // If setting as featured, unset other featured maps
@@ -216,32 +222,48 @@ class MapController extends Controller
         ]);
 
         $file = $request->file('image');
-        $ext = strtolower($file->getClientOriginalExtension());
         $mime = $file->getMimeType();
-        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-        if (!in_array($mime, $allowedMimes, true)) {
+        $extByMime = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+        if (!isset($extByMime[$mime])) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unsupported image type. Allowed: JPEG, PNG, WebP.',
             ], 422);
         }
+        $ext = $extByMime[$mime];
 
         $dims = @getimagesize($file->getRealPath());
         $width = $dims ? $dims[0] : null;
         $height = $dims ? $dims[1] : null;
 
-        // Delete old image file
-        if ($map->image_path && Storage::disk($map->image_disk ?: 'public')->exists($map->image_path)) {
-            Storage::disk($map->image_disk ?: 'public')->delete($map->image_path);
+        // Upload the replacement FIRST, verify it landed intact, then update
+        // the record and only then remove the old file. A failed upload must
+        // never leave the map with a deleted image.
+        $oldDisk = $map->image_disk ?: 'public';
+        $oldPath = $map->image_path;
+
+        $dir = 'maps/' . now()->format('Y/m');
+        // Unique name: replacing within the same month/extension must never
+        // overwrite (and then delete) the freshly uploaded file.
+        $storedName = $map->id . '-' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $relativePath = $dir . '/' . $storedName;
+
+        $file->storeAs($dir, $storedName, 'public');
+
+        $disk = Storage::disk('public');
+        if (!$disk->exists($relativePath) || (int) $disk->size($relativePath) !== (int) $file->getSize()) {
+            // Best-effort cleanup of the partial upload; the old image stays.
+            $disk->delete($relativePath);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'The new image could not be stored. The existing image was kept.',
+            ], 500);
         }
-
-        $storedName = $map->id . '.' . $ext;
-        $relativePath = 'maps/' . now()->format('Y/m') . '/' . $storedName;
-
-        $file->storeAs('maps/' . now()->format('Y/m'), $storedName, 'public');
 
         $map->update([
             'image_path' => $relativePath,
+            'image_disk' => 'public',
             'image_mime' => $mime,
             'image_size_bytes' => $file->getSize(),
             'image_width' => $width,
@@ -249,6 +271,12 @@ class MapController extends Controller
             'image_checksum' => hash_file('sha256', $file->getRealPath()),
             'updated_by' => $request->user()->id,
         ]);
+
+        // Only now that the new image is persisted and referenced can the old
+        // file be removed. Never delete a path that the row still points to.
+        if ($oldPath && $oldPath !== $relativePath && $oldPath !== $map->image_path) {
+            Storage::disk($oldDisk)->delete($oldPath);
+        }
 
         $this->writeAudit($request, 'map.replace_image', $map->id, "Map image replaced: {$map->title}", [
             'entity_type' => 'map',
@@ -261,6 +289,105 @@ class MapController extends Controller
             'message' => 'Map image replaced successfully.',
             'map' => $map,
         ]);
+    }
+
+    /** POST /api/admin/maps/bulk — upload several map images at once. */
+    public function bulkStore(Request $request)
+    {
+        $this->requirePermission($request, 'admin.manage_platform_settings');
+
+        $request->validate([
+            'images' => 'required|array|min:1|max:50',
+            'images.*' => 'required|image|mimes:jpg,jpeg,png,webp|max:10240',
+            'category' => 'nullable|string|in:' . implode(',', array_keys(Map::CATEGORIES)),
+            'sector' => 'nullable|string|max:120',
+            'phase' => 'nullable|string|max:60',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $category = $request->input('category') ?: 'sector_map';
+        $sector = $request->filled('sector') ? strip_tags((string) $request->input('sector')) : null;
+        $phase = $request->filled('phase') ? (string) $request->input('phase') : null;
+        $isActive = $request->boolean('is_active', true);
+
+        $disk = Storage::disk('public');
+        $nextOrder = ((int) Map::max('display_order')) + 1;
+        $extByMime = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+
+        $created = [];
+        $failed = [];
+
+        foreach ($request->file('images', []) as $file) {
+            $originalName = $file->getClientOriginalName();
+            try {
+                $mime = $file->getMimeType();
+                if (!isset($extByMime[$mime])) {
+                    throw new \RuntimeException('Unsupported image type.');
+                }
+                $ext = $extByMime[$mime];
+
+                $dims = @getimagesize($file->getRealPath());
+                $title = trim((string) pathinfo($originalName, PATHINFO_FILENAME));
+                $title = $title !== '' ? strip_tags($title) : 'Map ' . $nextOrder;
+
+                $mapId = 'map_' . bin2hex(random_bytes(8));
+                $dir = 'maps/' . now()->format('Y/m');
+                $storedName = $mapId . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
+                $relativePath = $dir . '/' . $storedName;
+
+                $file->storeAs($dir, $storedName, 'public');
+                if (!$disk->exists($relativePath) || (int) $disk->size($relativePath) !== (int) $file->getSize()) {
+                    $disk->delete($relativePath);
+                    throw new \RuntimeException('Stored file failed verification.');
+                }
+
+                $map = Map::create([
+                    'id' => $mapId,
+                    'title' => $title,
+                    'sector' => $sector,
+                    'phase' => $phase,
+                    'category' => $category,
+                    'description' => null,
+                    'image_path' => $relativePath,
+                    'image_disk' => 'public',
+                    'image_mime' => $mime,
+                    'image_size_bytes' => $file->getSize(),
+                    'image_width' => $dims ? $dims[0] : null,
+                    'image_height' => $dims ? $dims[1] : null,
+                    'image_checksum' => hash_file('sha256', $file->getRealPath()),
+                    'display_order' => $nextOrder++,
+                    'is_active' => $isActive,
+                    'is_featured' => false,
+                    'created_by' => $request->user()->id,
+                ]);
+
+                $created[] = $map;
+            } catch (\Throwable $e) {
+                $failed[] = [
+                    'file' => $originalName,
+                    'message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        if ($created !== []) {
+            $this->writeAudit($request, 'map.bulk_create', 'maps', 'Bulk map upload: ' . count($created) . ' created', [
+                'entity_type' => 'map',
+                'cross_agency' => true,
+                'metadata' => ['created' => count($created), 'failed' => count($failed)],
+            ]);
+        }
+
+        return response()->json([
+            'success' => $created !== [],
+            'message' => $created === []
+                ? 'No maps could be uploaded.'
+                : count($created) . ' map(s) uploaded' . ($failed !== [] ? ', ' . count($failed) . ' failed.' : '.'),
+            'maps' => $created,
+            'failed' => $failed,
+            'created_count' => count($created),
+            'failed_count' => count($failed),
+        ], $created === [] ? 422 : 201);
     }
 
     /** DELETE /api/admin/maps/{id} — delete map and its image. */

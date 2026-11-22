@@ -18,7 +18,8 @@
         </include>
     </source>
     <php>
-        <env name="APP_ENV" value="testing"/>
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_DEBUG" value="false" force="true"/>
         <env name="APP_KEY" value="base64:FCkLXSSnmmfbGJwJic1ie3qcv8XYDzm78f9Ax91nIGM="/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
@@ -28,6 +29,12 @@
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
+        <!-- Keep the suite hermetic: a developer .env may enable ClamAV
+             fail-closed (production default), which would reject every test
+             upload because no scanner runs locally. Scanner behaviour is
+             covered explicitly by the malware tests with fake scanners. -->
+        <env name="MALWARE_SCAN_ENABLED" value="false" force="true"/>
+        <env name="MALWARE_SCAN_FAIL_CLOSED" value="false" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

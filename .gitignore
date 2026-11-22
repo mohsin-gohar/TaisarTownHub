@@ -44,3 +44,6 @@ environment.yml
 # OS / editor scratch files
 Thumbs.db
 *.bak
+
+# TLS certificates are mounted at runtime and must never be committed
+nginx/ssl/

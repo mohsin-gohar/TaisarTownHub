@@ -1,8 +1,11 @@
 # TaisarTownHub Backend - Production Dockerfile (compose-compatible)
 # Builds from ./backend context. Runtime config/secrets are provided via env;
 # APP_KEY must be supplied at runtime (never generated/baked during image build).
+#
+# Runtime is PHP-FPM behind the nginx gateway. `php artisan serve` is a
+# development server and must never be the production runtime.
 
-FROM php:8.3-cli-alpine
+FROM php:8.3-fpm-alpine
 
 RUN apk add --no-cache \
     icu-dev \
@@ -23,18 +26,20 @@ COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction
 
 # Application code + autoloader.
-COPY . .
+COPY . ./
 RUN composer dump-autoload --optimize \
     && mkdir -p storage/app/private/documents storage/app/public storage/logs \
        storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
-# Runtime entrypoint (validates APP_KEY, caches config/routes, runs migrations).
+# PHP runtime limits for real uploads (defaults are 2M/8M and would reject
+# document and map uploads before Laravel ever sees them).
+COPY docker/php-prod.ini /usr/local/etc/php/conf.d/zz-production.ini
+
+# Runtime entrypoint (validates APP_KEY, caches config/routes).
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-USER www-data
-
-EXPOSE 8080
+EXPOSE 9000
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8080"]
+CMD ["php-fpm", "-F"]

@@ -31,6 +31,11 @@ fi
 php artisan config:cache
 php artisan route:cache
 
+# Public disk symlink (maps / public media). The nginx gateway serves the
+# shared volume directly at /storage/..., but the symlink keeps local and
+# single-container deployments working too.
+php artisan storage:link --force || true
+
 # Migrations run ONCE in the compose `migrate` service. Web replicas and queue
 # workers set RUN_MIGRATIONS=false so they can never race on schema changes.
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
