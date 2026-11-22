@@ -174,6 +174,19 @@ export const SEO_ROUTES: RouteSeo[] = [
     breadcrumb: ['Media Gallery'],
   },
   {
+    view: 'maps',
+    path: '/maps',
+    title: 'Taiser Town Scheme 45 Maps | TaisarTownHub',
+    description:
+      'Explore detailed sector maps, phase plans, and the overall Taiser Town layout. View high-resolution sector maps, phase plans, and guide maps with zoom, pan, and download.',
+    keywords: 'Taiser Town maps, Scheme 45 maps, sector maps Karachi, phase maps Taiser Town, guide map',
+    indexable: true,
+    inSitemap: true,
+    changefreq: 'monthly',
+    priority: 0.7,
+    breadcrumb: ['Maps'],
+  },
+  {
     view: 'services',
     path: '/services',
     title: 'File Verification & Transfer Services | TaisarTownHub',

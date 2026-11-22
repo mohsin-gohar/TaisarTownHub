@@ -27,7 +27,8 @@ import {
   X,
   LifeBuoy,
   Sparkles,
-  HardDrive
+  HardDrive,
+  Map as MapIcon
 } from 'lucide-react';
 
 const AdminOverview = lazy(() => import('./AdminOverview').then((m) => ({ default: m.AdminOverview })));
@@ -57,6 +58,7 @@ const AdminLocations = lazy(() => import('./AdminLocations').then((m) => ({ defa
 const AdminMediaStudio = lazy(() => import('./AdminMediaStudio').then((m) => ({ default: m.AdminMediaStudio })));
 const AdminFeaturedPromotions = lazy(() => import('./AdminFeaturedPromotions').then((m) => ({ default: m.AdminFeaturedPromotions })));
 const AdminAgencyOversight = lazy(() => import('./AdminAgencyOversight').then((m) => ({ default: m.AdminAgencyOversight })));
+const AdminMapManagement = lazy(() => import('./AdminMapManagement').then((m) => ({ default: m.AdminMapManagement })));
 
 export const AdminLayout: React.FC = () => {
   const {
@@ -191,6 +193,9 @@ export const AdminLayout: React.FC = () => {
       : []),
     ...(canOverseeAgencies
       ? [{ id: 'agency_oversight', label: 'Agency Oversight', icon: HardDrive }]
+      : []),
+    ...(hasEnterprise('admin.manage_platform_settings')
+      ? [{ id: 'maps', label: 'Map Management', icon: MapIcon }]
       : []),
     ...(hasAgencyContext && hasEnterprise('agency.view')
       ? [
@@ -462,6 +467,7 @@ export const AdminLayout: React.FC = () => {
             {adminTab === 'media_studio' && <AdminMediaStudio canUpload={canUploadMedia} />}
             {adminTab === 'subscription' && <AdminSubscription />}
             {adminTab === 'locations' && <AdminLocations canManage={canApproveListings} />}
+            {adminTab === 'maps' && hasEnterprise('admin.manage_platform_settings') && <AdminMapManagement />}
             {adminTab === 'notifications' && <AdminNotifications />}
             {adminTab === 'support' && <AdminSupportDesk canManage={canManageSupport} />}
           </Suspense>

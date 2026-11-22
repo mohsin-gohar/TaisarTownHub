@@ -75,6 +75,16 @@ export const MapsPage: React.FC = () => {
     setPan({ x: 0, y: 0 });
   };
 
+  // Close lightbox on Escape key.
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeLightbox();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxOpen]);
+
   const handleZoomIn = () => setZoom((z) => Math.min(z + 0.25, 4));
   const handleZoomOut = () => setZoom((z) => Math.max(z - 0.25, 0.5));
   const handleReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
@@ -191,21 +201,21 @@ export const MapsPage: React.FC = () => {
       <section className="py-12 px-4 sm:px-6 lg:px-8 bg-[#07141E]">
         <div className="max-w-7xl mx-auto">
           {loading && (
-            <div className="flex items-center justify-center py-20">
+            <div className="flex items-center justify-center py-20" data-testid="maps-loading">
               <Loader2 className="w-8 h-8 text-[#E7C878] animate-spin" />
               <span className="ml-3 text-slate-400">Loading maps…</span>
             </div>
           )}
 
           {error && (
-            <div className="text-center py-20">
+            <div className="text-center py-20" data-testid="maps-error">
               <p className="text-red-400 text-sm">{error}</p>
               <button onClick={fetchMaps} className="mt-3 text-[#E7C878] text-sm hover:underline">Try again</button>
             </div>
           )}
 
           {!loading && !error && filteredMaps.length === 0 && (
-            <div className="text-center py-20">
+            <div className="text-center py-20" data-testid="maps-empty">
               <MapPin className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <p className="text-slate-400 text-sm">No maps found matching your filters.</p>
               <p className="text-slate-500 text-xs mt-2">Try adjusting your search or category filter.</p>
@@ -217,6 +227,7 @@ export const MapsPage: React.FC = () => {
               {filteredMaps.map((map, idx) => (
                 <div
                   key={map.id}
+                  data-testid="map-card"
                   className="group relative bg-[#0a1a26] border border-slate-800 rounded-xl overflow-hidden hover:border-[#E7C878]/30 transition-colors cursor-pointer"
                   onClick={() => openLightbox(idx)}
                 >
@@ -277,7 +288,8 @@ export const MapsPage: React.FC = () => {
       {/* Lightbox */}
       {lightboxOpen && filteredMaps.length > 0 && (
         <div
-          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+          data-testid="map-lightbox"
+          className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center"
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
@@ -294,7 +306,7 @@ export const MapsPage: React.FC = () => {
               <button onClick={handleReset} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs" aria-label="Reset zoom">
                 Reset
               </button>
-              <span className="text-white/60 text-xs ml-2">{Math.round(zoom * 100)}%</span>
+              <span data-testid="zoom-level" className="text-white/60 text-xs ml-2">{Math.round(zoom * 100)}%</span>
             </div>
             <div className="flex items-center gap-2">
               <button
