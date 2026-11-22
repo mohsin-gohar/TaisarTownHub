@@ -975,7 +975,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdDate: new Date().toISOString().split('T')[0],
     };
     setProperties((prev) => [newProp, ...prev]);
-    showToast('success', `Property "${newProp.title}" listed successfully!`);
+    if (backendConnected) {
+      showToast('info', `Property "${newProp.title}" saved locally — backend sync not yet wired for properties.`);
+    } else {
+      showToast('info', `Property "${newProp.title}" saved locally — will sync when backend is available.`);
+    }
     return { success: true };
   };
 
@@ -1773,12 +1777,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // counters keyed by visitor state, never decremented retroactively.
       localStorage.removeItem(likedKey);
       showToast('info', 'Like removed from video tour.');
+      return;
+    }
+
+    localStorage.setItem(likedKey, 'true');
+    if (backendConnected) {
+      api.likeVideo(videoId).then((result) => {
+        if (!result?.ok) {
+          // Rollback optimistic like on API failure.
+          setAgencyVideos((prev) =>
+            prev.map((v) =>
+              v.id === videoId ? { ...v, likes: Math.max(0, v.likes - 1) } : v
+            )
+          );
+          localStorage.removeItem(likedKey);
+          showToast('error', 'Could not like the video. Please try again.');
+        }
+      }).catch(() => {
+        setAgencyVideos((prev) =>
+          prev.map((v) =>
+            v.id === videoId ? { ...v, likes: Math.max(0, v.likes - 1) } : v
+          )
+        );
+        localStorage.removeItem(likedKey);
+        showToast('error', 'Could not like the video. Please try again.');
+      });
     } else {
-      localStorage.setItem(likedKey, 'true');
       showToast('success', 'Liked! Thank you for supporting our partner agency video tour.');
-      if (backendConnected) {
-        api.likeVideo(videoId).catch(() => {});
-      }
     }
   };
 
@@ -1806,10 +1831,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     if (backendConnected) {
-      api.postVideoComment(videoId, userName, commentText).catch(() => {});
+      api.postVideoComment(videoId, userName.trim(), commentText.trim()).then((result) => {
+        if (!result) {
+          // Rollback optimistic comment on API failure.
+          setAgencyVideos((prev) =>
+            prev.map((v) =>
+              v.id === videoId
+                ? { ...v, comments: v.comments.filter((c) => c.id !== newComment.id) }
+                : v
+            )
+          );
+          showToast('error', 'Could not post the comment. Please try again.');
+        }
+      }).catch(() => {
+        setAgencyVideos((prev) =>
+          prev.map((v) =>
+            v.id === videoId
+              ? { ...v, comments: v.comments.filter((c) => c.id !== newComment.id) }
+              : v
+          )
+        );
+        showToast('error', 'Could not post the comment. Please try again.');
+      });
+    } else {
+      showToast('info', 'Comment saved locally — will sync when backend is available.');
     }
-
-    showToast('success', 'Your comment has been posted!');
   };
 
   const addAgencyVideo = (videoData: Omit<AgencyVideo, 'id' | 'likes' | 'comments' | 'views'>): Promise<{ ok: boolean }> => {
@@ -1891,35 +1937,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateInquiryStatus = (id: string, status: InquiryStatus) => {
-    if (!requirePermission('view_inquiries')) return;
+    if (!requirePermission(['crm.update_lead', 'crm.delete_lead'])) return;
     setInquiries((prev) =>
       prev.map((i) => (i.id === id ? { ...i, status } : i))
     );
     if (backendConnected) {
-      api.updateInquiryStatus(id, status).catch(() => {});
+      api.updateInquiryStatus(id, status).then((result) => {
+        if (!result) {
+          // Rollback optimistic status on API failure.
+          setInquiries((prev) =>
+            prev.map((i) => (i.id === id ? { ...i, status: 'Pending' } : i))
+          );
+          showToast('error', 'Could not change inquiry status. Please try again.');
+        }
+      }).catch(() => {
+        setInquiries((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, status: 'Pending' } : i))
+        );
+        showToast('error', 'Could not change inquiry status. Please try again.');
+      });
+    } else {
+      showToast('info', 'Status change saved locally — will sync when backend is available.');
     }
-    showToast('info', `Inquiry status changed to "${status}".`);
   };
 
   const updateInquiryNotes = (id: string, notes: string) => {
-    if (!requirePermission('view_inquiries')) return;
+    if (!requirePermission('crm.update_lead')) return;
     setInquiries((prev) =>
       prev.map((i) => (i.id === id ? { ...i, adminNotes: notes } : i))
     );
-    showToast('success', 'Internal agent notes updated.');
+    if (backendConnected) {
+      api.updateInquiryNotes(id, notes).then((result) => {
+        if (!result) {
+          // Rollback local notes on API failure.
+          setInquiries((prev) =>
+            prev.map((i) => (i.id === id ? { ...i, adminNotes: '' } : i))
+          );
+          showToast('error', 'Could not save inquiry notes. Please try again.');
+        }
+      }).catch(() => {
+        showToast('error', 'Could not save inquiry notes. Please try again.');
+      });
+    } else {
+      showToast('info', 'Notes saved locally — will sync when backend is available.');
+    }
   };
 
   const deleteInquiry = (id: string) => {
-    if (!requirePermission('view_inquiries')) return;
-    setInquiries((prev) => prev.filter((i) => i.id !== id));
-    showToast('info', 'Inquiry deleted.');
+    if (!requirePermission('crm.delete_lead')) return;
+    if (backendConnected) {
+      api.deleteInquiry(id).then((result) => {
+        if (!result) {
+          showToast('error', 'Could not delete the inquiry. Please try again.');
+          return;
+        }
+        setInquiries((prev) => prev.filter((i) => i.id !== id));
+        showToast('info', 'Inquiry deleted.');
+      }).catch(() => {
+        showToast('error', 'Could not delete the inquiry. Please try again.');
+      });
+    } else {
+      showToast('info', 'Inquiry marked for deletion — will sync when backend is available.');
+    }
   };
 
   // CMS Updates
   const updateCMSConfig = (updates: Partial<CMSConfig>) => {
     if (!requirePermission('edit_cms')) return;
     setCmsConfig((prev) => ({ ...prev, ...updates }));
-    showToast('success', 'Website CMS settings updated and live!');
+    showToast('info', 'CMS settings updated locally — changes persist only in this session until a backend CMS endpoint is implemented.');
   };
 
   const resetToDefaultData = async () => {

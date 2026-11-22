@@ -1564,6 +1564,31 @@ export const api = {
     }
   },
 
+  async updateInquiryNotes(id: string, notes: string): Promise<any | null> {
+    try {
+      const res = await apiFetch(`/inquiries/${id}/notes`, {
+        method: 'PATCH',
+        body: JSON.stringify({ notes }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async deleteInquiry(id: string): Promise<any | null> {
+    try {
+      const res = await apiFetch(`/inquiries/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
   async getLocations(): Promise<any | null> {
     try {
       const res = await apiFetch('/locations');

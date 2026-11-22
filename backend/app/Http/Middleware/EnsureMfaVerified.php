@@ -91,17 +91,34 @@ class EnsureMfaVerified
             return false;
         }
 
+        // Platform roles always require MFA under the global policy.
         if (in_array($user->role, ['super_admin', 'admin', 'manager'], true)) {
             return true;
         }
 
         // Agency authority lives in active memberships, NOT users.role.
-        // An agency owner created via self-registration has the base role
-        // 'dealer', so the legacy whitelist alone would exempt them from a
-        // global admin-MFA policy.
-        return $user->memberships()
+        // Agency owner / manager with an active membership require MFA.
+        if ($user->memberships()
             ->where('status', 'active')
             ->whereHas('role', fn ($q) => $q->whereIn('key', ['agency_owner', 'agency_manager']))
-            ->exists();
+            ->exists()) {
+            return true;
+        }
+
+        // Custom agency roles with elevated write/manage permissions also
+        // require MFA under the global admin policy so privileged custom
+        // roles cannot bypass mandatory second-factor verification.
+        $elevatedAgencyKeys = [
+            'agency.manage_staff', 'agency.manage_settings', 'agency.subscribe',
+            'documents.manage_permissions', 'finance.manage_payments',
+            'properties.publish', 'properties.delete', 'crm.delete_lead',
+        ];
+        foreach ($elevatedAgencyKeys as $key) {
+            if ($user->hasPermission($key)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

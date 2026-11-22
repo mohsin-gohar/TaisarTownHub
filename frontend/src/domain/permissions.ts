@@ -91,6 +91,8 @@ export type Permission =
   | 'view_my_commission'
   | 'pay_commissions'
   | 'view_inquiries'
+  | 'crm.update_lead'
+  | 'crm.delete_lead'
   | 'manage_projects'
   | 'manage_media'
   | 'upload_media'
@@ -124,6 +126,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   view_my_commission: 'View own commission statement',
   pay_commissions: 'Execute commission payouts',
   view_inquiries: 'View inquiry CRM',
+  'crm.update_lead': 'Update inquiry status & notes',
+  'crm.delete_lead': 'Delete inquiries',
   manage_projects: 'Manage projects',
   manage_media: 'Manage media library',
   upload_media: 'Upload media',

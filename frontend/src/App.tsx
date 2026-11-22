@@ -18,6 +18,7 @@ import { AvailableForSaleSection } from './components/public/AvailableForSaleSec
 import { Scheme45Guide } from './components/public/Scheme45Guide';
 import { ServicesSection } from './components/public/ServicesSection';
 import { MediaGallerySection } from './components/public/MediaGallerySection';
+import { VideoWalkthroughSection } from './components/public/VideoWalkthroughSection';
 import { AboutSection } from './components/public/AboutSection';
 
 import { ContactSection } from './components/public/ContactSection';
@@ -558,12 +559,9 @@ const MainAppContent: React.FC = () => {
                   Taisar Town Video Walkthroughs
                 </h2>
                 <p className="text-slate-400 text-lg mb-6">
-                  Video content for approved Taisar Town properties.
+                  Verified video tours from approved Taisar Town agencies.
                 </p>
-                <div className="max-w-3xl border-t border-slate-800 pt-6">
-                  <p className="text-slate-400 text-sm">No public video walkthroughs are available right now.</p>
-                  <button onClick={() => { window.history.pushState({}, '', '/gallery'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="mt-3 inline-flex items-center gap-2 text-sm text-[#E7C878] hover:text-[#F6E3B4]">Browse video gallery <ArrowRight className="w-4 h-4" /></button>
-                </div>
+                <VideoWalkthroughSection />
               </Reveal>
             </section>
 

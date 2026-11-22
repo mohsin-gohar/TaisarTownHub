@@ -1176,11 +1176,48 @@ class DocumentController extends Controller
             ->with('document')
             ->first();
 
-        if (!$share || !$share->isActive()) {
-            return response()->json(['success' => false, 'message' => 'This share link is no longer available.'], 410);
+        // Counter increment + availability check must be atomic under a row
+        // lock so concurrent downloads cannot overshoot max_downloads.
+        $share = DB::transaction(function () use ($share, $token): array {
+            if (!$share) {
+                return ['share' => null, 'reason' => 'not_found'];
+            }
+
+            $locked = DocumentShare::where('id', $share->id)
+                ->where('token_hash', hash('sha256', $token))
+                ->lockForUpdate()
+                ->first();
+
+            if (!$locked) {
+                return ['share' => null, 'reason' => 'not_found'];
+            }
+
+            if ($locked->revoked_at !== null || !$locked->expires_at->isFuture()) {
+                return ['share' => null, 'reason' => 'expired_or_revoked'];
+            }
+
+            if ($locked->max_downloads !== null && $locked->download_count >= $locked->max_downloads) {
+                return ['share' => null, 'reason' => 'downloads_exhausted'];
+            }
+
+            // Atomic increment — no other transaction can overshoot the cap.
+            $locked->forceFill([
+                'download_count' => $locked->download_count + 1,
+                'last_downloaded_at' => now(),
+            ])->save();
+
+            return ['share' => $locked, 'reason' => null];
+        });
+
+        if ($share['share'] === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This share link is no longer available.',
+            ], 410);
         }
 
-        $document = $share->document;
+        $lockedShare = $share['share'];
+        $document = $lockedShare->document;
 
         if (!$document || $document->status !== 'active') {
             return response()->json(['success' => false, 'message' => 'This document is no longer available.'], 410);
@@ -1200,25 +1237,14 @@ class DocumentController extends Controller
             return response()->json(['success' => false, 'message' => 'File is no longer available on storage.'], 410);
         }
 
-        // Counter increment must be atomic with the availability check.
-        DB::transaction(function () use ($share): void {
-            $locked = DocumentShare::where('id', $share->id)->lockForUpdate()->first();
-            if ($locked !== null) {
-                $locked->forceFill([
-                    'download_count' => $locked->download_count + 1,
-                    'last_downloaded_at' => now(),
-                ])->save();
-            }
-        });
-
-        $this->logAccess($document, $share->agency_id, $request, 'share_download');
+        $this->logAccess($document, $lockedShare->agency_id, $request, 'share_download');
 
         $this->writeAudit($request, 'document.share_download', $document->id,
             'Downloaded via share link: ' . $document->title, [
-                'agency_id' => $share->agency_id,
+                'agency_id' => $lockedShare->agency_id,
                 'entity_type' => 'document_share',
-                'entity_id' => $share->id,
-                'metadata' => ['download_count' => $share->download_count + 1],
+                'entity_id' => $lockedShare->id,
+                'metadata' => ['download_count' => $lockedShare->download_count],
             ]);
 
         return SecureFileStore::response(

@@ -176,6 +176,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
     /* ---------- Legacy inquiries (auth required) ---------- */
     Route::get('inquiries', [InquiryController::class, 'index'])->middleware('auth:sanctum');
     Route::patch('inquiries/{id}/status', [InquiryController::class, 'updateStatus'])->middleware('auth:sanctum');
+    Route::patch('inquiries/{id}/notes', [InquiryController::class, 'updateNotes'])->middleware('auth:sanctum');
+    Route::delete('inquiries/{id}', [InquiryController::class, 'destroy'])->middleware('auth:sanctum');
 
     /* ---------- CRM pipeline (agency leads, auth required) ---------- */
     Route::get('/agency/leads', [LeadController::class, 'index'])->middleware('auth:sanctum');

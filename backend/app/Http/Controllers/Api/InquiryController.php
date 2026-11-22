@@ -155,10 +155,13 @@ class InquiryController extends Controller
 
     /**
      * Update inquiry status.
+     *
+     * Requires a write-level CRM permission — read-only `view_inquiries` /
+     * `crm.view` must never be able to mutate inquiry state.
      */
     public function updateStatus(Request $request, $id)
     {
-        $this->requireAny($request, ['view_inquiries', 'crm.update_lead']);
+        $this->requireAny($request, ['crm.update_lead', 'crm.delete_lead']);
 
         $request->validate([
             'status' => 'required|string|in:Pending,Contacted,In Progress,Resolved',
@@ -183,6 +186,64 @@ class InquiryController extends Controller
             ]);
 
         return response()->json($inquiry);
+    }
+
+    /**
+     * PATCH /api/inquiries/{id}/notes — update internal agent notes.
+     * Requires crm.update_lead.
+     */
+    public function updateNotes(Request $request, $id)
+    {
+        $this->requireAny($request, ['crm.update_lead']);
+
+        $request->validate([
+            'notes' => 'nullable|string|max:4000',
+        ]);
+
+        $agencyId = $this->agencyId($request);
+        $query = Inquiry::query();
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        }
+        $inquiry = $query->findOrFail($id);
+
+        $inquiry->update(['adminNotes' => $request->input('notes', '')]);
+
+        $this->writeAudit($request, 'inquiry.notes', (string) $inquiry->id,
+            "Inquiry notes updated", [
+                'agency_id' => $agencyId,
+                'entity_type' => 'inquiry',
+                'entity_id' => (string) $inquiry->id,
+            ]);
+
+        return response()->json($inquiry);
+    }
+
+    /**
+     * DELETE /api/inquiries/{id} — delete an inquiry.
+     * Requires crm.delete_lead.
+     */
+    public function destroy(Request $request, $id)
+    {
+        $this->requireAny($request, ['crm.delete_lead']);
+
+        $agencyId = $this->agencyId($request);
+        $query = Inquiry::query();
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        }
+        $inquiry = $query->findOrFail($id);
+
+        $inquiry->delete();
+
+        $this->writeAudit($request, 'inquiry.delete', (string) $inquiry->id,
+            "Inquiry deleted: {$inquiry->fullName}", [
+                'agency_id' => $agencyId,
+                'entity_type' => 'inquiry',
+                'entity_id' => (string) $inquiry->id,
+            ]);
+
+        return response()->json(['success' => true, 'message' => 'Inquiry deleted.']);
     }
 
     private function maskCnic(string $cnic): string
