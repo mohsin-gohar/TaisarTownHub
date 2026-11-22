@@ -26,7 +26,13 @@ class AgencyVideoController extends Controller
             $query->where('phase', $request->phase);
         }
 
-        return response()->json($query->orderByDesc('created_at')->orderBy('id')->get());
+        // Public gallery: bounded page (plain-array shape kept for the
+        // existing frontend). Newest first; ?limit narrows further.
+        $limit = $request->filled('limit') ? (int) $request->limit : 100;
+
+        return response()->json(
+            $query->orderByDesc('created_at')->orderBy('id')->limit(min(max($limit, 1), 200))->get()
+        );
     }
 
     /**

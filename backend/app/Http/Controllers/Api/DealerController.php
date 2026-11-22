@@ -23,7 +23,11 @@ class DealerController extends Controller
             $query->where('status', $request->status);
         }
 
-        $dealers = $query->orderByDesc('created_at')->orderBy('id')->get();
+        // Public directory: bounded page (plain-array shape kept for the
+        // existing frontend). Newest first; ?limit narrows further.
+        $limit = $request->filled('limit') ? (int) $request->limit : 200;
+        $dealers = $query->orderByDesc('created_at')->orderBy('id')
+            ->limit(min(max($limit, 1), 500))->get();
 
         // Public endpoint: strip financial/PII fields. Only expose safe display
         // fields to unauthenticated visitors.

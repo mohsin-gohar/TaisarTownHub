@@ -94,6 +94,7 @@ class Permissions
         'legacy.view_commissions' => ['(legacy) view_commissions', 'legacy', false],
         'legacy.manage_payments' => ['(legacy) manage_payments', 'legacy', false],
         'legacy.view_inquiries' => ['(legacy) view_inquiries', 'legacy', false],
+        'legacy.manage_projects' => ['(legacy) manage_projects', 'legacy', false],
         'legacy.manage_media' => ['(legacy) manage_media', 'legacy', false],
         'legacy.upload_media' => ['(legacy) upload_media', 'legacy', false],
         'legacy.view_my_deals' => ['(legacy) view_my_deals', 'legacy', false],
