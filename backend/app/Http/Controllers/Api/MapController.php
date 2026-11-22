@@ -95,8 +95,8 @@ class MapController extends Controller
 
         $file = $request->file('image');
 
-        // Derive the stored extension from the verified MIME type, never from
-        // the client-supplied filename (a PNG named `payload.php` must not be
+        // Derive the stored extension from the sniffed MIME type, never the
+        // client-supplied filename (a PNG named `payload.php` must not be
         // written as an executable file on the public disk).
         $mime = $file->getMimeType();
         $extByMime = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
@@ -153,6 +153,88 @@ class MapController extends Controller
         ], 201);
     }
 
+    /** POST /api/admin/maps/bulk — bulk create maps from uploaded images. */
+    public function bulk(Request $request)
+    {
+        $this->requirePermission($request, 'admin.manage_platform_settings');
+
+        $request->validate([
+            'images' => ['required', 'array', 'min:1'],
+            'images.*' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'titles' => ['nullable', 'array', 'max:50'],
+            'titles.*' => ['nullable', 'string', 'max:255'],
+            'categories' => ['nullable', 'array', 'max:50'],
+            'categories.*' => ['required', 'string', 'in:' . implode(',', array_keys(Map::CATEGORIES))],
+            'sectors' => ['nullable', 'array', 'max:50'],
+            'sectors.*' => ['nullable', 'string', 'max:120'],
+            'phases' => ['nullable', 'array', 'max:50'],
+            'phases.*' => ['nullable', 'string', 'max:60'],
+            'descriptions' => ['nullable', 'array', 'max:50'],
+            'descriptions.*' => ['nullable', 'string', 'max:5000'],
+            'featured' => ['nullable', 'array', 'max:50'],
+            'featured.*' => ['nullable', 'boolean'],
+        ]);
+
+        /** @var array<int, \Illuminate\Http\UploadedFile> $files */
+        $files = $request->file('images');
+        $titles = (array) $request->input('titles', []);
+        $categories = (array) $request->input('categories', []);
+        $sectors = (array) $request->input('sectors', []);
+        $phases = (array) $request->input('phases', []);
+        $descriptions = (array) $request->input('descriptions', []);
+        $featured = (array) $request->input('featured', []);
+
+        if (empty($files) || count($files) < 1) {
+            return response()->json(['success' => false, 'message' => 'No images were uploaded.'], 422);
+        }
+
+        $extByMime = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+
+        $created = [];
+        foreach ($files as $index => $file) {
+            // Extension follows the real MIME type, never the client name.
+            $mime = $file->getMimeType();
+            $ext = $extByMime[$mime] ?? 'jpg';
+            $storedName = 'map_' . bin2hex(random_bytes(8)) . '.' . $ext;
+            $relativePath = 'maps/' . now()->format('Y/m') . '/' . $storedName;
+            $file->storeAs('maps/' . now()->format('Y/m'), $storedName, 'public');
+
+            $map = Map::create([
+                'title' => trim((string) ($titles[$index] ?? '')) ?: 'Taiser Town Map ' . ($index + 1),
+                'sector' => $sectors[$index] ?? null,
+                'phase' => $phases[$index] ?? null,
+                'category' => $categories[$index] ?? 'sector_map',
+                'description' => $descriptions[$index] ?? null,
+                'image_path' => $relativePath,
+                'image_disk' => 'public',
+                'image_mime' => $mime,
+                'image_size_bytes' => $file->getSize(),
+                'image_width' => @getimagesize($file->getRealPath())[0] ?? null,
+                'image_height' => @getimagesize($file->getRealPath())[1] ?? null,
+                'image_checksum' => hash_file('sha256', $file->getRealPath()),
+                'display_order' => count($created),
+                'is_active' => true,
+                'is_featured' => filter_var($featured[$index] ?? false, FILTER_VALIDATE_BOOLEAN),
+                'created_by' => $request->user()->id,
+            ]);
+            $created[] = $map;
+        }
+
+        $this->writeAudit($request, 'map.bulk_create', 'maps', "Bulk created " . count($created) . " maps", [
+            'entity_type' => 'map',
+            'entity_id' => 'maps',
+            'cross_agency' => true,
+            'metadata' => ['count' => count($created)],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Maps created successfully.',
+            'created' => count($created),
+            'maps' => $created,
+        ], 201);
+    }
+
     /** PUT /api/admin/maps/{id} — update map details (no image). */
     public function update(Request $request, string $id)
     {
@@ -160,9 +242,20 @@ class MapController extends Controller
 
         $map = Map::findOrFail($id);
 
+        $request->validate([
+            'title' => 'sometimes|string|max:255',
+            'sector' => 'nullable|string|max:120',
+            'phase' => 'nullable|string|max:60',
+            'category' => 'sometimes|string|in:' . implode(',', array_keys(Map::CATEGORIES)),
+            'description' => 'nullable|string|max:5000',
+            'display_order' => 'nullable|integer|min:0',
+            'is_active' => 'nullable|boolean',
+            'is_featured' => 'nullable|boolean',
+        ]);
+
         // Keep explicit nulls: they are how the admin clears an optional
-        // field (sector/phase/description). Only keys actually present in the
-        // request are forwarded, so an omitted field is left untouched.
+        // field (sector/phase/description). Only keys present in the request
+        // are forwarded, so an omitted field is left untouched.
         $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
             'sector' => 'nullable|string|max:120',
@@ -236,23 +329,21 @@ class MapController extends Controller
         $width = $dims ? $dims[0] : null;
         $height = $dims ? $dims[1] : null;
 
-        // Upload the replacement FIRST, verify it landed intact, then update
-        // the record and only then remove the old file. A failed upload must
-        // never leave the map with a deleted image.
         $oldDisk = $map->image_disk ?: 'public';
         $oldPath = $map->image_path;
 
         $dir = 'maps/' . now()->format('Y/m');
-        // Unique name: replacing within the same month/extension must never
+        // Collision-free name: replacing in the same month/extension must not
         // overwrite (and then delete) the freshly uploaded file.
         $storedName = $map->id . '-' . bin2hex(random_bytes(8)) . '.' . $ext;
         $relativePath = $dir . '/' . $storedName;
 
+        // Upload + verify BEFORE touching the old file, so a failed upload
+        // never leaves the map pointing at a missing image.
         $file->storeAs($dir, $storedName, 'public');
 
         $disk = Storage::disk('public');
         if (!$disk->exists($relativePath) || (int) $disk->size($relativePath) !== (int) $file->getSize()) {
-            // Best-effort cleanup of the partial upload; the old image stays.
             $disk->delete($relativePath);
 
             return response()->json([
@@ -272,8 +363,8 @@ class MapController extends Controller
             'updated_by' => $request->user()->id,
         ]);
 
-        // Only now that the new image is persisted and referenced can the old
-        // file be removed. Never delete a path that the row still points to.
+        // Only after the new file is persisted and referenced can the old one
+        // be removed. Never delete a path the row still points to.
         if ($oldPath && $oldPath !== $relativePath && $oldPath !== $map->image_path) {
             Storage::disk($oldDisk)->delete($oldPath);
         }
@@ -289,105 +380,6 @@ class MapController extends Controller
             'message' => 'Map image replaced successfully.',
             'map' => $map,
         ]);
-    }
-
-    /** POST /api/admin/maps/bulk — upload several map images at once. */
-    public function bulkStore(Request $request)
-    {
-        $this->requirePermission($request, 'admin.manage_platform_settings');
-
-        $request->validate([
-            'images' => 'required|array|min:1|max:50',
-            'images.*' => 'required|image|mimes:jpg,jpeg,png,webp|max:10240',
-            'category' => 'nullable|string|in:' . implode(',', array_keys(Map::CATEGORIES)),
-            'sector' => 'nullable|string|max:120',
-            'phase' => 'nullable|string|max:60',
-            'is_active' => 'nullable|boolean',
-        ]);
-
-        $category = $request->input('category') ?: 'sector_map';
-        $sector = $request->filled('sector') ? strip_tags((string) $request->input('sector')) : null;
-        $phase = $request->filled('phase') ? (string) $request->input('phase') : null;
-        $isActive = $request->boolean('is_active', true);
-
-        $disk = Storage::disk('public');
-        $nextOrder = ((int) Map::max('display_order')) + 1;
-        $extByMime = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-
-        $created = [];
-        $failed = [];
-
-        foreach ($request->file('images', []) as $file) {
-            $originalName = $file->getClientOriginalName();
-            try {
-                $mime = $file->getMimeType();
-                if (!isset($extByMime[$mime])) {
-                    throw new \RuntimeException('Unsupported image type.');
-                }
-                $ext = $extByMime[$mime];
-
-                $dims = @getimagesize($file->getRealPath());
-                $title = trim((string) pathinfo($originalName, PATHINFO_FILENAME));
-                $title = $title !== '' ? strip_tags($title) : 'Map ' . $nextOrder;
-
-                $mapId = 'map_' . bin2hex(random_bytes(8));
-                $dir = 'maps/' . now()->format('Y/m');
-                $storedName = $mapId . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
-                $relativePath = $dir . '/' . $storedName;
-
-                $file->storeAs($dir, $storedName, 'public');
-                if (!$disk->exists($relativePath) || (int) $disk->size($relativePath) !== (int) $file->getSize()) {
-                    $disk->delete($relativePath);
-                    throw new \RuntimeException('Stored file failed verification.');
-                }
-
-                $map = Map::create([
-                    'id' => $mapId,
-                    'title' => $title,
-                    'sector' => $sector,
-                    'phase' => $phase,
-                    'category' => $category,
-                    'description' => null,
-                    'image_path' => $relativePath,
-                    'image_disk' => 'public',
-                    'image_mime' => $mime,
-                    'image_size_bytes' => $file->getSize(),
-                    'image_width' => $dims ? $dims[0] : null,
-                    'image_height' => $dims ? $dims[1] : null,
-                    'image_checksum' => hash_file('sha256', $file->getRealPath()),
-                    'display_order' => $nextOrder++,
-                    'is_active' => $isActive,
-                    'is_featured' => false,
-                    'created_by' => $request->user()->id,
-                ]);
-
-                $created[] = $map;
-            } catch (\Throwable $e) {
-                $failed[] = [
-                    'file' => $originalName,
-                    'message' => $e->getMessage(),
-                ];
-            }
-        }
-
-        if ($created !== []) {
-            $this->writeAudit($request, 'map.bulk_create', 'maps', 'Bulk map upload: ' . count($created) . ' created', [
-                'entity_type' => 'map',
-                'cross_agency' => true,
-                'metadata' => ['created' => count($created), 'failed' => count($failed)],
-            ]);
-        }
-
-        return response()->json([
-            'success' => $created !== [],
-            'message' => $created === []
-                ? 'No maps could be uploaded.'
-                : count($created) . ' map(s) uploaded' . ($failed !== [] ? ', ' . count($failed) . ' failed.' : '.'),
-            'maps' => $created,
-            'failed' => $failed,
-            'created_count' => count($created),
-            'failed_count' => count($failed),
-        ], $created === [] ? 422 : 201);
     }
 
     /** DELETE /api/admin/maps/{id} — delete map and its image. */

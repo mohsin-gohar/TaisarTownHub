@@ -321,7 +321,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
   /* ---------- Admin: map management (super admin only) ---------- */
   Route::get('/admin/maps', [MapController::class, 'adminIndex'])->middleware('auth:sanctum');
   Route::post('/admin/maps', [MapController::class, 'store'])->middleware('auth:sanctum');
-  Route::post('/admin/maps/bulk', [MapController::class, 'bulkStore'])->middleware('auth:sanctum');
+  Route::post('/admin/maps/bulk', [MapController::class, 'bulk'])->middleware('auth:sanctum');
   Route::put('/admin/maps/reorder', [MapController::class, 'reorder'])->middleware('auth:sanctum');
   Route::post('/admin/maps/{id}/replace-image', [MapController::class, 'replaceImage'])->middleware('auth:sanctum');
   Route::post('/admin/maps/{id}/toggle', [MapController::class, 'toggle'])->middleware('auth:sanctum');
