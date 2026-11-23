@@ -135,10 +135,11 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -ptest-root-password"
+          --health-cmd="mysql --protocol=TCP -h 127.0.0.1 -uroot -ptest-root-password -e 'SELECT 1' taisartownhub_ci"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+          --health-start-period=30s
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -178,11 +179,33 @@ jobs:
           ENV
           php artisan key:generate --force
 
+      - name: Wait for MySQL app database (real TCP query)
+        # `mysqladmin ping` can succeed against MySQL's init-time socket
+        # server BEFORE MYSQL_DATABASE/MYSQL_USER exist. Prove the actual app
+        # database is reachable over TCP, the same check used in Compose.
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if mysql --protocol=TCP -h 127.0.0.1 -uroot -ptest-root-password \
+                -e 'SELECT 1' taisartownhub_ci >/dev/null 2>&1; then
+              echo "MySQL app database ready over TCP after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=MySQL app DB not ready::SELECT 1 against taisartownhub_ci over TCP never succeeded"
+          exit 1
+
       - name: Fresh migrations and seed data
         working-directory: backend
         run: |
-          php artisan migrate --force --no-interaction
-          php artisan db:seed --force --no-interaction
+          set -euo pipefail
+          log=/tmp/tth-migrate-seed.log
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error title=Migrate/seed failed::$(tail -c 1800 "$log" | tr "\n" " ")"; fi' EXIT
+          {
+            php artisan migrate --force --no-interaction -vvv
+            php artisan db:seed --force --no-interaction -vvv
+          } 2>&1 | tee "$log"
 
       - name: Create private-vault fixture
         run: |
