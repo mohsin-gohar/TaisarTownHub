@@ -224,11 +224,14 @@ jobs:
         run: bash scripts/backup.sh "/tmp/tth backup dir with spaces"
 
       - name: Run genuine isolated restore drill
-        run: >
-          pwsh -NoProfile -ExecutionPolicy Bypass
-          -File scripts/restore-drill.ps1
-          -BackupDir "/tmp/tth backup dir with spaces"
-          -Scratch "/tmp/tth restore drill with spaces"
+        run: |
+          set -euo pipefail
+          log=/tmp/tth-restore-drill.log
+          trap 'code=$?; if [ "$code" -ne 0 ]; then msg=$(head -c 2600 "$log" | tr "\n" " "); echo "::error title=Restore drill failed::$msg"; fi' EXIT
+          pwsh -NoProfile -ExecutionPolicy Bypass \
+            -File scripts/restore-drill.ps1 \
+            -BackupDir "/tmp/tth backup dir with spaces" \
+            -Scratch "/tmp/tth restore drill with spaces" 2>&1 | tee "$log"
 
       - name: Verify MySQL 8 engine and scratch cleanup
         run: |

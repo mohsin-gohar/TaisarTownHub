@@ -68,7 +68,18 @@ mv "$DB_ARTEFACT" "$STAMPED_DB"
 rm -rf "$WORK"
 
 MANIFEST="$DEST/manifest-${STAMP}.sha256"
-( cd "$DEST" && sha256sum "$(basename "$STAMPED_DB")" $( [ -n "$STAMPED_VAULT" ] && basename "$STAMPED_VAULT" ) > "$(basename "$MANIFEST")" )
+# Write the manifest explicitly as "<sha256>  <filename>". Some sha256sum
+# builds (e.g. Git Bash on Windows) emit "<sha256> *<filename>" for binary
+# files, which the restore drill previously could not parse.
+(
+  cd "$DEST"
+  DB_BASE="$(basename "$STAMPED_DB")"
+  printf '%s  %s\n' "$(sha256sum "$DB_BASE" | awk '{print $1}')" "$DB_BASE" > "$(basename "$MANIFEST")"
+  if [ -n "$VAULT_ARTEFACT" ]; then
+    VAULT_BASE="$(basename "$STAMPED_VAULT")"
+    printf '%s  %s\n' "$(sha256sum "$VAULT_BASE" | awk '{print $1}')" "$VAULT_BASE" >> "$(basename "$MANIFEST")"
+  fi
+)
 echo "[backup] manifest: $MANIFEST"
 
 # ---------------------------------------------------------------- retention

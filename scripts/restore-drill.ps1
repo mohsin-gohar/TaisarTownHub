@@ -205,7 +205,9 @@ try {
     # ---------------------------------------------------------------- checksums
     $expected = @{}
     foreach ($line in (Get-Content -LiteralPath $manifest.FullName)) {
-        if ($line -match '^([0-9a-fA-F]{64})\s+(.+)$') { $expected[$Matches[2].Trim()] = $Matches[1].ToLower() }
+        # Accept both "<hash>  <file>" and "<hash> *<file>" (some sha256sum
+        # builds mark binary files with a leading asterisk).
+        if ($line -match '^([0-9a-fA-F]{64})\s+\*?(.+)$') { $expected[$Matches[2].Trim()] = $Matches[1].ToLower() }
     }
     foreach ($artefact in @($dbBackup, $vault)) {
         if (-not $artefact) { continue }
