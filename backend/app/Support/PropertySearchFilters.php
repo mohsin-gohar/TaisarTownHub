@@ -85,9 +85,13 @@ final class PropertySearchFilters
             $query->where('possessionReady', true);
         }
 
-        if (!empty($filters['listingPurpose'])) {
-            $query->where('listing_purpose', $filters['listingPurpose']);
-        }
+        // The public marketplace is sale-only. Legacy/internal rental rows must
+        // never surface through saved searches or alert emails, regardless of
+        // what a stored filter payload contains.
+        $query->where(function ($q) use ($filters) {
+            $purpose = $filters['listingPurpose'] ?? 'sale';
+            $q->where('listing_purpose', $purpose === 'rent' ? 'sale' : (string) $purpose);
+        });
 
         if (!empty($filters['featured'])) {
             $query->featured();

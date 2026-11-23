@@ -38,7 +38,7 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-in
 # Application code + autoloader.
 COPY . ./
 RUN composer dump-autoload --optimize \
-    && mkdir -p storage/app/private/documents storage/app/public storage/logs \
+    && mkdir -p storage/app/private/documents storage/app/private/quarantine storage/app/public storage/logs \
        storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 

@@ -98,6 +98,41 @@ class CrmLeadsTest extends EnterpriseTestCase
             ->assertStatus(404);
     }
 
+    public function test_csv_export_neutralises_formula_injection(): void
+    {
+        [$manager, $agency] = $this->agencyUser([...$this->crmPermissions(true), 'crm.export'], 'manager');
+        $payload = '=HYPERLINK("http://evil.test","click")';
+        $this->createInquiry($agency, [
+            'fullName' => $payload,
+            'adminNotes' => '+SUM(1+1)',
+        ]);
+
+        $response = $this->getJson('/api/agency/leads/export', $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(200);
+        $csv = $response->getContent();
+
+        $this->assertStringContainsString('"\'=HYPERLINK', $csv);
+        $this->assertStringContainsString("'+SUM(1+1)", $csv);
+        $this->assertStringNotContainsString(',=HYPERLINK', $csv);
+    }
+
+    public function test_agent_cannot_mutate_a_colleagues_inquiry_through_legacy_endpoints(): void
+    {
+        [$agent, $agency] = $this->agencyUser($this->crmPermissions(false));
+        [$peer] = $this->agencyUser($this->crmPermissions(false), 'agent', $agency);
+        $lead = $this->createInquiry($agency, ['fullName' => 'Peer Lead', 'assigned_agent_id' => $peer->id]);
+        $headers = $this->authHeaders($this->tokenFor($agent));
+
+        $this->patchJson("/api/inquiries/{$lead->id}/status", ['status' => 'Resolved'], $headers)->assertStatus(404);
+        $this->patchJson("/api/inquiries/{$lead->id}/notes", ['notes' => 'tampered'], $headers)->assertStatus(404);
+        // Deletion additionally requires crm.delete_lead; the permission gate
+        // must still run before any record lookup.
+        $this->deleteJson("/api/inquiries/{$lead->id}", [], $headers)->assertStatus(403);
+
+        $this->assertSame('Pending', $lead->fresh()->status);
+        $this->assertNotNull(Inquiry::find($lead->id));
+    }
+
     public function test_assignment_requires_crm_assign_permission(): void
     {
         [$agent, $agency] = $this->agencyUser($this->crmPermissions(false));

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Building2, Search, BadgeCheck, MapPin, ArrowRight, Filter, RefreshCw } from 'lucide-react';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import { WhatsAppCta } from '../common/WhatsAppCta';
+import { AGENCY_WHATSAPP_MESSAGE, resolveWhatsAppLink } from '../../utils/whatsapp';
 
 interface AgencyCardData {
   id: string;
@@ -195,6 +197,10 @@ export const AgenciesDirectoryPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {agencies.map((agency) => {
               const initials = agency.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+              const whatsapp = resolveWhatsAppLink(
+                { agencyWhatsApp: agency.whatsapp, agencyPhone: agency.phone },
+                AGENCY_WHATSAPP_MESSAGE
+              );
               return (
                 <article key={agency.id} className="group rounded-2xl border border-slate-800 bg-[#0B1220] overflow-hidden hover:border-[#E7C878]/50 transition-all duration-300 hover:-translate-y-0.5 shadow-xl flex flex-col">
                   <div className="relative h-28 bg-gradient-to-br from-slate-800 via-[#07141E] to-slate-900">
@@ -251,13 +257,22 @@ export const AgenciesDirectoryPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="mt-auto pt-1 flex items-center gap-2">
+                    <div className="mt-auto pt-1 flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => openAgency(agency)}
                         className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm transition"
                       >
                         View agency profile <ArrowRight className="w-4 h-4" />
                       </button>
+                      {whatsapp && (
+                        <WhatsAppCta
+                          href={whatsapp.url}
+                          variant="outline"
+                          label="WhatsApp"
+                          ariaLabel={`Chat with ${agency.name} on WhatsApp`}
+                          className="px-3 py-2.5 text-xs"
+                        />
+                      )}
                     </div>
                   </div>
                 </article>
@@ -289,7 +304,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
         <div className="rounded-2xl border border-[#E7C878]/20 bg-gradient-to-r from-[#0B1220] to-[#07141E] p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-white font-serif-luxury text-xl font-bold">Are you a real estate agency?</h3>
-            <p className="text-slate-400 text-sm mt-1">Register your agency, get verified, and showcase your listings to buyers and tenants.</p>
+            <p className="text-slate-400 text-sm mt-1">Register your agency, get verified, and showcase your sale listings to buyers.</p>
           </div>
           <button
             onClick={() => { window.history.pushState({}, '', '/register'); window.dispatchEvent(new PopStateEvent('popstate')); }}

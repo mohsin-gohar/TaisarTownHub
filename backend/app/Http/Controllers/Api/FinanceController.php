@@ -782,9 +782,9 @@ public function update(Request $request, string $id)
             'metadata' => ['amount' => $payment->amount, 'reason' => $request->reason],
         ]);
 
-        // Soft delete instead of hard delete for audit trail
-        $payment->deleted_at = now();
-        $payment->save();
+        // Soft delete via the model's SoftDeletes trait so the audit trail is
+        // preserved and aggregate totals automatically exclude voided rows.
+        $payment->delete();
 
         if ($transaction) {
             $transaction->recalculateStatus();
@@ -939,6 +939,25 @@ public function update(Request $request, string $id)
             'notes' => 'nullable|string|max:1000',
         ]);
 
+        // Beneficiary identifiers are references, not free text: validate that
+        // they belong to the deal's tenant before writing to the ledger.
+        if (!empty($data['dealer_id']) && !$this->dealerBelongsToAgency((string) $data['dealer_id'], $transaction->agency_id)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'dealer_id' => 'The selected dealer does not belong to this agency.',
+            ]);
+        }
+        if (!empty($data['user_id'])) {
+            $member = AgencyMember::where('agency_id', $transaction->agency_id)
+                ->where('user_id', (int) $data['user_id'])
+                ->where('status', 'active')
+                ->exists();
+            if (!$member) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'user_id' => 'The selected user is not an active member of this agency.',
+                ]);
+            }
+        }
+
         $commission = Commission::create([
             'agency_id' => $transaction->agency_id,
             'transaction_id' => $transaction->id,
@@ -1077,6 +1096,7 @@ public function update(Request $request, string $id)
         $dealAgreed = (clone $deals)->whereNull('voided_at')->selectRaw('COUNT(*) AS n, COALESCE(SUM(agreementAmountPKR), 0) AS total')->first();
 
         $collected = DB::table('transaction_payments')
+            ->whereNull('deleted_at')
             ->whereBetween('received_at', [$from, $to]);
         if ($agencyId !== null) {
             $collected->where('agency_id', $agencyId);
@@ -1208,6 +1228,7 @@ public function update(Request $request, string $id)
             ->groupBy('d')->pluck('c', 'd');
 
         $paymentRows = DB::table('transaction_payments')
+            ->whereNull('deleted_at')
             ->where('received_at', '>=', now()->subDays($days))
             ->when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
             ->selectRaw('DATE(received_at) as d, COUNT(*) as c')

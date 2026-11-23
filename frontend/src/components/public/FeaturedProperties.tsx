@@ -15,6 +15,8 @@ import { ImageWithFallback } from '../../components/common/ImageWithFallback';
 import { toPublicProperty } from '../../utils/logic';
 import { Reveal } from '../common/Reveal';
 import { FavoriteHeart } from '../common/FavoriteHeart';
+import { WhatsAppCta } from '../common/WhatsAppCta';
+import { propertyWhatsAppMessage, resolveWhatsAppLink } from '../../utils/whatsapp';
 
 export const FeaturedProperties: React.FC = () => {
   const { properties, setSelectedPropertyId, setCurrentView, cmsConfig } = useApp();
@@ -51,7 +53,7 @@ export const FeaturedProperties: React.FC = () => {
               Featured Properties & Verified Plots
             </h2>
             <p className="text-slate-400 text-sm max-w-xl">
-              Authentic biometric-verified files, ready-possession plots, and executive homes with transparent pricing.
+              Hand-picked sale listings, ready-possession plots and executive homes with transparent pricing.
             </p>
           </div>
           <button
@@ -69,6 +71,10 @@ export const FeaturedProperties: React.FC = () => {
         {/* Property Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {featured.map((prop, idx) => {
+            const whatsapp = resolveWhatsAppLink(
+              { propertyWhatsApp: prop.contactWhatsApp, agencyPhone: prop.contactPhone },
+              propertyWhatsAppMessage(prop.title)
+            );
             return (
               <Reveal key={prop.id} delay={Math.min(idx * 0.06, 0.3)}>
                 <div className="group bg-[#07141E] rounded-2xl overflow-hidden border border-slate-800 hover:border-[#E7C878]/50 shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between h-full">
@@ -170,7 +176,7 @@ export const FeaturedProperties: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="pt-2">
+                  <div className="pt-2 flex flex-col gap-2">
                     <a
                       href={propertyHref(prop.id)}
                       onClick={onPropertyLinkClick(prop.id)}
@@ -179,6 +185,15 @@ export const FeaturedProperties: React.FC = () => {
                       <span>View Details &amp; Dossier</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </a>
+                    {whatsapp && (
+                      <WhatsAppCta
+                        href={whatsapp.url}
+                        label="Ask on WhatsApp"
+                        variant="outline"
+                        className="w-full py-2.5 text-xs border-emerald-600/40"
+                        title={`Ask about ${prop.title || 'this property'} on WhatsApp`}
+                      />
+                    )}
                   </div>
                 </div>
                 </div>

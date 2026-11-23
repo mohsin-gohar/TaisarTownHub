@@ -31,6 +31,8 @@ import {
   savedSearchFiltersFromState,
 } from '../../utils/savedSearchFilters';
 import { CompareModal } from './CompareModal';
+import { WhatsAppCta } from '../common/WhatsAppCta';
+import { propertyWhatsAppMessage, resolveWhatsAppLink } from '../../utils/whatsapp';
 import { CompareTray } from './CompareTray';
 import { SaveSearchModal } from './SaveSearchModal';
 import { SavedSearchPanel, SavedSearchRecord } from './SavedSearchPanel';
@@ -512,6 +514,10 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
         ) : (
           <div id="listing-results" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {sortedProperties.map((prop) => {
+              const whatsapp = resolveWhatsAppLink(
+                { propertyWhatsApp: prop.contactWhatsApp, agencyPhone: prop.contactPhone },
+                propertyWhatsAppMessage(prop.title)
+              );
               return (
                 <div
                   key={prop.id}
@@ -647,7 +653,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                       )}
                     </div>
 
-                    <div className="pt-2">
+                    <div className="pt-2 flex flex-col gap-2">
                       <a
                         href={propertyHref(prop.id)}
                         onClick={onPropertyLinkClick(prop.id)}
@@ -656,6 +662,15 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                         <span>View Details &amp; Dossier</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </a>
+                      {whatsapp && (
+                        <WhatsAppCta
+                          href={whatsapp.url}
+                          label="Ask on WhatsApp"
+                          variant="outline"
+                          className="w-full py-2.5 text-xs border-emerald-600/40"
+                          title={`Ask about ${prop.title || 'this property'} on WhatsApp`}
+                        />
+                      )}
                     </div>
                   </div>
                 </div>

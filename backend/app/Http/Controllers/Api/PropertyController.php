@@ -913,7 +913,10 @@ class PropertyController extends Controller
     private function serializeForScope(Property $property, $user, ?string $agencyId, bool $canSeeSensitive = false): array
     {
         $payload = $property->toArray();
-        if ($user && ($property->agency_id === ($agencyId ?? '') || $canSeeSensitive)) {
+        // Confidential deal fields require the explicit sensitive-data grant.
+        // Agency membership alone must not raise an agent's access level:
+        // show() applies the same rule via view_sensitive_cnic.
+        if ($canSeeSensitive) {
             $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
             $payload = $property->toArray();
         }

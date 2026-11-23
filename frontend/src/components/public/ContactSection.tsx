@@ -12,9 +12,17 @@ import {
   Building2
 } from 'lucide-react';
 import { validateInquiryForm } from '../../utils/logic';
+import { WhatsAppCta } from '../common/WhatsAppCta';
+import { buildWhatsAppLink } from '../../utils/whatsapp';
 
 export const ContactSection: React.FC = () => {
   const { cmsConfig, addInquiry, showToast } = useApp();
+  // This is the platform's own contact page; the number comes from CMS config
+  // and is never used as a substitute for an agency's public contact.
+  const platformWhatsapp = buildWhatsAppLink(
+    cmsConfig.contactWhatsApp,
+    'Assalam-o-Alaikum, I would like to speak with the TaisarTownHub advisory desk about Scheme 45 properties.'
+  );
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -146,8 +154,21 @@ export const ContactSection: React.FC = () => {
                     <span>Speak with the advisory desk</span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Call or WhatsApp {cmsConfig.contactPhone.trim()}. Written inquiries on this page are saved to the agency desk and reviewed by a consultant.
+                    Written inquiries on this page are saved to the agency desk and reviewed by a consultant.
                   </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                    {cmsConfig.contactPhone.trim() && (
+                      <a
+                        href={`tel:${cmsConfig.contactPhone.replace(/[^\d+]/g, '')}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:text-white"
+                      >
+                        <Phone className="w-3.5 h-3.5" /> Call {cmsConfig.contactPhone.trim()}
+                      </a>
+                    )}
+                    {platformWhatsapp && (
+                      <WhatsAppCta href={platformWhatsapp} label="WhatsApp advisory desk" variant="outline" className="px-3 py-2 text-xs" />
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

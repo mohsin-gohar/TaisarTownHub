@@ -448,6 +448,26 @@ class PaymentController extends Controller
             return; // idempotent
         }
 
+        // A completed Checkout Session is not proof of payment for async
+        // methods. Match the Flutterwave path: require a settled status and,
+        // when Stripe supplies it, the expected amount before activating.
+        $paymentStatus = $session->payment_status ?? null;
+        if ($paymentStatus !== null && !in_array($paymentStatus, ['paid', 'no_payment_required'], true)) {
+            Log::warning('Stripe checkout: session not settled', [
+                'session_id' => $session->id, 'payment_status' => $paymentStatus,
+            ]);
+            return;
+        }
+        $amountTotal = $session->amount_total ?? null;
+        $currency = strtolower((string) ($session->currency ?? 'pkr'));
+        if ($amountTotal !== null && $currency === 'pkr'
+            && (int) $amountTotal < (int) round((float) $invoice->total_pkr * 100)) {
+            Log::warning('Stripe checkout: amount below invoice total', [
+                'session_id' => $session->id, 'amount_total' => $amountTotal,
+            ]);
+            return;
+        }
+
         $invoice->update([
             'status' => 'paid',
             'stripe_payment_intent_id' => $session->payment_intent ?? null,

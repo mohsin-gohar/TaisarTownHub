@@ -113,9 +113,17 @@ class EnsureMfaVerified
             'documents.manage_permissions', 'finance.manage_payments',
             'properties.publish', 'properties.delete', 'crm.delete_lead',
         ];
-        foreach ($elevatedAgencyKeys as $key) {
-            if ($user->hasPermission($key)) {
-                return true;
+        // hasPermission() without an agency id only consults platform grants,
+        // so custom agency roles must be checked in the context of each active
+        // membership. Otherwise a privileged custom role bypasses this policy.
+        $memberships = $user->memberships()
+            ->where('status', 'active')
+            ->pluck('agency_id');
+        foreach ($memberships as $membershipAgencyId) {
+            foreach ($elevatedAgencyKeys as $key) {
+                if ($user->hasPermission($key, (string) $membershipAgencyId)) {
+                    return true;
+                }
             }
         }
 

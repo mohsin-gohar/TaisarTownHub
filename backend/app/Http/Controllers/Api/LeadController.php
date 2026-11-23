@@ -315,12 +315,12 @@ class LeadController extends Controller
             'property', 'budget', 'follow_up', 'created_at', 'notes',
         ]);
         foreach ($leads as $lead) {
-            fputcsv($handle, [
+            fputcsv($handle, array_map(fn ($cell) => $this->csvSafeCell($cell), [
                 $lead->id, $lead->fullName, $lead->email, $lead->phone,
                 $lead->lead_status, $lead->source, $lead->preferredPropertyOrProject,
                 $lead->budgetRange, $lead->follow_up_at, $lead->created_at,
                 $lead->adminNotes,
-            ]);
+            ]));
         }
         rewind($handle);
         $csv = stream_get_contents($handle);
@@ -338,6 +338,16 @@ class LeadController extends Controller
     }
 
     /* ==================== Helpers ==================== */
+
+    /** Neutralise spreadsheet formula injection in exported CRM fields. */
+    private function csvSafeCell($value): string
+    {
+        $text = (string) ($value ?? '');
+        if ($text !== '' && preg_match('/^[\=\+\-@\t\r]/', $text)) {
+            return "'" . $text;
+        }
+        return $text;
+    }
 
     private function findScoped(string $agencyId, string $id, $user): Inquiry
     {

@@ -25,6 +25,8 @@ import { Property, PublicProperty } from '../../types';
 import { Lightbox } from '../common/Lightbox';
 import { EmptyState } from '../common/EmptyState';
 import { ImageWithFallback } from '../common/ImageWithFallback';
+import { WhatsAppCta } from '../common/WhatsAppCta';
+import { propertyWhatsAppMessage, resolveWhatsAppLink } from '../../utils/whatsapp';
 
 const VIDEO_SENTINEL = '__tth_video__';
 
@@ -42,6 +44,14 @@ export const PropertyDetailPage: React.FC = () => {
   const activeProperties = properties.filter((p) => !p.deletedAt);
   const rawProperty = activeProperties.find((p) => p.id === selectedPropertyId) || activeProperties[0];
   const property: PublicProperty | undefined = rawProperty ? toPublicProperty(rawProperty) : undefined;
+  // Destination priority: the listing's public WhatsApp, then its public phone.
+  // The platform owner's number is never a substitute for the listing contact.
+  const whatsappLink = property
+    ? resolveWhatsAppLink(
+        { propertyWhatsApp: property.contactWhatsApp, agencyPhone: property.contactPhone },
+        propertyWhatsAppMessage(property.title)
+      )
+    : null;
 
   const [activeImage, setActiveImage] = useState<string>(property?.images?.[0] || '');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -461,6 +471,27 @@ export const PropertyDetailPage: React.FC = () => {
                     <span className="text-xs text-[#E7C878]">Scheme 45 Senior Advisor</span>
                   </div>
                 </div>
+                {(whatsappLink || property?.contactPhone) && (
+                  <div className="flex flex-wrap gap-2 pt-3">
+                    {whatsappLink && (
+                      <WhatsAppCta
+                        href={whatsappLink.url}
+                        label="Chat on WhatsApp"
+                        title={`Ask about ${property?.title || 'this property'} on WhatsApp`}
+                        variant="outline"
+                        className="flex-1 px-3 py-2.5 text-xs"
+                      />
+                    )}
+                    {property?.contactPhone && (
+                      <a
+                        href={`tel:${property.contactPhone.replace(/[^\d+]/g, '')}`}
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 py-2.5 text-xs font-semibold text-slate-200 hover:text-white"
+                      >
+                        <Phone className="w-3.5 h-3.5" /> Call
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Inquiry Form */}

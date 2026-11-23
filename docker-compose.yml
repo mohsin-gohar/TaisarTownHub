@@ -150,7 +150,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the deployment environment}
       CACHE_STORE: redis
       SESSION_DRIVER: redis
+      SESSION_SECURE_COOKIE: "true"
       QUEUE_CONNECTION: redis
+      # nginx is a separate container; without this Laravel sees every request
+      # as coming from the bridge IP, breaking rate limits, audit IPs and MFA
+      # new-location detection.
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}"
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
@@ -294,6 +299,8 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
       QUEUE_CONNECTION: redis
+      # Queue jobs must honour the same real client IP policy as HTTP.
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}"
       RUN_MIGRATIONS: "false"
       MALWARE_SCAN_ENABLED: "true"
       MALWARE_SCANNER: clamav
@@ -348,7 +355,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the deployment environment}
       CACHE_STORE: redis
       SESSION_DRIVER: redis
+      SESSION_SECURE_COOKIE: "true"
       QUEUE_CONNECTION: redis
+      # nginx is a separate container; without this Laravel sees every request
+      # as coming from the bridge IP, breaking rate limits, audit IPs and MFA
+      # new-location detection.
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}"
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}

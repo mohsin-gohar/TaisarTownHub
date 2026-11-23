@@ -81,15 +81,16 @@ return new class extends Migration
             if (!$dealer || empty($dealer->agency_id)) {
                 continue;
             }
-            DB::table('agency_members')->updateOrInsert(
-                ['agency_id' => $dealer->agency_id, 'user_id' => $user->id],
-                [
-                    'role_id' => $agentRole,
-                    'status' => 'active',
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]
-            );
+            // Insert-only: a re-run must never reset an owner/manager role or
+            // re-activate a member that was later deactivated.
+            DB::table('agency_members')->insertOrIgnore([
+                'agency_id' => $dealer->agency_id,
+                'user_id' => $user->id,
+                'role_id' => $agentRole,
+                'status' => 'active',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
         }
 
         /* ---------- 2. Sectors & blocks from existing data ---------- */
@@ -254,7 +255,8 @@ return new class extends Migration
             if ($exists) {
                 // Do not clobber rows already living in the relational table;
                 // only fill gaps (never overwrite a non-null value with null).
-                $patch = array_intersect_key($row, array_flip(['agency_id', 'slug', 'sector_id', 'published_at', 'approval_status', 'visibility']));
+                // Never rewrite an existing public slug: it is a stable URL.
+                $patch = array_intersect_key($row, array_flip(['agency_id', 'sector_id', 'published_at', 'approval_status', 'visibility']));
                 $patch = array_filter($patch, fn ($v) => $v !== null);
                 if ($patch) {
                     DB::table('properties')->where('id', $p['id'])->update($patch);
@@ -297,8 +299,21 @@ return new class extends Migration
                 'agency_id' => $agencyId,
                 'updated_at' => $now,
             ];
-            if (DB::table('transactions')->where('id', $t['id'])->exists()) {
-                DB::table('transactions')->where('id', $t['id'])->update($row);
+            if ($existing = DB::table('transactions')->where('id', $t['id'])->first()) {
+                // Gap-fill only. Stale business_records JSON must never
+                // overwrite newer finance edits (status, tenant, amounts).
+                $patch = [];
+                foreach ($row as $key => $value) {
+                    if ($key === 'updated_at' || $value === null) {
+                        continue;
+                    }
+                    if ($existing->{$key} === null || $existing->{$key} === '') {
+                        $patch[$key] = $value;
+                    }
+                }
+                if ($patch) {
+                    DB::table('transactions')->where('id', $t['id'])->update($patch);
+                }
             } else {
                 DB::table('transactions')->insert(array_merge([
                     'id' => $t['id'],
@@ -360,7 +375,15 @@ return new class extends Migration
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
-            if (!DB::table('commissions')->where('transaction_id', $txn->id)->exists()) {
+            // A transaction can legitimately have several beneficiaries.
+            // Deduplicate on the beneficiary + amount, not just transaction id.
+            $duplicate = DB::table('commissions')
+                ->where('transaction_id', $txn->id)
+                ->where('amount', $row['amount'])
+                ->when($row['dealer_id'] !== null,
+                    fn ($q) => $q->where('dealer_id', $row['dealer_id']),
+                    fn ($q) => $q->whereNull('dealer_id'));
+            if (!$duplicate->exists()) {
                 DB::table('commissions')->insert($row);
             }
             DB::table('business_records')->where('id', $record->id)->update(['agency_id' => $txn->agency_id]);

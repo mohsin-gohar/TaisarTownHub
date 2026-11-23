@@ -136,6 +136,31 @@ class MfaEnforcementTest extends EnterpriseTestCase
         $this->getJson('/api/auth/me', $this->authHeaders($this->tokenFor($viewer)))->assertOk();
     }
 
+    public function test_global_mfa_policy_covers_custom_agency_roles_with_elevated_grants(): void
+    {
+        \Illuminate\Support\Facades\DB::table('system_settings')->updateOrInsert(
+            ['key' => 'security.mfa_required_for_admins'],
+            [
+                'value' => json_encode(true),
+                'group' => 'security',
+                'description' => 'test',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        [$privileged] = $this->agencyUser(['finance.manage_payments'], 'finance_editor');
+        [$plain] = $this->agencyUser(['finance.view'], 'viewer');
+
+        $this->asGuest();
+        $this->getJson('/api/auth/me', $this->authHeaders($this->tokenFor($privileged)))
+            ->assertForbidden()
+            ->assertJsonPath('mfa_required', true);
+
+        $this->asGuest();
+        $this->getJson('/api/auth/me', $this->authHeaders($this->tokenFor($plain)))->assertOk();
+    }
+
     public function test_disabling_mfa_clears_every_verification_stamp(): void
     {
         $user = $this->makeUser('operator');

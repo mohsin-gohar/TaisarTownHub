@@ -127,7 +127,7 @@ export const SEO_ROUTES: RouteSeo[] = [
     path: '/agencies',
     title: 'Verified Real Estate Agencies | TaisarTownHub',
     description:
-      'Browse verified real estate agencies on TaisarTownHub, explore their public listings, and connect with trusted teams for buying or renting properties.',
+      'Browse verified real estate agencies on TaisarTownHub, explore their public sale listings, and connect with trusted teams for buying property in Scheme 45.',
     keywords: 'real estate agencies, verified agencies, property listings, TaisarTownHub',
     indexable: true,
     inSitemap: true,

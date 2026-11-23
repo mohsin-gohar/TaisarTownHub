@@ -51,6 +51,7 @@ class AdminDashboardController extends Controller
         $dealAgreed = (clone $deals)->whereNull('voided_at')->selectRaw('COUNT(*) AS n, COALESCE(SUM(agreementAmountPKR), 0) AS total')->first();
 
         $collected = DB::table('transaction_payments')
+            ->whereNull('deleted_at')
             ->whereBetween('received_at', [$from, $to])
             ->selectRaw('COALESCE(SUM(amount), 0) AS total, COUNT(*) AS n')
             ->first();
@@ -219,6 +220,7 @@ class AdminDashboardController extends Controller
             ->groupBy('d')->pluck('c', 'd');
 
         $paymentRows = DB::table('transaction_payments')
+            ->whereNull('deleted_at')
             ->where('received_at', '>=', now()->subDays($days))
             ->when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
             ->selectRaw('DATE(received_at) as d, COUNT(*) as c')

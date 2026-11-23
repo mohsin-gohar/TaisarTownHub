@@ -75,6 +75,50 @@ class SavedSearchAlertsTest extends EnterpriseTestCase
         $this->assertDatabaseMissing('saved_searches', ['id' => $id]);
     }
 
+    public function test_sale_only_marketplace_rejects_rental_saved_searches_and_alerts(): void
+    {
+        Carbon::setTestNow('2026-11-16 11:00:00');
+        [$user] = $this->agencyUser(['properties.view']);
+        $token = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson('/api/saved-searches', [
+            'name' => 'Rental search',
+            'filters' => ['listingPurpose' => 'rent'],
+        ], $token)->assertStatus(422)->assertJsonValidationErrors(['filters.listingPurpose']);
+
+        [$owner, $agency] = $this->agencyUser(['properties.view'], 'manager');
+        // Simulate a legacy stored filter from before the sale-only rule.
+        SavedSearch::create([
+            'id' => 'ss_rent_' . str_pad('1', 16, 'x', STR_PAD_LEFT),
+            'user_id' => $owner->id,
+            'name' => 'Legacy rent filter',
+            'filters' => ['sector' => 'Sector 45', 'listingPurpose' => 'rent'],
+            'frequency' => 'instant',
+            'alerts_enabled' => true,
+        ]);
+
+        // Alert windows only include listings created after the search.
+        Carbon::setTestNow('2026-11-16 11:05:00');
+        $sale = $this->makePublicProperty($agency, [
+            'title' => 'Sale listing alert',
+            'sector' => 'Sector 45',
+            'listing_purpose' => 'sale',
+        ]);
+        $this->makePublicProperty($agency, [
+            'title' => 'Legacy rental listing alert',
+            'sector' => 'Sector 45',
+            'listing_purpose' => 'rent',
+        ]);
+
+        Mail::fake();
+        $this->artisan('saved-searches:send-alerts')->assertSuccessful();
+
+        Mail::assertSent(SavedSearchMatchesMail::class, 1);
+        Mail::assertSent(SavedSearchMatchesMail::class, fn (SavedSearchMatchesMail $mail) =>
+            $mail->matches->pluck('id')->all() === [$sale->id]
+        );
+    }
+
     public function test_saved_searches_are_isolated_between_accounts(): void
     {
         [$owner] = $this->agencyUser(['properties.view']);

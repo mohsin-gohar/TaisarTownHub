@@ -69,6 +69,33 @@ class FinanceIsolationTest extends EnterpriseTestCase
             ->assertJsonValidationErrors('dealerId');
     }
 
+    public function test_commission_rejects_a_foreign_agency_dealer(): void
+    {
+        [$adminA] = $this->agencyUser($this->financePermissions(), 'manager');
+        [$adminB, $agencyB] = $this->agencyUser($this->financePermissions(), 'manager');
+        $deal = $this->createDeal($adminA);
+
+        $foreignDealer = \App\Models\Dealer::create([
+            'id' => 'dlr_' . \Illuminate\Support\Str::random(8),
+            'fullName' => 'Foreign Commission Dealer',
+            'phone' => '0300-9999999',
+            'agency_id' => $agencyB->id,
+        ]);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
+            'amount' => 5000,
+            'dealer_id' => $foreignDealer->id,
+            'beneficiary_type' => 'dealer',
+        ], $this->authHeaders($this->tokenFor($adminA)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('dealer_id');
+
+        $this->assertDatabaseMissing('commissions', [
+            'transaction_id' => $deal['id'],
+            'dealer_id' => $foreignDealer->id,
+        ]);
+    }
+
     public function test_void_requires_an_explicit_permission(): void
     {
         [$admin, $agency] = $this->agencyUser($this->financePermissions(), 'manager');
@@ -183,6 +210,30 @@ class FinanceIsolationTest extends EnterpriseTestCase
 
         $this->assertNotNull(TransactionPayment::find($paymentId), 'payment must still exist');
         $this->assertNull(TransactionPayment::find($paymentId)->deleted_at);
+    }
+
+    public function test_own_payment_can_be_voided_and_totals_are_recalculated(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['agreementAmountPKR' => 100000]);
+        $headers = fn () => $this->authHeaders($this->tokenFor($user));
+        $paymentId = $this->postJson(
+            "/api/agency/transactions/{$deal['id']}/payments",
+            ['amount' => 2500, 'type' => 'advance', 'method' => 'cash'],
+            $headers()
+        )->assertStatus(201)->json('payment.id');
+
+        $this->assertSame(2500.0, (float) Transaction::find($deal['id'])->totalPaid());
+
+        $this->deleteJson("/api/agency/payments/{$paymentId}", ['reason' => 'recorded in error'], $headers())
+            ->assertStatus(200)
+            ->assertJsonPath('success', true);
+
+        // Soft-deleted payments stay in the audit trail but stop counting.
+        $this->assertNull(TransactionPayment::find($paymentId));
+        $this->assertNotNull(TransactionPayment::withTrashed()->find($paymentId)->deleted_at);
+        $this->assertSame(0.0, (float) Transaction::find($deal['id'])->totalPaid());
+        $this->assertSame(100000.0, (float) Transaction::find($deal['id'])->remainingBalancePKR);
     }
 
     public function test_agency_cannot_read_or_mutate_another_agencys_commission_or_expense(): void

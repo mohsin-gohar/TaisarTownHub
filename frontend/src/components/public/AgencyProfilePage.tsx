@@ -1,12 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  ArrowLeft, BadgeCheck, Building2, Globe, Mail, MapPin, Phone, MessageCircle,
+  ArrowLeft, BadgeCheck, Building2, Globe, Mail, MapPin, Phone,
   X, ChevronLeft, ChevronRight, Home, BedDouble, Bath, Ruler, ShieldCheck, Eye,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { ImageWithFallback } from '../common/ImageWithFallback';
+import { WhatsAppCta } from '../common/WhatsAppCta';
+import {
+  AGENCY_WHATSAPP_MESSAGE,
+  propertyWhatsAppMessage,
+  resolveWhatsAppLink,
+} from '../../utils/whatsapp';
 
 type Listing = {
   id: string;
@@ -75,9 +81,11 @@ const formatPrice = (p?: number, formatted?: string) => {
 const PropertyQuickViewModal: React.FC<{
   listing: Listing | null;
   agencyName?: string;
+  agencyWhatsApp?: string | null;
+  agencyPhone?: string | null;
   onClose: () => void;
   onContact: (listing: Listing) => void;
-}> = ({ listing, agencyName, onClose, onContact }) => {
+}> = ({ listing, agencyName, agencyWhatsApp, agencyPhone, onClose, onContact }) => {
   const [index, setIndex] = useState(0);
   useEffect(() => { setIndex(0); }, [listing?.id]);
   useEffect(() => {
@@ -96,7 +104,16 @@ const PropertyQuickViewModal: React.FC<{
   if (!listing || typeof document === 'undefined') return null;
   const images = (listing.images && listing.images.length ? listing.images : []).filter(Boolean);
   const hasImages = images.length > 0;
-  const purpose = listing.listing_purpose === 'rent' ? 'For Rent' : 'For Sale';
+  // Public marketplace is sale-only; never render a rental label here.
+  const purpose = 'For Sale';
+  const whatsapp = resolveWhatsAppLink(
+    {
+      propertyWhatsApp: listing.contactWhatsApp,
+      agencyWhatsApp,
+      agencyPhone,
+    },
+    propertyWhatsAppMessage(listing.title)
+  );
 
   return createPortal(
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -177,10 +194,18 @@ const PropertyQuickViewModal: React.FC<{
               </div>
             )}
 
-            <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row gap-2">
+            <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row flex-wrap gap-2">
               <button onClick={() => onContact(listing)} className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm">
                 <Phone className="w-4 h-4" /> Contact {agencyName || 'agency'}
               </button>
+              {whatsapp && (
+                <WhatsAppCta
+                  href={whatsapp.url}
+                  label={`WhatsApp ${agencyName || 'agency'}`}
+                  title={`Ask about ${listing.title || 'this property'} on WhatsApp`}
+                  variant="outline"
+                />
+              )}
               <a href={`/properties?property=${encodeURIComponent(listing.id)}`} onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', `/properties?property=${encodeURIComponent(listing.id)}`); window.dispatchEvent(new PopStateEvent('popstate')); }} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-700 text-slate-200 hover:text-white text-sm font-semibold">
                 <Eye className="w-4 h-4" /> Open full page
               </a>
@@ -193,9 +218,24 @@ const PropertyQuickViewModal: React.FC<{
   );
 };
 
-const PropertyCard: React.FC<{ listing: Listing; onView: () => void; onContact: () => void }> = ({ listing, onView, onContact }) => {
+const PropertyCard: React.FC<{
+  listing: Listing;
+  agencyWhatsApp?: string | null;
+  agencyPhone?: string | null;
+  onView: () => void;
+  onContact: () => void;
+}> = ({ listing, agencyWhatsApp, agencyPhone, onView, onContact }) => {
   const image = listing.images?.[0];
-  const purpose = listing.listing_purpose === 'rent' ? 'For Rent' : 'For Sale';
+  // Public marketplace is sale-only; never render a rental label here.
+  const purpose = 'For Sale';
+  const whatsapp = resolveWhatsAppLink(
+    {
+      propertyWhatsApp: listing.contactWhatsApp,
+      agencyWhatsApp,
+      agencyPhone,
+    },
+    propertyWhatsAppMessage(listing.title)
+  );
   return (
     <article className="group rounded-2xl border border-slate-800 bg-[#0B1220] overflow-hidden hover:border-[#E7C878]/50 transition-all shadow-lg flex flex-col sm:flex-row">
       <div className="relative w-full sm:w-64 md:w-72 h-52 sm:h-auto shrink-0 bg-[#07141E] cursor-pointer" onClick={onView}>
@@ -226,6 +266,15 @@ const PropertyCard: React.FC<{ listing: Listing; onView: () => void; onContact: 
         <div className="mt-auto pt-2 flex flex-wrap gap-2">
           <button onClick={onView} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm">View details</button>
           <button onClick={onContact} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 text-sm font-semibold">Contact</button>
+          {whatsapp && (
+            <WhatsAppCta
+              href={whatsapp.url}
+              label="WhatsApp"
+              variant="outline"
+              title={`Ask about ${listing.title || 'this property'} on WhatsApp`}
+              className="px-4 py-2 text-sm"
+            />
+          )}
         </div>
       </div>
     </article>
@@ -300,10 +349,14 @@ export const AgencyProfilePage: React.FC<{ slug: string }> = ({ slug }) => {
   }
 
   const initials = agency.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+  // Only public, authorized agency contact data is used; never the platform owner's number.
+  const agencyWhatsappLink = resolveWhatsAppLink(
+    { agencyWhatsApp: agency.whatsapp, agencyPhone: agency.phone },
+    AGENCY_WHATSAPP_MESSAGE
+  );
   const stats = agency.stats || {
     public_listings: agency.listing_count ?? listings.length,
     sale_listings: agency.sale_listing_count ?? listings.filter((l) => l.listing_purpose === 'sale').length,
-    rent_listings: agency.rent_listing_count ?? listings.filter((l) => l.listing_purpose === 'rent').length,
     team_members: agency.member_count ?? 0,
   };
 
@@ -342,7 +395,7 @@ export const AgencyProfilePage: React.FC<{ slug: string }> = ({ slug }) => {
             </div>
             <div className="flex flex-wrap gap-2">
               {agency.phone && <a href={`tel:${agency.phone}`} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm"><Phone className="w-4 h-4" /> Call</a>}
-              {agency.whatsapp && <a href={`https://wa.me/${agency.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm"><MessageCircle className="w-4 h-4" /> WhatsApp</a>}
+              {agencyWhatsappLink && <WhatsAppCta href={agencyWhatsappLink.url} ariaLabel={`Chat with ${agency.name} on WhatsApp`} />}
             </div>
           </div>
         </section>
@@ -381,6 +434,8 @@ export const AgencyProfilePage: React.FC<{ slug: string }> = ({ slug }) => {
                   <PropertyCard
                     key={listing.id}
                     listing={listing}
+                    agencyWhatsApp={agency.whatsapp}
+                    agencyPhone={agency.phone}
                     onView={() => setSelected(listing)}
                     onContact={() => scrollToContact(listing)}
                   />
@@ -395,7 +450,15 @@ export const AgencyProfilePage: React.FC<{ slug: string }> = ({ slug }) => {
               <div className="space-y-3 text-sm">
                 {agency.office_address && <div className="flex gap-2.5 text-slate-300"><MapPin className="w-4 h-4 text-[#E7C878] mt-0.5 shrink-0" /><span>{agency.office_address}{agency.city ? `, ${agency.city}` : ''}</span></div>}
                 {agency.phone && <a href={`tel:${agency.phone}`} className="flex gap-2.5 text-slate-300 hover:text-white"><Phone className="w-4 h-4 text-[#E7C878] mt-0.5" /><span>{agency.phone}</span></a>}
-                {agency.whatsapp && <a href={`https://wa.me/${agency.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="flex gap-2.5 text-slate-300 hover:text-white"><MessageCircle className="w-4 h-4 text-[#E7C878] mt-0.5" /><span>WhatsApp: {agency.whatsapp}</span></a>}
+                {agencyWhatsappLink && (
+                  <WhatsAppCta
+                    href={agencyWhatsappLink.url}
+                    variant="subtle"
+                    className="gap-2.5 text-sm"
+                    label={`WhatsApp: ${agency.whatsapp || agency.phone}`}
+                    ariaLabel={`Chat with ${agency.name} on WhatsApp`}
+                  />
+                )}
                 {agency.email && <a href={`mailto:${agency.email}`} className="flex gap-2.5 text-slate-300 hover:text-white"><Mail className="w-4 h-4 text-[#E7C878] mt-0.5" /><span className="break-all">{agency.email}</span></a>}
                 {agency.website && <a href={agency.website.startsWith('http') ? agency.website : `https://${agency.website}`} target="_blank" rel="noreferrer" className="flex gap-2.5 text-slate-300 hover:text-white"><Globe className="w-4 h-4 text-[#E7C878] mt-0.5" /><span className="break-all">{agency.website}</span></a>}
               </div>
@@ -415,6 +478,8 @@ export const AgencyProfilePage: React.FC<{ slug: string }> = ({ slug }) => {
       <PropertyQuickViewModal
         listing={selected}
         agencyName={agency.name}
+        agencyWhatsApp={agency.whatsapp}
+        agencyPhone={agency.phone}
         onClose={() => setSelected(null)}
         onContact={scrollToContact}
       />

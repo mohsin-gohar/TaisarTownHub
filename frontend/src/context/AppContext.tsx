@@ -1915,7 +1915,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     if (!backendConnected) {
-      showToast('error', 'Our inquiry desk is temporarily unreachable. Please try again or contact us on WhatsApp.');
+      showToast('error', 'Our inquiry desk is temporarily unreachable. Please try again or call the advisory desk.');
       return false;
     }
 
@@ -1930,7 +1930,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     if (!result) {
-      showToast('error', 'We could not send your inquiry. Please try again or contact us on WhatsApp.');
+      showToast('error', 'We could not send your inquiry. Please try again or call the advisory desk.');
       return false;
     }
 

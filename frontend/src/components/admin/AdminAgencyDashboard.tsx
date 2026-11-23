@@ -5,10 +5,12 @@ import {
   FileText,
   FolderLock,
   Inbox,
+  MessageCircle,
   RefreshCw,
   Users,
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { normalizeWhatsAppNumber } from '../../utils/whatsapp';
 import {
   EnterpriseBadge,
   EnterpriseButton,
@@ -54,6 +56,18 @@ export const AdminAgencyDashboard: React.FC<AgencyDashboardProps> = ({ onNavigat
   const [subscription, setSubscription] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [contact, setContact] = useState({ phone: '', whatsapp: '' });
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactMessage, setContactMessage] = useState('');
+
+  useEffect(() => {
+    if (agency) {
+      setContact({
+        phone: agency.phone || '',
+        whatsapp: agency.whatsapp || '',
+      });
+    }
+  }, [agency?.id]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,6 +91,28 @@ export const AdminAgencyDashboard: React.FC<AgencyDashboardProps> = ({ onNavigat
   useEffect(() => {
     void load();
   }, [load]);
+
+  const savePublicContact = async () => {
+    if (!agency || savingContact) return;
+    const normalized = normalizeWhatsAppNumber(contact.whatsapp);
+    if (contact.whatsapp.trim() && !normalized) {
+      setContactMessage('Enter a valid WhatsApp number (local 03xx or international format).');
+      return;
+    }
+    setSavingContact(true);
+    setContactMessage('');
+    const result = await api.updateAgencyProfile(String(agency.id), {
+      phone: contact.phone || null,
+      whatsapp: normalized || null,
+    });
+    setSavingContact(false);
+    if (!result || result.success === false) {
+      setContactMessage(result?.message || 'Could not save public contact details.');
+      return;
+    }
+    setContactMessage('Public contact details saved.');
+    await load();
+  };
 
   const stats = agency?.stats ?? {};
   const limits = subscription?.limits ?? agency?.limits ?? {};
@@ -136,6 +172,43 @@ export const AdminAgencyDashboard: React.FC<AgencyDashboardProps> = ({ onNavigat
                   <FileText className="w-3.5 h-3.5" /> Subscription
                 </EnterpriseButton>
               </div>
+            </div>
+          </EnterpriseCard>
+
+          <EnterpriseCard
+            title="Public contact & WhatsApp"
+            subtitle="Shown to buyers on your public agency profile and sale listings"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="space-y-1.5">
+                <span className="text-xs font-semibold text-slate-300">Public phone</span>
+                <input
+                  value={contact.phone}
+                  onChange={(e) => setContact({ ...contact, phone: e.target.value })}
+                  placeholder="+92 300 1234567"
+                  className="w-full rounded-lg border border-slate-700 bg-[#07141E] px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-[#E7C878] focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-semibold text-slate-300">Public WhatsApp number</span>
+                <input
+                  value={contact.whatsapp}
+                  onChange={(e) => setContact({ ...contact, whatsapp: e.target.value })}
+                  placeholder="0300 1234567 or +92 300 1234567"
+                  className="w-full rounded-lg border border-slate-700 bg-[#07141E] px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-[#E7C878] focus:outline-none"
+                />
+                <span className="text-[11px] text-slate-500">Saved in international format. Leave empty to hide the WhatsApp button.</span>
+              </label>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <EnterpriseButton onClick={() => void savePublicContact()} disabled={savingContact} variant="secondary">
+                <MessageCircle className="w-3.5 h-3.5" /> {savingContact ? 'Saving…' : 'Save public contact'}
+              </EnterpriseButton>
+              {contactMessage && (
+                <span className={`text-xs ${contactMessage.startsWith('Public contact details saved') ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {contactMessage}
+                </span>
+              )}
             </div>
           </EnterpriseCard>
 

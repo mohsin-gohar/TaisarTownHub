@@ -49,7 +49,7 @@ class SendSavedSearchAlerts extends Command
 
                     /** @var \Illuminate\Database\Eloquent\Collection<int, Property> $matches */
                     $matches = PropertySearchFilters::apply(
-                        Property::query()->publiclyVisible(),
+                        Property::query()->publiclyVisible()->where('listing_purpose', 'sale'),
                         $search->filters ?? []
                     )
                         ->where(function ($q) use ($cutoff) {

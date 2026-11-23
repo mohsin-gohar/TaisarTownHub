@@ -1,8 +1,8 @@
 # Complete File Audit Ledger - TaisarTownHub
 
-Audit baseline: `e419f2a` (first independent-audit snapshot). Inventory regenerated from `git ls-files` at code commit `b4b40c9`; repository `mohsin-gohar/TaisarTownHub`; date 2026-11-23.
+Audit baseline: `e419f2a` (first independent-audit snapshot). Inventory regenerated from `git ls-files` at audit baseline `46b32f2`; repository `mohsin-gohar/TaisarTownHub`; date 2026-11-23.
 
-A parallel audit commit (`6c92d52`) added six new audit documents, updated this ledger and added one scratch generator. The scratch generator `write_perf.py` (hard-coded `/workspace` path, not used by the product or CI) was removed during cleanup. The baseline inventory was therefore 706 files; the current tracked tree is **712 files**, all listed below.
+A parallel audit commit (`6c92d52`) added audit documents and one scratch generator; the scratch file was removed. The 2026-11-23 audit/repair mission added eight new source, test and report files. The baseline inventory was 706 files; the current tracked tree is **720 files**, all listed below.
 
 ## Coverage policy (honesty first)
 
@@ -21,20 +21,20 @@ A parallel audit commit (`6c92d52`) added six new audit documents, updated this 
 
 | Area | Tracked files |
 |---|---:|
-| `backend` | 308 |
-| `frontend` | 209 |
+| `backend` | 311 |
+| `frontend` | 213 |
 | `(root)` | 152 |
+| `docs` | 16 |
 | `documents` | 16 |
-| `docs` | 15 |
 | `docker` | 4 |
 | `scripts` | 4 |
 | `.github` | 2 |
 | `.screenshots` | 1 |
 | `nginx` | 1 |
 
-Top extensions: `.php` 265, `.md` 164, `.tsx` 80, `.ts` 62, `.txt` 26, `(none)` 25, `.mts` 20, `.png` 12, `.json` 11, `.jpg` 7, `.conf` 6, `.yml` 4.
+Top extensions: `.php` 268, `.md` 165, `.tsx` 81, `.ts` 65, `.txt` 26, `(none)` 25, `.mts` 20, `.png` 12, `.json` 11, `.jpg` 7, `.conf` 6, `.yml` 4.
 
-Status totals: `READ` 65, `TESTED` 144, `INVENTORIED` 319, `HISTORICAL` 162, `ASSET` 22.
+Status totals: `READ` 68, `TESTED` 149, `INVENTORIED` 319, `HISTORICAL` 162, `ASSET` 22.
 
 ## Evidence supporting broad (not per-file) coverage
 
@@ -417,6 +417,7 @@ Status totals: `READ` 65, `TESTED` 144, `INVENTORIED` 319, `HISTORICAL` 162, `AS
 | `backend/database/migrations/2026_11_22_000003_add_public_marketplace_indexes.php` | Schema migration | READ |
 | `backend/database/migrations/2026_11_22_000004_add_transactions_agency_created_index.php` | Schema migration | READ |
 | `backend/database/migrations/2026_11_23_000001_create_maps_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_23_000002_add_deleted_at_to_transaction_payments.php` | Schema migration | TESTED |
 | `backend/database/seeders/AgencyFilesSyncSeeder.php` | Seeder | INVENTORIED |
 | `backend/database/seeders/DatabaseSeeder.php` | Seeder | READ |
 | `backend/database/seeders/DemoStaffSeeder.php` | Seeder | INVENTORIED |
@@ -464,6 +465,7 @@ Status totals: `READ` 65, `TESTED` 144, `INVENTORIED` 319, `HISTORICAL` 162, `AS
 | `backend/tests/Feature/ApiVersioningTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/AuthFlowsTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/AuthSecurityTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/BackfillIdempotencyTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/BookingConcurrencyTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/CatalogShapeTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/CorrelationIdTest.php` | Backend test | TESTED |
@@ -504,6 +506,7 @@ Status totals: `READ` 65, `TESTED` 144, `INVENTORIED` 319, `HISTORICAL` 162, `AS
 | `backend/tests/Feature/RateLimitTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/SavedSearchAlertsTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/SecurityHeadersTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/SensitiveMetadataTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/StorageSecurityTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/SubscriptionInvoicesTest.php` | Backend test | TESTED |
 | `backend/tests/Feature/SupportTicketsTest.php` | Backend test | TESTED |
@@ -524,6 +527,7 @@ Status totals: `READ` 65, `TESTED` 144, `INVENTORIED` 319, `HISTORICAL` 162, `AS
 | `docker/nginx.ci.conf` | Deployment configuration | READ |
 | `docs/AUDIT_FILE_COVERAGE.md` | Release-gate/audit document | HISTORICAL |
 | `docs/AUDIT_LEDGER_HEADER.md` | Release-gate/audit document | READ |
+| `docs/AUDIT_REPAIR_REPORT_2026_11_23.md` | Release-gate/audit document | READ |
 | `docs/COMPLETE_FILE_AUDIT_LEDGER.md` | Release-gate/audit document | READ |
 | `docs/FINAL_ENTERPRISE_AUDIT.md` | Release-gate/audit document | READ |
 | `docs/FINAL_INDEPENDENT_AUDIT.md` | Release-gate/audit document | READ |
@@ -584,6 +588,7 @@ Status totals: `READ` 65, `TESTED` 144, `INVENTORIED` 319, `HISTORICAL` 162, `AS
 | `frontend/e2e/sale-only.smoke.spec.ts` | Playwright E2E test/helper | TESTED |
 | `frontend/e2e/security.spec.ts` | Playwright E2E test/helper | TESTED |
 | `frontend/e2e/smoke.spec.ts` | Playwright E2E test/helper | TESTED |
+| `frontend/e2e/whatsapp.spec.ts` | Playwright E2E test/helper | TESTED |
 | `frontend/e2e/workflows.spec.ts` | Playwright E2E test/helper | TESTED |
 | `frontend/final-frontend-verify.txt` | Recorded audit output | INVENTORIED |
 | `frontend/final-playwright.txt` | Recorded audit output | INVENTORIED |
@@ -682,6 +687,7 @@ Status totals: `READ` 65, `TESTED` 144, `INVENTORIED` 319, `HISTORICAL` 162, `AS
 | `frontend/src/components/common/StatsCounter.tsx` | React component | INVENTORIED |
 | `frontend/src/components/common/ToastContainer.tsx` | React component | INVENTORIED |
 | `frontend/src/components/common/VideoModal.tsx` | React component | INVENTORIED |
+| `frontend/src/components/common/WhatsAppCta.tsx` | React component | READ |
 | `frontend/src/components/common/WhatsAppFloatingBtn.tsx` | React component | INVENTORIED |
 | `frontend/src/components/common/statusBadges.test.ts` | React component | TESTED |
 | `frontend/src/components/common/usePrefersReducedMotion.ts` | React component | INVENTORIED |
@@ -758,6 +764,8 @@ Status totals: `READ` 65, `TESTED` 144, `INVENTORIED` 319, `HISTORICAL` 162, `AS
 | `frontend/src/utils/reloadGuard.test.ts` | Manifest/config/asset | TESTED |
 | `frontend/src/utils/reloadGuard.ts` | Manifest/config/asset | INVENTORIED |
 | `frontend/src/utils/savedSearchFilters.ts` | Manifest/config/asset | INVENTORIED |
+| `frontend/src/utils/whatsapp.test.ts` | Manifest/config/asset | TESTED |
+| `frontend/src/utils/whatsapp.ts` | Manifest/config/asset | READ |
 | `frontend/tsc-appfix.txt` | Recorded audit output | INVENTORIED |
 | `frontend/tsconfig.json` | Manifest/config/asset | INVENTORIED |
 | `frontend/vercel.json` | Manifest/config/asset | INVENTORIED |

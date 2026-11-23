@@ -90,16 +90,24 @@ class AuthController extends Controller
             $maxAttempts = (int) SystemSetting::get('security.login_max_attempts', 5);
             $lockoutMinutes = (int) SystemSetting::get('security.login_lockout_minutes', 15);
 
-            $failed = (int) $user->failed_attempts + 1;
-            $updates = ['failed_attempts' => $failed];
-            if ($failed >= $maxAttempts) {
-                $updates['locked_until'] = now()->addMinutes($lockoutMinutes);
-                $updates['failed_attempts'] = 0;
-                Log::warning('Account locked after failed logins', [
-                    'user_id' => $user->id, 'ip' => $request->ip(), 'attempts' => $failed,
-                ]);
-            }
-            User::where('id', $user->id)->update($updates);
+            // Atomic read-modify-write: concurrent failures must not all read
+            // the same stale counter and silently skip the lockout threshold.
+            $failed = DB::transaction(function () use ($user, $maxAttempts, $lockoutMinutes, $request) {
+                $fresh = User::where('id', $user->id)->lockForUpdate()->firstOrFail();
+                $failed = (int) $fresh->failed_attempts + 1;
+                if ($failed >= $maxAttempts) {
+                    $fresh->failed_attempts = 0;
+                    $fresh->locked_until = now()->addMinutes($lockoutMinutes);
+                    Log::warning('Account locked after failed logins', [
+                        'user_id' => $user->id, 'ip' => $request->ip(), 'attempts' => $failed,
+                    ]);
+                } else {
+                    $fresh->failed_attempts = $failed;
+                }
+                $fresh->save();
+
+                return $failed;
+            });
 
             $this->recordLoginAttempt($request, $user, $user->email, false, false, 'invalid_password');
 

@@ -167,12 +167,8 @@ class InquiryController extends Controller
             'status' => 'required|string|in:Pending,Contacted,In Progress,Resolved',
         ]);
 
-        $query = Inquiry::query();
+        $inquiry = $this->findScopedForAgent($request, $id);
         $agencyId = $this->agencyId($request);
-        if ($agencyId !== null) {
-            $query->where('agency_id', $agencyId);
-        }
-        $inquiry = $query->findOrFail($id);
 
         $from = $inquiry->status;
         $inquiry->update(['status' => $request->status]);
@@ -205,12 +201,8 @@ class InquiryController extends Controller
             'notes' => 'nullable|string|max:4000',
         ]);
 
+        $inquiry = $this->findScopedForAgent($request, $id);
         $agencyId = $this->agencyId($request);
-        $query = Inquiry::query();
-        if ($agencyId !== null) {
-            $query->where('agency_id', $agencyId);
-        }
-        $inquiry = $query->findOrFail($id);
 
         $inquiry->update(['adminNotes' => $request->input('notes', '')]);
 
@@ -237,12 +229,8 @@ class InquiryController extends Controller
     {
         $this->requireAny($request, ['crm.delete_lead']);
 
+        $inquiry = $this->findScopedForAgent($request, $id);
         $agencyId = $this->agencyId($request);
-        $query = Inquiry::query();
-        if ($agencyId !== null) {
-            $query->where('agency_id', $agencyId);
-        }
-        $inquiry = $query->findOrFail($id);
 
         // Keep the legacy BusinessRecord mirror in sync so no orphaned
         // rows remain after deletion.
@@ -260,6 +248,31 @@ class InquiryController extends Controller
             ]);
 
         return response()->json(['success' => true, 'message' => 'Inquiry deleted.']);
+    }
+
+    /**
+     * Tenant + agent-level scope for CRM mutations. Without this, an agent
+     * could mutate leads assigned to a colleague in the same agency.
+     */
+    private function findScopedForAgent(Request $request, string $id): Inquiry
+    {
+        $agencyId = $this->agencyId($request);
+        $query = Inquiry::query();
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        }
+        $inquiry = $query->findOrFail($id);
+
+        $canSeeAll = $this->can($request, 'crm.assign_lead')
+            || $this->can($request, 'crm.delete_lead');
+        $userId = (int) ($request->user()?->id ?? 0);
+        if (!$canSeeAll
+            && $inquiry->assigned_agent_id !== null
+            && (int) $inquiry->assigned_agent_id !== $userId) {
+            abort(404, 'Inquiry not found.');
+        }
+
+        return $inquiry;
     }
 
     private function maskCnic(string $cnic): string
