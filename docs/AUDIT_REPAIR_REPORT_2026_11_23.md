@@ -173,7 +173,7 @@ No Docker CLI/daemon is available locally, so Compose startup and image builds r
    passwords visible in process arguments (B7), backup retention docs mismatch and quarantine not
    in backup (B11), deprecated root Dockerfile still shippable (B12), short-form `depends_on` for
    nginx (B13), E2E not wired into CI (B4).
-5. Coverage: a line-by-line review of all 712 files was not completed; CI/Docker runtime was not
+5. Coverage: a line-by-line review of all 720 tracked files was not completed; CI/Docker runtime was not
    re-executed locally.
 
 ## I. Final Git status
