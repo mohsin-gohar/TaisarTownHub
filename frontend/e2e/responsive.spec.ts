@@ -24,6 +24,10 @@ const publicRoutes = [
 
 for (const viewport of viewports) {
   test(`${viewport.name}: all public pages render without horizontal overflow`, async ({ page }) => {
+    // Eleven navigations that each wait for `load` (all images included) can
+    // exceed the default 30s budget on a local single-threaded dev server.
+    // This is a timeout allowance only: the overflow assertion is unchanged.
+    test.slow();
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
     for (const route of publicRoutes) {

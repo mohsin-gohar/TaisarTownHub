@@ -5,7 +5,7 @@
 # Default destination: /var/backups/taisartownhub (override with TTH_BACKUP_DIR).
 #
 # What it does:
-#   1. logical database dump (mysqldump for MySQL/MariaDB, sqlite3 copy otherwise)
+#   1. logical database dump via mysqldump (MySQL 8 / MariaDB is the only driver)
 #   2. tar archive of the private document vault
 #   3. sha256 manifest for every artefact
 #   4. verification (dump readable, table count > 0, vault listable)
@@ -23,27 +23,24 @@ WORK="$DEST/work-$STAMP"
 mkdir -p "$DEST" "$WORK"
 echo "[backup] destination: $DEST"
 
-DB_DRIVER="$(grep -E '^DB_CONNECTION=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r' || echo sqlite)"
+DB_DRIVER="$(grep -E '^DB_CONNECTION=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r' || echo mysql)"
+if [ "$DB_DRIVER" != "mysql" ]; then
+    echo "[backup] FATAL: only DB_CONNECTION=mysql is supported (found '$DB_DRIVER')" >&2
+    exit 1
+fi
 
 # ---------------------------------------------------------------- database
-if [ "$DB_DRIVER" = "sqlite" ]; then
-    DB_FILE="$(grep -E '^DB_DATABASE=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r')"
-    echo "[backup] sqlite driver → copying $DB_FILE"
-    cp "$DB_FILE" "$WORK/db.sqlite"
-    gzip -f "$WORK/db.sqlite"
-    DB_ARTEFACT="$WORK/db.sqlite.gz"
-    TABLE_COUNT="$(sqlite3 "$DB_FILE" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")"
-else
-    DB_NAME="$(grep -E '^DB_DATABASE=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r')"
-    DB_USER="$(grep -E '^DB_USERNAME=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r')"
-    DB_HOST="$(grep -E '^DB_HOST=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r')"
-    DB_PORT="$(grep -E '^DB_PORT=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r' || echo 3306)"
-    echo "[backup] mysql/mariadb driver → dumping $DB_NAME"
-    mysqldump --single-transaction --routines --triggers \
-        -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${DB_PASSWORD:-}" "$DB_NAME" | gzip > "$WORK/db.sql.gz"
-    DB_ARTEFACT="$WORK/db.sql.gz"
-    TABLE_COUNT="$(zcat "$DB_ARTEFACT" | grep -c 'CREATE TABLE' || true)"
-fi
+DB_NAME="$(grep -E '^DB_DATABASE=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r')"
+DB_USER="$(grep -E '^DB_USERNAME=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r')"
+DB_HOST="$(grep -E '^DB_HOST=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r')"
+DB_PORT="$(grep -E '^DB_PORT=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r' || echo 3306)"
+# DB_PASSWORD may legitimately be empty; read it from .env without echoing it.
+DB_PASSWORD="$(grep -E '^DB_PASSWORD=' "$BACKEND/.env" | cut -d= -f2- | tr -d '\r')"
+echo "[backup] mysql/mariadb driver → dumping $DB_NAME"
+mysqldump --single-transaction --routines --triggers \
+    -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" | gzip > "$WORK/db.sql.gz"
+DB_ARTEFACT="$WORK/db.sql.gz"
+TABLE_COUNT="$(zcat "$DB_ARTEFACT" | grep -c 'CREATE TABLE' || true)"
 
 # ---------------------------------------------------------------- vault
 VAULT_DIR="$BACKEND/storage/app/private/documents"

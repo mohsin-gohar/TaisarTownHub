@@ -22,14 +22,15 @@ database or GitHub remote has been touched.
 | A8 | Confirm domain DNS points to the target server for app + API hosts | Infrastructure | [ ] |
 | A9 | Provide Hostinger VPS access (SSH) for the actual deployment | Manual/access | [ ] |
 | A10 | Ensure ClamAV signatures can download and the daemon is reachable (fail-closed uploads) | Infrastructure | [ ] |
+| A11 | MySQL 8 available with `taisartownhub` (app) and `taisartownhub_test` (tests); `.env` / gitignored `.env.testing` contain the credentials | Infrastructure | [x] local — verify on the target host |
 
 ## B. Local gates that CAN be verified before deployment
 
 | # | Gate | Command | Expected |
 |---|---|---|---|
-| B1 | Backend suite | `cd backend && php artisan test` | 362 passed / 3054 assertions, 0 failures |
+| B1 | Backend suite on MySQL 8 | `cd backend && php artisan test` | 362 passed / 3054 assertions, 0 failures (verified locally on `taisartownhub_test`) |
 | B2 | Frontend chain | `cd frontend && npm run verify` | tsc clean, 149/149 tests, build + prerender, bundle check OK |
-| B3 | Browser E2E | `cd frontend && npm run e2e` (backend on `:8080`) | All tests pass (see final audit for the recorded run) |
+| B3 | Browser E2E | `cd frontend && npm run e2e` (backend on `:8080`, MySQL) | 84 passed / 0 failed (verified locally) |
 | B4 | PHP lint | `php -l` on changed PHP files / full app | No syntax errors |
 | B5 | YAML parse | parse both compose files and both workflows | Valid YAML |
 | B6 | Readiness gate | `bash -n scripts/wait-for-compose-ready.sh` + stubbed ready/failure run | Exit 0 when ready, exit 1 + logs on timeout |

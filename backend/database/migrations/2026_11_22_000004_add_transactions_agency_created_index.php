@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
  * created_at (deal listings, period comparisons). The existing
  * (agency_id, dealStatus) index cannot serve that ordering, so every
  * agency-scoped report query degraded to a filesort as transaction volume
- * grew. Additive-only index; safe on MySQL 8 and SQLite.
+ * grew. Additive-only index; safe on MySQL 8.
  */
 return new class extends Migration
 {

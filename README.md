@@ -10,7 +10,7 @@ Taiser Town Scheme 45, Karachi ke liye ek **sale-only public property marketplac
 
 ```text
 frontend/   React 19 + TypeScript + Vite + Tailwind — public portal + ERP UI
-backend/    Laravel 12 REST API (Sanctum), MySQL in production, SQLite for local tests
+backend/    Laravel 12 REST API (Sanctum), MySQL 8 for development, tests and production
   routes/api.php             Entry point: mounts api_definitions.php at /api and /api/v1
   routes/api_definitions.php All endpoint definitions and middleware groups
   database/migrations        Schema (incl. maps, full-text and composite indexes)
@@ -33,9 +33,10 @@ cd backend
 composer install
 cp .env.example .env
 php artisan key:generate
-# Default local DB is SQLite (backend/database/database.sqlite).
-# For MySQL, set DB_* in .env and create the database first.
+# MySQL 8 is the only supported database. Create `taisartownhub` first and
+# set DB_HOST/DB_PORT/DB_DATABASE/DB_USERNAME/DB_PASSWORD in .env.
 php artisan migrate
+php artisan db:seed        # local demo data only (never in production)
 php artisan serve --host=127.0.0.1 --port=8080
 ```
 
@@ -74,7 +75,7 @@ cd frontend && npm run e2e             # Playwright (starts Vite automatically; 
 bash scripts/wait-for-compose-ready.sh 60 mysql:healthy redis:healthy   # Docker readiness gate helper
 ```
 
-CI runs the backend suite on SQLite and MySQL 8, the frontend verify chain, an OpenAPI parse check, image builds and a containerised integration stack (`.github/workflows/ci.yml`, `.github/workflows/docker-ci.yml`).
+CI runs the backend suite on MySQL 8, the frontend verify chain, an OpenAPI parse check, image builds and a containerised integration stack (`.github/workflows/ci.yml`, `.github/workflows/docker-ci.yml`). Tests use the `taisartownhub_test` database (see `backend/.env.example`; local credentials go in the gitignored `backend/.env.testing`).
 
 ---
 

@@ -1,9 +1,11 @@
-# TaisarTownHub - automated backup for Windows hosts (dev + staging).
+# TaisarTownHub - automated MySQL backup for Windows hosts (dev + staging).
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\backup.ps1 -Destination <dir>
 #
-# Produces: <dest>\tth_db_<stamp>.sqlite.gz (or .sql.gz), <dest>\tth_vault_<stamp>.tar.gz
+# Produces: <dest>\tth_db_<stamp>.sql.gz, optional <dest>\tth_vault_<stamp>.tar.gz
 #           and a sha256 manifest. Nothing on the live system is ever deleted.
+# MySQL 8 / MariaDB is the only supported database engine.
+
 param(
     [string]$Destination = "$env:LOCALAPPDATA\Temp\opencode\tth-backups",
     [switch]$IncludeVault
@@ -32,56 +34,37 @@ function Compress-ToGzip([string]$source, [string]$target) {
     $out.Close()
 }
 
-function Get-TableCount([string]$file) {
-    $probe = @"
-<?php
-`$pdo = new PDO('sqlite:' . '$file');
-echo (int) `$pdo->query("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")->fetchColumn();
-"@
-    $probeFile = Join-Path $env:TEMP "tth_probe_$([guid]::NewGuid().ToString('N')).php"
-    Set-Content -Path $probeFile -Value $probe -Encoding ASCII
-    try {
-        $result = & php $probeFile
-        return [int](($result | Select-Object -First 1))
-    } catch {
-        return 0
-    } finally {
-        Remove-Item $probeFile -Force -ErrorAction SilentlyContinue
-    }
+$driver = Read-DotEnvValue 'DB_CONNECTION' 'mysql'
+if ($driver -ne 'mysql') {
+    throw "[backup] FATAL: only DB_CONNECTION=mysql is supported (found '$driver')"
 }
 
-$driver = Read-DotEnvValue 'DB_CONNECTION' 'sqlite'
-$dbArtefact = $null
-$tableCount = 0
+$name = Read-DotEnvValue 'DB_DATABASE'
+$user = Read-DotEnvValue 'DB_USERNAME'
+$hostName = Read-DotEnvValue 'DB_HOST' '127.0.0.1'
+$port = Read-DotEnvValue 'DB_PORT' '3306'
+$password = Read-DotEnvValue 'DB_PASSWORD'
 
-if ($driver -eq 'sqlite') {
-    $dbFile = Read-DotEnvValue 'DB_DATABASE' (Join-Path $backend 'database\database.sqlite')
-    Write-Host "[backup] sqlite driver - source $dbFile"
-    $copy = Join-Path $Destination "tth_db_$stamp.sqlite"
-    Copy-Item $dbFile $copy -Force
-    $tableCount = Get-TableCount $copy
-    $dbArtefact = "$copy.gz"
-    Compress-ToGzip $copy $dbArtefact
-    Remove-Item $copy -Force
-} else {
-    $name = Read-DotEnvValue 'DB_DATABASE'
-    $user = Read-DotEnvValue 'DB_USERNAME'
-    $hostName = Read-DotEnvValue 'DB_HOST' '127.0.0.1'
-    $port = Read-DotEnvValue 'DB_PORT' '3306'
-    $password = Read-DotEnvValue 'DB_PASSWORD'
-    Write-Host "[backup] mysql/mariadb driver - dumping $name"
-    $sql = Join-Path $Destination "tth_db_$stamp.sql"
-    & mysqldump --single-transaction --routines --triggers -h $hostName -P $port -u $user "-p$password" $name | Out-File -FilePath $sql -Encoding utf8
-    $tableCount = (Select-String -Path $sql -Pattern 'CREATE TABLE' -AllMatches).Count
-    $dbArtefact = "$sql.gz"
-    Compress-ToGzip $sql $dbArtefact
-    Remove-Item $sql -Force
+$dumpTool = if ($env:MYSQLDUMP) { $env:MYSQLDUMP } else { 'mysqldump' }
+if (-not $env:MYSQLDUMP -and -not (Get-Command mysqldump -ErrorAction SilentlyContinue)) {
+    $xamppDump = 'F:\Xampp\mysql\bin\mysqldump.exe'
+    if (Test-Path $xamppDump) { $dumpTool = $xamppDump }
 }
 
-if (-not $tableCount -or $tableCount -le 0) {
+Write-Host "[backup] MySQL dump of database '$name' from $hostName`:$port"
+$sql = Join-Path $Destination "tth_db_$stamp.sql"
+& $dumpTool --single-transaction --routines --triggers -h $hostName -P $port -u $user "-p$password" $name | Out-File -FilePath $sql -Encoding utf8
+if ($LASTEXITCODE -ne 0) { throw "[backup] FATAL: mysqldump failed with exit code $LASTEXITCODE" }
+
+$tableCount = (Select-String -Path $sql -Pattern 'CREATE TABLE' -AllMatches).Count
+if ($tableCount -le 0) {
     throw "[backup] FATAL: dump contains no tables - aborting"
 }
 Write-Host "[backup] verification: dump contains $tableCount tables"
+
+$dbArtefact = "$sql.gz"
+Compress-ToGzip $sql $dbArtefact
+Remove-Item $sql -Force
 
 $vaultArtefact = $null
 if ($IncludeVault) {
