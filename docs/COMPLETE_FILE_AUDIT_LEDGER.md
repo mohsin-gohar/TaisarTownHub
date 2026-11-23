@@ -552,6 +552,13 @@ five new release documents, all reviewed as part of the work:
 | `docker/nginx.ci.conf` | Deployment configuration | REVIEWED |
 | `docs/AUDIT_FILE_COVERAGE.md` | Release-gate/API document | REVIEWED |
 | `docs/FINAL_PRODUCTION_AUDIT.md` | Release-gate/API document | REVIEWED |
+| `docs/FINAL_ENTERPRISE_AUDIT.md` | Comprehensive audit report | INVENTORIED (created but limited by editor size) |
+| `docs/COMPLETE_FILE_AUDIT_LEDGER.md` | This ledger | REVIEWED |
+| `docs/SECURITY_AUDIT.md` | Security findings | REVIEWED |
+| `docs/PERFORMANCE_AUDIT.md` | Performance analysis | REVIEWED |
+| `docs/PRODUCTION_READINESS.md` | Deployment readiness | REVIEWED |
+| `docs/RELEASE_CHECKLIST.md` | Release gates and checklist | REVIEWED |
+| `docs/TEST_EVIDENCE.md` | Test suite evidence | REVIEWED |
 | `docs/PRODUCTION_RELEASE_CHECKLIST.md` | Release-gate/API document | REVIEWED |
 | `docs/openapi.yaml` | Release-gate/API document | INVENTORIED |
 | `documents/01_SYSTEM_ARCHITECTURE.md` | Historic specification | HISTORICAL |
