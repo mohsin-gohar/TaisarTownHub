@@ -35,10 +35,13 @@ Baseline: `e419f2a9d82f977bec28abb8cba0945581827cd6` (local `main` == `origin/ma
     (build deps removed afterwards).
   - `backend/scripts/healthcheck.php`: real cache **round-trip** (`put` + `get`) and per-dependency
     stderr diagnostics (`database`, `cache`, `storage`) so failures are observable in `docker logs`.
-- **Verification:** the rewritten healthcheck was executed against local MySQL 8 and returned
-  `{"status":"healthy",...,"checks":{"database":"ok","cache":"ok","storage":"ok"}}` with exit 0.
-  Docker is not installed in this workspace, so the rebuilt image itself could not be run locally —
-  the Docker CI workflow must be re-run on the pushed commit (BLOCKED item in `PRODUCTION_BLOCKERS.md`).
+- **Verification / second root cause found by CI re-run #11:** after installing phpredis the image
+  built successfully and migrations passed, but the container was STILL unhealthy. Source inspection
+  of `Illuminate\Cache\RedisStore` showed Laravel 12 stores numeric values **without serialization**,
+  so a `put(1)` / `get()` round-trip returns the string `"1"`; the new strict `!== 1` check failed.
+  Fixed by round-tripping a non-numeric sentinel string and comparing as a string. Local healthcheck
+  (MySQL + database cache) returns `{"status":"healthy",...,"checks":{"database":"ok","cache":"ok","storage":"ok"}}`
+  with exit 0. Docker is not installed locally, so the rebuilt image must be verified by CI.
 
 ## 3. HIGH — "Restore drill" never restored anything
 

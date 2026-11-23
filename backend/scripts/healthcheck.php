@@ -31,8 +31,13 @@ try {
 
 try {
     $key = 'healthcheck:' . gethostname();
-    Illuminate\Support\Facades\Cache::put($key, 1, now()->addSeconds(30));
-    if (Illuminate\Support\Facades\Cache::get($key) !== 1) {
+    // Laravel stores numeric cache values without serialization, so a Redis
+    // round-trip of `1` may return the string "1". Use a non-numeric sentinel
+    // and compare it as a string to avoid a false "unhealthy" result.
+    $sentinel = 'ok-' . gethostname();
+    Illuminate\Support\Facades\Cache::put($key, $sentinel, now()->addSeconds(30));
+    $cached = Illuminate\Support\Facades\Cache::get($key);
+    if (!is_string($cached) || $cached !== $sentinel) {
         throw new RuntimeException('cache round-trip did not return the stored value');
     }
     $checks['cache'] = 'ok';

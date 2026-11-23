@@ -26,8 +26,9 @@ Passwords are never printed.
 
 | Command | Result |
 |---|---|
-| `npx playwright test --workers=1` (Chromium) | **84 passed, 0 failed (6.5 min), EXIT 0** |
-| Coverage | Guest/public pages, all admin roles, security/MFA, tenant/workspace, maps, sale-only marketplace, responsive 360/390/430/768/1024/1280/1440px, workflows |
+| `npx playwright test --workers=1` (Chromium) | **84 passed, 0 failed (6.0 min), EXIT 0** on the pushed commit |
+| `npx playwright test e2e/responsive.spec.ts --workers=1` (after adding 320/375/414px) | **10 passed, 0 failed (2.5 min), EXIT 0** |
+| Coverage | Guest/public pages, all admin roles, security/MFA, tenant/workspace, maps, sale-only marketplace, responsive 320/360/375/390/414/430/768/1024/1280/1440px, workflows |
 
 ## Backup and genuine restore
 
@@ -54,8 +55,12 @@ Passwords are never printed.
 | same | Backend suite on MySQL 8 (integration) | **success** |
 | same | Frontend verify (Node 22) | **success** |
 | same | OpenAPI spec parses | **success** |
+| [CI #45119217795](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45119217795) (pushed fix) | Backend suite (PHP 8.3, MySQL 8), Frontend verify, OpenAPI | **run conclusion: success** (all 3 jobs) |
 | [Docker CI #45116283434](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45116283434) | Build & Test Frontend Image | **success** |
 | same | Build & Test Backend Image | **failure** — `Wait for backend readiness` timed out after ~3 min (root cause: missing phpredis driver, fixed) |
+| same | Full Stack Integration Test | **skipped** (upstream job failed) |
+| [Docker CI #45119217941](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45119217941) (after phpredis fix) | Frontend image | **success** |
+| same | Backend image build, infra readiness, migrations | **success**; `Wait for backend readiness` still **failed** — second root cause: strict integer comparison on a Redis numeric cache round-trip, fixed with a string sentinel |
 | same | Full Stack Integration Test | **skipped** (upstream job failed) |
 
 Raw log download for these jobs returned HTTP 403 without credentials; job/step conclusions above
