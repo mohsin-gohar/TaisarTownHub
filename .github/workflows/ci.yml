@@ -62,6 +62,8 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+        # Set lock wait timeout to prevent deadlocks from hanging tests
+        command: ["mysqld", "--innodb-lock-wait-timeout=5"]
     env:
       DB_CONNECTION: mysql
       DB_HOST: 127.0.0.1
@@ -70,6 +72,8 @@ jobs:
       DB_USERNAME: root
       DB_PASSWORD: test-only-password
       DB_ROOT_PASSWORD: test-only-password
+      # Prevent MySQL lock waits from hanging tests (G-15)
+      MYSQL_LOCK_WAIT_TIMEOUT: 5
     steps:
       - uses: actions/checkout@v4
 

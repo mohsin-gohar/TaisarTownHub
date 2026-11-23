@@ -61,6 +61,9 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+                PDO::MYSQL_ATTR_INIT_COMMAND => env('MYSQL_LOCK_WAIT_TIMEOUT') 
+                    ? "SET SESSION innodb_lock_wait_timeout=" . env('MYSQL_LOCK_WAIT_TIMEOUT')
+                    : null,
             ]) : [],
         ],
 

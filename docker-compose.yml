@@ -178,9 +178,9 @@ services:
       # recreation and every replica serves the same files.
       - public_storage:/var/www/html/storage/app/public
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      test: ["CMD", "php", "scripts/healthcheck.php"]
       interval: 15s
-      timeout: 5s
+      timeout: 10s
       retries: 3
       start_period: 30s
     depends_on:
