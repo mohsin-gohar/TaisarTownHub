@@ -49,11 +49,12 @@ export async function loginToAdminViaApi(
   const token = body.token as string;
   expect(token).toBeTruthy();
 
-  // `load` waits for every hero image on the public home page and can exceed
-  // the 30s test budget under parallel load. `domcontentloaded` is enough to
-  // establish the origin for sessionStorage and boot the SPA.
-  await page.goto('/admin', { waitUntil: 'domcontentloaded' });
-  await page.evaluate((value) => sessionStorage.setItem('tth_token', value), token);
+  // Inject the token BEFORE any application script runs on the first /admin
+  // load. The previous double-navigation (boot without token -> set token ->
+  // boot again) raced with the app's unauthenticated cleanup and occasionally
+  // left the login screen instead of the admin shell under load. addInitScript
+  // makes a single navigation deterministic; no assertion is relaxed.
+  await page.addInitScript((value) => sessionStorage.setItem('tth_token', value), token);
   await page.goto('/admin', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/admin(\/.*)?$/, { timeout: 20000 });
   // Under parallel load the single-threaded local PHP dev server can take
