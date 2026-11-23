@@ -1,0 +1,12 @@
+{
+  "url": "http://127.0.0.1:3000/",
+  "timestamp": "2026-11-23",
+  "method": "browser.lighthouse (Chromium, real rendered page)",
+  "scores": {
+    "accessibility": 1,
+    "best-practices": 1,
+    "seo": 1
+  },
+  "failures": [],
+  "note": "Before fixes: accessibility 0.93 with color-contrast failures on sale-card price (#B98A2F on white, ratio 3.11) and footer text (#62748e on #07141e, ratio 3.9). After changing price to #7A5A12 and footer text to slate-400: all 1.0, zero failures."
+}

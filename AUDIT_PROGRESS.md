@@ -1,33 +1,48 @@
-# AUDIT_PROGRESS.md — Kilocode Browser Audit (checkpoint)
+# KiloCode Gap-Closure Audit — Progress Checkpoint
 
-## Phase 1 — Repo state (recorded)
-- branch: main
-- HEAD: bb9f662 (docs: add final autonomous audit report)
-- working tree: clean (only untracked deliverables AUDIT_EVIDENCE/, AUDIT_PROGRESS.md, this report)
-- remote: origin mohsin-gohar/TaisarTownHub
-- runtimes: PHP 8.2, Composer 2.10, Node 26, npm 11; MySQL 127.0.0.1:3306 (root); Docker NOT installed; Playwright Chromium installed (Firefox/WebKit absent)
-- protected: backend/.env & frontend/.env git-ignored, not modified; throwaway taisartownhub_e2e DB created then dropped
+Last updated: 2026-11-23. Branch `main`, HEAD `a6f4611` at start (clean, == origin/main).
 
-## Completed this mission
-- Interactive Chromium sweep against live backend (:8080, throwaway DB) + Vite (:4173, APP_MODE=production)
-- Pages audited (HTTP 200, 0 console errors, 0 page errors, 0 failed responses): /, /properties, /properties?property=prop-1, /agencies, /contact, /login, /admin (guest guard), mobile menu (375)
-- Responsive overflow: none at 320/375/768/1280/1440/1920 (scrollWidth == innerWidth)
-- Property marketplace: 4 approved/public/sale cards render; search input + 4 filter selects present; detail view via ?property= works (title + WhatsApp)
-- WhatsApp: per-property normalized destinations 923218292831 / 923335192840 / 923218292832 with property-title message; agency directory link present; no platform-owner fallback
-- Contact form: real POST /api/inquiries -> HTTP 201; row persisted (audit-test@example.test) -> not fake success
-- Evidence: AUDIT_EVIDENCE/ (15 screenshots + sweep-results.json + sweep2-results.json)
+## Phase 1 — Repository state (DONE)
+- Branch: `main`; HEAD `a6f4611` ("docs: add final browser audit evidence and repair report"); origin/main identical.
+- Working tree clean, no untracked files, no local modifications at start. 740 tracked files.
+- No `AGENTS.md`. README + package manifests read. MariaDB 10.4 restarted locally after server reboot.
+- Existing reports treated as untrusted; source re-verified, not copied.
 
-## Automated suites (re-confirmed this session)
-- backend php artisan test = 372 passed (3120 assertions)
-- frontend npm run verify (tsc + 158 tests + build + 29-page prerender + bundle) PASS
-- npx playwright test = 90 passed (Chromium)
-- migrate:fresh --seed (54 migrations) on fresh MySQL 8 OK
-- composer audit 0 advisories; npm audit 0 vulns
+## Phase 2/12 — Test suites (DONE)
+- `php artisan test`: 372 passed / 3120 assertions, exit 0. Note: earlier concurrent runs produced SQLSTATE 40001 deadlocks on the shared `taisartownhub_test` DB — environment artifact of parallel test runs, not a code defect. Single clean run is green.
+- `npm run verify`: exit 0 (tsc, 149 unit tests, build/prerender, bundle check).
+- Local dev DB `taisartownhub` was missing the `2026_11_23_000002_add_deleted_at_to_transaction_payments` migration; ran `php artisan migrate --force` to apply it (fixed real /api/admin/dashboard 500).
 
-## Defects found this mission
-- None. No code changes required. (Prior LOW disk_path cleanup already committed: bcac2b9)
+## Phase 4 — WhatsApp verification (DONE, real browser)
+- Property detail (`/properties?property=prop-P-112`): 1 wa.me link, destination `923218292831`, URL-encoded title message, target=_blank, rel=noopener noreferrer.
+- Agency directory (`/agencies`): agency message template, normalized number, safe attrs.
+- Agency profile (`/agencies/taisartownhub-premier-advisory`): 6 wa.me links, correct attrs.
+- Properties listing: 4 wa.me links after async load. Contact page: 1 platform advisory wa.me link.
+- No platform-owner fallback on agency/property CTAs; no broken wa.me URLs; no duplicate 92.
+- Unit tests in `frontend/src/utils/whatsapp.test.ts` (9 tests) pass as part of npm verify.
 
-## Blockers (external)
-- Docker runtime, Firefox/WebKit, Lighthouse/CWV, load test, TLS/real secrets/SMTP/payment/OAuth/ClamAV, live-domain backend integration, VPS
+## Phase 3/7 — Real browser route + control sweep (IN PROGRESS)
+- 13 routes visited in Chromium (`/`, `/properties`, `/agencies`, `/guide`, `/gallery`, `/services`, `/about`, `/contact`, `/login`, `/register`, `/maps`, `/projects`, `/nonexistent-xyz`): all loaded, 0 console errors. `/projects` redirects to sale-only properties; 404 works.
+- Controls tested via real browser: property search (4→1 results), Reset Filters (1→4), favorites toggle (false→true), compare button, inquiry form submit (success toast), login (admin → /admin ERP), 8 admin modules navigated with distinct content and 0 console errors after migration fix.
+- Sale-only API check: `GET /api/properties?purpose=rent` returns 4 sale listings, no sensitive fields; `/api/catalog`, `/api/agencies`, `/api/agencies/featured` all 200.
 
-## Status: COMPLETE (all locally achievable work done). Servers stopped, throwaway DB dropped, temp scripts removed.
+## Phase 9 — Responsive/visual (DONE partial)
+- Lighthouse homepage after fixes: accessibility 1.0, best-practices 1.0, SEO 1.0, zero failures (evidence: AUDIT_EVIDENCE/lighthouse-homepage-final.json).
+- Fixed genuine color-contrast defects: sale-card price `#B98A2F`→`#7A5A12` (ratio 3.11→pass), footer `#62748e`→slate-400 (ratio 3.9→pass) in AvailableForSaleSection.tsx and Footer.tsx.
+
+## Defects found and repaired this mission
+1. Local dev DB lacked payment soft-delete migration → real /api/admin/dashboard 500 in browser. Fixed by applying migration (environment repair, no source change).
+2. Color-contrast accessibility failures (Lighthouse 0.93) → fixed in source; retest 1.0.
+
+## Git status
+- Modified (uncommitted, NOT pushed per rules): frontend/src/components/public/AvailableForSaleSection.tsx, frontend/src/components/common/Footer.tsx; new: AUDIT_EVIDENCE/lighthouse-homepage-final.json, AUDIT_PROGRESS.md.
+- No commit/push performed (explicitly forbidden without permission).
+
+## Final status (2026-11-24)
+- Full Playwright suite re-run cleanly: **90 passed / 0 failed** (4.4m). The earlier single failure was flaky/timing and passed in isolation; no product defect.
+- Responsive spec: **10 passed** (320–1440px real device emulation).
+- Lighthouse after fixes: **1.0 / 1.0 / 1.0**, zero failures.
+- PHP lint 268/0, OpenAPI 97 paths, composer audit 0, npm audit 0.
+- Final report written: `FINAL_KILOCODE_GAP_CLOSURE_AUDIT_REPORT.md`.
+- Verdict: COMPLETE WITH EXTERNAL BLOCKERS.
+- No commit/push performed (per rules). Do not commit/push without explicit permission.

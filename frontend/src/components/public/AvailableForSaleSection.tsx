@@ -102,7 +102,7 @@ export const AvailableForSaleSection: React.FC = () => {
                     <MapPin className="w-3.5 h-3.5 text-[#B98A2F] shrink-0" />
                     {property.location || `${property.sector || 'Taiser Town'}, Karachi`}
                   </p>
-                  <div className="text-lg font-bold text-[#B98A2F]">
+                  <div className="text-lg font-bold text-[#7A5A12]">
                     {property.formattedPrice || formatPKRCurrency(property.pricePKR)}
                   </div>
                   <p className="text-xs text-[#475569] flex items-center gap-1">

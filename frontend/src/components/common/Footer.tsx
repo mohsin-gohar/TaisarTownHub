@@ -193,12 +193,12 @@ export const Footer: React.FC = () => {
                 </button>
               </form>
             )}
-            <span className="block text-[10px] text-slate-500">We respect your privacy. Unsubscribe anytime.</span>
+            <span className="block text-[10px] text-slate-400">We respect your privacy. Unsubscribe anytime.</span>
           </div>
         </div>
 
         {/* Disclaimer */}
-        <div className="mt-12 pt-6 border-t border-slate-800/80 text-[11px] text-slate-500 space-y-2">
+        <div className="mt-12 pt-6 border-t border-slate-800/80 text-[11px] text-slate-400 space-y-2">
           <p>
             <strong className="text-slate-400">DISCLAIMER:</strong> TaisarTownHub is a real estate agency platform for Taiser Town Scheme 45, Karachi. Plot details, prices, and availability are subject to verification through Malir Development Authority (MDA) official channels. Please confirm current status with our advisory desk before any transaction.
           </p>
