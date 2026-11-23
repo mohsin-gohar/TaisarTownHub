@@ -252,9 +252,17 @@ try {
         throw "refusing to run against non-loopback host '$hostName' without -AllowRemoteHost (production safety)"
     }
     $client = if ($env:MYSQL_CLIENT) { $env:MYSQL_CLIENT } else { 'mysql' }
-    if (-not $env:MYSQL_CLIENT -and -not (Get-Command mysql -ErrorAction SilentlyContinue)) {
+    # Resolve to an absolute path: ProcessStartInfo does not reliably search
+    # PATH on every platform, and the import uses it directly.
+    $resolvedClient = @(Get-Command $client -ErrorAction SilentlyContinue) | Select-Object -First 1
+    if ($resolvedClient) {
+        $client = $resolvedClient.Source
+    } elseif (-not $env:MYSQL_CLIENT) {
         $xampp = 'F:\Xampp\mysql\bin\mysql.exe'
         if (Test-Path -LiteralPath $xampp) { $client = $xampp }
+    }
+    if (-not (Get-Command $client -ErrorAction SilentlyContinue)) {
+        throw "mysql client not found ('$client'); set MYSQL_CLIENT to its full path"
     }
     $env:MYSQL_PWD = $password   # only via environment; never on the command line
 

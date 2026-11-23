@@ -5,13 +5,18 @@
 #   bash scripts/wait-for-compose-ready.sh <deadline-seconds> [service[:expectation] ...]
 #
 # Expectations:
-#   healthy  - container status contains "(healthy)" (default)
-#   exited0  - one-shot container finished with exit code 0
+#   healthy  - container state is "running" AND health is "healthy" (default)
+#   exited0  - one-shot container state is "exited" AND exit code is 0
 #
 # Unlike an arbitrary count of "healthy" lines or a fixed `sleep`, this gate:
 #   * checks an explicit list of REQUIRED services by name,
+#   * reads machine fields (.State/.Health/.ExitCode) instead of matching the
+#     human ".Status" text, which differs between Docker Compose versions
+#     (`exited` vs `Exited (0) ...`) and made one-shot services look pending,
 #   * fails with a non-zero exit status after the defined deadline,
-#   * prints Compose status and tail logs of the services that are not ready.
+#   * prints Compose status and tail logs of the services that are not ready,
+#   * emits a GitHub Actions error annotation with the pending services, so a
+#     failure is diagnosable even when raw job logs are inaccessible.
 # A failing gate therefore stops the job BEFORE any smoke test or test suite runs.
 
 set -euo pipefail
@@ -27,10 +32,31 @@ fi
 
 log() { echo "[readiness] $*"; }
 
+# Emit "state|health|exitcode" for exactly one service (empty when absent).
 status_of() {
-  # Print the Compose status text for exactly one service (empty when absent).
-  docker compose "${COMPOSE_FILES[@]}" ps -a --format '{{.Service}} {{.Status}}' \
-    | awk -v wanted="$1" '$1 == wanted { sub(/^[^ ]+ /, ""); print; exit }'
+  docker compose "${COMPOSE_FILES[@]}" ps -a --format '{{.Service}}|{{.State}}|{{.Health}}|{{.ExitCode}}' \
+    | awk -F'|' -v wanted="$1" '$1 == wanted { print $2 "|" $3 "|" $4; exit }'
+}
+
+describe() {
+  local service="$1" raw="$2"
+  if [ -z "$raw" ]; then
+    echo "$service (absent)"
+    return
+  fi
+  IFS='|' read -r state health exit_code <<< "$raw"
+  echo "$service (state=${state:-unknown}, health=${health:-none}, exit=${exit_code:-none})"
+}
+
+matches() {
+  local expectation="$1" raw="$2"
+  [ -n "$raw" ] || return 1
+  IFS='|' read -r state health exit_code <<< "$raw"
+  case "$expectation" in
+    healthy) [ "$state" = "running" ] && [ "$health" = "healthy" ] ;;
+    exited0) [ "$state" = "exited" ] && [ "$exit_code" = "0" ] ;;
+    *) return 2 ;;
+  esac
 }
 
 start=$((SECONDS))
@@ -46,26 +72,19 @@ while :; do
     fi
 
     status="$(status_of "$service")"
-    case "$expectation" in
-      healthy)
-        if [[ "$status" == *"(healthy)"* ]]; then
-          ready=$((ready + 1))
-        else
-          pending+=("$service (${status:-absent})")
-        fi
-        ;;
-      exited0)
-        if [[ "$status" == [Ee]xited\ "(0)"* ]]; then
-          ready=$((ready + 1))
-        else
-          pending+=("$service (${status:-absent})")
-        fi
-        ;;
-      *)
-        echo "[readiness] ERROR: unknown expectation '$expectation' for '$service'." >&2
-        exit 2
-        ;;
-    esac
+    set +e
+    matches "$expectation" "$status"
+    match=$?
+    set -e
+    if [ "$match" -eq 2 ]; then
+      echo "[readiness] ERROR: unknown expectation '$expectation' for '$service'." >&2
+      exit 2
+    fi
+    if [ "$match" -eq 0 ]; then
+      ready=$((ready + 1))
+    else
+      pending+=("$(describe "$service" "$status")")
+    fi
   done
 
   if [ "${#pending[@]}" -eq 0 ]; then
@@ -79,6 +98,9 @@ while :; do
     for item in "${pending[@]}"; do
       log "  - $item"
     done
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+      echo "::error title=Readiness gate timeout::Not ready after ${elapsed}s: ${pending[*]}"
+    fi
     log "--- compose ps -a ---"
     docker compose "${COMPOSE_FILES[@]}" ps -a || true
     log "--- logs of not-ready services ---"

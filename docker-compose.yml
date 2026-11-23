@@ -38,10 +38,14 @@ services:
       - mysql_data:/var/lib/mysql
       - ./backend/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      # TCP + a real query as the app user. `mysqladmin ping -h localhost` can
+      # succeed against the init-time socket before the database and app user
+      # exist, which would let `migrate` run too early on a fresh volume.
+      test: ["CMD-SHELL", "mysql --protocol=TCP -h 127.0.0.1 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -e 'SELECT 1' \"$$MYSQL_DATABASE\""]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
     networks:
       - taisartownhub-network
 
@@ -239,7 +243,9 @@ services:
   # 6. Nginx — Reverse proxy, SSL termination, load balancing
   # ------------------------------------------------------------
   nginx:
-    image: nginx:alpine
+    # Pinned (not `nginx:alpine`): the gateway config is validated against this
+    # exact tag in CI, so a floating tag could ship an untested nginx.
+    image: nginx:1.27-alpine
     container_name: taisartownhub-nginx
     restart: unless-stopped
     ports:

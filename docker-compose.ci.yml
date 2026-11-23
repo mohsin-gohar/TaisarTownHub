@@ -3,12 +3,17 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
 #
 # Notes:
-#   * The backend CI job pre-builds `taisartownhub-backend:test` and the
-#     frontend job pre-builds `taisartownhub-frontend:test` with buildx. Every
-#     service built from those Dockerfiles reuses the matching tag, so compose
-#     does not silently build a second, untested copy of the image.
+#   * GitHub Actions jobs run on separate runners, so images built in the
+#     backend/frontend jobs are NOT present in the integration job. That job
+#     rebuilds both tags with the shared GHA cache and starts the stack with
+#     `--no-build`, so Compose reuses the tested images instead of silently
+#     building extra copies.
 #   * DB_DATABASE must match the database created by the CI MySQL service;
 #     otherwise migrations and the container test suite target a missing DB.
+#   * The MySQL healthcheck runs a real TCP query as the app user, because
+#     `mysqladmin ping -h localhost` can pass before the init scripts create
+#     that user/database (the entrypoint's temporary server listens on a
+#     socket). Without it the `migrate` one-shot could fail on first boot.
 #   * CI has no TLS certificates, so nginx is started with a HTTP-only config.
 
 services:
@@ -18,6 +23,18 @@ services:
       MYSQL_DATABASE: taisartownhub_test
       MYSQL_USER: taisar
       MYSQL_PASSWORD: test-password
+    # `mysqladmin ping -h localhost` succeeds against the init-time server
+    # (socket-only, before MYSQL_DATABASE/MYSQL_USER exist), so Compose could
+    # mark MySQL healthy while the app credentials were still missing. A real
+    # TCP query as the app user proves the database is usable by the services
+    # that depend on it and removes the first-run race that made the migrate
+    # one-shot fail intermittently.
+    healthcheck:
+      test: ["CMD-SHELL", "mysql --protocol=TCP -h 127.0.0.1 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -e 'SELECT 1' \"$$MYSQL_DATABASE\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   redis:
     command: redis-server --requirepass test-redis-password --appendonly yes

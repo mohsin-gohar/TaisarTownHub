@@ -119,6 +119,97 @@ jobs:
           docker run --rm taisartownhub-frontend:test ls -la /usr/share/nginx/html/
           docker run --rm taisartownhub-frontend:test test -f /usr/share/nginx/html/index.html
 
+  backup-restore:
+    name: Backup & Restore Drill (MySQL 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Genuine end-to-end backup validation on a disposable MySQL 8 service:
+    # migrate -> seed -> private-vault fixture -> backup.sh -> restore-drill.ps1
+    # (isolated scratch database + checksum/schema/row/index/FK/vault checks).
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-root-password
+          MYSQL_DATABASE: taisartownhub_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ptest-root-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, bcmath, intl, zip, gd
+          coverage: none
+
+      - name: Install MySQL 8 client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mysql-client
+
+      - name: Install dependencies
+        working-directory: backend
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare environment
+        working-directory: backend
+        run: |
+          cat > .env <<'ENV'
+          APP_NAME=TaisarTownHub
+          APP_ENV=testing
+          APP_DEBUG=true
+          APP_KEY=
+          DB_CONNECTION=mysql
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_DATABASE=taisartownhub_ci
+          DB_USERNAME=root
+          DB_PASSWORD=test-root-password
+          CACHE_STORE=array
+          SESSION_DRIVER=array
+          QUEUE_CONNECTION=sync
+          MAIL_MAILER=log
+          ENV
+          php artisan key:generate --force
+
+      - name: Fresh migrations and seed data
+        working-directory: backend
+        run: |
+          php artisan migrate --force --no-interaction
+          php artisan db:seed --force --no-interaction
+
+      - name: Create private-vault fixture
+        run: |
+          mkdir -p "backend/storage/app/private/documents/nested"
+          printf 'backup drill fixture\n' > "backend/storage/app/private/documents/nested/drill document.txt"
+
+      - name: Run real backup (destination path contains spaces)
+        run: bash scripts/backup.sh "/tmp/tth backup dir with spaces"
+
+      - name: Run genuine isolated restore drill
+        run: >
+          pwsh -NoProfile -ExecutionPolicy Bypass
+          -File scripts/restore-drill.ps1
+          -BackupDir "/tmp/tth backup dir with spaces"
+          -Scratch "/tmp/tth restore drill with spaces"
+
+      - name: Verify MySQL 8 engine and scratch cleanup
+        run: |
+          export MYSQL_PWD=test-root-password
+          version=$(mysql -h 127.0.0.1 -P 3306 -uroot -N -B -e "SELECT VERSION()")
+          echo "MySQL server: $version"
+          case "$version" in 8.*) ;; *) echo "expected MySQL 8, got $version" >&2; exit 1;; esac
+          leftovers=$(mysql -h 127.0.0.1 -P 3306 -uroot -N -B -e "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'tth_restore_drill_%'")
+          echo "Leftover drill databases: $leftovers"
+          test "$leftovers" = "0"
+          test ! -e "/tmp/tth restore drill with spaces"
+
   docker-integration:
     name: Full Stack Integration Test
     runs-on: ubuntu-latest
@@ -128,8 +219,70 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Images built in the other jobs live on different runners, so they are
+      # not available here. Rebuild the same two images with the shared GHA
+      # cache and force Compose to reuse them (`--no-build`), instead of letting
+      # Compose silently build two more copies during `up`.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image (cached)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: false
+          load: true
+          tags: taisartownhub-backend:test
+          cache-from: type=gha
+
+      - name: Build frontend image (cached)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.prod
+          push: false
+          load: true
+          tags: taisartownhub-frontend:test
+          build-args: |
+            VITE_API_URL=http://localhost/api
+            VITE_APP_MODE=production
+            VITE_STRIPE_PUBLIC_KEY=pk_test_ci
+            VITE_SENTRY_DSN=
+            VITE_GA_MEASUREMENT_ID=
+            VITE_LOGROCKET_APP_ID=
+          cache-from: type=gha
+
+      - name: Validate nginx configs (CI and production)
+        # `docker compose up` would only reveal a broken config as a failed
+        # readiness gate after several minutes. Validate BOTH configs first;
+        # the production config needs a throwaway self-signed certificate
+        # because TLS material is never committed to the repository.
+        run: |
+          set -euo pipefail
+          docker run --rm --add-host frontend:127.0.0.1 \
+            -v "$PWD/docker/nginx.ci.conf:/etc/nginx/nginx.ci.conf:ro" \
+            nginx:1.27-alpine nginx -t -c /etc/nginx/nginx.ci.conf
+          mkdir -p nginx/ssl
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+            -subj "/CN=localhost" \
+            -keyout nginx/ssl/privkey.pem -out nginx/ssl/fullchain.pem 2>/dev/null
+          docker run --rm --add-host frontend:127.0.0.1 \
+            -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$PWD/nginx/ssl:/etc/nginx/ssl:ro" \
+            nginx:1.27-alpine nginx -t
+          # Legacy image configs (root Dockerfile.prod, deprecated but still
+          # tracked) had the same invalid CORS block. Validate them too so no
+          # shipped config can fail on startup.
+          docker run --rm \
+            -v "$PWD/docker/backend/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            nginx:1.27-alpine nginx -t
+          docker run --rm --add-host backend:127.0.0.1 \
+            -v "$PWD/docker/frontend/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            nginx:1.27-alpine nginx -t
+
       - name: Start full stack
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build
 
       - name: Wait for required services (readiness gate)
         # Checks required services BY NAME, not an arbitrary count of "healthy"
@@ -142,14 +295,56 @@ jobs:
             backend:healthy frontend:healthy nginx:healthy \
             worker:healthy scheduler:healthy
 
+      - name: Seed enterprise catalog (production-safe)
+        # APP_ENV=production makes DatabaseSeeder run EnterpriseSeeder only:
+        # permissions, roles, plans and settings. No demo accounts or fixtures.
+        # Registration below needs the agency-owner role and plan catalog.
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php artisan db:seed --force --no-interaction
+
       - name: Run integration smoke tests
         run: |
+          set -euo pipefail
+          BASE=http://localhost
           # Every request goes through the real nginx gateway.
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused http://localhost/api/health | grep -q "healthy"
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused http://localhost/ | grep -q "TaisarTownHub"
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused http://localhost/maps | grep -q "TaisarTownHub"
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused http://localhost/api/agencies | grep -q "success"
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused http://localhost/api/maps | grep -q "success"
+          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/health" | grep -q "healthy"
+          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/" | grep -q "TaisarTownHub"
+          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/maps" | grep -q "TaisarTownHub"
+          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/agencies" | grep -q "success"
+          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/maps" | grep -q "success"
+
+          # Regression: OPTIONS used to hit add_header inside a server-level
+          # `if`, so nginx refused to start. It must now answer 204 with CORS
+          # headers from the named preflight location.
+          PREFLIGHT_HEADERS=$(curl -sS -D - -o /dev/null -X OPTIONS "$BASE/api/auth/login" \
+            -H "Origin: http://localhost" \
+            -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: content-type")
+          echo "$PREFLIGHT_HEADERS" | grep -qi '^HTTP/1.1 204'
+          echo "$PREFLIGHT_HEADERS" | grep -qi '^Access-Control-Allow-Origin: http://localhost'
+
+          # Genuine auth flow through nginx -> PHP-FPM -> MySQL -> Redis.
+          EMAIL="ci-drill-$(date +%s)@example.test"
+          PASSWORD="Ci-Drill-Pass-123"
+          REGISTER=$(curl -fsS -X POST "$BASE/api/auth/register" \
+            -H "Content-Type: application/json" -H "Accept: application/json" \
+            -d "{\"fullName\":\"CI Drill User\",\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"phone\":\"03001234567\",\"cnic\":\"42101-1234567-1\"}")
+          echo "$REGISTER" | grep -q '"success":true'
+          TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$REGISTER")
+          test -n "$TOKEN"
+          curl -fsS "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/json" | grep -q "$EMAIL"
+          curl -fsS -X POST "$BASE/api/auth/logout" -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/json" | grep -q '"success":true'
+
+          LOGIN=$(curl -fsS -X POST "$BASE/api/auth/login" \
+            -H "Content-Type: application/json" -H "Accept: application/json" \
+            -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
+          echo "$LOGIN" | grep -q '"success":true'
+          TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$LOGIN")
+          test -n "$TOKEN"
+          curl -fsS "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/json" | grep -q "$EMAIL"
+          echo "integration smoke tests: gateway, preflight, register, login, me, logout all passed"
 
       - name: Dump diagnostics on failure
         if: failure()
