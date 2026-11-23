@@ -220,8 +220,10 @@ class PropertyController extends Controller
         }
 
         if ($isOwnerAgency || $isModerator) {
+            // Owner/moderator may see confidential deal fields. No server-side
+            // storage path exists on a Property (and none is ever serialized),
+            // so only the confidential business columns are un-hidden here.
             $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes']);
-            $property->makeVisible(['disk_path'] ?? []);
         } elseif ($user && $this->can($request, 'view_sensitive_cnic')) {
             $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
         } else {

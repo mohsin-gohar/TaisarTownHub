@@ -285,6 +285,31 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->assertDatabaseHas('properties', ['id' => $id, 'isFeatured' => false]);
     }
 
+    public function test_owner_detail_exposes_confidential_fields_but_never_a_storage_path(): void
+    {
+        [$agent, $agency] = $this->agencyUser($this->agentPermissions());
+
+        $id = $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Owner Confidentiality Plot',
+            'submit' => true,
+            'purchasePricePKR' => 4000000,
+            'sellingPricePKR' => 5000000,
+            'internalNotes' => 'Owner-only note',
+        ]), $this->authHeaders($this->tokenFor($agent)))->assertStatus(201)->json('id');
+
+        $response = $this->getJson("/api/properties/{$id}", $this->authHeaders($this->tokenFor($agent)))
+            ->assertOk();
+
+        // The owning agency sees the confidential deal columns...
+        $response->assertJsonPath('purchasePricePKR', 4000000)
+            ->assertJsonPath('sellingPricePKR', 5000000)
+            ->assertJsonPath('internalNotes', 'Owner-only note');
+
+        // ...but no server-side storage path is ever serialized on a Property.
+        $this->assertArrayNotHasKey('disk_path', $response->json());
+        $this->assertStringNotContainsString('"disk_path"', $response->getContent());
+    }
+
     public function test_public_listing_detail_hides_private_internal_fields(): void
     {
         [$agent] = $this->agencyUser($this->agentPermissions());

@@ -71,9 +71,9 @@ MySQL, Redis, ClamAV, one-shot migrations, PHP-FPM backend, frontend SPA, nginx 
 ## Testing (verified commands)
 
 ```bash
-cd backend && php artisan test          # 362 passed (3054 assertions)
+cd backend && php artisan test          # 371 passed (3113 assertions)
 cd backend && composer audit            # 0 advisories (Laravel 12.73 / Symfony 7.4.23)
-cd frontend && npm run verify          # tsc + 149 unit tests + build + prerender + bundle check
+cd frontend && npm run verify          # tsc + 158 unit tests + build + prerender + bundle check
 cd frontend && npm run e2e             # Playwright (starts Vite automatically; backend must be on :8080)
 bash scripts/wait-for-compose-ready.sh 60 mysql:healthy redis:healthy   # Docker readiness gate helper
 ```
