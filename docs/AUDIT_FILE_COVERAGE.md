@@ -1,24 +1,27 @@
 # Audit File Coverage Ledger
 
 Mission: complete repository audit → fix → test → re-audit (final gate documents).
-Baseline commit audited: `6c9439f` (clean, equal to `origin/main` at start).
-CI/readiness fixes committed locally afterwards: `0894484`.
+Baseline commit audited: `6c9439f`. Re-verified against `5844190` (current `origin/main`, clean tree)
+on 2026-11-23.
+CI/readiness fixes: `0894484`, followed by the documentation commit `5844190`; both are on
+`origin/main`. All counts below were re-measured from the working tree.
 
 ## 1. Source inventory (file counts measured from the working tree)
 
 | Area | Files | Notes |
 |---|---:|---|
 | `backend/app` | 117 | Controllers, models, middleware, services, providers, console |
+| `backend/app/Models` | 47 | Eloquent models (subset of `backend/app`) |
 | `backend/routes` | 4 | `api.php`, `api_definitions.php`, `console.php`, `web.php` |
 | `backend/config` | 15 | Laravel configuration |
-| `backend/database` | 63 | Migrations, seeders, factories, sqlite dev DB, init SQL |
+| `backend/database` | 63 | **53 migrations**, seeders, factories, sqlite dev DB, init SQL |
 | `backend/tests` | 59 | 55 `*Test.php` suites + support/helpers |
 | `backend/resources` | 6 | Blade/mail assets |
 | `frontend/src` | 128 | Pages, components, domain, services, context, styles |
 | `frontend/e2e` | 13 | 11 Playwright spec files + config/helpers |
 | `frontend/scripts` | 24 | Test runner, prerender, bundle check, scripts |
-| `scripts/` (root) | 5 | Backup/restore helpers + CI readiness gate (added this mission) |
-| `docker/` | 5 | Runtime configs + CI-only nginx config (added this mission) |
+| `scripts/` (root) | 4 | Backup/restore helpers + CI readiness gate (added this mission) |
+| `docker/` | 4 | Runtime configs + CI-only nginx config (added this mission) |
 | `nginx/` | 1 | Production HTTPS gateway config |
 | `.github/workflows` | 2 | `ci.yml`, `docker-ci.yml` |
 | Root `*.md` | 133 | Historical audit/report documents (not executable source) |
@@ -52,7 +55,11 @@ re-verified selectively; they are not treated as evidence).
 ### Verified through executable evidence (not per-file manual review)
 - Entire backend test suite: `php artisan test` → 362 passed / 3054 assertions (see final audit).
 - Entire frontend verification chain: tsc + 149 unit tests + build/prerender + bundle check.
-- Full Playwright suite: 84 tests, Chromium (see final audit for the final tally).
+- Playwright: 11 spec files declaring 74 tests — **not executed in this audit**. The Chromium run
+  failed at the CDP transport layer in this environment, and no CI job runs Playwright, so no pass
+  result is claimed.
+- Committed CI at `5844190`: `ci.yml` run #60 failed with **0 jobs started**; `docker-ci.yml` run
+  #5 failed at **"Start infrastructure services"** and the integration job was skipped.
 - CI gate logic: ready/failure paths exercised locally with a fake `docker` test double:
   ready → exit 0 with `9/9 required services satisfied`; unhealthy/starting → exit 1 with
   `TIMEOUT`, the not-ready service list and tail logs.
@@ -80,8 +87,9 @@ re-verified selectively; they are not treated as evidence).
    compose stack and the integration job could not be executed locally. The readiness gate was
    verified with a deterministic stub instead; the YAML was parsed statically; the nginx configs
    could not be run through `nginx -t` locally.
-4. Browser QA used Playwright's Chromium project only. No Firefox/WebKit, Lighthouse, or load-test
-   run was performed.
+4. No browser QA run completed: the Chromium launch failed at the CDP transport layer, so the
+   earlier "84 Playwright tests" figure was removed. No Firefox/WebKit, Lighthouse or load-test run
+   was performed.
 
 ## 4. Re-audit result for files changed this mission
 
@@ -94,6 +102,6 @@ re-verified selectively; they are not treated as evidence).
 | `docker/nginx.ci.conf` (new) | HTTP-only gateway for CI | Routing mirrored from production config; not executable locally |
 | `scripts/wait-for-compose-ready.sh` (new) | Fail-closed readiness gate | `bash -n`; ready and timeout paths executed with stub |
 | `README.md` | Corrected stale claims (test counts, ports, features) | Counts cross-checked against test logs |
-| `backend/composer.lock` | Patched Laravel/Symfony + transitive deps (24 packages) | `composer audit` 0 advisories; backend suite re-run green |
+| `backend/composer.lock` | Patched Laravel/Symfony + transitive deps (24 packages) | `composer audit` 0 advisories after `composer install` from the committed lock (a stale vendor tree reports the old 8); backend suite green |
 | `frontend/e2e/helpers/adminLogin.ts` | Deterministic token injection before SPA boot | `tsc --noEmit` clean; focused E2E pass; full rerun |
-| `docs/FINAL_PRODUCTION_AUDIT.md`, `docs/PRODUCTION_RELEASE_CHECKLIST.md`, `docs/AUDIT_FILE_COVERAGE.md` | New release-gate documents | Cross-checked all counts against recorded test output |
+| `docs/FINAL_PRODUCTION_AUDIT.md`, `docs/PRODUCTION_RELEASE_CHECKLIST.md`, `docs/AUDIT_FILE_COVERAGE.md` | New release-gate documents; numbers corrected to measured values | Re-measured: 53 migrations, 47 models, 362 backend / 149 frontend tests, 4 root scripts, 4 `docker/` files; unverifiable Playwright tally removed; CI-red status recorded |
