@@ -1,6 +1,15 @@
 # TaisarTownHub — CI Docker Compose
 # Test-specific overrides with safe defaults for CI environment.
 # Usage: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
+#
+# Notes:
+#   * The backend CI job pre-builds `taisartownhub-backend:test` and the
+#     frontend job pre-builds `taisartownhub-frontend:test` with buildx. Every
+#     service built from those Dockerfiles reuses the matching tag, so compose
+#     does not silently build a second, untested copy of the image.
+#   * DB_DATABASE must match the database created by the CI MySQL service;
+#     otherwise migrations and the container test suite target a missing DB.
+#   * CI has no TLS certificates, so nginx is started with a HTTP-only config.
 
 services:
   mysql:
@@ -23,15 +32,19 @@ services:
       start_period: 120s
 
   migrate:
+    image: taisartownhub-backend:test
     environment:
       APP_KEY: base64:FCkLXSSnmmfbGJwJic1ie3qcv8XYDzm78f9Ax91nIGM=
+      DB_DATABASE: taisartownhub_test
       DB_PASSWORD: test-password
       REDIS_PASSWORD: test-redis-password
 
   backend:
+    image: taisartownhub-backend:test
     environment:
       APP_KEY: base64:FCkLXSSnmmfbGJwJic1ie3qcv8XYDzm78f9Ax91nIGM=
       APP_URL: http://localhost
+      DB_DATABASE: taisartownhub_test
       DB_PASSWORD: test-password
       REDIS_PASSWORD: test-redis-password
       CORS_ALLOWED_ORIGINS: http://localhost
@@ -63,6 +76,7 @@ services:
       start_period: 20s
 
   frontend:
+    image: taisartownhub-frontend:test
     build:
       args:
         VITE_API_URL: http://localhost/api
@@ -71,9 +85,18 @@ services:
         VITE_GA_MEASUREMENT_ID:
         VITE_LOGROCKET_APP_ID:
 
+  nginx:
+    # Production config requires TLS certificates, which CI does not have.
+    # `-c` selects the HTTP-only config; the production mount stays harmless.
+    command: ["nginx", "-g", "daemon off;", "-c", "/etc/nginx/nginx.ci.conf"]
+    volumes:
+      - ./docker/nginx.ci.conf:/etc/nginx/nginx.ci.conf:ro
+
   worker:
+    image: taisartownhub-backend:test
     environment:
       APP_KEY: base64:FCkLXSSnmmfbGJwJic1ie3qcv8XYDzm78f9Ax91nIGM=
+      DB_DATABASE: taisartownhub_test
       DB_PASSWORD: test-password
       REDIS_PASSWORD: test-redis-password
       FLUTTERWAVE_PUBLIC_KEY: FLWPUBK_TEST
@@ -88,8 +111,10 @@ services:
       MAIL_FROM_ADDRESS: test@localhost
 
   scheduler:
+    image: taisartownhub-backend:test
     environment:
       APP_KEY: base64:FCkLXSSnmmfbGJwJic1ie3qcv8XYDzm78f9Ax91nIGM=
+      DB_DATABASE: taisartownhub_test
       DB_PASSWORD: test-password
       REDIS_PASSWORD: test-redis-password
       MAIL_MAILER: log

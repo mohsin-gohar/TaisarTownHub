@@ -219,6 +219,13 @@ services:
       - "80"
     depends_on:
       - backend
+    # The SPA image runs its own nginx with a static /health endpoint.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - taisartownhub-network
 
@@ -240,6 +247,14 @@ services:
     depends_on:
       - frontend
       - backend
+    # /healthz is served on :80 before the HTTPS redirect (see nginx/nginx.conf).
+    # It verifies the gateway process itself, independently of TLS certificates.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - taisartownhub-network
 
@@ -286,6 +301,14 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    # Boots Laravel and reaches the Redis queue; a dead queue connection or an
+    # unbootable app makes the worker unhealthy instead of silently idle.
+    healthcheck:
+      test: ["CMD-SHELL", "php artisan queue:monitor redis:default --max=100000 >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
     command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=90"]
     networks:
       - taisartownhub-network
@@ -334,6 +357,14 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    # Boots Laravel and resolves the registered schedule; catches a broken app
+    # or scheduler configuration that would otherwise skip every job silently.
+    healthcheck:
+      test: ["CMD-SHELL", "php artisan schedule:list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
     command: ["php", "artisan", "schedule:work"]
     networks:
       - taisartownhub-network
