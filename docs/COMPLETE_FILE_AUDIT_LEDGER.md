@@ -1,116 +1,88 @@
-# Complete File Audit Ledger — TaisarTownHub
+# Complete File Audit Ledger - TaisarTownHub
 
-Audit baseline: `e419f2a9d82f977bec28abb8cba0945581827cd6` (local `main` == `origin/main`, clean tree, verified with `git fetch origin`).
-Repository: `mohsin-gohar/TaisarTownHub`. Audit date: 2026-11-23.
+Audit baseline: `e419f2a` (first independent-audit snapshot). Inventory regenerated from `git ls-files` at code commit `b4b40c9`; repository `mohsin-gohar/TaisarTownHub`; date 2026-11-23.
+
+A parallel audit commit (`6c92d52`) added six new audit documents, updated this ledger and added one scratch generator. The scratch generator `write_perf.py` (hard-coded `/workspace` path, not used by the product or CI) was removed during cleanup. The baseline inventory was therefore 706 files; the current tracked tree is **712 files**, all listed below.
 
 ## Coverage policy (honesty first)
 
-This ledger inventories **all 701 tracked files** (`git ls-files`) and records a review status for
-each. Statuses are deliberately conservative:
-
 | Status | Meaning |
 |---|---|
-| `REVIEWED` | File content was read and checked for defects during this audit; findings/fixes are listed in `docs/VERIFIED_BUGS_AND_REPAIRS.md`. |
-| `TEST-COVERED` | File is exercised by a real executed test suite (backend 362 tests, frontend 149 tests, Playwright 84 tests) but was not line-by-line read. |
-| `INVENTORIED` | File is present and its purpose is path-derived; it was NOT individually read in this session. No claim of audit coverage is made for it. |
-| `HISTORICAL` | Prior report/snapshot — preserved, NOT treated as evidence; claims re-verified only where cited. |
-| `ASSET` | Binary/static asset — inventoried, reference-checked only where noted. |
-| `BLOCKED` | Could not be executed/verified here (reason stated). |
+| `READ` | File content was read and checked for defects during this audit; findings are in `docs/VERIFIED_BUGS_AND_REPAIRS.md`. |
+| `TESTED` | File is exercised by a real executed test suite (backend suite, fresh migrations, frontend unit tests, Playwright E2E) or was itself executed. NOT a line-by-line review claim. |
+| `INVENTORIED` | Path-derived purpose only. The file was NOT individually read; no audit coverage is claimed. |
+| `HISTORICAL` | Prior report/snapshot or scratch output. Preserved, NOT treated as evidence. |
+| `ASSET` | Binary/static asset. Inventoried; not code-reviewed. |
+| `BLOCKED` | Cannot be verified in this workspace (reason stated in `docs/PRODUCTION_BLOCKERS.md`). |
 
-**No claim of 100% file-by-file review is made.** The inventory proves *enumeration*, not line-by-line
-coverage. This distinction is intentional and is reflected in the completion estimate.
+**No claim of 100% file-by-file review.** Enumeration is not line-by-line coverage.
 
 ## Inventory summary
 
-| Area | Tracked files | Note |
-|---|---:|---|
-| `backend/` | 308 | PHP source, config, migrations, seeders, tests, assets |
-| `frontend/` | 209 | React/TS source, tests, E2E, scripts, public assets |
-| `documents/` | 16 | Historic specification documents (HISTORICAL) |
-| `docs/` | 5 | OpenAPI + release-gate documents |
-| `scripts/` | 4 | Backup, restore drill |
-| `docker/`, `nginx/`, `.github/` | 7 | Runtime/CI configuration |
-| Root files (reports, manifests, assets) | ~152 | Mostly HISTORICAL reports and audit logs |
+| Area | Tracked files |
+|---|---:|
+| `backend` | 308 |
+| `frontend` | 209 |
+| `(root)` | 152 |
+| `documents` | 16 |
+| `docs` | 15 |
+| `docker` | 4 |
+| `scripts` | 4 |
+| `.github` | 2 |
+| `.screenshots` | 1 |
+| `nginx` | 1 |
 
-Extensions: 265 `.php`, 153 `.md`, 80 `.tsx`, 62 `.ts`, 26 `.txt`, 20 `.mts`, 12 `.png`,
-11 `.json`, 7 `.jpg`, 6 `.conf`, 4 `.yml`, 4 `.mjs`, plus manifests/lockfiles.
+Top extensions: `.php` 265, `.md` 164, `.tsx` 80, `.ts` 62, `.txt` 26, `(none)` 25, `.mts` 20, `.png` 12, `.json` 11, `.jpg` 7, `.conf` 6, `.yml` 4.
 
-## Files read and checked in this audit (`REVIEWED`)
+Status totals: `READ` 65, `TESTED` 144, `INVENTORIED` 319, `HISTORICAL` 162, `ASSET` 22.
 
-- `.github/workflows/ci.yml`, `.github/workflows/docker-ci.yml`
-- `backend/Dockerfile.prod`, `backend/docker/entrypoint.sh`, `backend/scripts/healthcheck.php`,
-  `backend/scripts/wait-for-db.php`, `backend/scripts/assert-db-driver.php`
-- `backend/config/database.php`, `backend/config/queue.php`, `backend/config/cors.php`,
-  `backend/bootstrap/app.php`, `backend/phpunit.xml`, `backend/composer.json`, `backend/composer.lock`
-- `backend/database/migrations/2026_11_22_000003_add_public_marketplace_indexes.php`,
-  `backend/database/migrations/2026_11_22_000004_add_transactions_agency_created_index.php`
-- `backend/app/Http/Controllers/Api/AuthorizesApi.php`, `DocumentController.php` (download/
-  preview/delete paths), `HealthController.php`, `AgencyController.php::index`, `MapController::publicIndex`,
-  `AuthController.php` (Google OAuth state/nonce, suspended accounts)
-- `backend/app/Http/Middleware/AgencyContext.php`, `backend/app/Providers/AppServiceProvider.php`
-- `backend/app/Models/User.php`, `Agency.php`, `Property.php` (`$fillable` mass-assignment review)
-- `backend/routes/api.php`, `backend/routes/api_definitions.php`
-- `Dockerfile.prod` (root legacy image — reviewed and deprecated), `docker-compose.yml`,
-  `docker-compose.ci.yml`, `docker/nginx.ci.conf`, `nginx/nginx.conf`,
-  `frontend/nginx.conf`, `frontend/Dockerfile.prod`
-- `scripts/backup.ps1`, `scripts/backup.sh`, `scripts/restore-drill.ps1`, `scripts/wait-for-compose-ready.sh`
-- `README.md`, `docs/*`, `frontend/playwright.config.ts`, `frontend/e2e/helpers/adminLogin.ts`,
-  `frontend/e2e/responsive.spec.ts`, `frontend/e2e/role-based.spec.ts`, `frontend/e2e/admin-pages.spec.ts`
-- `backend/.env.example`, `frontend/.env.example`, `.gitignore`, root `package.json`, `frontend/package.json`
+## Evidence supporting broad (not per-file) coverage
 
-## Test evidence supporting broad (not per-file) coverage
-
-- Backend: 362 tests / 3054 assertions on a fresh MySQL 8 database — see `docs/TEST_EVIDENCE.md`.
-- Frontend: `npm run verify` — TypeScript, 149 unit tests, build+prerender, bundle privacy check.
-- Browser: Playwright 84/84 (Chromium) against the real API on MySQL.
-- Restore: real isolated MySQL import drill PASS (58 tables, critical row counts, indexes, vault).
-- Dependency audits: `composer audit` 0 advisories; `npm audit --audit-level=high` 0 vulnerabilities.
+- Backend: 362 tests / 3054 assertions, exit 0, on local MariaDB 10.4 (MySQL protocol). MySQL 8 is authoritative in CI; no SQLite anywhere.
+- Frontend: `npm run verify` exit 0 (149/149 unit tests, tsc, build/prerender, bundle privacy check).
+- Browser: Playwright 87/87 Chromium against the real API (earlier commit; only CI/runtime files changed since).
+- Restore: genuine isolated MySQL import drill PASS - 58 tables, 256 indexes, 95 FK orphan checks, exact row counts, vault extraction, verified cleanup; corrupt-backup path exits 1 with no leftovers.
+- Static: 265 PHP files `php -l` clean; `composer audit` 0 advisories; `npm audit --audit-level=high` 0 vulnerabilities.
+- Runtime: four nginx configs pass real `nginx -t`; full CI and production gateways start and return 204 with CORS headers for OPTIONS.
 
 ## Blocked / not verifiable here
 
 | Item | Reason |
 |---|---|
-| Docker image build & full Compose stack | No Docker CLI/daemon in this workspace (documented, not claimed green locally). CI run results were read via GitHub's public Jobs API. |
-| GitHub Actions raw log download | `/actions/jobs/{id}/logs` returned HTTP 403 without credentials; job/step statuses were obtained from the public Jobs API instead. |
-| Firefox/WebKit, Lighthouse, load tests | Tooling/targets not configured; not claimed. |
-| Historical root reports (~150 `*.md`, `audit-*.txt`) | Marked HISTORICAL; not used as evidence. |
+| Docker image build and full Compose stack | No Docker CLI/daemon in this workspace. Validated by GitHub Actions only. |
+| Raw GitHub job logs | HTTP 403 without credentials; public Jobs API step conclusions used instead. |
+| Firefox/WebKit, Lighthouse, load tests | Tooling/targets not configured; no claim made. |
+| Staging/VPS, TLS secrets, production secrets | No access provided; no deployment attempted. |
 
-## Files ADDED by this audit (not in the baseline 701-file inventory)
-
-The baseline inventory below is the `git ls-files` snapshot taken at audit start. This audit added
-five new release documents, all reviewed as part of the work:
-`docs/COMPLETE_FILE_AUDIT_LEDGER.md`, `docs/FINAL_INDEPENDENT_AUDIT.md`,
-`docs/VERIFIED_BUGS_AND_REPAIRS.md`, `docs/PRODUCTION_BLOCKERS.md`, `docs/TEST_EVIDENCE.md`.
-
-## Full inventory (path → derived purpose → status)
+## Full inventory (path - purpose - status)
 
 | Path | Purpose (path-derived) | Status |
 |---|---|---|
-| `.github/workflows/ci.yml` | GitHub Actions workflow | REVIEWED |
-| `.github/workflows/docker-ci.yml` | GitHub Actions workflow | REVIEWED |
-| `.gitignore` | Manifest/config/asset | REVIEWED |
+| `.github/workflows/ci.yml` | GitHub Actions workflow | READ |
+| `.github/workflows/docker-ci.yml` | GitHub Actions workflow | READ |
+| `.gitignore` | Manifest/config/asset | READ |
 | `.nvmrc` | Manifest/config/asset | INVENTORIED |
 | `.screenshots/api-properties.json` | Manifest/config/asset | INVENTORIED |
 | `AGENCY_MARKETPLACE_IMPLEMENTATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `API_DATABASE_VERIFICATION_REPORT.md` | Historical report/note | HISTORICAL |
-| `API_DOCS.md` | Historical report/note | INVENTORIED |
-| `API_DOCUMENTATION.md` | Historical report/note | INVENTORIED |
+| `API_DOCS.md` | Historical report/note | HISTORICAL |
+| `API_DOCUMENTATION.md` | Historical report/note | HISTORICAL |
 | `API_ROUTE_AND_AUTHORIZATION_AUDIT.md` | Historical report/note | HISTORICAL |
 | `AUDIT_REPORT.md` | Historical report/note | HISTORICAL |
 | `BACKEND_DATABASE_API_AUDIT.md` | Historical report/note | HISTORICAL |
-| `BACKUP_GUIDE.md` | Historical report/note | INVENTORIED |
+| `BACKUP_GUIDE.md` | Historical report/note | HISTORICAL |
 | `BACKUP_RESTORE_TEST_REPORT.md` | Historical report/note | HISTORICAL |
-| `BROWSER_TEST_INVENTORY.md` | Historical report/note | INVENTORIED |
-| `BROWSER_TEST_PLAN.md` | Historical report/note | INVENTORIED |
-| `BUGS_FIXED_AND_REMAINING.md` | Historical report/note | INVENTORIED |
+| `BROWSER_TEST_INVENTORY.md` | Historical report/note | HISTORICAL |
+| `BROWSER_TEST_PLAN.md` | Historical report/note | HISTORICAL |
+| `BUGS_FIXED_AND_REMAINING.md` | Historical report/note | HISTORICAL |
 | `BUG_FIX_REPORT.md` | Historical report/note | HISTORICAL |
-| `BUG_REGISTER_AND_FIXES.md` | Historical report/note | INVENTORIED |
+| `BUG_REGISTER_AND_FIXES.md` | Historical report/note | HISTORICAL |
 | `BUTTON_LINK_AND_FORM_AUDIT.md` | Historical report/note | HISTORICAL |
 | `BUTTON_LINK_FORM_TEST_REPORT.md` | Historical report/note | HISTORICAL |
 | `CHANGELOG.md` | Historical report/note | HISTORICAL |
 | `CODEBASE_AUDIT.md` | Historical report/note | HISTORICAL |
-| `CODEX_BLOCKERS_AND_UNVERIFIED_CLAIMS.md` | Historical report/note | INVENTORIED |
-| `CODEX_DIAGNOSTIC_SCRIPTS.md` | Historical report/note | INVENTORIED |
+| `CODEX_BLOCKERS_AND_UNVERIFIED_CLAIMS.md` | Historical report/note | HISTORICAL |
+| `CODEX_DIAGNOSTIC_SCRIPTS.md` | Historical report/note | HISTORICAL |
 | `CODEX_FINAL_VERIFICATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `CODEX_SECURITY_TENANT_ISOLATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `CODEX_SEO_BUILD_QA_REPORT.md` | Historical report/note | HISTORICAL |
@@ -118,35 +90,35 @@ five new release documents, all reviewed as part of the work:
 | `COMPLETE_BROWSER_QA_REPORT.md` | Historical report/note | HISTORICAL |
 | `COMPLETE_ENTERPRISE_AUDIT.md` | Historical report/note | HISTORICAL |
 | `COMPLETE_SOURCE_CODE_AUDIT.md` | Historical report/note | HISTORICAL |
-| `CRITICAL_SECURITY_FINDINGS.md` | Historical report/note | INVENTORIED |
+| `CRITICAL_SECURITY_FINDINGS.md` | Historical report/note | HISTORICAL |
 | `CRITICAL_SECURITY_FIX_REPORT.md` | Historical report/note | HISTORICAL |
-| `DATABASE_ERD.md` | Historical report/note | INVENTORIED |
-| `DATABASE_ERD_DATA_DICTIONARY.md` | Historical report/note | INVENTORIED |
+| `DATABASE_ERD.md` | Historical report/note | HISTORICAL |
+| `DATABASE_ERD_DATA_DICTIONARY.md` | Historical report/note | HISTORICAL |
 | `DATABASE_MIGRATION_AUDIT.md` | Historical report/note | HISTORICAL |
-| `DATABASE_SCHEMA.md` | Historical report/note | INVENTORIED |
-| `DEMO_START_GUIDE.md` | Historical report/note | INVENTORIED |
-| `DEPLOYMENT.md` | Historical report/note | INVENTORIED |
+| `DATABASE_SCHEMA.md` | Historical report/note | HISTORICAL |
+| `DEMO_START_GUIDE.md` | Historical report/note | HISTORICAL |
+| `DEPLOYMENT.md` | Historical report/note | HISTORICAL |
 | `DEPLOYMENT_AND_CICD_AUDIT.md` | Historical report/note | HISTORICAL |
-| `DEPLOYMENT_GUIDE.md` | Historical report/note | INVENTORIED |
-| `DEVELOPMENT_MASTER_PROMPT.md` | Historical report/note | INVENTORIED |
-| `Dockerfile.prod` | Legacy multi-stage image — DEPRECATED, reviewed and retired | REVIEWED |
+| `DEPLOYMENT_GUIDE.md` | Historical report/note | HISTORICAL |
+| `DEVELOPMENT_MASTER_PROMPT.md` | Historical report/note | HISTORICAL |
+| `Dockerfile.prod` | Deployment configuration | READ |
 | `END_TO_END_WORKFLOW_REPORT.md` | Historical report/note | HISTORICAL |
-| `ENTERPRISE_APPLICATION_INVENTORY.md` | Historical report/note | INVENTORIED |
-| `ENTERPRISE_FEATURE_GAP_ANALYSIS.md` | Historical report/note | INVENTORIED |
+| `ENTERPRISE_APPLICATION_INVENTORY.md` | Historical report/note | HISTORICAL |
+| `ENTERPRISE_FEATURE_GAP_ANALYSIS.md` | Historical report/note | HISTORICAL |
 | `ENTERPRISE_MARKETPLACE_V2_REPORT.md` | Historical report/note | HISTORICAL |
 | `ENTERPRISE_REMEDIATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `ENTERPRISE_TRANSFORMATION_REPORT.md` | Historical report/note | HISTORICAL |
-| `FILE_AUDIT_LEDGER.md` | Historical report/note | INVENTORIED |
-| `FILE_STORAGE_DEPLOYMENT_GUIDE.md` | Historical report/note | INVENTORIED |
+| `FILE_AUDIT_LEDGER.md` | Historical report/note | HISTORICAL |
+| `FILE_STORAGE_DEPLOYMENT_GUIDE.md` | Historical report/note | HISTORICAL |
 | `FILE_STORAGE_SECURITY_REPORT.md` | Historical report/note | HISTORICAL |
-| `FILE_STORAGE_THREAT_MODEL.md` | Historical report/note | INVENTORIED |
+| `FILE_STORAGE_THREAT_MODEL.md` | Historical report/note | HISTORICAL |
 | `FINAL_100_PERCENT_COMPLETION_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINAL_BROWSER_E2E_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINAL_DOCKER_CLAMAV_RUNTIME_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINAL_ENTERPRISE_TRANSFORMATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINAL_FINANCE_INTEGRITY_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINAL_INDEPENDENT_AUDIT_REPORT.md` | Historical report/note | HISTORICAL |
-| `FINAL_KILOCODE_VERIFICATION.md` | Historical report/note | INVENTORIED |
+| `FINAL_KILOCODE_VERIFICATION.md` | Historical report/note | HISTORICAL |
 | `FINAL_MULTI_TENANT_ISOLATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINAL_PERFORMANCE_SEO_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINAL_PRODUCTION_AUDIT.md` | Historical report/note | HISTORICAL |
@@ -154,28 +126,28 @@ five new release documents, all reviewed as part of the work:
 | `FINAL_PRODUCTION_READINESS_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINAL_PUBLIC_WEBSITE_DESIGN_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINAL_RELEASE_GATE_REPORT.md` | Historical report/note | HISTORICAL |
-| `FINAL_REMAINING_BLOCKERS.md` | Historical report/note | INVENTORIED |
+| `FINAL_REMAINING_BLOCKERS.md` | Historical report/note | HISTORICAL |
 | `FINAL_SECURITY_AUDIT.md` | Historical report/note | HISTORICAL |
 | `FINAL_VERIFICATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `FINANCE_INTEGRITY_AUDIT.md` | Historical report/note | HISTORICAL |
-| `FIREBASE_SETUP.md` | Historical report/note | INVENTORIED |
+| `FIREBASE_SETUP.md` | Historical report/note | HISTORICAL |
 | `FRONTEND_PAGE_AND_INTERACTION_AUDIT.md` | Historical report/note | HISTORICAL |
 | `FRONTEND_UI_UX_AUDIT.md` | Historical report/note | HISTORICAL |
-| `HOSTINGER_VPS_DEPLOYMENT.md` | Historical report/note | INVENTORIED |
-| `INITIAL_BUG_REGISTER.md` | Historical report/note | INVENTORIED |
+| `HOSTINGER_VPS_DEPLOYMENT.md` | Historical report/note | HISTORICAL |
+| `INITIAL_BUG_REGISTER.md` | Historical report/note | HISTORICAL |
 | `LOAD_TEST_REPORT.md` | Historical report/note | HISTORICAL |
-| `MASTER_REQUIREMENTS_GAP_ANALYSIS.md` | Historical report/note | INVENTORIED |
-| `MYSQL_PRIMARY_DATABASE.md` | Historical report/note | INVENTORIED |
+| `MASTER_REQUIREMENTS_GAP_ANALYSIS.md` | Historical report/note | HISTORICAL |
+| `MYSQL_PRIMARY_DATABASE.md` | Historical report/note | HISTORICAL |
 | `NOVEMBER_25_LAUNCH_CHECKLIST.md` | Historical report/note | HISTORICAL |
 | `PAGE_AND_SECTION_AUDIT.md` | Historical report/note | HISTORICAL |
 | `PAGE_BY_PAGE_TEST_REPORT.md` | Historical report/note | HISTORICAL |
 | `PERFORMANCE_SEO_AUDIT.md` | Historical report/note | HISTORICAL |
 | `PRODUCTION_CONFIGURATION_AUDIT.md` | Historical report/note | HISTORICAL |
 | `PRODUCTION_DEPLOYMENT_CHECKLIST.md` | Historical report/note | HISTORICAL |
-| `PRODUCTION_READINESS.md` | Historical report/note | INVENTORIED |
+| `PRODUCTION_READINESS.md` | Historical report/note | HISTORICAL |
 | `PRODUCTION_READINESS_CHECKLIST.md` | Historical report/note | HISTORICAL |
 | `PRODUCTION_READINESS_REPORT.md` | Historical report/note | HISTORICAL |
-| `PROJECT_ANALYSIS.md` | Historical report/note | INVENTORIED |
+| `PROJECT_ANALYSIS.md` | Historical report/note | HISTORICAL |
 | `PROJECT_COMPLETE_AUDIT_REPORT.md` | Historical report/note | HISTORICAL |
 | `PROJECT_FINAL_AUDIT_REPORT.md` | Historical report/note | HISTORICAL |
 | `PROJECT_IMPLEMENTATION_REPORT.md` | Historical report/note | HISTORICAL |
@@ -189,40 +161,40 @@ five new release documents, all reviewed as part of the work:
 | `QODER_PAGE_BY_PAGE_BROWSER_AUDIT.md` | Historical report/note | HISTORICAL |
 | `QODER_PERFORMANCE_CORE_WEB_VITALS_REPORT.md` | Historical report/note | HISTORICAL |
 | `QODER_REDIS_RESILIENCE_REPORT.md` | Historical report/note | HISTORICAL |
-| `QODER_REMAINING_BLOCKERS.md` | Historical report/note | INVENTORIED |
+| `QODER_REMAINING_BLOCKERS.md` | Historical report/note | HISTORICAL |
 | `QODER_SCALABILITY_LOAD_BALANCING_REPORT.md` | Historical report/note | HISTORICAL |
 | `QODER_SECURITY_TENANT_ISOLATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `QODER_SEO_RESPONSIVE_ACCESSIBILITY_REPORT.md` | Historical report/note | HISTORICAL |
 | `QODER_UI_THEME_REGRESSION_REPORT.md` | Historical report/note | HISTORICAL |
 | `RATE_LIMIT_PERFORMANCE_REPORT.md` | Historical report/note | HISTORICAL |
-| `RBAC_MATRIX.md` | Historical report/note | INVENTORIED |
-| `RBAC_PERMISSION_MATRIX.md` | Historical report/note | INVENTORIED |
+| `RBAC_MATRIX.md` | Historical report/note | HISTORICAL |
+| `RBAC_PERMISSION_MATRIX.md` | Historical report/note | HISTORICAL |
 | `RBAC_TENANT_ISOLATION_REPORT.md` | Historical report/note | HISTORICAL |
-| `README.md` | Historical report/note | REVIEWED |
-| `REMAINING_BLOCKERS.md` | Historical report/note | INVENTORIED |
+| `README.md` | Historical report/note | READ |
+| `REMAINING_BLOCKERS.md` | Historical report/note | HISTORICAL |
 | `RESPONSIVE_ACCESSIBILITY_AUDIT.md` | Historical report/note | HISTORICAL |
 | `RESPONSIVE_TEST_REPORT.md` | Historical report/note | HISTORICAL |
 | `ROLE_BASED_TEST_REPORT.md` | Historical report/note | HISTORICAL |
 | `ROLE_SIMULATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `SALE_ONLY_MARKETPLACE_REPORT.md` | Historical report/note | HISTORICAL |
-| `SECURE_FILE_VAULT_ARCHITECTURE.md` | Historical report/note | INVENTORIED |
+| `SECURE_FILE_VAULT_ARCHITECTURE.md` | Historical report/note | HISTORICAL |
 | `SECURE_FILE_VAULT_AUDIT.md` | Historical report/note | HISTORICAL |
 | `SECURE_FILE_VAULT_INTEGRATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `SECURITY_AND_TENANT_ISOLATION_AUDIT.md` | Historical report/note | HISTORICAL |
-| `SECURITY_ARCHITECTURE.md` | Historical report/note | INVENTORIED |
+| `SECURITY_ARCHITECTURE.md` | Historical report/note | HISTORICAL |
 | `SECURITY_AUDIT.md` | Historical report/note | HISTORICAL |
 | `SECURITY_AUDIT_REPORT.md` | Historical report/note | HISTORICAL |
 | `SECURITY_TEST_REPORT.md` | Historical report/note | HISTORICAL |
 | `SECURITY_VERIFICATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `TENANT_ISOLATION_AUDIT.md` | Historical report/note | HISTORICAL |
-| `TENANT_ISOLATION_VERIFICATION.md` | Historical report/note | INVENTORIED |
-| `TESTING_STRATEGY.md` | Historical report/note | INVENTORIED |
+| `TENANT_ISOLATION_VERIFICATION.md` | Historical report/note | HISTORICAL |
+| `TESTING_STRATEGY.md` | Historical report/note | HISTORICAL |
 | `TEST_REPORT.md` | Historical report/note | HISTORICAL |
 | `TEST_RESULTS.md` | Historical report/note | HISTORICAL |
 | `TEST_VERIFICATION_REPORT.md` | Historical report/note | HISTORICAL |
 | `UI_THEME_REGRESSION_REPORT.md` | Historical report/note | HISTORICAL |
 | `UI_UX_RESPONSIVE_AUDIT.md` | Historical report/note | HISTORICAL |
-| `UPGRADE_MASTER.md` | Historical report/note | INVENTORIED |
+| `UPGRADE_MASTER.md` | Historical report/note | HISTORICAL |
 | `UPLOAD_SECURITY_REPORT.md` | Historical report/note | HISTORICAL |
 | `WORKFLOW_E2E_REPORT.md` | Historical report/note | HISTORICAL |
 | `audit-frontend-verify-A.txt` | Recorded audit output | HISTORICAL |
@@ -238,11 +210,11 @@ five new release documents, all reviewed as part of the work:
 | `audit-run-A.txt` | Recorded audit output | HISTORICAL |
 | `backend/.dockerignore` | Manifest/config/asset | INVENTORIED |
 | `backend/.editorconfig` | Manifest/config/asset | INVENTORIED |
-| `backend/.env.example` | Manifest/config/asset | REVIEWED |
+| `backend/.env.example` | Manifest/config/asset | READ |
 | `backend/.gitattributes` | Manifest/config/asset | INVENTORIED |
 | `backend/.gitignore` | Manifest/config/asset | INVENTORIED |
 | `backend/Dockerfile` | Manifest/config/asset | INVENTORIED |
-| `backend/Dockerfile.prod` | Manifest/config/asset | REVIEWED |
+| `backend/Dockerfile.prod` | Manifest/config/asset | READ |
 | `backend/README.md` | Historical report/note | INVENTORIED |
 | `backend/app/Console/Commands/BusinessRecordsAuditCommand.php` | Artisan command | INVENTORIED |
 | `backend/app/Console/Commands/EncryptVault.php` | Artisan command | INVENTORIED |
@@ -258,22 +230,22 @@ five new release documents, all reviewed as part of the work:
 | `backend/app/Http/Controllers/Api/AdminFeaturedAgencyController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/AdminSystemController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/AdminUserController.php` | API controller | INVENTORIED |
-| `backend/app/Http/Controllers/Api/AgencyController.php` | API controller | REVIEWED |
+| `backend/app/Http/Controllers/Api/AgencyController.php` | API controller | READ |
 | `backend/app/Http/Controllers/Api/AgencyStaffController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/AgencyVideoController.php` | API controller | INVENTORIED |
-| `backend/app/Http/Controllers/Api/AuthController.php` | API controller | REVIEWED |
-| `backend/app/Http/Controllers/Api/AuthorizesApi.php` | API controller | REVIEWED |
+| `backend/app/Http/Controllers/Api/AuthController.php` | API controller | READ |
+| `backend/app/Http/Controllers/Api/AuthorizesApi.php` | API controller | READ |
 | `backend/app/Http/Controllers/Api/DealerController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/DealerFilesController.php` | API controller | INVENTORIED |
-| `backend/app/Http/Controllers/Api/DocumentController.php` | API controller | REVIEWED |
+| `backend/app/Http/Controllers/Api/DocumentController.php` | API controller | READ |
 | `backend/app/Http/Controllers/Api/FavoriteController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/FeaturedAgencyController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/FinanceController.php` | API controller | INVENTORIED |
-| `backend/app/Http/Controllers/Api/HealthController.php` | API controller | REVIEWED |
+| `backend/app/Http/Controllers/Api/HealthController.php` | API controller | READ |
 | `backend/app/Http/Controllers/Api/InquiryController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/LeadController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/LocationController.php` | API controller | INVENTORIED |
-| `backend/app/Http/Controllers/Api/MapController.php` | API controller | REVIEWED |
+| `backend/app/Http/Controllers/Api/MapController.php` | API controller | READ |
 | `backend/app/Http/Controllers/Api/MediaController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/NotificationController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/PaymentController.php` | API controller | INVENTORIED |
@@ -285,13 +257,13 @@ five new release documents, all reviewed as part of the work:
 | `backend/app/Http/Controllers/Api/TransactionController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Api/WorkspaceController.php` | API controller | INVENTORIED |
 | `backend/app/Http/Controllers/Controller.php` | API controller | INVENTORIED |
-| `backend/app/Http/Middleware/AgencyContext.php` | HTTP middleware | REVIEWED |
+| `backend/app/Http/Middleware/AgencyContext.php` | HTTP middleware | READ |
 | `backend/app/Http/Middleware/CorrelationId.php` | HTTP middleware | INVENTORIED |
 | `backend/app/Http/Middleware/EnsureMfaVerified.php` | HTTP middleware | INVENTORIED |
 | `backend/app/Http/Middleware/SecurityHeaders.php` | HTTP middleware | INVENTORIED |
 | `backend/app/Http/Middleware/TrustProxies.php` | HTTP middleware | INVENTORIED |
 | `backend/app/Mail/SavedSearchMatchesMail.php` | Manifest/config/asset | INVENTORIED |
-| `backend/app/Models/Agency.php` | Eloquent model | REVIEWED |
+| `backend/app/Models/Agency.php` | Eloquent model | READ |
 | `backend/app/Models/AgencyInvitation.php` | Eloquent model | INVENTORIED |
 | `backend/app/Models/AgencyMember.php` | Eloquent model | INVENTORIED |
 | `backend/app/Models/AgencyPromotion.php` | Eloquent model | INVENTORIED |
@@ -320,7 +292,7 @@ five new release documents, all reviewed as part of the work:
 | `backend/app/Models/Permission.php` | Eloquent model | INVENTORIED |
 | `backend/app/Models/Project.php` | Eloquent model | INVENTORIED |
 | `backend/app/Models/PromotionPackage.php` | Eloquent model | INVENTORIED |
-| `backend/app/Models/Property.php` | Eloquent model | REVIEWED |
+| `backend/app/Models/Property.php` | Eloquent model | READ |
 | `backend/app/Models/PropertyCategory.php` | Eloquent model | INVENTORIED |
 | `backend/app/Models/PropertyFavorite.php` | Eloquent model | INVENTORIED |
 | `backend/app/Models/PropertyStatusHistory.php` | Eloquent model | INVENTORIED |
@@ -335,7 +307,7 @@ five new release documents, all reviewed as part of the work:
 | `backend/app/Models/SystemSetting.php` | Eloquent model | INVENTORIED |
 | `backend/app/Models/Transaction.php` | Eloquent model | INVENTORIED |
 | `backend/app/Models/TransactionPayment.php` | Eloquent model | INVENTORIED |
-| `backend/app/Models/User.php` | Eloquent model | REVIEWED |
+| `backend/app/Models/User.php` | Eloquent model | READ |
 | `backend/app/Models/VideoComment.php` | Eloquent model | INVENTORIED |
 | `backend/app/Models/VideoLike.php` | Eloquent model | INVENTORIED |
 | `backend/app/Notifications/ListingUpdated.php` | Manifest/config/asset | INVENTORIED |
@@ -343,7 +315,7 @@ five new release documents, all reviewed as part of the work:
 | `backend/app/Notifications/ResetPasswordLink.php` | Manifest/config/asset | INVENTORIED |
 | `backend/app/Notifications/SuspiciousLoginDetected.php` | Manifest/config/asset | INVENTORIED |
 | `backend/app/Notifications/VerifyEmailLink.php` | Manifest/config/asset | INVENTORIED |
-| `backend/app/Providers/AppServiceProvider.php` | Service provider | REVIEWED |
+| `backend/app/Providers/AppServiceProvider.php` | Service provider | READ |
 | `backend/app/Services/AgencyOnboarding.php` | Service/helper | INVENTORIED |
 | `backend/app/Services/AgencyPromotionService.php` | Service/helper | INVENTORIED |
 | `backend/app/Services/ClamAVScanner.php` | Service/helper | INVENTORIED |
@@ -351,16 +323,16 @@ five new release documents, all reviewed as part of the work:
 | `backend/app/Services/FileVaultCrypto.php` | Service/helper | INVENTORIED |
 | `backend/app/Services/MalwareScanner.php` | Service/helper | INVENTORIED |
 | `backend/app/Services/SecureFileStore.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/LegacyBackfillBackup.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/LegacyTenancyResolver.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/MalwareScanResult.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/MfaService.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/MfaVerification.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/Permissions.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/PlanLimits.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/PropertySearchFilters.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/RolePermissions.php` | Service/helper | INVENTORIED |
-| `backend/app/Support/UploadSecurity.php` | Service/helper | INVENTORIED |
+| `backend/app/Support/LegacyBackfillBackup.php` | Support/helper | INVENTORIED |
+| `backend/app/Support/LegacyTenancyResolver.php` | Support/helper | INVENTORIED |
+| `backend/app/Support/MalwareScanResult.php` | Support/helper | INVENTORIED |
+| `backend/app/Support/MfaService.php` | Support/helper | INVENTORIED |
+| `backend/app/Support/MfaVerification.php` | Support/helper | INVENTORIED |
+| `backend/app/Support/Permissions.php` | Support/helper | INVENTORIED |
+| `backend/app/Support/PlanLimits.php` | Support/helper | INVENTORIED |
+| `backend/app/Support/PropertySearchFilters.php` | Support/helper | INVENTORIED |
+| `backend/app/Support/RolePermissions.php` | Support/helper | INVENTORIED |
+| `backend/app/Support/UploadSecurity.php` | Support/helper | INVENTORIED |
 | `backend/artisan` | Manifest/config/asset | INVENTORIED |
 | `backend/audit-migrations.txt` | Recorded audit output | INVENTORIED |
 | `backend/audit-routes.txt` | Recorded audit output | INVENTORIED |
@@ -369,96 +341,96 @@ five new release documents, all reviewed as part of the work:
 | `backend/audit-run-D.txt` | Recorded audit output | INVENTORIED |
 | `backend/audit-run-E.txt` | Recorded audit output | INVENTORIED |
 | `backend/audit-run-F.txt` | Recorded audit output | INVENTORIED |
-| `backend/bootstrap/app.php` | Manifest/config/asset | REVIEWED |
+| `backend/bootstrap/app.php` | Manifest/config/asset | READ |
 | `backend/bootstrap/cache/.gitignore` | Manifest/config/asset | INVENTORIED |
 | `backend/bootstrap/providers.php` | Manifest/config/asset | INVENTORIED |
-| `backend/composer.json` | Manifest/config/asset | REVIEWED |
-| `backend/composer.lock` | Manifest/config/asset | REVIEWED |
+| `backend/composer.json` | Manifest/config/asset | READ |
+| `backend/composer.lock` | Manifest/config/asset | READ |
 | `backend/config/app.php` | Laravel configuration | INVENTORIED |
 | `backend/config/auth.php` | Laravel configuration | INVENTORIED |
 | `backend/config/cache.php` | Laravel configuration | INVENTORIED |
-| `backend/config/cors.php` | Laravel configuration | REVIEWED |
-| `backend/config/database.php` | Laravel configuration | REVIEWED |
+| `backend/config/cors.php` | Laravel configuration | READ |
+| `backend/config/database.php` | Laravel configuration | READ |
 | `backend/config/filesystems.php` | Laravel configuration | INVENTORIED |
 | `backend/config/hashing.php` | Laravel configuration | INVENTORIED |
 | `backend/config/logging.php` | Laravel configuration | INVENTORIED |
 | `backend/config/mail.php` | Laravel configuration | INVENTORIED |
 | `backend/config/malware.php` | Laravel configuration | INVENTORIED |
-| `backend/config/queue.php` | Laravel configuration | REVIEWED |
+| `backend/config/queue.php` | Laravel configuration | READ |
 | `backend/config/sanctum.php` | Laravel configuration | INVENTORIED |
 | `backend/config/services.php` | Laravel configuration | INVENTORIED |
 | `backend/config/session.php` | Laravel configuration | INVENTORIED |
 | `backend/config/vault.php` | Laravel configuration | INVENTORIED |
 | `backend/database/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/database/factories/UserFactory.php` | Seeder/factory | INVENTORIED |
+| `backend/database/factories/UserFactory.php` | Factory | INVENTORIED |
 | `backend/database/init.sql` | Manifest/config/asset | INVENTORIED |
-| `backend/database/migrations/0001_01_01_000000_create_users_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/0001_01_01_000001_create_cache_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/0001_01_01_000002_create_jobs_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_02_145235_create_personal_access_tokens_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_02_145311_create_dealers_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_02_145312_create_properties_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_02_145313_create_agency_videos_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_02_145315_create_video_comments_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_02_145316_create_inquiries_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_02_145318_create_transactions_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_02_145319_create_projects_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_03_100000_create_dealer_files.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_03_110000_add_role_to_users.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_03_120000_add_soft_deletes_to_agency_videos.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_03_130000_add_soft_deletes_to_remaining_tables.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_03_160000_create_audit_logs_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_03_170000_create_business_records_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_05_100000_add_indexes_to_business_records.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_05_110000_add_extra_fields_to_properties.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000001_create_agencies_tables.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000002_create_rbac_tables.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000003_create_agency_members_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000004_add_enterprise_fields_to_users.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000005_create_location_and_category_tables.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000006_add_workflow_fields_to_properties.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000007_create_property_workflow_tables.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000008_create_document_vault_tables.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000009_create_media_files_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000010_add_crm_fields_to_inquiries.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000011_create_finance_tables.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000012_create_notifications_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000013_create_subscription_tables.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000014_create_system_settings_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000015_extend_audit_logs_and_business_records.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000016_backfill_enterprise_relations.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000017_add_full_fields_to_properties.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000018_add_pending_changes_to_properties.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000019_add_video_engagement_attribution.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_10_000020_add_finance_detail_columns_to_transactions.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_13_000001_encrypt_dealer_cnic_at_rest.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_13_000002_create_email_verification_tokens.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_13_000003_create_support_expenses_invoices_shares_tables.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_13_000004_add_mfa_and_login_history.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_15_142734_widen_dealer_files_decimal_fields.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_15_184000_make_property_id_nullable_in_transactions.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_16_000001_create_saved_searches_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_17_000001_add_vault_scan_lifecycle.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_20_000001_add_billing_lifecycle_columns.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_20_000002_create_featured_agency_promotions.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_20_092340_add_google_oauth_to_users_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/migrations/2026_11_22_000003_add_public_marketplace_indexes.php` | Schema migration | REVIEWED |
-| `backend/database/migrations/2026_11_22_000004_add_transactions_agency_created_index.php` | Schema migration | REVIEWED |
-| `backend/database/migrations/2026_11_23_000001_create_maps_table.php` | Schema migration | TEST-COVERED (fresh MySQL migration) |
-| `backend/database/seeders/AgencyFilesSyncSeeder.php` | Seeder/factory | INVENTORIED |
-| `backend/database/seeders/DatabaseSeeder.php` | Seeder/factory | INVENTORIED |
-| `backend/database/seeders/DemoStaffSeeder.php` | Seeder/factory | INVENTORIED |
-| `backend/database/seeders/EnterpriseDemoSeeder.php` | Seeder/factory | INVENTORIED |
-| `backend/database/seeders/EnterpriseSeeder.php` | Seeder/factory | INVENTORIED |
-| `backend/database/seeders/MapSeeder.php` | Seeder/factory | INVENTORIED |
-| `backend/docker/entrypoint.sh` | Manifest/config/asset | REVIEWED |
+| `backend/database/migrations/0001_01_01_000000_create_users_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/0001_01_01_000001_create_cache_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/0001_01_01_000002_create_jobs_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_02_145235_create_personal_access_tokens_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_02_145311_create_dealers_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_02_145312_create_properties_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_02_145313_create_agency_videos_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_02_145315_create_video_comments_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_02_145316_create_inquiries_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_02_145318_create_transactions_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_02_145319_create_projects_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_03_100000_create_dealer_files.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_03_110000_add_role_to_users.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_03_120000_add_soft_deletes_to_agency_videos.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_03_130000_add_soft_deletes_to_remaining_tables.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_03_160000_create_audit_logs_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_03_170000_create_business_records_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_05_100000_add_indexes_to_business_records.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_05_110000_add_extra_fields_to_properties.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000001_create_agencies_tables.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000002_create_rbac_tables.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000003_create_agency_members_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000004_add_enterprise_fields_to_users.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000005_create_location_and_category_tables.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000006_add_workflow_fields_to_properties.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000007_create_property_workflow_tables.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000008_create_document_vault_tables.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000009_create_media_files_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000010_add_crm_fields_to_inquiries.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000011_create_finance_tables.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000012_create_notifications_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000013_create_subscription_tables.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000014_create_system_settings_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000015_extend_audit_logs_and_business_records.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000016_backfill_enterprise_relations.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000017_add_full_fields_to_properties.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000018_add_pending_changes_to_properties.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000019_add_video_engagement_attribution.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_10_000020_add_finance_detail_columns_to_transactions.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_13_000001_encrypt_dealer_cnic_at_rest.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_13_000002_create_email_verification_tokens.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_13_000003_create_support_expenses_invoices_shares_tables.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_13_000004_add_mfa_and_login_history.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_15_142734_widen_dealer_files_decimal_fields.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_15_184000_make_property_id_nullable_in_transactions.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_16_000001_create_saved_searches_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_17_000001_add_vault_scan_lifecycle.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_20_000001_add_billing_lifecycle_columns.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_20_000002_create_featured_agency_promotions.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_20_092340_add_google_oauth_to_users_table.php` | Schema migration | TESTED |
+| `backend/database/migrations/2026_11_22_000003_add_public_marketplace_indexes.php` | Schema migration | READ |
+| `backend/database/migrations/2026_11_22_000004_add_transactions_agency_created_index.php` | Schema migration | READ |
+| `backend/database/migrations/2026_11_23_000001_create_maps_table.php` | Schema migration | TESTED |
+| `backend/database/seeders/AgencyFilesSyncSeeder.php` | Seeder | INVENTORIED |
+| `backend/database/seeders/DatabaseSeeder.php` | Seeder | READ |
+| `backend/database/seeders/DemoStaffSeeder.php` | Seeder | INVENTORIED |
+| `backend/database/seeders/EnterpriseDemoSeeder.php` | Seeder | INVENTORIED |
+| `backend/database/seeders/EnterpriseSeeder.php` | Seeder | READ |
+| `backend/database/seeders/MapSeeder.php` | Seeder | INVENTORIED |
+| `backend/docker/entrypoint.sh` | Manifest/config/asset | READ |
 | `backend/docker/php-prod.ini` | Manifest/config/asset | INVENTORIED |
 | `backend/package.json` | Manifest/config/asset | INVENTORIED |
-| `backend/phpunit.xml` | Manifest/config/asset | REVIEWED |
-| `backend/public/.htaccess` | Manifest/config/asset | INVENTORIED |
-| `backend/public/favicon.ico` | Manifest/config/asset | ASSET (inventory only) |
-| `backend/public/index.php` | Manifest/config/asset | INVENTORIED |
-| `backend/public/robots.txt` | Recorded audit output | INVENTORIED |
+| `backend/phpunit.xml` | Manifest/config/asset | READ |
+| `backend/public/.htaccess` | Public web entrypoint/asset | INVENTORIED |
+| `backend/public/favicon.ico` | Public web entrypoint/asset | ASSET |
+| `backend/public/index.php` | Public web entrypoint/asset | INVENTORIED |
+| `backend/public/robots.txt` | Public web entrypoint/asset | INVENTORIED |
 | `backend/resources/css/app.css` | Backend resource/template | INVENTORIED |
 | `backend/resources/js/app.js` | Backend resource/template | INVENTORIED |
 | `backend/resources/js/bootstrap.js` | Backend resource/template | INVENTORIED |
@@ -466,101 +438,105 @@ five new release documents, all reviewed as part of the work:
 | `backend/resources/views/emails/saved-search-matches.blade.php` | Backend resource/template | INVENTORIED |
 | `backend/resources/views/welcome.blade.php` | Backend resource/template | INVENTORIED |
 | `backend/route-method-audit.php` | Manifest/config/asset | INVENTORIED |
-| `backend/routes/api.php` | Route definition | REVIEWED |
-| `backend/routes/api_definitions.php` | Route definition | REVIEWED |
+| `backend/routes/api.php` | Route definition | READ |
+| `backend/routes/api_definitions.php` | Route definition | READ |
 | `backend/routes/console.php` | Route definition | INVENTORIED |
 | `backend/routes/web.php` | Route definition | INVENTORIED |
-| `backend/scripts/assert-db-driver.php` | Manifest/config/asset | REVIEWED |
-| `backend/scripts/healthcheck.php` | Manifest/config/asset | REVIEWED |
-| `backend/scripts/wait-for-db.php` | Manifest/config/asset | REVIEWED |
-| `backend/storage/app/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/app/private/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/app/private/documents/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/app/public/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/framework/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/framework/cache/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/framework/cache/data/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/framework/sessions/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/framework/testing/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/framework/views/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/storage/logs/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `backend/tests/Feature/AdminStaffSubscriptionTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/AgencyContextTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/AgencyStorageOversightTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/AgencyVideoCommentIsolationTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/AgencyVideoPublishingTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/ApiVersioningTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/AuthFlowsTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/AuthSecurityTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/BookingConcurrencyTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/CatalogShapeTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/CorrelationIdTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/CrmLeadsTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/CrossAgencyCapabilitiesTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/DatabaseSeederProductionSafetyTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/DealerAgencyLinkTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/DealerFilesAuthorizationTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/DocumentSharesTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/EncryptionAtRestTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/EnterpriseTestCase.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/ExampleTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/ExpensesTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/FavoritesNotificationsTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/FeaturedAgencyPromotionTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/FileVaultSecurityTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/FinanceIsolationTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/FinanceLifecycleTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/FinanceReportsTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/GoogleOAuthTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/LegacyTenancyResolverTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/LegacyTransactionIsolationTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/LoginHistoryTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/MalwareScanningTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/MalwareUploadEnforcementTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/MapManagementSafetyTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/MapManagementTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/MfaEnforcementTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/MfaTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/MigrationSmokeTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/MysqlConcurrencyTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/PaymentConfigurationTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/PaymentGatewayTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/PlanLimitEnforcementTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/ProductionReadinessTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/PropertyLifecycleTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/PublicIndexBoundsTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/RateLimitTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/SavedSearchAlertsTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/SecurityHeadersTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/StorageSecurityTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/SubscriptionInvoicesTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/SupportTicketsTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/WorkspaceApprovalTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Feature/WorkspaceHardeningTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Support/concurrency_request.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Support/fake_clamd.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/TestCase.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Unit/ExampleTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Unit/PermissionsCatalogTest.php` | Backend test | TEST-COVERED (executed) |
-| `backend/tests/Unit/RolePermissionsTest.php` | Backend test | TEST-COVERED (executed) |
+| `backend/scripts/assert-db-driver.php` | Manifest/config/asset | READ |
+| `backend/scripts/healthcheck.php` | Manifest/config/asset | READ |
+| `backend/scripts/wait-for-db.php` | Manifest/config/asset | READ |
+| `backend/storage/app/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/app/private/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/app/private/documents/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/app/public/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/framework/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/framework/cache/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/framework/cache/data/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/framework/sessions/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/framework/testing/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/framework/views/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/storage/logs/.gitignore` | Runtime storage placeholder | INVENTORIED |
+| `backend/tests/Feature/AdminStaffSubscriptionTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/AgencyContextTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/AgencyStorageOversightTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/AgencyVideoCommentIsolationTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/AgencyVideoPublishingTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/ApiVersioningTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/AuthFlowsTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/AuthSecurityTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/BookingConcurrencyTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/CatalogShapeTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/CorrelationIdTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/CrmLeadsTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/CrossAgencyCapabilitiesTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/DatabaseSeederProductionSafetyTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/DealerAgencyLinkTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/DealerFilesAuthorizationTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/DocumentSharesTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/EncryptionAtRestTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/EnterpriseTestCase.php` | Backend test | TESTED |
+| `backend/tests/Feature/ExampleTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/ExpensesTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/FavoritesNotificationsTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/FeaturedAgencyPromotionTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/FileVaultSecurityTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/FinanceIsolationTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/FinanceLifecycleTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/FinanceReportsTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/GoogleOAuthTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/LegacyTenancyResolverTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/LegacyTransactionIsolationTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/LoginHistoryTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/MalwareScanningTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/MalwareUploadEnforcementTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/MapManagementSafetyTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/MapManagementTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/MfaEnforcementTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/MfaTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/MigrationSmokeTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/MysqlConcurrencyTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/PaymentConfigurationTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/PaymentGatewayTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/PlanLimitEnforcementTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/ProductionReadinessTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/PropertyLifecycleTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/PublicIndexBoundsTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/RateLimitTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/SavedSearchAlertsTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/SecurityHeadersTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/StorageSecurityTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/SubscriptionInvoicesTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/SupportTicketsTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/WorkspaceApprovalTest.php` | Backend test | TESTED |
+| `backend/tests/Feature/WorkspaceHardeningTest.php` | Backend test | TESTED |
+| `backend/tests/Support/concurrency_request.php` | Backend test | TESTED |
+| `backend/tests/Support/fake_clamd.php` | Backend test | TESTED |
+| `backend/tests/TestCase.php` | Backend test | TESTED |
+| `backend/tests/Unit/ExampleTest.php` | Backend test | TESTED |
+| `backend/tests/Unit/PermissionsCatalogTest.php` | Backend test | TESTED |
+| `backend/tests/Unit/RolePermissionsTest.php` | Backend test | TESTED |
 | `backend/vite.config.js` | Manifest/config/asset | INVENTORIED |
-| `docker-compose.ci.yml` | Deployment configuration | REVIEWED |
-| `docker-compose.yml` | Deployment configuration | REVIEWED |
-| `docker/backend/nginx.conf` | Deployment configuration | INVENTORIED |
-| `docker/backend/supervisord.conf` | Deployment configuration | INVENTORIED |
-| `docker/frontend/nginx.conf` | Deployment configuration | INVENTORIED |
-| `docker/nginx.ci.conf` | Deployment configuration | REVIEWED |
-| `docs/AUDIT_FILE_COVERAGE.md` | Release-gate/API document | REVIEWED |
-| `docs/FINAL_PRODUCTION_AUDIT.md` | Release-gate/API document | REVIEWED |
-| `docs/FINAL_ENTERPRISE_AUDIT.md` | Comprehensive audit report | INVENTORIED (created but limited by editor size) |
-| `docs/COMPLETE_FILE_AUDIT_LEDGER.md` | This ledger | REVIEWED |
-| `docs/SECURITY_AUDIT.md` | Security findings | REVIEWED |
-| `docs/PERFORMANCE_AUDIT.md` | Performance analysis | REVIEWED |
-| `docs/PRODUCTION_READINESS.md` | Deployment readiness | REVIEWED |
-| `docs/RELEASE_CHECKLIST.md` | Release gates and checklist | REVIEWED |
-| `docs/TEST_EVIDENCE.md` | Test suite evidence | REVIEWED |
-| `docs/PRODUCTION_RELEASE_CHECKLIST.md` | Release-gate/API document | REVIEWED |
-| `docs/openapi.yaml` | Release-gate/API document | INVENTORIED |
+| `docker-compose.ci.yml` | Deployment configuration | READ |
+| `docker-compose.yml` | Deployment configuration | READ |
+| `docker/backend/nginx.conf` | Deployment configuration | READ |
+| `docker/backend/supervisord.conf` | Deployment configuration | READ |
+| `docker/frontend/nginx.conf` | Deployment configuration | READ |
+| `docker/nginx.ci.conf` | Deployment configuration | READ |
+| `docs/AUDIT_FILE_COVERAGE.md` | Release-gate/audit document | HISTORICAL |
+| `docs/AUDIT_LEDGER_HEADER.md` | Release-gate/audit document | READ |
+| `docs/COMPLETE_FILE_AUDIT_LEDGER.md` | Release-gate/audit document | READ |
+| `docs/FINAL_ENTERPRISE_AUDIT.md` | Release-gate/audit document | READ |
+| `docs/FINAL_INDEPENDENT_AUDIT.md` | Release-gate/audit document | READ |
+| `docs/FINAL_PRODUCTION_AUDIT.md` | Release-gate/audit document | HISTORICAL |
+| `docs/PERFORMANCE_AUDIT.md` | Release-gate/audit document | READ |
+| `docs/PRODUCTION_BLOCKERS.md` | Release-gate/audit document | READ |
+| `docs/PRODUCTION_READINESS.md` | Release-gate/audit document | READ |
+| `docs/PRODUCTION_RELEASE_CHECKLIST.md` | Release-gate/audit document | HISTORICAL |
+| `docs/RELEASE_CHECKLIST.md` | Release-gate/audit document | READ |
+| `docs/SECURITY_AUDIT.md` | Release-gate/audit document | READ |
+| `docs/TEST_EVIDENCE.md` | Release-gate/audit document | READ |
+| `docs/VERIFIED_BUGS_AND_REPAIRS.md` | Release-gate/audit document | READ |
+| `docs/openapi.yaml` | Release-gate/audit document | TESTED |
 | `documents/01_SYSTEM_ARCHITECTURE.md` | Historic specification | HISTORICAL |
 | `documents/02_PRD_USER_STORIES.md` | Historic specification | HISTORICAL |
 | `documents/03_DATABASE_SCHEMA.md` | Historic specification | HISTORICAL |
@@ -578,57 +554,57 @@ five new release documents, all reviewed as part of the work:
 | `documents/15_DEPLOYMENT_CICD.md` | Historic specification | HISTORICAL |
 | `documents/16_ENTERPRISE_ARCHITECTURE.md` | Historic specification | HISTORICAL |
 | `frontend/.dockerignore` | Manifest/config/asset | INVENTORIED |
-| `frontend/.env.example` | Manifest/config/asset | REVIEWED |
+| `frontend/.env.example` | Manifest/config/asset | READ |
 | `frontend/.gitignore` | Manifest/config/asset | INVENTORIED |
-| `frontend/.screenshots/audit/agencies-desktop.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/agency-not-found-desktop.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/final-home-desktop.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/final-home-mobile.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/final-properties-desktop.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/gallery-desktop.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/home-desktop.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/home-mobile.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/login-mobile.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/not-found-desktop.png` | Manifest/config/asset | ASSET (inventory only) |
-| `frontend/.screenshots/audit/properties-desktop.png` | Manifest/config/asset | ASSET (inventory only) |
+| `frontend/.screenshots/audit/agencies-desktop.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/agency-not-found-desktop.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/final-home-desktop.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/final-home-mobile.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/final-properties-desktop.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/gallery-desktop.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/home-desktop.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/home-mobile.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/login-mobile.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/not-found-desktop.png` | Manifest/config/asset | ASSET |
+| `frontend/.screenshots/audit/properties-desktop.png` | Manifest/config/asset | ASSET |
 | `frontend/Dockerfile` | Manifest/config/asset | INVENTORIED |
-| `frontend/Dockerfile.prod` | Manifest/config/asset | REVIEWED |
+| `frontend/Dockerfile.prod` | Manifest/config/asset | INVENTORIED |
 | `frontend/__seo.mjs` | Manifest/config/asset | INVENTORIED |
 | `frontend/audit-verify-C.txt` | Recorded audit output | INVENTORIED |
 | `frontend/audit-verify-D.txt` | Recorded audit output | INVENTORIED |
-| `frontend/e2e/admin-pages.spec.ts` | Playwright E2E test/helper | REVIEWED |
-| `frontend/e2e/agency-marketplace.smoke.spec.ts` | Playwright E2E test/helper | TEST-COVERED (executed) |
-| `frontend/e2e/helpers/adminLogin.ts` | Playwright E2E test/helper | REVIEWED |
-| `frontend/e2e/helpers/isolatedIp.ts` | Playwright E2E test/helper | TEST-COVERED (executed) |
-| `frontend/e2e/interactive-elements.spec.ts` | Playwright E2E test/helper | TEST-COVERED (executed) |
-| `frontend/e2e/maps.spec.ts` | Playwright E2E test/helper | TEST-COVERED (executed) |
-| `frontend/e2e/public-pages.spec.ts` | Playwright E2E test/helper | TEST-COVERED (executed) |
-| `frontend/e2e/responsive.spec.ts` | Playwright E2E test/helper | REVIEWED |
-| `frontend/e2e/role-based.spec.ts` | Playwright E2E test/helper | REVIEWED |
-| `frontend/e2e/sale-only.smoke.spec.ts` | Playwright E2E test/helper | TEST-COVERED (executed) |
-| `frontend/e2e/security.spec.ts` | Playwright E2E test/helper | TEST-COVERED (executed) |
-| `frontend/e2e/smoke.spec.ts` | Playwright E2E test/helper | TEST-COVERED (executed) |
-| `frontend/e2e/workflows.spec.ts` | Playwright E2E test/helper | TEST-COVERED (executed) |
+| `frontend/e2e/admin-pages.spec.ts` | Playwright E2E test/helper | READ |
+| `frontend/e2e/agency-marketplace.smoke.spec.ts` | Playwright E2E test/helper | TESTED |
+| `frontend/e2e/helpers/adminLogin.ts` | Playwright E2E test/helper | READ |
+| `frontend/e2e/helpers/isolatedIp.ts` | Playwright E2E test/helper | TESTED |
+| `frontend/e2e/interactive-elements.spec.ts` | Playwright E2E test/helper | TESTED |
+| `frontend/e2e/maps.spec.ts` | Playwright E2E test/helper | TESTED |
+| `frontend/e2e/public-pages.spec.ts` | Playwright E2E test/helper | TESTED |
+| `frontend/e2e/responsive.spec.ts` | Playwright E2E test/helper | READ |
+| `frontend/e2e/role-based.spec.ts` | Playwright E2E test/helper | READ |
+| `frontend/e2e/sale-only.smoke.spec.ts` | Playwright E2E test/helper | TESTED |
+| `frontend/e2e/security.spec.ts` | Playwright E2E test/helper | TESTED |
+| `frontend/e2e/smoke.spec.ts` | Playwright E2E test/helper | TESTED |
+| `frontend/e2e/workflows.spec.ts` | Playwright E2E test/helper | TESTED |
 | `frontend/final-frontend-verify.txt` | Recorded audit output | INVENTORIED |
 | `frontend/final-playwright.txt` | Recorded audit output | INVENTORIED |
 | `frontend/final-playwright2.txt` | Recorded audit output | INVENTORIED |
 | `frontend/index.html` | Manifest/config/asset | INVENTORIED |
-| `frontend/nginx.conf` | Manifest/config/asset | REVIEWED |
+| `frontend/nginx.conf` | Manifest/config/asset | INVENTORIED |
 | `frontend/package-lock.json` | Manifest/config/asset | INVENTORIED |
-| `frontend/package.json` | Manifest/config/asset | REVIEWED |
-| `frontend/playwright.config.ts` | Manifest/config/asset | REVIEWED |
-| `frontend/public/favicon.svg` | Static public asset | ASSET (inventory only) |
-| `frontend/public/hero-bg.jpg` | Static public asset | ASSET (inventory only) |
-| `frontend/public/hero-slide-2.jpg` | Static public asset | ASSET (inventory only) |
-| `frontend/public/hero-slide-3.jpg` | Static public asset | ASSET (inventory only) |
-| `frontend/public/hero-slide-4.jpg` | Static public asset | ASSET (inventory only) |
-| `frontend/public/hero-slide-5.jpg` | Static public asset | ASSET (inventory only) |
-| `frontend/public/image.png` | Static public asset | ASSET (inventory only) |
-| `frontend/public/logo.jpg` | Static public asset | ASSET (inventory only) |
+| `frontend/package.json` | Manifest/config/asset | READ |
+| `frontend/playwright.config.ts` | Manifest/config/asset | READ |
+| `frontend/public/favicon.svg` | Static public asset | ASSET |
+| `frontend/public/hero-bg.jpg` | Static public asset | ASSET |
+| `frontend/public/hero-slide-2.jpg` | Static public asset | ASSET |
+| `frontend/public/hero-slide-3.jpg` | Static public asset | ASSET |
+| `frontend/public/hero-slide-4.jpg` | Static public asset | ASSET |
+| `frontend/public/hero-slide-5.jpg` | Static public asset | ASSET |
+| `frontend/public/image.png` | Static public asset | ASSET |
+| `frontend/public/logo.jpg` | Static public asset | ASSET |
 | `frontend/public/manifest.webmanifest` | Static public asset | INVENTORIED |
-| `frontend/public/og-image.jpg` | Static public asset | ASSET (inventory only) |
+| `frontend/public/og-image.jpg` | Static public asset | ASSET |
 | `frontend/public/robots.txt` | Static public asset | INVENTORIED |
-| `frontend/public/sample-video.mp4` | Static public asset | INVENTORIED |
+| `frontend/public/sample-video.mp4` | Static public asset | ASSET |
 | `frontend/public/sw.js` | Static public asset | INVENTORIED |
 | `frontend/scripts/_audit.mjs` | Frontend build/test script | INVENTORIED |
 | `frontend/scripts/browser-admin-interactions.mts` | Frontend build/test script | INVENTORIED |
@@ -655,7 +631,7 @@ five new release documents, all reviewed as part of the work:
 | `frontend/scripts/verify-fixes.mts` | Frontend build/test script | INVENTORIED |
 | `frontend/scripts/workflows-e2e.mts` | Frontend build/test script | INVENTORIED |
 | `frontend/src/App.tsx` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/components/admin/AdminAgencyApprovals.test.ts` | React component | INVENTORIED |
+| `frontend/src/components/admin/AdminAgencyApprovals.test.ts` | React component | TESTED |
 | `frontend/src/components/admin/AdminAgencyApprovals.tsx` | React component | INVENTORIED |
 | `frontend/src/components/admin/AdminAgencyDashboard.tsx` | React component | INVENTORIED |
 | `frontend/src/components/admin/AdminAgencyOversight.tsx` | React component | INVENTORIED |
@@ -672,7 +648,7 @@ five new release documents, all reviewed as part of the work:
 | `frontend/src/components/admin/AdminLayout.tsx` | React component | INVENTORIED |
 | `frontend/src/components/admin/AdminLocations.tsx` | React component | INVENTORIED |
 | `frontend/src/components/admin/AdminLoginModal.tsx` | React component | INVENTORIED |
-| `frontend/src/components/admin/AdminMapManagement.test.ts` | React component | INVENTORIED |
+| `frontend/src/components/admin/AdminMapManagement.test.ts` | React component | TESTED |
 | `frontend/src/components/admin/AdminMapManagement.tsx` | React component | INVENTORIED |
 | `frontend/src/components/admin/AdminMediaLibrary.tsx` | React component | INVENTORIED |
 | `frontend/src/components/admin/AdminMediaStudio.tsx` | React component | INVENTORIED |
@@ -690,8 +666,8 @@ five new release documents, all reviewed as part of the work:
 | `frontend/src/components/admin/AdminSubscription.tsx` | React component | INVENTORIED |
 | `frontend/src/components/admin/AdminSupportDesk.tsx` | React component | INVENTORIED |
 | `frontend/src/components/admin/AdminTransactions.tsx` | React component | INVENTORIED |
-| `frontend/src/components/admin/adminFileUpload.test.ts` | React component | INVENTORIED |
-| `frontend/src/components/common/AgencyDetailsModal.test.ts` | React component | INVENTORIED |
+| `frontend/src/components/admin/adminFileUpload.test.ts` | React component | TESTED |
+| `frontend/src/components/common/AgencyDetailsModal.test.ts` | React component | TESTED |
 | `frontend/src/components/common/AgencyDetailsModal.tsx` | React component | INVENTORIED |
 | `frontend/src/components/common/ConfirmDialog.tsx` | React component | INVENTORIED |
 | `frontend/src/components/common/EmptyState.tsx` | React component | INVENTORIED |
@@ -707,7 +683,7 @@ five new release documents, all reviewed as part of the work:
 | `frontend/src/components/common/ToastContainer.tsx` | React component | INVENTORIED |
 | `frontend/src/components/common/VideoModal.tsx` | React component | INVENTORIED |
 | `frontend/src/components/common/WhatsAppFloatingBtn.tsx` | React component | INVENTORIED |
-| `frontend/src/components/common/statusBadges.test.ts` | React component | INVENTORIED |
+| `frontend/src/components/common/statusBadges.test.ts` | React component | TESTED |
 | `frontend/src/components/common/usePrefersReducedMotion.ts` | React component | INVENTORIED |
 | `frontend/src/components/presentation/DeviceFrame.tsx` | React component | INVENTORIED |
 | `frontend/src/components/presentation/PresentationBar.tsx` | React component | INVENTORIED |
@@ -716,17 +692,17 @@ five new release documents, all reviewed as part of the work:
 | `frontend/src/components/public/AgenciesSection.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/AgencyAccessPage.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/AgencyProfilePage.tsx` | React component | INVENTORIED |
-| `frontend/src/components/public/AuthPage.test.ts` | React component | INVENTORIED |
+| `frontend/src/components/public/AuthPage.test.ts` | React component | TESTED |
 | `frontend/src/components/public/AuthPage.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/AvailableForSaleSection.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/CompareModal.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/CompareTray.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/ContactSection.tsx` | React component | INVENTORIED |
-| `frontend/src/components/public/CrawlableDetailLinks.test.ts` | React component | INVENTORIED |
+| `frontend/src/components/public/CrawlableDetailLinks.test.ts` | React component | TESTED |
 | `frontend/src/components/public/FeaturedProjects.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/FeaturedProperties.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/HeroSection.tsx` | React component | INVENTORIED |
-| `frontend/src/components/public/MapsPage.test.ts` | React component | INVENTORIED |
+| `frontend/src/components/public/MapsPage.test.ts` | React component | TESTED |
 | `frontend/src/components/public/MapsPage.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/MediaGallerySection.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/NotFoundPage.tsx` | React component | INVENTORIED |
@@ -740,46 +716,46 @@ five new release documents, all reviewed as part of the work:
 | `frontend/src/components/public/ServicesSection.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/TestimonialsSection.tsx` | React component | INVENTORIED |
 | `frontend/src/components/public/VideoWalkthroughSection.tsx` | React component | INVENTORIED |
-| `frontend/src/components/public/heroSlider.test.ts` | React component | INVENTORIED |
-| `frontend/src/components/public/mediaVideoFlow.test.ts` | React component | INVENTORIED |
-| `frontend/src/config/appMode.test.ts` | Frontend unit test | INVENTORIED |
+| `frontend/src/components/public/heroSlider.test.ts` | React component | TESTED |
+| `frontend/src/components/public/mediaVideoFlow.test.ts` | React component | TESTED |
+| `frontend/src/config/appMode.test.ts` | Manifest/config/asset | TESTED |
 | `frontend/src/config/appMode.ts` | Manifest/config/asset | INVENTORIED |
 | `frontend/src/config/seo.ts` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/context/AppContext.test.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/context/AppContext.tsx` | Frontend domain/state | INVENTORIED |
+| `frontend/src/context/AppContext.test.ts` | React context | TESTED |
+| `frontend/src/context/AppContext.tsx` | React context | INVENTORIED |
 | `frontend/src/data/agencyVideosSeed.ts` | Manifest/config/asset | INVENTORIED |
 | `frontend/src/data/erpSeed.empty.ts` | Manifest/config/asset | INVENTORIED |
 | `frontend/src/data/erpSeed.ts` | Manifest/config/asset | INVENTORIED |
 | `frontend/src/data/publicSeed.ts` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/domain/auditLog.test.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/auditLog.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/authSession.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/mediaPolicy.test.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/mediaPolicy.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/mfa.test.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/mfa.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/permissions.test.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/permissions.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/transactions.test.ts` | Frontend domain/state | INVENTORIED |
-| `frontend/src/domain/transactions.ts` | Frontend domain/state | INVENTORIED |
+| `frontend/src/domain/auditLog.test.ts` | Frontend domain logic | TESTED |
+| `frontend/src/domain/auditLog.ts` | Frontend domain logic | INVENTORIED |
+| `frontend/src/domain/authSession.ts` | Frontend domain logic | INVENTORIED |
+| `frontend/src/domain/mediaPolicy.test.ts` | Frontend domain logic | TESTED |
+| `frontend/src/domain/mediaPolicy.ts` | Frontend domain logic | INVENTORIED |
+| `frontend/src/domain/mfa.test.ts` | Frontend domain logic | TESTED |
+| `frontend/src/domain/mfa.ts` | Frontend domain logic | INVENTORIED |
+| `frontend/src/domain/permissions.test.ts` | Frontend domain logic | TESTED |
+| `frontend/src/domain/permissions.ts` | Frontend domain logic | INVENTORIED |
+| `frontend/src/domain/transactions.test.ts` | Frontend domain logic | TESTED |
+| `frontend/src/domain/transactions.ts` | Frontend domain logic | INVENTORIED |
 | `frontend/src/index.css` | Manifest/config/asset | INVENTORIED |
 | `frontend/src/main.tsx` | Manifest/config/asset | INVENTORIED |
 | `frontend/src/pages/AuthFlowPages.tsx` | React page/route | INVENTORIED |
 | `frontend/src/services/api.ts` | API client/service | INVENTORIED |
 | `frontend/src/storage/indexedDb.ts` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/types/index.ts` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/utils/apiProperty.test.ts` | Frontend unit test | INVENTORIED |
+| `frontend/src/types/index.ts` | TypeScript types | INVENTORIED |
+| `frontend/src/utils/apiProperty.test.ts` | Manifest/config/asset | TESTED |
 | `frontend/src/utils/apiProperty.ts` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/utils/documentUpload.test.ts` | Frontend unit test | INVENTORIED |
+| `frontend/src/utils/documentUpload.test.ts` | Manifest/config/asset | TESTED |
 | `frontend/src/utils/documentUpload.ts` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/utils/exportCsv.test.ts` | Frontend unit test | INVENTORIED |
+| `frontend/src/utils/exportCsv.test.ts` | Manifest/config/asset | TESTED |
 | `frontend/src/utils/exportCsv.ts` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/utils/logic.sales.test.ts` | Frontend unit test | INVENTORIED |
-| `frontend/src/utils/logic.test.ts` | Frontend unit test | INVENTORIED |
+| `frontend/src/utils/logic.sales.test.ts` | Manifest/config/asset | TESTED |
+| `frontend/src/utils/logic.test.ts` | Manifest/config/asset | TESTED |
 | `frontend/src/utils/logic.ts` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/utils/marketplaceFeatures.test.ts` | Frontend unit test | INVENTORIED |
+| `frontend/src/utils/marketplaceFeatures.test.ts` | Manifest/config/asset | TESTED |
 | `frontend/src/utils/propertyCompare.ts` | Manifest/config/asset | INVENTORIED |
-| `frontend/src/utils/reloadGuard.test.ts` | Frontend unit test | INVENTORIED |
+| `frontend/src/utils/reloadGuard.test.ts` | Manifest/config/asset | TESTED |
 | `frontend/src/utils/reloadGuard.ts` | Manifest/config/asset | INVENTORIED |
 | `frontend/src/utils/savedSearchFilters.ts` | Manifest/config/asset | INVENTORIED |
 | `frontend/tsc-appfix.txt` | Recorded audit output | INVENTORIED |
@@ -787,10 +763,16 @@ five new release documents, all reviewed as part of the work:
 | `frontend/vercel.json` | Manifest/config/asset | INVENTORIED |
 | `frontend/vite.config.ts` | Manifest/config/asset | INVENTORIED |
 | `metadata.json` | Manifest/config/asset | INVENTORIED |
-| `nginx/nginx.conf` | Deployment configuration | REVIEWED |
-| `package.json` | Manifest/config/asset | REVIEWED |
-| `scripts/backup.ps1` | Ops script | REVIEWED |
-| `scripts/backup.sh` | Ops script | REVIEWED |
-| `scripts/restore-drill.ps1` | Ops script | REVIEWED |
-| `scripts/wait-for-compose-ready.sh` | Ops script | REVIEWED |
+| `nginx/nginx.conf` | Deployment configuration | READ |
+| `package.json` | Manifest/config/asset | READ |
+| `scripts/backup.ps1` | Ops script | READ |
+| `scripts/backup.sh` | Ops script | READ |
+| `scripts/restore-drill.ps1` | Ops script | READ |
+| `scripts/wait-for-compose-ready.sh` | Ops script | READ |
 | `vercel.json` | Manifest/config/asset | INVENTORIED |
+
+## Removed from baseline during cleanup
+
+| Path | Reason | Status |
+|---|---|---|
+| `write_perf.py` | Scratch report generator with hard-coded `/workspace` path; not used by product or CI. | HISTORICAL (removed) |

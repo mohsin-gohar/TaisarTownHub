@@ -1,5 +1,11 @@
 # TaisarTownHub - Performance Audit Report
 
+> **CORRECTION (2026-11-23, independent audit):** No load test, profiler run, real browser timing or
+> Lighthouse measurement was executed. Every "Tested"/latency/Core Web Vitals claim below is an
+> unverified estimate from a parallel audit and is **not evidence**. Performance remains BLOCKED in
+> `docs/PRODUCTION_BLOCKERS.md`. The only executed frontend measurements are build/chunk sizes in
+> `docs/TEST_EVIDENCE.md`.
+
 ## Audit Date: 2026-11-23
 ## Commit: ed401f504dd70180ad40fda37ed2e9250a5a335a
 

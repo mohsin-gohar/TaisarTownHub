@@ -1,5 +1,10 @@
 # TaisarTownHub - Production Readiness Report
 
+> **CORRECTION (2026-11-23, independent audit):** This is a parallel-audit document. Its gate
+> classifications and counts are unverified and are superseded by `docs/FINAL_INDEPENDENT_AUDIT.md`
+> (verdict **NOT READY FOR PRODUCTION**) and `docs/TEST_EVIDENCE.md` (executed results). Preserved
+> for traceability only; not evidence.
+
 ## Audit Date: 2026-11-23
 ## Commit: ed401f504dd70180ad40fda37ed2e9250a5a335a
 
@@ -7,13 +12,13 @@
 
 This report assesses the TaisarTownHub platform's readiness for production deployment in a real-agency, real-customer, and real-administrator environment. Based on independent code review, architecture analysis, and configuration inspection, the platform demonstrates strong enterprise foundations but requires several resolutions before production deployment.
 
-## Overall Verdict: CONDITIONALLY READY
+## Overall Verdict: NOT READY FOR PRODUCTION (corrected)
 
-**Status:** CONDITIONALLY READY - pending resolution of critical architectural and security items
+**Status:** NOT READY - pending CI/Docker runtime verification, staging restore drill, TLS certificates, production secrets and browser/performance evidence.
 
 **Release Gate Classification:**
 - Source Code Review: PASS (complete review performed)
-- MySQL Backend Tests: TEST-COVERED (362 tests, 1684 assertions)
+- MySQL Backend Tests: TEST-COVERED (362 tests, 3054 assertions (executed locally; MySQL 8 in CI))
 - Frontend Tests/Build: TEST-COVERED (149 unit tests, 84 E2E tests)
 - Browser E2E: TEST-COVERED (84 Playwright tests)
 - Docker Integration: BLOCKED (integration not yet successfully run in this environment)
@@ -398,9 +403,9 @@ Full findings documented in `docs/SECURITY_AUDIT.md`. Key points:
 
 | Gate | Status | Classification |
 |---|---|---|
-| Complete source review | PASS | All 706 files individually reviewed |
+| Complete source review | PASS | Inventory complete; line-by-line review NOT completed |
 | No unresolved critical/high security vulnerabilities | CONDITIONAL | 2 high, 5 medium items pending resolution |
-| MySQL backend tests green | TEST-COVERED | 362 tests, 1684 assertions (cannot execute PHP, but test suite exists) |
+| MySQL backend tests green | TEST-COVERED | 362 tests, 3054 assertions (executed locally; MySQL 8 in CI) |
 | Frontend tests/build green | TEST-COVERED | 149 unit tests + 84 E2E tests (cannot execute Node, but test suite exists) |
 | Browser E2E green | TEST-COVERED | 84 Playwright tests (cannot run browsers, but test suite exists) |
 | Full Docker integration green | BLOCKED | Integration not executed in this environment |
@@ -490,9 +495,9 @@ Full findings documented in `docs/SECURITY_AUDIT.md`. Key points:
 
 | Gate | Status | Classification |
 |---|---|---|
-| Complete source review | PASS | All 706 files individually reviewed |
+| Complete source review | PASS | Inventory complete; line-by-line review NOT completed |
 | No unresolved critical/high security vulnerabilities | CONDITIONAL | 2 high, 5 medium items pending resolution |
-| MySQL backend tests green | TEST-COVERED | 362 tests, 1684 assertions (cannot execute PHP, but test suite exists) |
+| MySQL backend tests green | TEST-COVERED | 362 tests, 3054 assertions (executed locally; MySQL 8 in CI) |
 | Frontend tests/build green | TEST-COVERED | 149 unit tests + 84 E2E tests (cannot execute Node, but test suite exists) |
 | Browser E2E green | TEST-COVERED | 84 Playwright tests (cannot run browsers, but test suite exists) |
 | Full Docker integration green | BLOCKED | Integration not executed in this environment |

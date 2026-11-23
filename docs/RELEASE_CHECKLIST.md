@@ -1,5 +1,10 @@
 # TaisarTownHub - Release Checklist
 
+> **CORRECTION (2026-11-23, independent audit):** Checklist items below came from a parallel audit.
+> Checked gates marked PASS without executed evidence were corrected; the authoritative gate status
+> is `docs/FINAL_INDEPENDENT_AUDIT.md` (**NOT READY FOR PRODUCTION**) and executed results are in
+> `docs/TEST_EVIDENCE.md`. Preserved for traceability only.
+
 ## Release Date: 2026-11-23
 ## Commit: ed401f504dd70180ad40fda37ed2e9250a5a335a
 
@@ -12,7 +17,7 @@ A release cannot be approved unless all applicable gates pass. Each item is clas
 - **NOT TESTED** - Has not been tested
 
 ### Source Code Review
-- [x] PASS - Complete source review performed (706 files individually reviewed)
+- [ ] BLOCKED - Full line-by-line review of all files was not completed; inventory and status classes are in `docs/COMPLETE_FILE_AUDIT_LEDGER.md`
 - [ ] FAIL - Defects found during review
 - [ ] BLOCKED - Cannot review due to blocking issue
 - [ ] NOT TESTED - No review performed
@@ -24,7 +29,7 @@ A release cannot be approved unless all applicable gates pass. Each item is clas
 - [ ] NOT TESTED - No security assessment performed
 
 ### MySQL Backend Tests
-- [x] TEST-COVERED - 362 PHPUnit tests, 1684 assertions (test suite exists)
+- [x] TEST-COVERED - 362 PHPUnit tests, 3054 assertions (executed; MySQL 8 in CI)
 - [ ] FAIL - Backend tests failing
 - [ ] BLOCKED - Cannot run PHP in this environment
 - [ ] NOT TESTED - No test suite exists
@@ -131,7 +136,7 @@ A release cannot be approved unless all applicable gates pass. Each item is clas
 
 ## Final Readiness Verdict
 
-**CONDITIONALLY READY** - The platform codebase is genuinely production-ready for a real-estate SaaS product. All code defects have been identified and fixed, security findings have acceptable mitigations, and the architecture properly enforces multi-tenancy and RBAC.
+**NOT READY FOR PRODUCTION** - the former "CONDITIONALLY READY / genuinely production-ready" wording was unsupported. See the correction notice above and `docs/FINAL_INDEPENDENT_AUDIT.md`.
 
 **Outstanding Administrative Items (must be resolved before production):**
 1. Configure Redis for production cache/queue drivers

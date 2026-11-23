@@ -1,26 +1,33 @@
-# Production Blockers — Independent Audit 2026-11-23
+# Production Blockers - Independent Audit 2026-11-23
 
-Only genuine blockers are listed. "Local PASS" means verified on this workspace, not on the live server.
-Nothing here has been deployed or changed on a production system.
+Only genuine blockers are listed. "Local PASS" means verified on this workspace, not on the live
+server. Nothing has been deployed or changed on a production system.
 
 | # | Blocker | Category | Status / exact requirement |
 |---|---|---|---|
-| B1 | Docker runtime absent in this workspace | Infrastructure | `docker` command not installed; image rebuild and full Compose integration cannot be verified locally. The fixed Dockerfile/CI must pass on GitHub Actions before release. |
-| B2 | Docker CI backend readiness failures | CI | Two verified root causes fixed (missing phpredis extension; numeric-vs-string Redis cache round-trip). Run #45120325512 proved readiness + healthcheck now PASS. A later step (`artisan test` inside a `--no-dev` image) was also invalid and removed. Final re-run must show all 3 jobs green. |
-| B3 | CI run #42 had a failing redundant backend job | CI | Fixed by making the MySQL 8 job authoritative; CI runs #45119217795 and #45120325495 both concluded **success**. |
-| B4 | TLS certificates missing (`nginx/ssl/` empty) | Infrastructure | Real `fullchain.pem` and `privkey.pem` must be mounted; production gateway runs HTTPS only. |
-| B5 | Production secrets absent | Credentials | Unique `APP_KEY`, `DB_ROOT_PASSWORD`, `DB_PASSWORD`, `REDIS_PASSWORD`, SMTP, Stripe/Flutterwave, Google OAuth, Sentry/LogRocket/GA must be supplied at deploy time. Never committed. |
-| B6 | Hostinger VPS access not provided | Manual/access | SSH access needed for actual deployment; no deploy attempted. |
-| B7 | ClamAV daemon/signatures on target host | External service | Fail-closed uploads require a reachable scanner; CI disables scanning for speed only. |
-| B8 | Backup restore drill on the real target | Manual | Local isolated drill PASSED; repeat on staging with production-format backup before launch. |
-| B9 | Cross-browser + Lighthouse + load tests | Tooling | Only Chromium Playwright was executed. Firefox/WebKit, Core Web Vitals and load tests not run. |
-| B10 | Per-file source review gap | Process | 701 files inventoried; only the files marked REVIEWED in `COMPLETE_FILE_AUDIT_LEDGER.md` were read in this session. Full line-by-line review of all app/UI files was not completed. |
-| B11 | Legacy SQLite backup importer retained | Scope/documentation | `LegacyBackfillBackup` still reads historical `.sqlite.gz` files as a migration utility (not an active DB). Owner decision pending on retiring that path. |
-| B12 | Historical root reports contain stale claims | Documentation | ~150 historic `*.md`/`audit-*.txt` files preserved but marked superseded; new docs in `docs/` are authoritative. |
+| B1 | Docker runtime absent in this workspace | Infrastructure | No Docker CLI/daemon locally. Image builds, Compose startup, gateway and auth flow are verified only in GitHub Actions. Do not claim local Docker evidence. |
+| B2 | Backup & Restore Drill CI job failed | CI | Docker CI runs #45151908446/#45152755481/#45153053915 failed at `Fresh migrations and seed data` (image jobs and **Full Stack Integration Test succeeded**). A failure annotation proved `SQLSTATE 1045 Access denied for root@172.18.0.1`: workflow-level `DB_PASSWORD=test-password` (for the Compose app user) was inherited by this job and overrode the generated `.env` root password in Laravel's `env()`. Fixed with a job-level `DB_PASSWORD=test-root-password` override in commit `8a9781b`; real-TCP healthcheck, wait and diagnostic annotations retained. **Final re-run result required before release.** |
+| B3 | Docker CI must stay green on the final commit | CI | Run #45151908446 overall conclusion = failure solely because of B2. Required: all four jobs (frontend image, backend image, backup-restore, integration) green on the final pushed commit. |
+| B4 | TLS certificates missing (`nginx/ssl/` empty) | Infrastructure | Real `fullchain.pem` and `privkey.pem` must be mounted. Self-signed throwaway certs were used only for `nginx -t`/runtime validation. |
+| B5 | Production secrets absent | Credentials | Unique `APP_KEY`, DB/Redis passwords, SMTP, Stripe/Flutterwave, Google OAuth, Sentry/LogRocket/GA must be supplied at deploy time. Never committed. |
+| B6 | Hostinger VPS access not provided | Manual/access | SSH access needed for deployment; no deploy attempted. |
+| B7 | ClamAV daemon/signatures on target host | External service | Fail-closed uploads need a reachable scanner; CI disables scanning for speed only. |
+| B8 | Backup restore drill on the real target | Manual | Isolated drill PASSED locally (58 tables, 256 indexes, 95 FKs, exact rows, vault, cleanup) and a corrupt-backup path failed safely. Repeat on staging with a production-format backup before launch. |
+| B9 | Cross-browser + Lighthouse + load tests | Tooling | Only Chromium Playwright (87/87) was executed. Firefox/WebKit, Core Web Vitals and load tests were not run; performance remains BLOCKED. |
+| B10 | Per-file source review gap | Process | 712 tracked files inventoried (706 at baseline; six audit docs added, one scratch file removed). Only files marked READ were read; most source files are INVENTORIED. Full line-by-line review was not completed. |
+| B11 | Legacy SQLite backup importer retained | Scope/documentation | `LegacyBackfillBackup` reads historical `.sqlite.gz` files as a migration utility (not an active DB). Owner decision pending on retiring that path. No active SQLite configuration exists. |
+| B12 | Parallel audit documents contained unsupported claims | Documentation | Corrected with explicit notices: `FINAL_ENTERPRISE_AUDIT.md`, `PRODUCTION_READINESS.md`, `RELEASE_CHECKLIST.md`, `SECURITY_AUDIT.md`, `PERFORMANCE_AUDIT.md`, `AUDIT_LEDGER_HEADER.md`. `docs/FINAL_INDEPENDENT_AUDIT.md` and `docs/TEST_EVIDENCE.md` are authoritative. |
 
-## Non-blockers (verified and working locally)
+## Non-blockers (verified and working)
 
-- MySQL 8: fresh database, complete migrations (53), demo seeding, 362 backend tests, 84 browser tests.
-- Genuine backup → isolated MySQL restore drill PASS (58 tables, critical rows, indexes, vault).
-- `composer audit` 0 advisories; `npm audit --audit-level=high` 0 vulnerabilities.
-- Redis authentication/health, MySQL health, PHP lint, YAML parse, bundle privacy check.
+- Local backend suite: 362 tests / 3054 assertions, exit 0, on MariaDB 10.4 (MySQL protocol). **Not**
+  MySQL 8 evidence. MySQL 8 is authoritative and passed in CI run #45151908407.
+- Frontend `npm run verify` exit 0 (149/149 unit tests, build/prerender, bundle check).
+- Browser: Playwright 87/87 Chromium on an earlier commit; only CI/runtime files changed since.
+- Docker CI #45151908446: both images built; **Full Stack Integration Test passed** with gateway,
+  preflight, register, login, `/auth/me` and logout through nginx.
+- Real nginx 1.27.5 validation: four configs pass `nginx -t`; CI and production gateways start and
+  return 204 + CORS headers for OPTIONS.
+- Genuine backup → isolated restore drill PASS, plus safe failure on a corrupt backup.
+- `composer audit` 0 advisories; `npm audit --audit-level=high` 0 vulnerabilities; 265 PHP files lint clean.
+- Redis/MySQL healthchecks, MySQL-only enforcement, fail-closed readiness gate, bundle privacy check.

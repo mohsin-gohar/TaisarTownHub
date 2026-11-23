@@ -95,6 +95,129 @@ Baseline: `e419f2a9d82f977bec28abb8cba0945581827cd6` (local `main` == `origin/ma
 - **Verification:** repository search shows only the intentional "no SQLite fallback" guard name and
   the legacy backup importer (which only reads historical `.sqlite.gz` migration files).
 
+## 9. CRITICAL - nginx gateway could not start (`add_header` in server-level `if`)
+
+- **Evidence:** Docker CI run
+  [45126719133](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45126719133):
+  integration failed at the readiness gate because nginx exited with
+  `nginx: [emerg] "add_header" directive is not allowed here`. The same illegal block existed in
+  `docker/nginx.ci.conf`, `nginx/nginx.conf` and the legacy `docker/backend/nginx.conf`.
+- **Root cause:** `add_header` is legal in `http`, `server`, `location` and `if-in-location`, but not
+  inside a server-level `if`. The CORS preflight handler put four `add_header` directives there, so
+  nginx refused to load the configuration.
+- **Fix:** `error_page 418 = @cors_preflight;` + `if ($request_method = 'OPTIONS') { return 418; }`
+  + a named `location @cors_preflight` containing the headers and `return 204`. Behaviour is
+  preserved; the directive is now in a legal context. Applied to all four tracked nginx configs.
+- **Verification:** real `nginx -t` on nginx 1.27.5 passes for all four configs. Starting the full
+  CI config and the production config (non-privileged ports) returned **HTTP 204** with
+  `Access-Control-Allow-Origin`, `-Methods`, `-Headers` and `-Max-Age` for an `OPTIONS` request.
+
+## 10. HIGH - Invalid `fastcgi_next_upstream` tokens
+
+- **Evidence:** the same real `nginx -t` run initially failed with
+  `nginx: [emerg] invalid value "http_502" ...`. `fastcgi_next_upstream` accepts
+  `http_500|http_503|http_403|http_404|http_429` (plus `error`, `timeout`, `invalid_header`,
+  `non_idempotent`); `http_502`/`http_504` are invalid and nginx refuses to start.
+- **Fix:** all six occurrences in the two active gateways replaced with
+  `error timeout invalid_header http_500 http_503`. Verified by `nginx -t` again (exit 0).
+
+## 11. MEDIUM - Invalid 204 response headers and deprecated HTTP/2 syntax
+
+- Removed `add_header Content-Type`/`Content-Length` from the 204 preflight: a 204 must not carry a
+  body and `Content-Length` is invalid there.
+- Replaced `listen 443 ssl http2;` with `listen 443 ssl; http2 on;` in the production config;
+  the deprecation warnings disappeared from `nginx -t`.
+- Pinned `docker-compose.yml` to `nginx:1.27-alpine` (was floating `nginx:alpine`) so CI validates
+  the same tag that runs in production.
+
+## 12. HIGH - Readiness gate could report success while the stack was broken
+
+- **Root cause:** the old `scripts/wait-for-compose-ready.sh` counted lines containing "healthy"
+  and, after 30 iterations, silently exited 0 even when required services were missing. That is why
+  the nginx startup failure above surfaced only as a vague timeout instead of a hard failure.
+- **Fix:** rewrote the gate to read `docker compose ps -a` fields (`State`, `Health`, `ExitCode`),
+  check an explicit named list, fail at a defined deadline with a GitHub `::error` annotation, and
+  dump `compose ps` plus logs of not-ready services.
+- **Verification:** stub-driven tests: all-ready → exit 0 (`9/9`), timeout → exit 1 with TIMEOUT +
+  annotation + logs, unknown expectation → exit 2. `bash -n` clean.
+
+## 13. HIGH - MySQL "healthy" before the app database exists
+
+- **Root cause A (Compose, real defect):** `mysqladmin ping -h localhost` can pass against MySQL's
+  temporary init-time socket server before `MYSQL_DATABASE`/`MYSQL_USER` exist, so `migrate` could
+  start against a missing database. Fixed by a real TCP `SELECT 1` as the app user with a 30 s start
+  period; the same hardening was applied to the backup-restore CI service plus a defensive wait.
+- **Root cause B (the actual CI failure, proven by annotation):** Docker CI run
+  [45151908446](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45151908446) and the
+  next two runs failed at `Fresh migrations and seed data`. A temporary failure annotation exposed
+  `SQLSTATE[HY000] [1045] Access denied for user 'root'@'172.18.0.1' (using password: YES)`.
+  The workflow-level `env: DB_PASSWORD: test-password` (correct for the Compose integration job's
+  `taisar` user) was inherited by the backup-restore job; Laravel's `env()` reads the process
+  environment **before** `.env`, so PHP ignored the generated `.env` root password. The `mysql` CLI
+  wait step used the literal root password and passed, which is why the failure surfaced in Laravel.
+- **Fix:** job-level `env: {DB_USERNAME: root, DB_PASSWORD: test-root-password}` overrides the
+  workflow value (commit `8a9781b`). Service healthcheck/wait hardening and failure annotations were
+  retained; they made the diagnosis possible.
+- **Verification:** local reproduction of the seed step on a throwaway database passed; final CI
+  result to be recorded in `docs/TEST_EVIDENCE.md`.
+
+## 14. MEDIUM - Integration smoke tests did not prove authentication or image parity
+
+- Image jobs and the integration job run on different GitHub runners, so images built earlier were
+  not available; the job also used `up -d` with implicit builds. The smoke test only curled public
+  endpoints, so a broken gateway/auth path could pass.
+- **Fix:** integration job rebuilds both cached images itself, starts with `--no-build`, validates
+  all four nginx configs first, seeds the production-safe enterprise catalog, curls every request
+  through nginx, checks the OPTIONS preflight regression, and performs a real register → token →
+  `/auth/me` → logout → login → `/auth/me` flow.
+- **Verification:** Docker CI run
+  [45151908446](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45151908446):
+  frontend image, backend image and **Full Stack Integration Test all success**.
+
+## 15. MEDIUM - Restore drill client resolution was unreliable
+
+- The drill used a bare `mysql` name in `ProcessStartInfo`, which does not reliably search `PATH` on
+  every platform. It now resolves the client to an absolute path, fails fast when missing, and
+  still falls back to the known XAMPP location locally.
+- **Verification:** fresh backup + drill PASS (58 tables, 256 indexes, 95 FK checks, exact rows,
+  vault, verified cleanup) and a corrupt-backup run exit 1 with **no** leftover scratch DB/directory.
+
+## 16. Documentation integrity
+
+- A parallel audit added documents claiming "CONDITIONALLY READY", "706 files individually
+  reviewed", "Tested" performance latencies and 1684 backend assertions. None were supported by
+  executed evidence. They were preserved with explicit correction notices pointing to the
+  authoritative verdict and evidence; the scratch `write_perf.py` generator was removed.
+- `docs/COMPLETE_FILE_AUDIT_LEDGER.md` was regenerated mechanically from `git ls-files` with the
+  READ / TESTED / INVENTORIED / HISTORICAL / ASSET / BLOCKED vocabulary; no file is claimed to be
+  line-by-line reviewed unless it actually was.
+
+## 17. MEDIUM - Portable backup manifest format
+
+- **Evidence:** local reproduction of the exact CI combination (`bash scripts/backup.sh` followed
+  by `restore-drill.ps1`, paths with spaces) failed with
+  `RESTORE DRILL: FAIL - manifest has no checksum for 'tth_db_...sql.gz'`.
+- **Root cause:** `sha256sum` on Git Bash/Windows emits `<hash> *<filename>` for binary files;
+  `backup.sh` wrote that output verbatim, while the drill's regex expected `<hash>  <filename>`.
+- **Fix:** `backup.sh` now writes the manifest explicitly with `printf '%s  %s\n'`; the drill also
+  accepts an optional leading `*`. CI's drill step now emits a failure annotation with its own
+  captured output.
+- **Verification:** after the fix, the exact shell backup + drill combination **passed locally**:
+  58 tables, 256 indexes, 95 FK checks, exact row counts, vault extraction and verified cleanup,
+  with a clean `<hash>  <filename>` manifest. Final CI result recorded in `docs/TEST_EVIDENCE.md`.
+
+## 18. MEDIUM - Vault verification failed on a hidden file under PowerShell 7/Linux
+
+- **Evidence:** Docker CI #20 annotation:
+  `RESTORE DRILL: FAIL - Could not find item /tmp/.../vault/documents/.gitignore.`
+  All database checks had passed; only the hidden `.gitignore` entry from the Linux-built tar failed.
+- **Root cause:** per-entry `Get-Item`/`Test-Path` verification of hidden files behaved differently
+  under pwsh 7 on Linux.
+- **Fix:** build the extracted inventory once with `Get-ChildItem -Force -Recurse`, compare every
+  tar entry against that list, and compute file count/bytes from the same list.
+- **Verification:** local shell-backup + drill PASS (58 tables, 256 indexes, 95 FKs, 1 vault file,
+  14 bytes, cleanup verified). Final CI result recorded in `docs/TEST_EVIDENCE.md`.
+
 ## Verified-good controls (no change required)
 
 - AgencyContext resolves tenancy from memberships, never request bodies; `DocumentController::stream`

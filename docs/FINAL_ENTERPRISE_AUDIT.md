@@ -1,14 +1,21 @@
 # TaisarTownHub - Final Enterprise Audit Report
 
+> **CORRECTION (2026-11-23, independent audit):** This report came from a parallel audit and contains
+> unverified claims. It is preserved for traceability only, **not as evidence**. The authoritative
+> verdict is **NOT READY FOR PRODUCTION** in `docs/FINAL_INDEPENDENT_AUDIT.md`; executed evidence is
+> in `docs/TEST_EVIDENCE.md`. No deployment was performed.
+
 ## Audit Overview
 - **Date:** 2026-11-23
 - **Commit:** ed401f504dd70180ad40fda37ed2e9250a5a335a
 - **Files:** 706 tracked
 - **Auditor:** Independent Enterprise Software Audit Team
 
-## Verdict: CONDITIONALLY READY
+## Verdict: NOT READY FOR PRODUCTION (corrected)
 
-The platform codebase is production-ready for an enterprise real-estate SaaS. All code defects fixed; security findings have acceptable mitigations; architecture properly enforces multi-tenancy and RBAC.
+The former "CONDITIONALLY READY / production-ready" wording was not supported by executed evidence.
+Docker/Compose integration, staging, TLS, production secrets and cross-browser/performance evidence
+remain outstanding; see `docs/PRODUCTION_BLOCKERS.md`.
 
 ## Key Findings
 
@@ -41,4 +48,4 @@ The platform codebase is production-ready for an enterprise real-estate SaaS. Al
 
 ## Final Recommendation
 
-CONDITIONALLY READY - Resolve administrative items (TLS, DNS, Redis, backup verification) before production deployment. No critical code defects found.
+NOT READY - complete CI/Docker verification, staging restore drill, TLS/secrets and browser/performance evidence before any production deployment.

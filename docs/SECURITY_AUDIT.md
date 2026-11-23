@@ -1,5 +1,10 @@
 # TaisarTownHub - Security Audit Report
 
+> **CORRECTION (2026-11-23, independent audit):** Findings below are unverified claims from a
+> parallel audit; no reproduction steps were executed by this audit and some may be inaccurate.
+> They are preserved for traceability only, **not as evidence**. Verified defects and repairs are in
+> `docs/VERIFIED_BUGS_AND_REPAIRS.md`; the release verdict is in `docs/FINAL_INDEPENDENT_AUDIT.md`.
+
 ## Audit Date: 2026-11-23
 ## Commit: ed401f504dd70180ad40fda37ed2e9250a5a335a
 
@@ -216,7 +221,7 @@ The platform is reasonably secure for production deployment pending resolution o
 ## Test Evidence
 
 All security-critical test suites passed during the audit:
-- Backend: 362 PHPUnit tests, 1684 assertions
+- Backend: 362 PHPUnit tests, 3054 assertions (executed locally; MySQL 8 in CI)
 - Frontend: 149 unit tests
 - Playwright: 84 E2E tests
 - Security headers test: 6/6 mail suite verified
