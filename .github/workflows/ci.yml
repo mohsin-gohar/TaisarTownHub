@@ -62,8 +62,10 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
-        # Set lock wait timeout to prevent deadlocks from hanging tests
-        command: ["mysqld", "--innodb-lock-wait-timeout=5"]
+        # NOTE: GitHub Actions service containers do not support a `command:`
+        # key. Adding one invalidates the whole workflow and the run fails to
+        # start with zero jobs. The lock wait timeout is applied per connection
+        # by backend/config/database.php from MYSQL_LOCK_WAIT_TIMEOUT below.
     env:
       DB_CONNECTION: mysql
       DB_HOST: 127.0.0.1
