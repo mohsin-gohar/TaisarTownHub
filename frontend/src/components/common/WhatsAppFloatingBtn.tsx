@@ -1,15 +1,16 @@
 ﻿import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { MessageCircle } from 'lucide-react';
-import { generateWhatsAppLink } from '../../utils/logic';
+import { buildWhatsAppLink } from '../../utils/whatsapp';
 
 export const WhatsAppFloatingBtn: React.FC = () => {
   const { cmsConfig } = useApp();
 
-  const whatsAppLink = generateWhatsAppLink(
+  const whatsAppLink = buildWhatsAppLink(
     cmsConfig.contactWhatsApp,
     'Salam! I am viewing TaisarTownHub website and would like instant consultation on Taiser Town Scheme 45 plots.'
   );
+  if (!whatsAppLink) return null;
 
   return (
     <aside aria-label="Contact via WhatsApp" className="fixed bottom-6 left-6 z-40">

@@ -41,24 +41,25 @@ test('calculateInstallmentPlan computes down payment and monthly correctly', () 
 
 test('generateWhatsAppLink produces valid encoded wa.me URL', () => {
   const link = generateWhatsAppLink('+92 300 1234567', 'Salam, I want info on Sector 70-D');
-  assert.ok(link.startsWith('https://wa.me/923001234567?text='));
+  assert.ok(link?.startsWith('https://wa.me/923001234567?text='));
 });
 
 test('generateWhatsAppLink normalizes local and international PK formats', () => {
   // 0300... local format
-  assert.ok(generateWhatsAppLink('03001234567', 'hi').startsWith('https://wa.me/923001234567?text='));
+  assert.ok(generateWhatsAppLink('03001234567', 'hi')?.startsWith('https://wa.me/923001234567?text='));
   // 0092... international dialing prefix
-  assert.ok(generateWhatsAppLink('00923001234567', 'hi').startsWith('https://wa.me/923001234567?text='));
+  assert.ok(generateWhatsAppLink('00923001234567', 'hi')?.startsWith('https://wa.me/923001234567?text='));
   // Bare 10-digit national number
-  assert.ok(generateWhatsAppLink('3001234567', 'hi').startsWith('https://wa.me/923001234567?text='));
-  // Implausible number degrades to a number-less chat link, never a broken wa.me/<garbage> URL
-  assert.equal(generateWhatsAppLink('12345', 'hi'), 'https://wa.me/?text=hi');
-  assert.equal(generateWhatsAppLink('', 'hi'), 'https://wa.me/?text=hi');
+  assert.ok(generateWhatsAppLink('3001234567', 'hi')?.startsWith('https://wa.me/923001234567?text='));
+  assert.ok(generateWhatsAppLink('+92 92 300 1234567', 'hi')?.startsWith('https://wa.me/923001234567?text='));
+  assert.equal(generateWhatsAppLink('12345', 'hi'), null);
+  assert.equal(generateWhatsAppLink('', 'hi'), null);
 });
 
 test('validateInquiryForm checks required fields strictly', () => {
   assert.equal(validateInquiryForm({ fullName: '', phone: '12345678', message: 'Hello world' }).isValid, false);
   assert.equal(validateInquiryForm({ fullName: 'Ali Khan', phone: '03001234567', message: 'Interested in plot' }).isValid, true);
+  assert.equal(validateInquiryForm({ fullName: 'Ali Khan', phone: '12345678', message: 'Interested in plot' }).isValid, false);
 });
 
 test('maskCNIC masks national ID numbers for privacy', () => {

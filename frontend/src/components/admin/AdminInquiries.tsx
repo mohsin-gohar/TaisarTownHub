@@ -17,7 +17,7 @@ import {
   Download
 } from 'lucide-react';
 import { Inquiry, InquiryStatus } from '../../types';
-import { generateWhatsAppLink } from '../../utils/logic';
+import { buildWhatsAppLink } from '../../utils/whatsapp';
 import { exportCsv } from '../../utils/exportCsv';
 import { EmptyState } from '../common/EmptyState';
 
@@ -186,7 +186,7 @@ export const AdminInquiries: React.FC = () => {
           />
         ) : (
           filteredInquiries.map((inq) => {
-            const whatsAppReply = generateWhatsAppLink(
+            const whatsAppReply = buildWhatsAppLink(
               inq.phone,
               `Salam ${inq.fullName}! This is TaisarTownHub Real Estate Advisory. We received your inquiry regarding "${inq.preferredPropertyOrProject || inq.subject}". How can we best assist you with file verification and site inspection?`
             );
@@ -300,14 +300,19 @@ export const AdminInquiries: React.FC = () => {
                     )}
 
                     {/* Quick WhatsApp Action Button */}
-                    <a
-                      href={whatsAppReply}
-                      target="_blank" rel="noopener noreferrer"
-                      className="w-full py-2 px-3 rounded-lg bg-[#E7C878]/15 hover:bg-[#E7C878] text-[#F6E3B4] hover:text-[#0B1220] transition-colors border border-[#E7C878]/40 font-bold text-xs flex items-center justify-center gap-2"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      <span>WhatsApp Client</span>
-                    </a>
+                    {whatsAppReply ? (
+                      <a
+                        href={whatsAppReply}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2 px-3 rounded-lg bg-[#E7C878]/15 hover:bg-[#E7C878] text-[#F6E3B4] hover:text-[#0B1220] transition-colors border border-[#E7C878]/40 font-bold text-xs flex items-center justify-center gap-2"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>WhatsApp Client</span>
+                      </a>
+                    ) : (
+                      <p className="text-[11px] text-slate-500">No valid WhatsApp number on this inquiry.</p>
+                    )}
                   </div>
                 </div>
               </div>

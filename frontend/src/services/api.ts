@@ -641,16 +641,22 @@ export const api = {
     preferredPropertyOrProject?: string;
     budgetRange?: string;
     propertyId?: string;
-  }): Promise<any | null> {
+  }): Promise<{ ok: boolean; status: number; message?: string; body?: any }> {
     try {
       const res = await apiFetch('/inquiries', {
         method: 'POST',
         body: JSON.stringify(inquiryData),
       });
-      if (!res.ok) return null;
-      return await res.json();
+      const body = await res.json().catch(() => ({}));
+      const validation = body?.errors ? Object.values(body.errors).flat().find((item) => typeof item === 'string') : undefined;
+      return {
+        ok: res.ok,
+        status: res.status,
+        message: typeof body?.message === 'string' ? body.message : typeof validation === 'string' ? validation : undefined,
+        body,
+      };
     } catch {
-      return null;
+      return { ok: false, status: 0, message: 'The inquiry desk could not be reached.' };
     }
   },
 

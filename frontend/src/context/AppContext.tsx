@@ -1901,13 +1901,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Inquiries Management
   const addInquiry = async (
-    inquiryData: Omit<Inquiry, 'id' | 'submittedAt' | 'status'>
+    inquiryData: Omit<Inquiry, 'id' | 'submittedAt' | 'status'> & { propertyId?: string }
   ): Promise<boolean> => {
     const now = new Date();
     const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const { propertyId, ...publicFields } = inquiryData;
 
     const newInquiry: Inquiry = {
-      ...inquiryData,
+      ...publicFields,
       id: `inq-${Date.now()}`,
       status: 'Pending',
       submittedAt: formattedDate,
@@ -1926,11 +1927,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subject: inquiryData.subject,
       message: inquiryData.message,
       preferredPropertyOrProject: inquiryData.preferredPropertyOrProject,
-      budgetRange: inquiryData.budgetRange
+      budgetRange: inquiryData.budgetRange,
+      propertyId,
     });
 
-    if (!result) {
-      showToast('error', 'We could not send your inquiry. Please try again or call the advisory desk.');
+    if (!result.ok) {
+      const message = result.status === 429
+        ? 'Too many inquiries were sent from this connection. Please wait a minute and try again.'
+        : result.status === 422
+          ? (result.message || 'Please check the inquiry details and try again.')
+          : result.status === 402
+            ? (result.message || 'This agency is not accepting new inquiries right now.')
+            : (result.message || 'We could not send your inquiry. Please try again or call the advisory desk.');
+      showToast('error', message);
       return false;
     }
 
