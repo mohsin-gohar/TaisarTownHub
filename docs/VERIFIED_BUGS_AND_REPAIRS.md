@@ -75,7 +75,20 @@ Baseline: `e419f2a9d82f977bec28abb8cba0945581827cd6` (local `main` == `origin/ma
 - **Verification:** source review + reference scan (compose and CI reference only the per-service
   Dockerfiles). Not built — no Docker runtime locally.
 
-## 6. MEDIUM — Misleading CI comments / obsolete test-driver claims
+## 7. HIGH — Docker CI ran PHPUnit inside a `--no-dev` production image
+
+- **Evidence:** Docker CI run
+  [45120325512](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45120325512):
+  backend readiness and the healthcheck step now **passed** (string-sentinel fix worked), but
+  `Run backend tests in container` failed after ~1 second.
+- **Root cause:** `backend/Dockerfile.prod` installs dependencies with `composer install --no-dev`,
+  while PHPUnit and `nunomaduro/collision` (which provides `artisan test`) are `require-dev` packages.
+  The command can never exist in the production image.
+- **Fix:** removed the two invalid in-container test steps (`docker-backend` and `docker-integration`);
+  added an explanatory comment. Backend tests remain authoritative in `ci.yml` on MySQL 8.
+- **Verification:** workflow YAML parses; step removed. CI must be re-run on the pushed commit.
+
+## 8. MEDIUM — Misleading CI comments / obsolete test-driver claims
 
 - **Root cause:** workflow comments still described SQLite `:memory:` tests and `pdo_sqlite`.
 - **Fix:** comments and extension lists corrected to MySQL-only; no driver fallback remains.

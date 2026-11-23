@@ -28,7 +28,9 @@ Full detail with root causes and evidence: `docs/VERIFIED_BUGS_AND_REPAIRS.md`.
    executed successfully (58 tables).
 4. **HIGH** `backup.sh` ignored `DB_PASSWORD` from `.env` → fixed.
 5. **MEDIUM** Root `Dockerfile.prod` (obsolete, baked APP_KEY, sqlite CLI, wrong architecture) → clearly retired/deprecated; authoritative images documented.
-6. **MEDIUM** Stale SQLite test-driver claims in CI → removed; MySQL-only enforced.
+6. **HIGH** Docker CI invoked `artisan test` inside a `--no-dev` production image (PHPUnit is a dev
+   dependency) → invalid steps removed; authoritative suite stays in `ci.yml`.
+7. **MEDIUM** Stale SQLite test-driver claims in CI → removed; MySQL-only enforced.
 
 Previously verified and still intact: MySQL-safe index name, Redis healthcheck password, Compose
 interpolation variables, fail-closed readiness gate with required services and logs.

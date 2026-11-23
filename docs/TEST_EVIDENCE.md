@@ -62,6 +62,9 @@ Passwords are never printed.
 | [Docker CI #45119217941](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45119217941) (after phpredis fix) | Frontend image | **success** |
 | same | Backend image build, infra readiness, migrations | **success**; `Wait for backend readiness` still **failed** — second root cause: strict integer comparison on a Redis numeric cache round-trip, fixed with a string sentinel |
 | same | Full Stack Integration Test | **skipped** (upstream job failed) |
+| [Docker CI #45120325512](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45120325512) (after string sentinel) | Backend image, infra readiness, migrations, **backend readiness**, healthcheck | **all success** — healthcheck fix verified by CI |
+| same | `Run backend tests in container` | **failure** — `artisan test` absent in the `--no-dev` production image; invalid steps removed |
+| same | Full Stack Integration Test | **skipped** (upstream job failed) |
 
 Raw log download for these jobs returned HTTP 403 without credentials; job/step conclusions above
 come from the public Jobs API. Docker builds/Compose startup were NOT runnable locally (no Docker CLI).

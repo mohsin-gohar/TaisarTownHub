@@ -3,6 +3,12 @@
 # Builds production Docker images, runs container smoke tests,
 # and validates healthchecks. Runs on push to main and PRs.
 #
+# PHPUnit tests are intentionally NOT run inside these containers: production
+# images are installed with `composer --no-dev`, so `artisan test` (PHPUnit is
+# a require-dev dependency) is unavailable. The authoritative backend suite
+# runs in ci.yml against MySQL 8. This workflow validates image/runtime health
+# and gateway smoke behaviour only.
+#
 # Readiness is checked by scripts/wait-for-compose-ready.sh against an explicit
 # list of required services (with a hard deadline and failure logs). No test
 # step may start until that gate succeeds.
@@ -68,9 +74,6 @@ jobs:
 
       - name: Run backend healthcheck
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php scripts/healthcheck.php
-
-      - name: Run backend tests in container
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php artisan test --filter "MapManagement|DocumentShare|Inquiry"
 
       - name: Dump diagnostics on failure
         if: failure()
@@ -147,9 +150,6 @@ jobs:
           curl -fsS --retry 5 --retry-delay 3 --retry-connrefused http://localhost/maps | grep -q "TaisarTownHub"
           curl -fsS --retry 5 --retry-delay 3 --retry-connrefused http://localhost/api/agencies | grep -q "success"
           curl -fsS --retry 5 --retry-delay 3 --retry-connrefused http://localhost/api/maps | grep -q "success"
-
-      - name: Run full test suite
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php artisan test --filter "MapManagement|DocumentShare|Inquiry|FeaturedAgency"
 
       - name: Dump diagnostics on failure
         if: failure()
