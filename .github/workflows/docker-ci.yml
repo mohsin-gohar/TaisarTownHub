@@ -40,29 +40,29 @@ jobs:
 
       - name: Start test stack
         run: |
-          docker compose -f docker-compose.yml up -d mysql redis clamav
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d mysql redis clamav
           sleep 10
 
       - name: Run migrations
         run: |
-          docker compose -f docker-compose.yml run --rm migrate
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm migrate
 
       - name: Start backend and run healthcheck
         run: |
-          docker compose -f docker-compose.yml up -d backend
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d backend
           sleep 15
 
       - name: Run backend healthcheck
         run: |
-          docker compose -f docker-compose.yml exec -T backend php scripts/healthcheck.php
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php scripts/healthcheck.php
 
       - name: Run backend tests in container
         run: |
-          docker compose -f docker-compose.yml exec -T backend php artisan test --filter "MapManagement|DocumentShare|Inquiry"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php artisan test --filter "MapManagement|DocumentShare|Inquiry"
 
       - name: Cleanup
         if: always()
-        run: docker compose -f docker-compose.yml down -v
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
 
   docker-frontend:
     name: Build & Test Frontend Image
@@ -109,19 +109,19 @@ jobs:
 
       - name: Start full stack
         run: |
-          docker compose -f docker-compose.yml up -d
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
 
       - name: Wait for services
         run: |
           echo "Waiting for services to be healthy..."
           for i in {1..30}; do
-            if docker compose ps --format "table {{.Service}}\t{{.Status}}" | grep -q "unhealthy"; then
+            if docker compose -f docker-compose.yml -f docker-compose.ci.yml ps --format "table {{.Service}}\t{{.Status}}" | grep -q "unhealthy"; then
               echo "Service unhealthy, checking logs..."
-              docker compose logs --tail=50
+              docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail=50
               exit 1
             fi
-            if docker compose ps --format "table {{.Service}}\t{{.Status}}" | grep -q "healthy"; then
-              healthy_count=$(docker compose ps --format "table {{.Service}}\t{{.Status}}" | grep -c "healthy")
+            if docker compose -f docker-compose.yml -f docker-compose.ci.yml ps --format "table {{.Service}}\t{{.Status}}" | grep -q "healthy"; then
+              healthy_count=$(docker compose -f docker-compose.yml -f docker-compose.ci.yml ps --format "table {{.Service}}\t{{.Status}}" | grep -c "healthy")
               echo "Healthy services: $healthy_count"
               if [ "$healthy_count" -ge 6 ]; then
                 echo "All core services healthy!"
@@ -150,8 +150,8 @@ jobs:
 
       - name: Run full test suite
         run: |
-          docker compose -f docker-compose.yml exec -T backend php artisan test --filter "MapManagement|DocumentShare|Inquiry|FeaturedAgency"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php artisan test --filter "MapManagement|DocumentShare|Inquiry|FeaturedAgency"
 
       - name: Cleanup
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
