@@ -17,7 +17,13 @@ return new class extends Migration
     {
         Schema::table('properties', function (Blueprint $table) {
             if (!Schema::hasIndex('properties', ['approval_status', 'visibility', 'listing_purpose', 'agency_id'])) {
-                $table->index(['approval_status', 'visibility', 'listing_purpose', 'agency_id']);
+                // Explicit short name: the generated name
+                // properties_approval_status_visibility_listing_purpose_agency_id_index
+                // exceeds MySQL's 64-character identifier limit.
+                $table->index(
+                    ['approval_status', 'visibility', 'listing_purpose', 'agency_id'],
+                    'properties_public_listing_index'
+                );
             }
         });
 
@@ -50,7 +56,7 @@ return new class extends Migration
 
         Schema::table('properties', function (Blueprint $table) {
             if (Schema::hasIndex('properties', ['approval_status', 'visibility', 'listing_purpose', 'agency_id'])) {
-                $table->dropIndex(['approval_status', 'visibility', 'listing_purpose', 'agency_id']);
+                $table->dropIndex('properties_public_listing_index');
             }
         });
     }
