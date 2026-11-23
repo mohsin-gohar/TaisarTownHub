@@ -1,27 +1,46 @@
-# TaisarTownHub — GENUINE MySQL backup restoration drill.
+# TaisarTownHub — GENUINE MySQL backup restoration drill (safety-first).
 #
 # This is NOT a "count CREATE TABLE statements" check. It:
-#   1. finds the newest backup + its sha256 manifest, verifies both checksums,
-#   2. checks gzip integrity by decompressing to a scratch file,
-#   3. creates an ISOLATED temporary MySQL database (never the live one),
-#   4. imports the COMPLETE SQL dump into it with the mysql client,
-#   5. verifies schema/table count, critical row counts, migration state,
-#      named indexes and real SELECT queries,
-#   6. verifies the private-vault archive with tar -tzf,
-#   7. drops ONLY the temporary database it created and removes scratch files.
+#   1. finds the newest tth_db_*.sql.gz backup and its sha256 manifest,
+#   2. verifies every artefact checksum and the gzip stream,
+#   3. parses the dump itself for the EXPECTED schema (tables, named indexes,
+#      foreign keys) and EXPECTED row counts (extended INSERT tuples),
+#   4. allocates a UNIQUE scratch database (timestamp + random suffix), never
+#      drops or reuses a database it did not create in this exact run,
+#   5. imports the COMPLETE dump through the mysql client's stdin (space-safe),
+#   6. verifies exact table set equality, every expected index, every foreign
+#      key (orphan scan), CHECK TABLE health and exact per-table row counts
+#      derived from the backup,
+#   7. extracts the private-vault archive into scratch storage, rejects path
+#      traversal and confirms every archived entry was restored,
+#   8. drops ONLY the scratch database this run created, deletes ONLY this
+#      run's scratch directory, then VERIFIES both are gone (success & failure).
 #
-# MySQL 8 / MariaDB is the only supported engine. Nothing in the live
-# environment is modified. Exit code: 0 = PASS, 1 = FAIL.
+# Safety:
+#   * refuses non-loopback hosts unless -AllowRemoteHost is passed explicitly,
+#   * never connects to the application database, never touches production,
+#   * never deletes a pre-existing database and never "cleans" the backup dir,
+#   * credentials are read from backend/.env and never printed.
+#
+# MySQL 8 (CI) and MySQL-protocol MariaDB (local XAMPP) are supported.
+# Exit code: 0 = PASS (including verified cleanup), 1 = FAIL.
 param(
     [string]$BackupDir = "$env:LOCALAPPDATA\Temp\opencode\tth-backups",
-    [string]$Scratch = "$env:LOCALAPPDATA\Temp\opencode\tth-restore-drill"
+    [string]$Scratch = "$env:LOCALAPPDATA\Temp\opencode\tth-restore-drill",
+    [switch]$AllowRemoteHost
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $backend = Join-Path $root 'backend'
 $temporaryDatabase = $null
+$createdDatabase = $false
 $work = $null
+$scratchExisted = $false
+$client = $null
+$hostName = $null
+$port = $null
+$user = $null
 
 function Read-DotEnvValue([string]$key, [string]$fallback = '') {
     $envFile = Join-Path $backend '.env'
@@ -31,150 +50,368 @@ function Read-DotEnvValue([string]$key, [string]$fallback = '') {
     return ($line -split '=', 2)[1].Trim().Trim('"')
 }
 
-function Fail([string]$message) {
-    Write-Host "RESTORE DRILL: FAIL - $message"
-    exit 1
+function Invoke-Sql([string]$database, [string]$query) {
+    $sqlArgs = @('-h', $hostName, '-P', "$port", '-u', $user, '-N', '-B')
+    if ($database) { $sqlArgs += $database }
+    $sqlArgs += @('-e', $query)
+    $result = & $client @sqlArgs 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "SQL failed (exit $LASTEXITCODE): $query => $($result -join ' ')"
+    }
+    return @($result)
 }
 
+function Invoke-SqlScalar([string]$database, [string]$query) {
+    # @() is required: PowerShell unrolls a single-element array returned by a
+    # function into a scalar string, and indexing that string would yield its
+    # first CHARACTER (e.g. "11" -> "1"). That produced false row-count drift.
+    $rows = @(Invoke-Sql $database $query)
+    if ($rows.Count -eq 0) { return $null }
+    return "$($rows[0])".Trim()
+}
+
+function Invoke-MysqlImport([string]$database, [string]$file) {
+    # File redirection through stdin avoids every shell/SOURCE path-quoting
+    # problem (spaces, parentheses, non-ASCII) on Windows and Linux.
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $client
+    $psi.Arguments = ('-h "{0}" -P {1} -u "{2}" --binary-mode --default-character-set=utf8mb4 "{3}"' -f $hostName, $port, $user, $database)
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $psi
+    if (-not $proc.Start()) { throw "could not start mysql client '$client'" }
+    $errTask = $proc.StandardError.ReadToEndAsync()
+    $stream = [System.IO.File]::OpenRead($file)
+    try {
+        $stream.CopyTo($proc.StandardInput.BaseStream)
+    } finally {
+        $stream.Close()
+        $proc.StandardInput.Close()
+    }
+    $proc.WaitForExit()
+    $errText = $errTask.Result
+    if ($proc.ExitCode -ne 0) {
+        throw "mysql import of '$file' failed (exit $($proc.ExitCode)): $($errText.Trim())"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($errText)) {
+        Write-Host "[drill] mysql import notes: $($errText.Trim())"
+    }
+}
+
+# Quoting-aware counter for mysqldump extended INSERT statements. Counts the
+# top-level value tuples per table so restored row counts can be compared to
+# expectations derived from the backup itself.
+function Get-InsertRowCounts([string]$sql) {
+    $counts = @{}
+    $pattern = [regex]'(?m)^INSERT INTO `([^`]+)` VALUES '
+    foreach ($match in $pattern.Matches($sql)) {
+        $table = $match.Groups[1].Value
+        $i = $match.Index + $match.Length
+        $len = $sql.Length
+        $inQuote = $false
+        $depth = 0
+        $rows = 0
+        while ($i -lt $len) {
+            $c = $sql[$i]
+            if ($inQuote) {
+                if ($c -eq '\') { $i += 2; continue }
+                if ($c -eq "'") {
+                    if ($i + 1 -lt $len -and $sql[$i + 1] -eq "'") { $i += 2; continue }
+                    $inQuote = $false
+                }
+                $i++
+                continue
+            }
+            if ($c -eq "'") { $inQuote = $true; $i++; continue }
+            if ($c -eq '(') { $depth++; $i++; continue }
+            if ($c -eq ')') {
+                $depth--
+                if ($depth -eq 0) { $rows++ }
+                $i++
+                continue
+            }
+            if ($c -eq ';' -and $depth -eq 0) { $i++; break }
+            $i++
+        }
+        if ($counts.ContainsKey($table)) { $counts[$table] += $rows } else { $counts[$table] = $rows }
+    }
+    return $counts
+}
+
+function Get-DumpExpectations([string]$sql) {
+    $tables = @{}   # table -> list of index names (including PRIMARY)
+    $foreignKeys = New-Object System.Collections.Generic.List[object]
+    $current = $null
+    foreach ($line in ($sql -split "`r?`n")) {
+        if ($line -match '^CREATE TABLE `([^`]+)` \(') {
+            $current = $Matches[1]
+            $tables[$current] = New-Object System.Collections.Generic.List[string]
+            continue
+        }
+        if (-not $current) { continue }
+        if ($line -match '^\) ENGINE') { $current = $null; continue }
+        if ($line -match '^\s+PRIMARY KEY \(') {
+            $tables[$current].Add('PRIMARY')
+        } elseif ($line -match '^\s+(?:UNIQUE |FULLTEXT |SPATIAL )?KEY `([^`]+)`') {
+            $tables[$current].Add($Matches[1])
+        }
+        if ($line -match 'FOREIGN KEY \(`([^`]+)`\) REFERENCES `([^`]+)` \(`([^`]+)`\)') {
+            $foreignKeys.Add([pscustomobject]@{
+                Table        = $current
+                Column       = $Matches[1]
+                Parent       = $Matches[2]
+                ParentColumn = $Matches[3]
+            })
+        }
+    }
+    return [pscustomobject]@{
+        Tables      = $tables
+        ForeignKeys = $foreignKeys
+        RowCounts   = (Get-InsertRowCounts $sql)
+    }
+}
+
+function Quote-Identifier([string]$name) {
+    return $name.Replace('`', '``')
+}
+
+function Quote-Literal([string]$value) {
+    return $value.Replace("'", "''")
+}
+
+$exitCode = 0
+$cleanupErrors = New-Object System.Collections.Generic.List[string]
+
 try {
-    # --- Locate backup and its manifest -------------------------------------
-    $dbBackup = Get-ChildItem $BackupDir -Filter 'tth_db_*.sql.gz' -ErrorAction SilentlyContinue |
+    # ---------------------------------------------------------------- locate
+    $dbBackup = Get-ChildItem -LiteralPath $BackupDir -Filter 'tth_db_*.sql.gz' -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $dbBackup) { Fail "no tth_db_*.sql.gz backup in $BackupDir" }
+    if (-not $dbBackup) { throw "no tth_db_*.sql.gz backup in '$BackupDir'" }
 
     $stamp = ($dbBackup.BaseName -replace '^tth_db_', '') -replace '\.sql$', ''
-    $manifest = Get-ChildItem $BackupDir -Filter 'manifest-*.sha256' -ErrorAction SilentlyContinue |
+    $manifest = Get-ChildItem -LiteralPath $BackupDir -Filter 'manifest-*.sha256' -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like "*$stamp*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $manifest) { Fail "no sha256 manifest for backup stamp $stamp" }
+    if (-not $manifest) { throw "no sha256 manifest for backup stamp '$stamp'" }
 
-    Write-Host "[drill] backup : $($dbBackup.FullName)"
+    $vault = Get-ChildItem -LiteralPath $BackupDir -Filter 'tth_vault_*.tar.gz' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like "*$stamp*" } | Select-Object -First 1
+
+    Write-Host "[drill] backup  : $($dbBackup.FullName)"
     Write-Host "[drill] manifest: $($manifest.FullName)"
 
-    # --- Checksums ----------------------------------------------------------
+    # ---------------------------------------------------------------- checksums
     $expected = @{}
-    foreach ($line in (Get-Content $manifest.FullName)) {
-        if ($line -match '^([0-9a-f]{64})\s+(.+)$') { $expected[$Matches[2]] = $Matches[1] }
+    foreach ($line in (Get-Content -LiteralPath $manifest.FullName)) {
+        if ($line -match '^([0-9a-fA-F]{64})\s+(.+)$') { $expected[$Matches[2].Trim()] = $Matches[1].ToLower() }
     }
-    foreach ($artefact in @($dbBackup)) {
-        if (-not $expected.ContainsKey($artefact.Name)) { Fail "manifest has no checksum for $($artefact.Name)" }
-        $actual = (Get-FileHash -Algorithm SHA256 -Path $artefact.FullName).Hash.ToLower()
-        if ($actual -ne $expected[$artefact.Name]) { Fail "checksum mismatch for $($artefact.Name)" }
+    foreach ($artefact in @($dbBackup, $vault)) {
+        if (-not $artefact) { continue }
+        if (-not $expected.ContainsKey($artefact.Name)) { throw "manifest has no checksum for '$($artefact.Name)'" }
+        $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artefact.FullName).Hash.ToLower()
+        if ($actualHash -ne $expected[$artefact.Name]) { throw "checksum mismatch for '$($artefact.Name)'" }
     }
-    Write-Host "[drill] sha256 verified for database backup"
+    Write-Host '[drill] sha256 verified for database backup and vault archive'
 
-    # --- Gzip integrity -----------------------------------------------------
-    $work = Join-Path $Scratch "work-$stamp-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+    # ---------------------------------------------------------------- gzip
+    $scratchExisted = Test-Path -LiteralPath $Scratch
+    if (-not $scratchExisted) { New-Item -ItemType Directory -Force -Path $Scratch | Out-Null }
+    $work = Join-Path $Scratch ("work-{0}-{1}" -f $stamp, ([guid]::NewGuid().ToString('N').Substring(0, 8)))
     New-Item -ItemType Directory -Force -Path $work | Out-Null
     $sqlPath = Join-Path $work 'restored.sql'
     try {
         $inputStream = [System.IO.File]::OpenRead($dbBackup.FullName)
-        $gzip = New-Object System.IO.Compression.GZipStream($inputStream, [System.IO.Compression.CompressionMode]::Decompress)
-        $output = [System.IO.File]::Create($sqlPath)
-        $gzip.CopyTo($output)
-        $output.Close(); $gzip.Close(); $inputStream.Close()
+        try {
+            $gzip = New-Object System.IO.Compression.GZipStream($inputStream, [System.IO.Compression.CompressionMode]::Decompress)
+            try {
+                $output = [System.IO.File]::Create($sqlPath)
+                try { $gzip.CopyTo($output) } finally { $output.Close() }
+            } finally { $gzip.Close() }
+        } finally { $inputStream.Close() }
     } catch {
-        Fail "gzip decompression failed: $($_.Exception.Message)"
+        throw "gzip decompression failed: $($_.Exception.Message)"
     }
-    $sqlText = Get-Content $sqlPath -Raw
-    if ([string]::IsNullOrWhiteSpace($sqlText)) { Fail "decompressed dump is empty" }
-    $createTableCount = ([regex]::Matches($sqlText, 'CREATE TABLE')).Count
-    if ($createTableCount -eq 0) { Fail 'dump contains no CREATE TABLE statements' }
+    if ((Get-Item -LiteralPath $sqlPath).Length -eq 0) { throw 'decompressed dump is empty' }
+    $sqlText = [System.IO.File]::ReadAllText($sqlPath)
     if ($sqlText -notmatch 'Dump completed') {
-        Write-Host '[drill] WARNING: dump completion marker missing (older mysqldump or interrupted export)'
+        throw 'dump is incomplete: the "Dump completed" marker is missing (interrupted export)'
     }
-    Write-Host "[drill] gzip OK, $createTableCount CREATE TABLE statements in dump"
 
-    # --- MySQL connection details (never printed) ---------------------------
+    $expect = Get-DumpExpectations $sqlText
+    if ($expect.Tables.Count -eq 0) { throw 'dump contains no CREATE TABLE statements' }
+    Write-Host "[drill] parsed backup: $($expect.Tables.Count) tables, $($expect.ForeignKeys.Count) foreign keys, $($expect.RowCounts.Count) tables with data"
+
+    # ---------------------------------------------------------------- connect
     $hostName = Read-DotEnvValue 'DB_HOST' '127.0.0.1'
     $port = Read-DotEnvValue 'DB_PORT' '3306'
     $user = Read-DotEnvValue 'DB_USERNAME' 'root'
     $password = Read-DotEnvValue 'DB_PASSWORD' ''
+    if ($hostName -notin @('127.0.0.1', 'localhost', '::1') -and -not $AllowRemoteHost) {
+        throw "refusing to run against non-loopback host '$hostName' without -AllowRemoteHost (production safety)"
+    }
     $client = if ($env:MYSQL_CLIENT) { $env:MYSQL_CLIENT } else { 'mysql' }
     if (-not $env:MYSQL_CLIENT -and -not (Get-Command mysql -ErrorAction SilentlyContinue)) {
         $xampp = 'F:\Xampp\mysql\bin\mysql.exe'
-        if (Test-Path $xampp) { $client = $xampp }
+        if (Test-Path -LiteralPath $xampp) { $client = $xampp }
     }
-    $env:MYSQL_PWD = $password   # avoids putting the password on the command line
+    $env:MYSQL_PWD = $password   # only via environment; never on the command line
 
-    function Invoke-Sql([string]$database, [string]$query) {
-        $args = @('-h', $hostName, '-P', $port, '-u', $user, '-N', '-B', '-e', $query)
-        if ($database) { $args += $database }
-        $result = & $client @args 2>&1
-        if ($LASTEXITCODE -ne 0) { throw "SQL failed: $query => $result" }
-        return $result
+    # ---------------------------------------------------------------- scratch DB
+    # Unique name per run. A pre-existing database is NEVER dropped or reused.
+    for ($attempt = 0; $attempt -lt 5; $attempt++) {
+        $candidate = 'tth_restore_drill_{0}_{1}' -f (Get-Date -Format 'yyyyMMdd_HHmmss'), ([guid]::NewGuid().ToString('N').Substring(0, 8))
+        $exists = Invoke-SqlScalar '' "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$candidate'"
+        if ($exists -eq '0') { $temporaryDatabase = $candidate; break }
+    }
+    if (-not $temporaryDatabase) { throw 'could not allocate a unique scratch database name' }
+
+    Invoke-Sql '' "CREATE DATABASE ``$temporaryDatabase`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" | Out-Null
+    $createdDatabase = $true
+    Write-Host "[drill] created isolated scratch database $temporaryDatabase"
+
+    # ---------------------------------------------------------------- import
+    Invoke-MysqlImport $temporaryDatabase $sqlPath
+    Write-Host '[drill] complete SQL dump imported successfully'
+
+    # ---------------------------------------------------------------- schema/rows
+    $actualTables = @(Invoke-Sql $temporaryDatabase "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='$temporaryDatabase' AND TABLE_TYPE='BASE TABLE'" |
+        Where-Object { $_ -and "$_".Trim() } | ForEach-Object { "$_".Trim() })
+    $expectedTables = @($expect.Tables.Keys | Sort-Object)
+    $missingTables = @($expectedTables | Where-Object { $actualTables -notcontains $_ })
+    $extraTables = @($actualTables | Where-Object { $expectedTables -notcontains $_ })
+    if ($missingTables.Count -gt 0) { throw "restored schema is missing tables: $($missingTables -join ', ')" }
+    if ($extraTables.Count -gt 0) { throw "restored schema has unexpected tables: $($extraTables -join ', ')" }
+    Write-Host "[drill] table set matches the backup exactly ($($actualTables.Count) tables)"
+
+    foreach ($table in $expectedTables) {
+        $expectedRows = if ($expect.RowCounts.ContainsKey($table)) { [int]$expect.RowCounts[$table] } else { 0 }
+        $query = 'SELECT COUNT(*) FROM `{0}`' -f (Quote-Identifier $table)
+        $actualRows = [int](Invoke-SqlScalar $temporaryDatabase $query)
+        if ($actualRows -ne $expectedRows) {
+            throw "row-count mismatch for '$table': backup has $expectedRows row(s), restored database has $actualRows"
+        }
+    }
+    Write-Host '[drill] every table row count matches the count derived from the backup'
+
+    $checkedIndexes = 0
+    foreach ($table in $expectedTables) {
+        foreach ($index in $expect.Tables[$table]) {
+            $q = "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='$temporaryDatabase' AND TABLE_NAME='$(Quote-Literal $table)' AND INDEX_NAME='$(Quote-Literal $index)'"
+            if ([int](Invoke-SqlScalar $temporaryDatabase $q) -lt 1) {
+                throw "index '$index' is missing on table '$table' after restore"
+            }
+            $checkedIndexes++
+        }
+    }
+    Write-Host "[drill] all $checkedIndexes expected indexes are present"
+
+    $checkTargets = ($actualTables | ForEach-Object { '`{0}`' -f (Quote-Identifier $_) }) -join ', '
+    $checkFailures = @(Invoke-Sql $temporaryDatabase "CHECK TABLE $checkTargets" | Where-Object { $_ -and ($_ -notmatch "`tOK$") })
+    if ($checkFailures.Count -gt 0) { throw "CHECK TABLE reported problems: $($checkFailures -join ' | ')" }
+    Write-Host "[drill] CHECK TABLE reports OK for all $($actualTables.Count) tables"
+
+    foreach ($fk in $expect.ForeignKeys) {
+        $q = 'SELECT COUNT(*) FROM `{0}` c LEFT JOIN `{1}` p ON c.`{2}` = p.`{3}` WHERE c.`{2}` IS NOT NULL AND p.`{3}` IS NULL' -f `
+            (Quote-Identifier $fk.Table), (Quote-Identifier $fk.Parent), (Quote-Identifier $fk.Column), (Quote-Identifier $fk.ParentColumn)
+        $orphans = [int](Invoke-SqlScalar $temporaryDatabase $q)
+        if ($orphans -ne 0) {
+            throw "foreign-key integrity violation: $($fk.Table).$($fk.Column) -> $($fk.Parent).$($fk.ParentColumn) has $orphans orphaned row(s)"
+        }
+    }
+    Write-Host "[drill] all $($expect.ForeignKeys.Count) foreign-key relationships are free of orphaned rows"
+
+    # Meaningful application query against the restored copy.
+    if ($expect.Tables.ContainsKey('properties')) {
+        $saleListings = Invoke-SqlScalar $temporaryDatabase "SELECT COUNT(*) FROM properties WHERE listing_purpose='sale'"
+        $otherListings = Invoke-SqlScalar $temporaryDatabase "SELECT COUNT(*) FROM properties WHERE listing_purpose IS NOT NULL AND listing_purpose <> 'sale'"
+        Write-Host "[drill] restored catalog: $saleListings sale listing(s), $otherListings non-sale listing(s)"
+    }
+    if ($expect.Tables.ContainsKey('migrations')) {
+        $migrationCount = Invoke-SqlScalar $temporaryDatabase 'SELECT COUNT(*) FROM migrations'
+        Write-Host "[drill] restored migration history: $migrationCount applied migration(s)"
+        if ([int]$migrationCount -lt 1) { throw 'restored migrations table is empty' }
     }
 
-    # --- Isolated scratch database ------------------------------------------
-    $temporaryDatabase = 'tth_restore_drill_' + $stamp.Replace('-', '_').Replace(':', '_')
-    if ($temporaryDatabase -notmatch '^tth_restore_drill_[0-9A-Za-z_]+$') { Fail 'unsafe temporary database name' }
-    $exists = (Invoke-Sql '' "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$temporaryDatabase'")
-    if ($exists) {
-        # Only ever drop a database with the drill prefix.
-        Invoke-Sql '' "DROP DATABASE $temporaryDatabase" | Out-Null
-    }
-    Invoke-Sql '' "CREATE DATABASE $temporaryDatabase CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" | Out-Null
-    Write-Host "[drill] created isolated database $temporaryDatabase"
-
-    # --- Real import --------------------------------------------------------
-    $env:MYSQL_PWD = $password
-    $source = "SOURCE $($sqlPath -replace '\\', '/')"
-    & $client -h $hostName -P $port -u $user $temporaryDatabase -e $source 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { Fail 'mysql import of the full dump failed' }
-    Write-Host '[drill] full SQL dump imported successfully'
-
-    # --- Verification queries ----------------------------------------------
-    $actualTables = [int](Invoke-Sql $temporaryDatabase "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$temporaryDatabase' AND TABLE_TYPE='BASE TABLE'")
-    Write-Host "[drill] tables in restored database: $actualTables (dump declares $createTableCount)"
-    if ($actualTables -lt $createTableCount) { Fail "restored table count $actualTables < dump count $createTableCount" }
-
-    $critical = @('users', 'agencies', 'properties', 'dealers', 'inquiries', 'transactions', 'business_records', 'maps', 'migrations')
-    $rowCounts = @{}
-    foreach ($table in $critical) {
-        $found = Invoke-Sql $temporaryDatabase "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$temporaryDatabase' AND TABLE_NAME='$table'"
-        if ([int]$found -eq 0) { Fail "critical table '$table' missing after restore" }
-        $rowCounts[$table] = [int](Invoke-Sql $temporaryDatabase "SELECT COUNT(*) FROM $table")
-        Write-Host ("  {0,-18} {1} rows" -f $table, $rowCounts[$table])
-    }
-
-    $indexCount = [int](Invoke-Sql $temporaryDatabase "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='$temporaryDatabase' AND INDEX_NAME='properties_public_listing_idx'")
-    if ($indexCount -lt 1) { Fail 'public-marketplace index missing in restored schema' }
-
-    $saleCount = [int](Invoke-Sql $temporaryDatabase "SELECT COUNT(*) FROM properties WHERE listing_purpose='sale'")
-    Write-Host "[drill] query check: sale listings = $saleCount"
-    if ($saleCount -lt 0) { Fail 'meaningful query failed' }
-    Write-Host '[drill] schema, rows, indexes and queries verified'
-
-    # --- Vault archive integrity -------------------------------------------
-    $vault = Get-ChildItem $BackupDir -Filter 'tth_vault_*.tar.gz' -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "*$stamp*" } | Select-Object -First 1
+    # ---------------------------------------------------------------- vault
     if ($vault) {
-        if (-not $expected.ContainsKey($vault.Name)) { Fail "manifest has no checksum for $($vault.Name)" }
-        $vaultHash = (Get-FileHash -Algorithm SHA256 -Path $vault.FullName).Hash.ToLower()
-        if ($vaultHash -ne $expected[$vault.Name]) { Fail "checksum mismatch for $($vault.Name)" }
-        $entries = @(tar -tzf $vault.FullName 2>&1)
-        if ($LASTEXITCODE -ne 0 -or $entries.Count -eq 0) { Fail 'vault archive failed tar integrity check' }
-        Write-Host "[drill] vault archive OK ($($entries.Count) entries)"
-    } else {
-        Write-Host '[drill] no vault archive for this backup stamp (skipped)'
-    }
+        Write-Host "[drill] verifying private vault archive $($vault.Name)"
+        $entries = @(& tar -tzf $vault.FullName 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw "vault archive failed tar integrity check: $($entries -join ' ')" }
+        if ($entries.Count -eq 0) { throw 'vault archive contains no entries' }
+        foreach ($entry in $entries) {
+            $normalized = "$entry".Replace('\', '/')
+            if ($normalized -match '^([A-Za-z]:|//|/)' -or ($normalized -split '/') -contains '..') {
+                throw "vault archive contains an unsafe path: $entry"
+            }
+        }
+        $vaultDir = Join-Path $work 'vault'
+        New-Item -ItemType Directory -Force -Path $vaultDir | Out-Null
+        & tar -xzf $vault.FullName -C $vaultDir 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'vault extraction into scratch storage failed' }
 
-    Write-Host 'RESTORE DRILL: PASS - isolated MySQL restore and verification completed'
-    $exitCode = 0
+        $restoredFiles = 0
+        $restoredBytes = 0
+        $vaultRoot = [System.IO.Path]::GetFullPath($vaultDir)
+        foreach ($entry in $entries) {
+            $relative = "$entry".Replace('/', [System.IO.Path]::DirectorySeparatorChar).TrimEnd([System.IO.Path]::DirectorySeparatorChar)
+            if (-not $relative) { continue }
+            $resolved = [System.IO.Path]::GetFullPath((Join-Path $vaultRoot $relative))
+            if (-not $resolved.StartsWith($vaultRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "vault entry escapes scratch storage: $entry"
+            }
+            if (-not (Test-Path -LiteralPath $resolved)) { throw "vault entry missing after extraction: $entry" }
+            if (-not (Test-Path -LiteralPath $resolved -PathType Container)) {
+                $restoredFiles++
+                $restoredBytes += (Get-Item -LiteralPath $resolved).Length
+            }
+        }
+        Write-Host "[drill] vault extracted into scratch storage: $restoredFiles file(s), $restoredBytes byte(s)"
+    } else {
+        Write-Host '[drill] no vault archive for this backup stamp (database-only drill)'
+    }
 } catch {
     Write-Host "RESTORE DRILL: FAIL - $($_.Exception.Message)"
     $exitCode = 1
 } finally {
-    # Clean up ONLY the temporary resources created by this drill.
-    if ($temporaryDatabase -and $env:MYSQL_PWD -ne $null) {
+    # Cleanup ONLY resources created by THIS execution, then verify cleanup.
+    if ($createdDatabase -and $temporaryDatabase) {
         try {
-            & $client -h $hostName -P $port -u $user $temporaryDatabase -e "SELECT 1" 2>&1 | Out-Null
-            $args = @('-h', $hostName, '-P', $port, '-u', $user, '-e', "DROP DATABASE $temporaryDatabase")
-            & $client @args 2>&1 | Out-Null
-            Write-Host "[drill] cleaned up temporary database $temporaryDatabase"
-        } catch { Write-Host "[drill] WARNING: temporary database cleanup failed: $($_.Exception.Message)" }
+            Invoke-Sql '' "DROP DATABASE ``$temporaryDatabase``" | Out-Null
+        } catch {
+            $cleanupErrors.Add("could not drop scratch database '$temporaryDatabase': $($_.Exception.Message)")
+        }
+        try {
+            $stillThere = Invoke-SqlScalar '' "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$temporaryDatabase'"
+            if ($stillThere -ne '0') { $cleanupErrors.Add("scratch database '$temporaryDatabase' still exists after cleanup") }
+        } catch {
+            $cleanupErrors.Add("could not verify removal of scratch database '$temporaryDatabase': $($_.Exception.Message)")
+        }
     }
-    if ($work -and (Test-Path $work)) { Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($work -and (Test-Path -LiteralPath $work)) {
+        try { Remove-Item -LiteralPath $work -Recurse -Force } catch { }
+        if (Test-Path -LiteralPath $work) { $cleanupErrors.Add("scratch directory still exists after cleanup: $work") }
+    }
+    # If this run created the scratch root, remove it too (only when empty).
+    if (-not $scratchExisted -and (Test-Path -LiteralPath $Scratch)) {
+        try { Remove-Item -LiteralPath $Scratch -Force } catch { }
+        if (Test-Path -LiteralPath $Scratch) {
+            $cleanupErrors.Add("scratch root directory still exists after cleanup: $Scratch")
+        }
+    }
     Remove-Item Env:MYSQL_PWD -ErrorAction SilentlyContinue
+
+    if ($cleanupErrors.Count -gt 0) {
+        foreach ($cleanupError in $cleanupErrors) { Write-Host "[drill] CLEANUP FAILURE: $cleanupError" }
+        Write-Host 'RESTORE DRILL: FAIL - cleanup verification failed'
+        $exitCode = 1
+    } elseif ($temporaryDatabase) {
+        Write-Host "[drill] cleanup verified: scratch database dropped, scratch directory removed"
+    }
 }
 
+if ($exitCode -eq 0) {
+    Write-Host 'RESTORE DRILL: PASS - isolated MySQL restore, data integrity and cleanup verified'
+}
 exit $exitCode

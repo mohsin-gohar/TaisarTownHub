@@ -28,6 +28,7 @@ Passwords are never printed.
 |---|---|
 | `npx playwright test --workers=1` (Chromium) | **84 passed, 0 failed (6.0 min), EXIT 0** on the pushed commit |
 | `npx playwright test e2e/responsive.spec.ts --workers=1` (after adding 320/375/414px) | **10 passed, 0 failed (2.5 min), EXIT 0** |
+| `npx playwright test --workers=1` (FINAL, 87 tests incl. new widths) | **87 passed, 0 failed (8.7 min), EXIT 0** |
 | Coverage | Guest/public pages, all admin roles, security/MFA, tenant/workspace, maps, sale-only marketplace, responsive 320/360/375/390/414/430/768/1024/1280/1440px, workflows |
 
 ## Backup and genuine restore
@@ -65,6 +66,8 @@ Passwords are never printed.
 | [Docker CI #45120325512](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45120325512) (after string sentinel) | Backend image, infra readiness, migrations, **backend readiness**, healthcheck | **all success** — healthcheck fix verified by CI |
 | same | `Run backend tests in container` | **failure** — `artisan test` absent in the `--no-dev` production image; invalid steps removed |
 | same | Full Stack Integration Test | **skipped** (upstream job failed) |
+| [CI #45120793219](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45120793219) | All 3 jobs on final commit | **run conclusion: success** |
+| [Docker CI #45120793292](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45120793292) | Frontend image + Backend image (incl. readiness + healthcheck) | **both jobs success**; Full Stack Integration running at time of writing |
 
 Raw log download for these jobs returned HTTP 403 without credentials; job/step conclusions above
 come from the public Jobs API. Docker builds/Compose startup were NOT runnable locally (no Docker CLI).

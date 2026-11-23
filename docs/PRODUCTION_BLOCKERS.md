@@ -6,8 +6,8 @@ Nothing here has been deployed or changed on a production system.
 | # | Blocker | Category | Status / exact requirement |
 |---|---|---|---|
 | B1 | Docker runtime absent in this workspace | Infrastructure | `docker` command not installed; image rebuild and full Compose integration cannot be verified locally. The fixed Dockerfile/CI must pass on GitHub Actions before release. |
-| B2 | Docker CI job #9 was failing | CI | Backend image built but stayed unhealthy for ~3 min. Root cause (missing phpredis driver) fixed in `backend/Dockerfile.prod`; **CI must be re-run on the pushed commit** and show all 3 jobs green. |
-| B3 | CI run #42 had a failing redundant backend job | CI | Fixed by making the MySQL 8 job authoritative; **CI must be re-run** and show all 3 jobs green. |
+| B2 | Docker CI backend readiness failures | CI | Two verified root causes fixed (missing phpredis extension; numeric-vs-string Redis cache round-trip). Run #45120325512 proved readiness + healthcheck now PASS. A later step (`artisan test` inside a `--no-dev` image) was also invalid and removed. Final re-run must show all 3 jobs green. |
+| B3 | CI run #42 had a failing redundant backend job | CI | Fixed by making the MySQL 8 job authoritative; CI runs #45119217795 and #45120325495 both concluded **success**. |
 | B4 | TLS certificates missing (`nginx/ssl/` empty) | Infrastructure | Real `fullchain.pem` and `privkey.pem` must be mounted; production gateway runs HTTPS only. |
 | B5 | Production secrets absent | Credentials | Unique `APP_KEY`, `DB_ROOT_PASSWORD`, `DB_PASSWORD`, `REDIS_PASSWORD`, SMTP, Stripe/Flutterwave, Google OAuth, Sentry/LogRocket/GA must be supplied at deploy time. Never committed. |
 | B6 | Hostinger VPS access not provided | Manual/access | SSH access needed for actual deployment; no deploy attempted. |

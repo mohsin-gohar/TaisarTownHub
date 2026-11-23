@@ -75,6 +75,13 @@ Extensions: 265 `.php`, 153 `.md`, 80 `.tsx`, 62 `.ts`, 26 `.txt`, 20 `.mts`, 12
 | Firefox/WebKit, Lighthouse, load tests | Tooling/targets not configured; not claimed. |
 | Historical root reports (~150 `*.md`, `audit-*.txt`) | Marked HISTORICAL; not used as evidence. |
 
+## Files ADDED by this audit (not in the baseline 701-file inventory)
+
+The baseline inventory below is the `git ls-files` snapshot taken at audit start. This audit added
+five new release documents, all reviewed as part of the work:
+`docs/COMPLETE_FILE_AUDIT_LEDGER.md`, `docs/FINAL_INDEPENDENT_AUDIT.md`,
+`docs/VERIFIED_BUGS_AND_REPAIRS.md`, `docs/PRODUCTION_BLOCKERS.md`, `docs/TEST_EVIDENCE.md`.
+
 ## Full inventory (path → derived purpose → status)
 
 | Path | Purpose (path-derived) | Status |

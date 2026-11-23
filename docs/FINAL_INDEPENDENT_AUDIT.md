@@ -39,7 +39,7 @@ interpolation variables, fail-closed readiness gate with required services and l
 
 Backend `php artisan test`: **362 passed / 3054 assertions, 0 failed**.
 Frontend `npm run verify`: **EXIT 0**, 149/149 unit tests, build/prerender, bundle OK.
-Playwright: **84/84 passed** (Chromium). Restore drill: **PASS** (real import).
+Playwright: **87/87 passed** (Chromium, incl. 320/375/414px). Restore drill: **PASS** (real import).
 `composer audit`: 0 advisories. `npm audit`: 0 vulnerabilities. PHP lint, YAML parse, OpenAPI parse: OK.
 All exact commands and GitHub job statuses: `docs/TEST_EVIDENCE.md`.
 
