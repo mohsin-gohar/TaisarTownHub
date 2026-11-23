@@ -361,23 +361,27 @@ try {
         & tar -xzf $vault.FullName -C $vaultDir 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'vault extraction into scratch storage failed' }
 
-        $restoredFiles = 0
-        $restoredBytes = 0
+        # Build the extracted inventory with -Force so hidden files (for
+        # example a vault's .gitignore) are included on every platform. A
+        # single listing is also immune to per-entry Get-Item quirks under
+        # PowerShell 7 on Linux.
         $vaultRoot = [System.IO.Path]::GetFullPath($vaultDir)
+        $allExtracted = @(Get-ChildItem -LiteralPath $vaultDir -Force -Recurse -ErrorAction Stop)
+        $actualEntries = @($allExtracted | ForEach-Object {
+            $full = [System.IO.Path]::GetFullPath($_.FullName)
+            $relativeName = $full.Substring($vaultRoot.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar)
+            $relativeName.Replace('\', '/')
+        })
         foreach ($entry in $entries) {
-            $relative = "$entry".Replace('/', [System.IO.Path]::DirectorySeparatorChar).TrimEnd([System.IO.Path]::DirectorySeparatorChar)
-            if (-not $relative) { continue }
-            $resolved = [System.IO.Path]::GetFullPath((Join-Path $vaultRoot $relative))
-            if (-not $resolved.StartsWith($vaultRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-                throw "vault entry escapes scratch storage: $entry"
-            }
-            if (-not (Test-Path -LiteralPath $resolved)) { throw "vault entry missing after extraction: $entry" }
-            if (-not (Test-Path -LiteralPath $resolved -PathType Container)) {
-                $restoredFiles++
-                $restoredBytes += (Get-Item -LiteralPath $resolved).Length
+            $relativeName = "$entry".Replace('\', '/').Trim().TrimEnd('/')
+            if (-not $relativeName -or $relativeName -eq '.') { continue }
+            if ($actualEntries -notcontains $relativeName) {
+                throw "vault entry missing after extraction: $entry"
             }
         }
-        Write-Host "[drill] vault extracted into scratch storage: $restoredFiles file(s), $restoredBytes byte(s)"
+        $restoredFiles = @($allExtracted | Where-Object { -not $_.PSIsContainer })
+        $restoredBytes = [long](($restoredFiles | Measure-Object -Property Length -Sum).Sum)
+        Write-Host "[drill] vault extracted into scratch storage: $($restoredFiles.Count) file(s), $restoredBytes byte(s)"
     } else {
         Write-Host '[drill] no vault archive for this backup stamp (database-only drill)'
     }
