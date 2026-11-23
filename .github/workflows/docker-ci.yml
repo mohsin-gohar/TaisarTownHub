@@ -201,7 +201,7 @@ jobs:
         run: |
           set -euo pipefail
           log=/tmp/tth-migrate-seed.log
-          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error title=Migrate/seed failed::$(tail -c 1800 "$log" | tr "\n" " ")"; fi' EXIT
+          trap 'code=$?; if [ "$code" -ne 0 ]; then msg=$(head -c 2600 "$log" | tr "\n" " "); echo "::error title=Migrate/seed failed::$msg"; fi' EXIT
           {
             php artisan migrate --force --no-interaction -vvv
             php artisan db:seed --force --no-interaction -vvv
