@@ -51,14 +51,17 @@ test('generateWhatsAppLink normalizes local and international PK formats', () =>
   assert.ok(generateWhatsAppLink('00923001234567', 'hi').startsWith('https://wa.me/923001234567?text='));
   // Bare 10-digit national number
   assert.ok(generateWhatsAppLink('3001234567', 'hi').startsWith('https://wa.me/923001234567?text='));
-  // Implausible number degrades to a number-less chat link, never a broken wa.me/<garbage> URL
-  assert.equal(generateWhatsAppLink('12345', 'hi'), 'https://wa.me/?text=hi');
-  assert.equal(generateWhatsAppLink('', 'hi'), 'https://wa.me/?text=hi');
+  // Missing or implausible numbers produce no URL. Callers must hide the CTA.
+  assert.equal(generateWhatsAppLink('12345', 'hi'), '');
+  assert.equal(generateWhatsAppLink('', 'hi'), '');
+  assert.equal(generateWhatsAppLink('92923001234567', 'hi').startsWith('https://wa.me/923001234567?text='), true);
 });
 
 test('validateInquiryForm checks required fields strictly', () => {
   assert.equal(validateInquiryForm({ fullName: '', phone: '12345678', message: 'Hello world' }).isValid, false);
   assert.equal(validateInquiryForm({ fullName: 'Ali Khan', phone: '03001234567', message: 'Interested in plot' }).isValid, true);
+  assert.equal(validateInquiryForm({ fullName: 'Ali Khan', phone: '12345', message: 'Interested in plot' }).isValid, false);
+  assert.equal(validateInquiryForm({ fullName: 'Ali Khan', phone: '+92 300 1234567', message: 'Interested in plot' }).isValid, true);
 });
 
 test('maskCNIC masks national ID numbers for privacy', () => {

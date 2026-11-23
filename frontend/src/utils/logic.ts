@@ -13,6 +13,7 @@ import {
   type Permission,
 } from '../domain/permissions';
 import { computeFinancials as calculateFinancialsDomain } from '../domain/transactions';
+import { buildWhatsAppLink, normalizeWhatsAppNumber } from './whatsapp';
 
 /**
  * Format currency into standard Pakistani Rupees notation (Lacs / Crores / Thousands)
@@ -61,19 +62,9 @@ export function calculateInstallmentPlan(
  * Generate official WhatsApp click-to-chat link
  */
 export function generateWhatsAppLink(rawPhone: string, textMessage: string): string {
-  const encodedMsg = encodeURIComponent(textMessage);
-
-  // Normalize to WhatsApp international format (digits only, no '+').
-  let digits = (rawPhone || '').replace(/[^0-9]/g, '');
-  if (digits.startsWith('0092')) digits = `92${digits.slice(4)}`; // 0092... → 92...
-  else if (digits.startsWith('0')) digits = `92${digits.slice(1)}`; // 0300... → 92300...
-  else if (digits.length === 10) digits = `92${digits}`; // 3001234567 → 923001234567
-
-  // Implausible numbers degrade to a number-less WhatsApp chat link
-  // rather than a broken wa.me/<garbage> URL.
-  if (digits.length < 10 || digits.length > 15) return `https://wa.me/?text=${encodedMsg}`;
-
-  return `https://wa.me/${digits}?text=${encodedMsg}`;
+  // Missing or implausible numbers return an empty string so callers hide the
+  // control. A number-less https://wa.me/?text= link is not a valid contact.
+  return buildWhatsAppLink(rawPhone, textMessage) ?? '';
 }
 
 export interface FilterCriteria {
@@ -185,7 +176,7 @@ export function validateInquiryForm(data: {
   if (!data.fullName || data.fullName.trim().length < 2) {
     return { isValid: false, error: 'Please enter a valid full name (minimum 2 characters).' };
   }
-  if (!data.phone || data.phone.trim().length < 7) {
+  if (!normalizeWhatsAppNumber(data.phone)) {
     return { isValid: false, error: 'Please enter a valid phone or WhatsApp number.' };
   }
   if (data.email && data.email.trim() !== '') {

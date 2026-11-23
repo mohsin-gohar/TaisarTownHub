@@ -647,7 +647,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(inquiryData),
       });
-      if (!res.ok) return null;
+      if (!res.ok) return { ok: false, status: res.status };
       return await res.json();
     } catch {
       return null;

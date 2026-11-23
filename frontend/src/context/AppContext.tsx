@@ -1926,11 +1926,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subject: inquiryData.subject,
       message: inquiryData.message,
       preferredPropertyOrProject: inquiryData.preferredPropertyOrProject,
-      budgetRange: inquiryData.budgetRange
+      budgetRange: inquiryData.budgetRange,
+      propertyId: inquiryData.propertyId
     });
 
-    if (!result) {
-      showToast('error', 'We could not send your inquiry. Please try again or call the advisory desk.');
+    if (!result || result.ok === false) {
+      const status = result?.status;
+      const message = status === 429
+        ? 'Too many inquiries were sent from this connection. Please wait a minute and try again.'
+        : status === 422
+          ? 'Please check the name, phone number and message, then send the inquiry again.'
+          : 'We could not send your inquiry. Please try again or call the advisory desk.';
+      showToast('error', message);
       return false;
     }
 

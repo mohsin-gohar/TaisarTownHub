@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Building2, Search, BadgeCheck, MapPin, ArrowRight, Filter, RefreshCw } from 'lucide-react';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
@@ -48,8 +48,10 @@ export const AgenciesDirectoryPage: React.FC = () => {
   const [sort, setSort] = useState<'name' | 'newest' | 'listings'>('name');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<any>(null);
+  const requestSeq = useRef(0);
 
   const load = async (nextPage = 1) => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     setError('');
     const body = await api.getPublicAgencies({
@@ -60,6 +62,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
       page: nextPage,
       per_page: 12,
     });
+    if (seq !== requestSeq.current) return;
     setLoading(false);
     if (!body || body.success === false) {
       setError(body?.message || 'Could not load agencies right now.');

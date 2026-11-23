@@ -17,7 +17,7 @@ import {
   Download
 } from 'lucide-react';
 import { Inquiry, InquiryStatus } from '../../types';
-import { generateWhatsAppLink } from '../../utils/logic';
+import { buildWhatsAppLink } from '../../utils/whatsapp';
 import { exportCsv } from '../../utils/exportCsv';
 import { EmptyState } from '../common/EmptyState';
 
@@ -186,7 +186,7 @@ export const AdminInquiries: React.FC = () => {
           />
         ) : (
           filteredInquiries.map((inq) => {
-            const whatsAppReply = generateWhatsAppLink(
+            const whatsAppReply = buildWhatsAppLink(
               inq.phone,
               `Salam ${inq.fullName}! This is TaisarTownHub Real Estate Advisory. We received your inquiry regarding "${inq.preferredPropertyOrProject || inq.subject}". How can we best assist you with file verification and site inspection?`
             );
@@ -299,7 +299,7 @@ export const AdminInquiries: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Quick WhatsApp Action Button */}
+                    {whatsAppReply && (
                     <a
                       href={whatsAppReply}
                       target="_blank" rel="noopener noreferrer"
@@ -308,6 +308,7 @@ export const AdminInquiries: React.FC = () => {
                       <MessageCircle className="w-3.5 h-3.5" />
                       <span>WhatsApp Client</span>
                     </a>
+                    )}
                   </div>
                 </div>
               </div>
