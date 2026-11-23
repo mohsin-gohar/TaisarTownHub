@@ -123,6 +123,14 @@ jobs:
     name: Backup & Restore Drill (MySQL 8)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Workflow-level DB_PASSWORD=test-password belongs to the Compose
+    # integration job (app user `taisar`). Laravel's env() reads process
+    # environment BEFORE .env, so without this job-level override PHP ignored
+    # the generated .env value and connected with the wrong root password
+    # (SQLSTATE 1045). Job-level env overrides workflow-level env.
+    env:
+      DB_USERNAME: root
+      DB_PASSWORD: test-root-password
     # Genuine end-to-end backup validation on a disposable MySQL 8 service:
     # migrate -> seed -> private-vault fixture -> backup.sh -> restore-drill.ps1
     # (isolated scratch database + checksum/schema/row/index/FK/vault checks).
