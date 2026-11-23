@@ -52,6 +52,12 @@ services:
     image: redis:7-alpine
     container_name: taisartownhub-redis
     restart: unless-stopped
+    # The healthcheck below reads REDIS_PASSWORD inside the container, so the
+    # value must be present in the container environment (the command alone
+    # does not set it, which left every deployment's redis permanently
+    # "unhealthy").
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
     command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment} --appendonly yes
     volumes:
       - redis_data:/data
