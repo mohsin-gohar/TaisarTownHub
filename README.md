@@ -63,6 +63,9 @@ docker compose up -d --build
 
 MySQL, Redis, ClamAV, one-shot migrations, PHP-FPM backend, frontend SPA, nginx gateway, queue worker and scheduler are all defined in `docker-compose.yml`. Production TLS files must be mounted at `nginx/ssl/fullchain.pem` and `nginx/ssl/privkey.pem`; CI uses `docker/nginx.ci.conf` (HTTP only) instead. See `DEPLOYMENT.md`, `HOSTINGER_VPS_DEPLOYMENT.md` and `FILE_STORAGE_DEPLOYMENT_GUIDE.md`.
 
+> The root `Dockerfile.prod` is **deprecated and not authoritative** — use `backend/Dockerfile.prod`
+> and `frontend/Dockerfile.prod` with `docker-compose.yml`. It is kept only as historical reference.
+
 ---
 
 ## Testing (verified commands)

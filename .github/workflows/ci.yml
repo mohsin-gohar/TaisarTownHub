@@ -1,8 +1,9 @@
-# G-15 — CI gates: backend feature suite, frontend verify chain, OpenAPI parse.
+# CI gates: one authoritative MySQL 8 backend suite, frontend verify, OpenAPI parse.
 #
-# Mirrors the gates proven locally: `php artisan test` (sqlite :memory:,
-# APP_KEY pinned in phpunit.xml) and `npm run verify`
-# (lint → tests → build + prerender → bundle check).
+# The old redundant "Backend suite (PHP 8.3)" job had NO MySQL service while
+# PHPUnit is configured for MySQL, producing 354 connection-refused failures on
+# every push. It is removed; the MySQL integration job is the only backend
+# suite. SQLite is never used as a workaround.
 
 name: CI
 
@@ -12,39 +13,8 @@ on:
   pull_request:
 
 jobs:
-  backend:
-    name: Backend suite (PHP 8.3)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-
-      # .env is gitignored, so a fresh checkout has none. phpdotenv emits a
-      # file_get_contents warning for the missing file and PHPUnit 11 promotes
-      # it to a test warning on every Feature test. Keep the file empty:
-      # phpunit.xml supplies every authoritative test setting, and copying
-      # .env.example would enable fail-closed malware scanning and break
-      # upload tests.
-      - name: Prepare test environment
-        run: 'echo "# CI test bootstrap: phpunit.xml supplies the test environment." > .env'
-
-      - name: Set up PHP 8.3
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          extensions: pdo_mysql, pdo_sqlite, bcmath, intl, zip, gd
-          coverage: none
-
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
-
-      - name: Run feature suite
-        run: php artisan test
-
-  integration-mysql:
-    name: Backend suite on MySQL 8 (integration)
+  backend-mysql:
+    name: Backend suite (PHP 8.3, MySQL 8)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -62,10 +32,9 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
-        # NOTE: GitHub Actions service containers do not support a `command:`
-        # key. Adding one invalidates the whole workflow and the run fails to
-        # start with zero jobs. The lock wait timeout is applied per connection
-        # by backend/config/database.php from MYSQL_LOCK_WAIT_TIMEOUT below.
+        # GitHub Actions service containers do not support `command:`. The
+        # lock wait timeout is applied per connection by config/database.php
+        # via MYSQL_LOCK_WAIT_TIMEOUT below.
     env:
       DB_CONNECTION: mysql
       DB_HOST: 127.0.0.1
@@ -74,21 +43,20 @@ jobs:
       DB_USERNAME: root
       DB_PASSWORD: test-only-password
       DB_ROOT_PASSWORD: test-only-password
-      # Prevent MySQL lock waits from hanging tests (G-15)
       MYSQL_LOCK_WAIT_TIMEOUT: 5
     steps:
       - uses: actions/checkout@v4
 
-      # Same reason as the backend job: a fresh checkout has no .env. Keep it
-      # empty so the job-level DB_* variables and phpunit.xml are authoritative.
+      # phpunit.xml + the job-level DB_* variables are authoritative. Keep
+      # .env present but empty to avoid phpdotenv warnings on every test.
       - name: Prepare test environment
-        run: 'echo "# CI test bootstrap: phpunit.xml supplies the test environment." > .env'
+        run: 'echo "# CI bootstrap: MySQL settings come from the job environment." > .env'
 
       - name: Set up PHP 8.3
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: pdo_mysql, pdo_sqlite, bcmath, intl, zip, gd
+          extensions: pdo_mysql, bcmath, intl, zip, gd
           coverage: none
 
       - name: Install dependencies

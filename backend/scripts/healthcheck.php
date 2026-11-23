@@ -1,14 +1,15 @@
 <?php
 
 /**
- * PHP-FPM healthcheck for Docker container.
- * 
- * This script checks if the PHP-FPM process is responding correctly.
- * It can be run via CLI for Docker healthcheck or called via HTTP if needed.
- * 
- * Exit codes:
- *   0 = healthy
- *   1 = unhealthy
+ * Container readiness probe for the Laravel API.
+ *
+ * Verifies the dependencies the service actually needs to serve traffic:
+ * MySQL connectivity, a real Redis cache round-trip (Compose runs
+ * CACHE_STORE=redis, SESSION_DRIVER=redis and QUEUE_CONNECTION=redis), and a
+ * writable storage/log directory. Failure prints the failing dependency to
+ * stderr so `docker compose logs` explains WHY the container is unhealthy.
+ *
+ * Exit codes: 0 = healthy, 1 = unhealthy.
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
@@ -16,38 +17,42 @@ require_once __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
+$checks = [];
+
 try {
-    // Check database connectivity
     $pdo = Illuminate\Support\Facades\DB::connection()->getPdo();
     $pdo->query('SELECT 1')->fetchColumn();
-    
-    // Check cache connectivity
-    Illuminate\Support\Facades\Cache::get('healthcheck');
-    
-    // Check if storage is writable
-    $storagePath = storage_path('logs');
-    if (!is_writable($storagePath)) {
-        throw new Exception("Storage path not writable: {$storagePath}");
-    }
-    
-    // All checks passed
-    echo json_encode([
-        'status' => 'healthy',
-        'timestamp' => date('c'),
-        'checks' => [
-            'database' => 'ok',
-            'cache' => 'ok',
-            'storage' => 'ok',
-        ],
-    ]);
-    exit(0);
-    
+    $checks['database'] = 'ok';
 } catch (Throwable $e) {
-    fwrite(STDERR, "Healthcheck failed: " . $e->getMessage() . "\n");
-    echo json_encode([
-        'status' => 'unhealthy',
-        'timestamp' => date('c'),
-        'error' => $e->getMessage(),
-    ]);
+    fwrite(STDERR, "Healthcheck failed [database]: " . $e->getMessage() . "\n");
+    echo json_encode(['status' => 'unhealthy', 'checks' => $checks, 'error' => 'database: ' . $e->getMessage()]);
     exit(1);
 }
+
+try {
+    $key = 'healthcheck:' . gethostname();
+    Illuminate\Support\Facades\Cache::put($key, 1, now()->addSeconds(30));
+    if (Illuminate\Support\Facades\Cache::get($key) !== 1) {
+        throw new RuntimeException('cache round-trip did not return the stored value');
+    }
+    $checks['cache'] = 'ok';
+} catch (Throwable $e) {
+    fwrite(STDERR, "Healthcheck failed [cache]: " . $e->getMessage() . "\n");
+    echo json_encode(['status' => 'unhealthy', 'checks' => $checks, 'error' => 'cache: ' . $e->getMessage()]);
+    exit(1);
+}
+
+$storagePath = storage_path('logs');
+if (!is_writable($storagePath)) {
+    fwrite(STDERR, "Healthcheck failed [storage]: {$storagePath} is not writable\n");
+    echo json_encode(['status' => 'unhealthy', 'checks' => $checks, 'error' => 'storage: not writable']);
+    exit(1);
+}
+$checks['storage'] = 'ok';
+
+echo json_encode([
+    'status' => 'healthy',
+    'timestamp' => date('c'),
+    'checks' => $checks,
+]);
+exit(0);

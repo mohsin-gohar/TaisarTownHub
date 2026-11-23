@@ -1,6 +1,16 @@
 # ====================================================================
-# TaisarTownHub Backend — Production Dockerfile
-# Multi-tenant SaaS Laravel 12 API with Sanctum
+# DEPRECATED / NOT AUTHORITATIVE — DO NOT BUILD THIS FILE
+# ====================================================================
+# This legacy multi-stage file predates the current production architecture.
+# It bundles nginx+supervisord into the API image, used PHP 8.2, installed the
+# SQLite CLI and generated APP_KEY AT BUILD TIME (a secret baked into the
+# image). None of that matches docker-compose.yml or CI.
+#
+# Authoritative production images:
+#   backend/Dockerfile.prod   (PHP-FPM, context ./backend)
+#   frontend/Dockerfile.prod  (static SPA, context ./frontend)
+#   docker-compose.yml        (+ .env with runtime secrets)
+# Kept only as historical reference; never use it for a deployment.
 # ====================================================================
 FROM php:8.2-fpm-alpine AS backend-base
 
@@ -13,7 +23,6 @@ RUN apk add --no-cache \
     libxml2-dev \
     zip \
     unzip \
-    sqlite \
     mysql-client \
     rabbitmq-c-dev \
     && docker-php-ext-install pdo pdo_mysql bcmath gd xml
@@ -27,8 +36,7 @@ COPY backend/ .
 
 RUN composer install --no-dev --optimize-autoloader
 
-# Generate application key
-RUN php artisan key:generate --no-interaction || true
+# APP_KEY must be supplied at runtime — never generate/bake secrets in an image.
 
 # Optimize for production
 RUN php artisan config:cache \
