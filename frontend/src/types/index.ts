@@ -483,6 +483,7 @@ export interface Inquiry {
   message: string;
   preferredPropertyOrProject?: string;
   budgetRange?: string;
+  propertyId?: string;
   status: InquiryStatus;
   submittedAt: string;
   adminNotes?: string;
