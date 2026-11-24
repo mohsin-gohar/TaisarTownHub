@@ -85,6 +85,37 @@ class WorkspaceRoleGateTest extends EnterpriseTestCase
         $this->assertNotContains('admin.manage_agencies', $grants, 'agency verification must remain platform-only');
     }
 
+    public function test_agency_owner_membership_resolves_legacy_ui_permissions_without_platform_scope(): void
+    {
+        [$user, $agency] = $this->agencyUser(Permissions::agencyRoleGrants('agency_owner'), 'agency_owner');
+        $user->forceFill(['role' => 'dealer'])->save();
+
+        $permissions = $user->permissionsFor($agency->id);
+
+        foreach ([
+            'create_properties',
+            'edit_properties',
+            'delete_properties',
+            'upload_documents',
+            'verify_documents',
+            'view_sensitive_cnic',
+            'view_transactions',
+            'create_transactions',
+            'update_transactions',
+            'cancel_transactions',
+            'void_transactions',
+            'manage_payments',
+            'view_reports',
+        ] as $permission) {
+            $this->assertContains($permission, $permissions, "agency owner membership is missing resolved permission [{$permission}]");
+        }
+
+        $this->assertFalse($user->isPlatformUser());
+        $this->assertNotContains('admin.manage_agencies', $permissions);
+        $this->assertNotContains('edit_cms', $permissions);
+        $this->assertNotContains('manage_users', $permissions);
+    }
+
     public function test_a_member_with_no_read_permission_cannot_dump_the_workspace(): void
     {
         [$user] = $this->agencyUser([], 'viewer');
