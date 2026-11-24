@@ -187,7 +187,14 @@ interface AppContextType {
   
   // Inquiries & CMS
   inquiries: Inquiry[];
-  addInquiry: (inquiry: Omit<Inquiry, 'id' | 'submittedAt' | 'status'>) => Promise<boolean>;
+  addInquiry: (
+    inquiry: Omit<Inquiry, 'id' | 'submittedAt' | 'status'> & {
+      /** Bot protection (G-11): solved challenge fields forwarded verbatim. */
+      captchaToken?: string;
+      captchaAnswer?: string;
+      companyWebsite?: string;
+    }
+  ) => Promise<boolean>;
   updateInquiryStatus: (id: string, status: InquiryStatus) => void;
   updateInquiryNotes: (id: string, notes: string) => void;
   deleteInquiry: (id: string) => void;
@@ -1901,13 +1908,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Inquiries Management
   const addInquiry = async (
-    inquiryData: Omit<Inquiry, 'id' | 'submittedAt' | 'status'>
+    inquiryData: Omit<Inquiry, 'id' | 'submittedAt' | 'status'> & {
+      /** Bot protection (G-11): solved challenge fields forwarded verbatim. */
+      captchaToken?: string;
+      captchaAnswer?: string;
+      companyWebsite?: string;
+    }
   ): Promise<boolean> => {
     const now = new Date();
     const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+    const { captchaToken: _ct, captchaAnswer: _ca, companyWebsite: _cw, ...leadFields } = inquiryData;
     const newInquiry: Inquiry = {
-      ...inquiryData,
+      ...leadFields,
       id: `inq-${Date.now()}`,
       status: 'Pending',
       submittedAt: formattedDate,
@@ -1927,12 +1940,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       message: inquiryData.message,
       preferredPropertyOrProject: inquiryData.preferredPropertyOrProject,
       budgetRange: inquiryData.budgetRange,
-      propertyId: inquiryData.propertyId
+      propertyId: inquiryData.propertyId,
+      captchaToken: inquiryData.captchaToken,
+      captchaAnswer: inquiryData.captchaAnswer,
+      companyWebsite: inquiryData.companyWebsite
     });
 
     if (!result || result.ok === false) {
       const status = result?.status;
-      const message = status === 429
+      const code = result?.data?.code;
+      const message = code === 'captcha_failed'
+        ? 'The security answer was incorrect or expired. A new question has been loaded — please solve it and resend.'
+        : status === 429
         ? 'Too many inquiries were sent from this connection. Please wait a minute and try again.'
         : status === 422
           ? 'Please check the name, phone number and message, then send the inquiry again.'

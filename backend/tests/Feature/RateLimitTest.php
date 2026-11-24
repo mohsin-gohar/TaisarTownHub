@@ -70,10 +70,12 @@ class RateLimitTest extends EnterpriseTestCase
                 'fullName' => 'Rate Tester ' . $i,
                 'phone' => '+9230000000' . $i,
                 'message' => 'Write rate-limit probe ' . $i,
-            ])->assertStatus(201);
+            ] + $this->solveInquiryCaptcha())->assertStatus(201);
         }
 
-        // 31st must be throttled (429).
+        // 31st must be throttled (429). Rate limiting is enforced by the
+        // router middleware BEFORE validation, so no captcha solve is
+        // needed to prove the 429 path.
         $this->postJson('/api/inquiries', [
             'fullName' => 'Rate Overflow',
             'phone' => '+92300000000',

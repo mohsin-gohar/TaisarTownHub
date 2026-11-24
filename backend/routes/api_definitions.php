@@ -106,7 +106,11 @@ Route::get('/shares/{token}/download', [DocumentController::class, 'sharedDownlo
 Route::post('/payments/webhook/stripe', [PaymentController::class, 'stripeWebhook'])->middleware('throttle:60,1');
 Route::post('/payments/webhook/flutterwave', [PaymentController::class, 'flutterwaveWebhook'])->middleware('throttle:60,1');
 
-// Public lead capture (property-scoped leads get agency-attached server-side)
+// Public lead capture (property-scoped leads get agency-attached server-side).
+// G-11 bot protection: submissions must first solve a signed, single-use,
+// expiring math challenge issued by the endpoint below — no third-party
+// captcha tracker is loaded into visitors' browsers.
+Route::get('inquiries/captcha', [InquiryController::class, 'captcha'])->middleware('throttle:api.public');
 Route::post('inquiries', [InquiryController::class, 'store'])->middleware('throttle:api.write');
 
 /*
