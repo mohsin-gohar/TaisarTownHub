@@ -14,6 +14,24 @@ const API = process.env.PROBE_API || 'http://127.0.0.1:8090/api';
 const DURATION = Number(process.argv[2] || 20);
 const CONCURRENCY = Number(process.argv[3] || 10);
 
+// This harness creates disposable properties and transactions. Never let a
+// forgotten command or a copied production URL mutate a real customer system.
+const apiUrl = new URL(API);
+const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(apiUrl.hostname);
+if (process.env.LOAD_TEST_ALLOW_MUTATIONS !== 'true') {
+  throw new Error('Refusing to run: set LOAD_TEST_ALLOW_MUTATIONS=true only for an approved disposable test environment.');
+}
+if (!isLoopback && process.env.LOAD_TEST_ALLOW_REMOTE !== 'true') {
+  throw new Error('Refusing a non-local API target. Use a disposable staging environment and explicitly set LOAD_TEST_ALLOW_REMOTE=true.');
+}
+if (!process.env.LOAD_TEST_EMAIL || !process.env.LOAD_TEST_PASSWORD) {
+  throw new Error('Set LOAD_TEST_EMAIL and LOAD_TEST_PASSWORD for a dedicated disposable test account; built-in credentials are not allowed.');
+}
+if (!Number.isInteger(DURATION) || DURATION < 1 || DURATION > 600
+  || !Number.isInteger(CONCURRENCY) || CONCURRENCY < 1 || CONCURRENCY > 100) {
+  throw new Error('Duration must be 1..600 seconds and concurrency must be 1..100.');
+}
+
 type Sample = { ms: number; status: number; endpoint: string };
 type Family = { name: string; samples: Sample[]; errors: number; throttled: number; serverErrors: number };
 
@@ -59,13 +77,16 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
   const login = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: jsonHeaders,
-    body: JSON.stringify({ email: 'superadmin@taisartownhub.com', password: 'Super@Admin2026!' }),
+    body: JSON.stringify({ email: process.env.LOAD_TEST_EMAIL, password: process.env.LOAD_TEST_PASSWORD }),
   });
   const session = await login.json().catch(() => ({}));
   const token = session?.token;
-  const authHeaders = token ? { ...jsonHeaders, Authorization: `Bearer ${token}` } : jsonHeaders;
+  if (!login.ok || !token) {
+    throw new Error(`Dedicated load-test account login failed (HTTP ${login.status}); no load or mutations were started.`);
+  }
+  const authHeaders = { ...jsonHeaders, Authorization: `Bearer ${token}` };
 
-  console.log(`load test: ${DURATION}s, concurrency ${CONCURRENCY}, authenticated=${Boolean(token)}`);
+  console.log(`load test: ${DURATION}s, concurrency ${CONCURRENCY}, authenticated=true, target=${apiUrl.origin}`);
 
   const stopAt = Date.now() + DURATION * 1000;
   const publicEndpoints = ['/catalog', '/properties', '/projects', '/locations', '/videos', '/dealers'];
@@ -110,7 +131,10 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
     }),
   });
   const probePropertyBody = await probeProperty.json().catch(() => ({}));
-  const propertyId = probePropertyBody?.property?.id || probePropertyBody?.id || 'prop-15';
+  const propertyId = probePropertyBody?.property?.id || probePropertyBody?.id;
+  if (!probeProperty.ok || !propertyId) {
+    throw new Error(`Disposable property creation failed (HTTP ${probeProperty.status}); refusing to book any existing property.`);
+  }
   console.log(`\nbooking target: ${propertyId} (created: ${probeProperty.status})`);
   const attempts = 8;
   const bookingResults = await Promise.all(
