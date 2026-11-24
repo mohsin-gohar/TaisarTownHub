@@ -129,6 +129,7 @@ class Permissions
             'properties.publish', 'properties.assign', 'properties.feature',
             'documents.view', 'documents.upload', 'documents.update', 'documents.download',
             'documents.delete', 'documents.restore', 'documents.manage_permissions', 'documents.view_sensitive',
+            'legacy.view_sensitive_cnic',
             'crm.view', 'crm.create_lead', 'crm.update_lead', 'crm.assign_lead', 'crm.delete_lead', 'crm.export',
             'finance.view', 'finance.create_transaction', 'finance.update_transaction',
             'finance.manage_payments', 'finance.view_reports',
