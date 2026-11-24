@@ -118,6 +118,7 @@ class Permissions
         'finance.manage_payments' => ['manage_payments'],
         'agency.view' => ['view_reports'],
         'documents.manage_permissions' => ['verify_documents'],
+        'documents.view_sensitive' => ['view_sensitive_cnic'],
     ];
 
     /** System agency role key => enterprise permission keys (aliases appended by grants()). */
