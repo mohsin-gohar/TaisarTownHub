@@ -49,6 +49,17 @@ export async function loginToAdminViaApi(
   const token = body.token as string;
   expect(token).toBeTruthy();
 
+  // When the SPA and API share an origin (the Docker integration stack), tag
+  // browser API requests with the same per-role TEST-NET address used by the
+  // Node-side login. CI nginx trusts only its private Docker bridge for this
+  // header; production nginx continues to use the actual remote address.
+  const pageOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:4173').origin;
+  if (pageOrigin === new URL(API_BASE).origin) {
+    await page.route('**/api/**', (route) => route.continue({
+      headers: { ...route.request().headers(), 'X-Forwarded-For': ip },
+    }));
+  }
+
   // Inject the token BEFORE any application script runs on the first /admin
   // load. The previous double-navigation (boot without token -> set token ->
   // boot again) raced with the app's unauthenticated cleanup and occasionally
