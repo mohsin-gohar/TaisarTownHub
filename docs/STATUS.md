@@ -27,11 +27,11 @@ No changes have been made to `main`; no production deployment has been performed
 | Backend production image | Docker CI build, compose startup, readiness and PHP healthcheck | **PASS** |
 | Frontend production image | Docker CI build and built `index.html` check | **PASS** |
 | Backup/restore | MySQL 8 backup plus isolated restore drill | **PASS** — data integrity and scratch cleanup verified |
-| Full-stack integration | Docker CI full-stack job | **Not yet marked complete in the latest run**; do not treat as verified until its check turns green |
+| Full-stack integration | Docker CI full-stack job | **PASS** — full stack started, required services became ready, enterprise catalog seeded, integration smoke tests passed, cleanup succeeded |
 
 CI links:
-- [CI run](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45424288883)
-- [Docker CI run](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45424288999)
+- [Latest CI run](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45424876246)
+- [Latest Docker CI run](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45424876272)
 
 ## C. Still not verified
 
