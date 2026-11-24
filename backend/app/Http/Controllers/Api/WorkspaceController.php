@@ -824,7 +824,8 @@ class WorkspaceController extends Controller
      */
     private function allRows(string $collection, ?string $agencyId): array
     {
-        $query = BusinessRecord::where('collection', $collection);
+        // Soft-deleted rows must never reappear in a workspace dump.
+        $query = BusinessRecord::where('collection', $collection)->whereNull('deleted_at');
 
         if (in_array($collection, self::AGENCY_SCOPED, true) && $agencyId !== null) {
             $query->where('agency_id', $agencyId);
