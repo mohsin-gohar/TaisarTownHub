@@ -1,100 +1,67 @@
 # TaisarTownHub — Real Estate Marketplace & Agency ERP
 
-Taiser Town Scheme 45, Karachi ke liye ek **sale-only public property marketplace** aur uske saath multi-tenant agency ERP. Public portal searchable listings, agencies aur maps dikhata hai; ERP agenciyon ko properties, inquiries, documents, finance, subscriptions aur team management deta hai.
+Taiser Town Scheme 45, Karachi: a **sale-only public property marketplace** plus multi-tenant agency ERP. The public portal serves searchable listings, verified agencies and maps; the ERP gives agencies properties, inquiries/CRM, a private document vault, finance, subscriptions and team management.
 
-> **Status:** Feature-complete application code with automated tests. It is **not yet cleared for a live production launch** — TLS certificates, real secrets/credentials and external services are still required. See `docs/FINAL_PRODUCTION_AUDIT.md` and `docs/PRODUCTION_RELEASE_CHECKLIST.md`.
+> **Status:** feature-complete application code with automated tests. **Not cleared for a live production launch** — TLS, real secrets and external services are still required. Single source of truth for status: [`docs/STATUS.md`](docs/STATUS.md).
 
----
+## Stack
 
-## Repository layout
+`frontend/` React 19 + TypeScript + Vite + Tailwind (public portal + ERP UI, SEO prerender) · `backend/` Laravel 12 REST API (Sanctum token auth, MFA, RBAC) on MySQL 8 · `docker/` + `docker-compose.yml` (nginx, PHP-FPM, MySQL 8, Redis, ClamAV, queue, scheduler) · `nginx/` production TLS gateway · `docs/` consolidated documentation (this tree).
 
-```text
-frontend/   React 19 + TypeScript + Vite + Tailwind — public portal + ERP UI
-backend/    Laravel 12 REST API (Sanctum), MySQL 8 for development, tests and production
-  routes/api.php             Entry point: mounts api_definitions.php at /api and /api/v1
-  routes/api_definitions.php All endpoint definitions and middleware groups
-  database/migrations        Schema (incl. maps, full-text and composite indexes)
-  database/seeders           Demo agencies/properties/maps (development only)
-docker/     Backend/frontend runtime configs + CI-only HTTP nginx config
-nginx/      Production HTTPS gateway config (certificates go in nginx/ssl/)
-scripts/    Backup/restore scripts + Docker CI readiness gate
-docs/       openapi.yaml + production release gate documents
-.github/    CI and Docker CI workflows
-```
-
----
-
-## Local development
-
-### 1. Backend (Laravel API, port 8080)
+## Run it
 
 ```bash
-cd backend
-composer install
-cp .env.example .env
-php artisan key:generate
-# MySQL 8 is the only supported database. Create `taisartownhub` first and
-# set DB_HOST/DB_PORT/DB_DATABASE/DB_USERNAME/DB_PASSWORD in .env.
-php artisan migrate
-php artisan db:seed        # local demo data only (never in production)
+# backend (API on :8080)
+cd backend && composer install && cp .env.example .env
+php artisan key:generate && php artisan migrate --seed
 php artisan serve --host=127.0.0.1 --port=8080
-```
 
-API health probe: `http://127.0.0.1:8080/api/health`
+# frontend (Vite on :3000)
+cd frontend && npm ci && cp .env.example .env && npm run dev
+# VITE_API_URL=http://127.0.0.1:8080/api
 
-### 2. Frontend (Vite, port 3000)
-
-```bash
-cd frontend
-npm ci
-cp .env.example .env      # VITE_API_URL normally http://127.0.0.1:8080/api
-npm run dev
-```
-
-Open `http://localhost:3000`. From the repository root the same commands are available as `npm run dev:backend`, `npm run dev:frontend`, `npm run build` and `npm run verify`.
-
-### 3. Docker (full stack)
-
-```bash
-# Required environment first: DB_ROOT_PASSWORD, DB_PASSWORD, REDIS_PASSWORD,
-# APP_KEY plus the payment/mail/monitoring keys listed in backend/.env.example.
+# or the full stack
 docker compose up -d --build
 ```
 
-MySQL, Redis, ClamAV, one-shot migrations, PHP-FPM backend, frontend SPA, nginx gateway, queue worker and scheduler are all defined in `docker-compose.yml`. Production TLS files must be mounted at `nginx/ssl/fullchain.pem` and `nginx/ssl/privkey.pem`; CI uses `docker/nginx.ci.conf` (HTTP only) instead. See `DEPLOYMENT.md`, `HOSTINGER_VPS_DEPLOYMENT.md` and `FILE_STORAGE_DEPLOYMENT_GUIDE.md`.
+Demo accounts and walkthrough: `docs/DEMO_GUIDE.md`. Deployment/VPS/TLS/env checklist: `docs/DEPLOYMENT.md`.
 
-> The root `Dockerfile.prod` is **deprecated and not authoritative** — use `backend/Dockerfile.prod`
-> and `frontend/Dockerfile.prod` with `docker-compose.yml`. It is kept only as historical reference.
-
----
-
-## Testing (verified commands)
+## Test it
 
 ```bash
-cd backend && php artisan test          # 371 passed (3113 assertions)
-cd backend && composer audit            # 0 advisories (Laravel 12.73 / Symfony 7.4.23)
-cd frontend && npm run verify          # tsc + 158 unit tests + build + prerender + bundle check
-cd frontend && npm run e2e             # Playwright (starts Vite automatically; backend must be on :8080)
-bash scripts/wait-for-compose-ready.sh 60 mysql:healthy redis:healthy   # Docker readiness gate helper
+cd backend  && php artisan test        # full backend suite (SQLite default; MySQL 8 in CI)
+cd frontend && npm run verify          # tsc + unit tests + build + prerender + bundle check
+cd frontend && npm run e2e             # Playwright (backend must be on :8080)
 ```
 
-CI runs the backend suite on MySQL 8, the frontend verify chain, an OpenAPI parse check, image builds and a containerised integration stack (`.github/workflows/ci.yml`, `.github/workflows/docker-ci.yml`). Tests use the `taisartownhub_test` database (see `backend/.env.example`; local credentials go in the gitignored `backend/.env.testing`).
-
----
+CI (`.github/workflows/`) runs the backend suite on MySQL 8, the frontend verify chain, an OpenAPI parse check and a containerised integration stack.
 
 ## Key features
 
-- Sale-only public marketplace with verified agencies, property search/filters and maps.
-- Manually controlled, **free** Featured Agencies roster (no automatic paid placement, no fake social proof).
-- Tenant-isolated agency workspaces: properties, inquiries/CRM, private document vault with quarantine and audit logging, finance/transactions, subscriptions, saved searches and team roles.
-- Sanctum token auth, registration, email verification, password reset, MFA, Google OAuth, RBAC permissions and agency invitations.
-- Admin oversight: users, agencies, featured roster, platform settings, maps and audit logs.
-- SEO-prerendered public routes, responsive UI, PWA manifest and security headers.
+- Sale-only public marketplace: verified agencies, search/filters, maps, SEO-prerendered routes.
+- Manually controlled, **free** Featured Agencies roster (no paid placement, no fake social proof).
+- Tenant-isolated agency workspaces: properties, inquiries/CRM, private document vault (quarantine, share links, audit logging), finance, subscriptions, saved searches, team roles.
+- Sanctum token auth, registration, email verification, password reset, MFA, Google OAuth, RBAC (62 permissions / 13 roles), agency invitations.
+- Bot-protected public inquiry intake (signed math captcha + honeypot).
+- Admin oversight: users, agencies, featured roster, settings, maps, audit logs.
+
+## Docs
+
+| Doc | Content |
+|---|---|
+| `docs/API.md` | endpoint families, auth, envelopes, rate limits |
+| `docs/DATABASE.md` | ERD, table groups, engine policy |
+| `docs/DEPLOYMENT.md` | topology, Docker, VPS + DNS/TLS, production env checklist |
+| `docs/SECURITY.md` | tenancy, RBAC matrix, vault architecture, MFA |
+| `docs/BACKUP_RESTORE.md` | backup/restore + drill checklist |
+| `docs/DEMO_GUIDE.md` | local demo quick-start |
+| `docs/STATUS.md` | what is verified / not verified / blocked |
+| `docs/openapi.yaml` | machine-readable API contract |
+| `documents/` | long-form internal design docs |
 
 ## Known limitations / external requirements
 
 - No TLS certificate is committed — required before serving real traffic.
-- Real `APP_KEY`, database, SMTP, monitoring and payment-provider credentials must be supplied at deploy time; none are baked into images.
-- ClamAV must be running for document uploads where fail-closed scanning is enabled.
-- Browser QA automates Chromium only; other browsers, load testing and Lighthouse Core Web Vitals have not been run in this repository.
-- The repo root contains many historical audit reports from earlier missions; the release-gate documents in `docs/` are the current source of truth.
+- Real `APP_KEY`, database, SMTP, monitoring and payment credentials must be supplied at deploy time; none are baked into images.
+- ClamAV must be reachable for fail-closed upload scanning.
+- `Dockerfile.prod` at the root is deprecated — use the per-app `Dockerfile.prod` files with `docker-compose.yml`.
