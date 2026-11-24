@@ -62,20 +62,20 @@ class WorkspaceRoleGateTest extends EnterpriseTestCase
         $grants = Permissions::agencyRoleGrants('agency_owner');
 
         foreach ([
-            'view_properties',
-            'create_properties',
-            'edit_properties',
-            'delete_properties',
-            'upload_documents',
-            'verify_documents',
-            'view_sensitive_cnic',
-            'view_transactions',
-            'create_transactions',
-            'update_transactions',
-            'cancel_transactions',
-            'void_transactions',
-            'manage_payments',
-            'view_reports',
+            'legacy.view_properties',
+            'legacy.create_properties',
+            'legacy.edit_properties',
+            'legacy.delete_properties',
+            'legacy.upload_documents',
+            'legacy.verify_documents',
+            'legacy.view_sensitive_cnic',
+            'legacy.view_transactions',
+            'legacy.create_transactions',
+            'legacy.update_transactions',
+            'legacy.cancel_transactions',
+            'legacy.void_transactions',
+            'legacy.manage_payments',
+            'legacy.view_reports',
         ] as $permission) {
             $this->assertContains($permission, $grants, "agency_owner is missing legacy alias [{$permission}]");
         }
