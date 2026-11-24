@@ -340,11 +340,19 @@ jobs:
           set -euo pipefail
           BASE=http://localhost
           # Every request goes through the real nginx gateway.
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/health" | grep -q "healthy"
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/" | grep -q "TaisarTownHub"
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/maps" | grep -q "TaisarTownHub"
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/agencies" | grep -q "success"
-          curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/maps" | grep -q "success"
+          # Capture the body first: piping curl straight into `grep -q` lets
+          # grep close the pipe on the first match, which makes curl exit 23
+          # (CURLE_WRITE_ERROR) under `set -o pipefail` — a flaky CI failure.
+          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/health")
+          grep -q "healthy" <<<"$BODY"
+          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/")
+          grep -q "TaisarTownHub" <<<"$BODY"
+          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/maps")
+          grep -q "TaisarTownHub" <<<"$BODY"
+          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/agencies")
+          grep -q "success" <<<"$BODY"
+          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/maps")
+          grep -q "success" <<<"$BODY"
 
           # Regression: OPTIONS used to hit add_header inside a server-level
           # `if`, so nginx refused to start. It must now answer 204 with CORS
@@ -353,8 +361,8 @@ jobs:
             -H "Origin: http://localhost" \
             -H "Access-Control-Request-Method: POST" \
             -H "Access-Control-Request-Headers: content-type")
-          echo "$PREFLIGHT_HEADERS" | grep -qi '^HTTP/1.1 204'
-          echo "$PREFLIGHT_HEADERS" | grep -qi '^Access-Control-Allow-Origin: http://localhost'
+          grep -qi '^HTTP/1.1 204' <<<"$PREFLIGHT_HEADERS"
+          grep -qi '^Access-Control-Allow-Origin: http://localhost' <<<"$PREFLIGHT_HEADERS"
 
           # Genuine auth flow through nginx -> PHP-FPM -> MySQL -> Redis.
           EMAIL="ci-drill-$(date +%s)@example.test"
@@ -362,22 +370,25 @@ jobs:
           REGISTER=$(curl -fsS -X POST "$BASE/api/auth/register" \
             -H "Content-Type: application/json" -H "Accept: application/json" \
             -d "{\"fullName\":\"CI Drill User\",\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"phone\":\"03001234567\",\"cnic\":\"42101-1234567-1\"}")
-          echo "$REGISTER" | grep -q '"success":true'
+          grep -q '"success":true' <<<"$REGISTER"
           TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$REGISTER")
           test -n "$TOKEN"
-          curl -fsS "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/json" | grep -q "$EMAIL"
-          curl -fsS -X POST "$BASE/api/auth/logout" -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/json" | grep -q '"success":true'
+          BODY=$(curl -fsS "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/json")
+          grep -q "$EMAIL" <<<"$BODY"
+          BODY=$(curl -fsS -X POST "$BASE/api/auth/logout" -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/json")
+          grep -q '"success":true' <<<"$BODY"
 
           LOGIN=$(curl -fsS -X POST "$BASE/api/auth/login" \
             -H "Content-Type: application/json" -H "Accept: application/json" \
             -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
-          echo "$LOGIN" | grep -q '"success":true'
+          grep -q '"success":true' <<<"$LOGIN"
           TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$LOGIN")
           test -n "$TOKEN"
-          curl -fsS "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/json" | grep -q "$EMAIL"
+          BODY=$(curl -fsS "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/json")
+          grep -q "$EMAIL" <<<"$BODY"
           echo "integration smoke tests: gateway, preflight, register, login, me, logout all passed"
 
       - name: Dump diagnostics on failure
