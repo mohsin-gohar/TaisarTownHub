@@ -3,8 +3,9 @@
  *
  * Drives realistic concurrent traffic against the running API and reports
  * latency percentiles, throughput and error rates per endpoint family. It
- * also runs a **concurrency safety** check: N parallel attempts to book the
- * same property must not produce more than one successful deal.
+ * also runs a **concurrency integrity** check: N parallel transactions for
+ * one disposable property must receive distinct deal numbers. Dealer-file
+ * double-sell protection is covered separately by BookingConcurrencyTest.
  *
  * Usage:
  *   npx tsx scripts/load-test.mts [durationSeconds] [concurrency]
@@ -147,6 +148,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
           propertyId,
           propertyTitle: `Load-test concurrent booking ${Date.now()}-${index}`,
           sector: 'Sector 70-D',
+          transactionType: 'Sale',
           sellerName: 'Load Test Seller',
           buyerName: `Load Test Buyer ${index}`,
           agreementAmountPKR: 10000000,
@@ -195,6 +197,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
   console.log(`4xx (client)      : ${clientErrors}`);
   console.log(`network failures  : ${networkErrors}`);
   console.log(`total error rate  : ${((errors / all.length) * 100).toFixed(2)}%`);
+  if (serverErrors > 0 || networkErrors > 0) process.exitCode = 1;
 
   console.log('\n--- concurrency safety (parallel booking of one property) ---');
   bookingResults.forEach((r, i) =>
@@ -204,11 +207,22 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
       }`,
     ),
   );
+  const dealNumbers = bookingResults
+    .filter((r) => r.status === 201)
+    .map((r) => r.body?.dealNumber)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const uniqueDealNumbers = new Set(dealNumbers);
+  const bookingIntegrityPass = bookingResults.every((r) => r.status === 201)
+    && dealNumbers.length === created
+    && uniqueDealNumbers.size === created;
+  const unexpectedServerErrors = bookingResults.filter((r) => r.status === 0 || r.status >= 500).length;
+
   console.log(
-    created <= 1
-      ? `PASS — ${created} deal(s) created out of ${attempts} parallel attempts (no double booking)`
-      : `FAIL — ${created} deals created from ${attempts} parallel attempts`,
+    bookingIntegrityPass
+      ? `PASS — ${created} parallel transactions received ${uniqueDealNumbers.size} unique deal numbers`
+      : `FAIL — ${created}/${attempts} transactions created; ${dealNumbers.length} deal numbers, ${uniqueDealNumbers.size} unique`,
   );
+  if (unexpectedServerErrors > 0 || !bookingIntegrityPass) process.exitCode = 1;
 
   console.log(JSON.stringify({
     generatedAt: new Date().toISOString(),
@@ -241,6 +255,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
       body: JSON.stringify({ reason: 'automated load-test cleanup' }),
     });
     console.log(`cleanup: void transaction ${id} -> ${res.status}`);
+    if (!res.ok) process.exitCode = 1;
   }
   if (propertyId) {
     const res = await fetch(`${API}/properties/${propertyId}`, {

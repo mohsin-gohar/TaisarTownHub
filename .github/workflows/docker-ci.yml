@@ -103,6 +103,16 @@ jobs:
           PLAYWRIGHT_SKIP_WEBSERVER: "true"
         run: npx playwright test e2e/role-based.spec.ts --workers=1
 
+      - name: Run disposable 10-worker API load and transaction integrity probe
+        working-directory: frontend
+        env:
+          PROBE_API: http://127.0.0.1/api
+          LOAD_TEST_EMAIL: admin@taisartownhub.com
+          LOAD_TEST_PASSWORD: Admin@Taisar2026
+          LOAD_TEST_ALLOW_MUTATIONS: "true"
+          LOAD_COOLDOWN: "65"
+        run: npx tsx scripts/load-test.mts 10 10
+
       - name: Dump diagnostics on failure
         if: failure()
         run: |
