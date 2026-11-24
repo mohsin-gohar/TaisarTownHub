@@ -1,68 +1,74 @@
-# TaisarTownHub — STATUS
+# TaisarTownHub — Release Readiness
 
-**Branch:** `fix/workspace-tenant-isolation-v2` (from `main` @ `2463bfe`) · **Date:** 2026-11-24  
-**Review PR:** [#4 — Security: isolate workspace tenants and protect public catalog data](https://github.com/mohsin-gohar/TaisarTownHub/pull/4) (draft; not merged).
+**Current main:** `e780f1f7cf104a04e3855fb61ec2bfd43422ad52` (PR #4 merged)  
+**QA branch:** `qa/cross-browser-multireplica`  
+**Date:** 2026-11-24
 
-This is the single source of truth for what is verified, what is not, and what is blocked. Status vocabulary: **VERIFIED** (command + real result), **NOT VERIFIED** (exact command/requirement remains), **BLOCKED** (needs owner access, credentials, assets or business decision). No marketing language; no "100%" claims.
+This document separates verified engineering work from checks that require a real production environment, licensed assets, or owner decisions. A green CI pipeline is not equivalent to a production launch.
 
-## A. Changes on this review branch
+## 1. Merged security work
 
-| Commit | Change |
-|---|---|
-| `139bee3` | Tenant isolation for subscribers; destructive workspace replace interlocks; public catalog allowlists and visibility checks; tenant/role/privacy regression tests. |
-| `ed397fa` | Exclude soft-deleted `business_records` from workspace dumps. |
-| `fdfff96` | Regression test proving soft-deleted workspace rows are hidden. |
-| `d66f754` | Add Playwright Chromium UI regression suites to pull-request CI. |
+PR #4 — [Security: isolate workspace tenants and protect public catalog data](https://github.com/mohsin-gohar/TaisarTownHub/pull/4) — is merged into `main`.
 
-No changes have been made to `main`; no production deployment has been performed.
+- Agency subscriber data is tenant-scoped; platform-owned subscribers are not exposed to agencies.
+- Workspace replace operations reject empty/invalid payloads and require explicit confirmation for platform-wide destructive replacement.
+- Soft-deleted records are excluded from workspace dumps.
+- Public catalog responses use field allowlists and visibility rules.
+- Regression tests cover tenant isolation, role gates, replacement safety, subscription privacy and catalog privacy.
 
-## B. Verified on GitHub Actions for this branch
+## 2. Verified on main
 
-| Area | Evidence | Result |
+CI runs for merge commit `e780f1f`:
+- [CI](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45429621094) — all jobs successful.
+- [Docker CI](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45429621006) — all jobs successful.
+
+Evidence from the code-identical review run:
+- Backend PHP 8.3 + MySQL 8: **420 passed / 0 failed (3,694 assertions)**.
+- Frontend `npm run verify`: passed (typecheck, unit tests, build/prerender, bundle privacy guard).
+- Chromium UI regression: **46 passed / 2 skipped / 0 failed**.
+- OpenAPI YAML parse: passed.
+- Backend and frontend production-image build/runtime checks: passed.
+- MySQL 8 backup/restore drill: passed.
+- Full-stack Docker integration: passed (services ready, enterprise catalog seed, gateway/auth smoke, cleanup).
+
+## 3. Additional CI hardening on QA branch
+
+The following checks have been added and must pass before their status is upgraded:
+- Firefox + WebKit public-route smoke tests using the existing cross-browser Playwright config.
+- Two-replica Docker backend test: scale backend to two containers, check each container's PHP health, then exercise the nginx gateway.
+
+No claim is made that these new jobs have passed until GitHub Actions reports success on this QA branch.
+
+## 4. Remaining engineering verification
+
+| Area | Current state | Closure evidence |
 |---|---|---|
-| Backend PHP suite | CI run for commit `d66f754`, PHP 8.3 + MySQL 8 | **420 passed / 0 failed (3,694 assertions)** |
-| Frontend verification | `npm run verify` in CI | **PASS** — typecheck, unit tests, build/prerender and bundle privacy guard |
-| Browser UI regression | Playwright Chromium: cross-browser smoke, responsive, maps, interactive elements, WhatsApp and public pages | **46 passed / 2 skipped / 0 failed** |
-| OpenAPI contract syntax | YAML parse job | **PASS** |
-| Backend production image | Docker CI build, compose startup, readiness and PHP healthcheck | **PASS** |
-| Frontend production image | Docker CI build and built `index.html` check | **PASS** |
-| Backup/restore | MySQL 8 backup plus isolated restore drill | **PASS** — data integrity and scratch cleanup verified |
-| Full-stack integration | Docker CI full-stack job | **PASS** — full stack started, required services became ready, enterprise catalog seeded, integration smoke tests passed, cleanup succeeded |
+| Real ClamAV/EICAR integration | Unit-level fake-daemon protocol and upload fail-closed tests exist; real antivirus daemon + EICAR fixture has not been verified in CI | Start actual ClamAV with current signatures; clean file accepted, EICAR rejected/quarantined, scanner outage blocks uploads |
+| API-dependent browser workflows | UI-only Chromium smoke is green; seeded API-backed role/CRUD browser matrix is not yet run as one full suite | Run Playwright against disposable MySQL-backed stack for guest, agency owner/staff and super-admin flows |
+| Firefox/WebKit | Newly added CI job pending | Both engines pass all seven public-route smoke tests |
+| Multi-replica | Newly added Docker CI step pending | Both PHP replicas healthy and gateway requests succeed after scale-up |
+| Lighthouse/accessibility | No production HTTPS origin has been supplied | Run Lighthouse/accessibility checks against real deployment and resolve material findings |
+| Load/capacity | Harness exists at `frontend/scripts/load-test.mts`; no representative production-like load result exists | Run approved 10/50/100-user tests against disposable staging; record p95/p99, 5xx and error rates |
+| Full source review | Repository inventory is 631 tracked paths; no honest line-by-line review of every source/config/test file is claimed | Complete risk-ranked review of auth, tenant boundaries, money, uploads, integrations, deployment and remaining modules with evidence |
 
-CI links:
-- [Latest CI run](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45424876246)
-- [Latest Docker CI run](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45424876272)
+## 5. Owner/environment blockers — do not fabricate or bypass
 
-## C. Still not verified
+1. **Production secrets:** unique `APP_KEY`, DB/Redis passwords, SMTP, payment provider keys/webhook secrets, OAuth and monitoring credentials. Create/store only in the VPS/deployment secret manager; never commit them.
+2. **DNS/TLS and VPS:** domain A/AAAA records, VPS/SSH access, firewall, real TLS certificates, backup destination and rollback owner are not available through repository access.
+3. **Legacy ownership mapping:** run the read-only `platform:legacy-ownership --json` report on a protected copy of the actual production database. The owner must approve ambiguous/unresolved record ownership. Only then run `platform:legacy-backfill --apply` with a verified backup and approved mapping.
+4. **Licensed Scheme 45 media:** replace sample/stock references only with media the owner has rights to publish. Do not invent or scrape assets.
+5. **Platform-wide MFA policy:** owner must decide whether Super Admin MFA is mandatory; then enforce and test the approved policy.
+6. **Production rate limits:** current values are starting targets; finalize from staging/real traffic measurements.
+7. **Payments and mail:** confirm whether Stripe/Flutterwave are enabled for the business, supply live credentials/webhook configuration, and verify SMTP delivery. Otherwise explicitly disable unused integrations.
+8. **Data protection/retention:** owner approval required for privacy notice, retention periods, backups, data deletion and incident response.
 
-| Area | Required verification |
-|---|---|
-| API-dependent browser workflows | Run the full Playwright suite against a seeded, running API, including login/role workflows and CRUD journeys; the new CI browser job intentionally covers UI-only suites only. |
-| ClamAV upload security | Verify clean upload, EICAR rejection/quarantine, and fail-closed behaviour when ClamAV is unavailable (expected hold/423). |
-| Multi-replica operation | Run `docker compose up -d --scale backend=2`; verify stateless auth/session behaviour and requests across both replicas. |
-| Firefox and WebKit | Install browsers and run cross-browser suites; current CI browser job uses Chromium only. |
-| Lighthouse / accessibility | Run Lighthouse against a real HTTPS deployment; resolve any material accessibility, SEO or performance findings. |
-| Load / capacity | Run 10/50/100-user load tests against a representative API; record p95 latency and error rates. |
-| Full source audit | A line-by-line audit of all repository files has not been completed. The tree contains hundreds of files; inventory and selected high-risk reviews are not equivalent to a full audit. |
+## 6. Safe release sequence
 
-## D. Blocked on owner access, assets or decisions
+1. Finish and pass QA branch CI (including cross-browser and multi-replica checks).
+2. Verify actual ClamAV/EICAR upload path and API-backed browser journeys on disposable staging.
+3. Owner supplies licensed media, approved legacy mapping, production secrets, domain and VPS access.
+4. Take and verify full database + private-storage backup; run production readiness audit; deploy with rollback images ready.
+5. Run post-deploy HTTPS, auth, tenant isolation, upload/download, queue, scheduler, mail/payment webhooks, monitoring and restore checks.
+6. Only then mark production launch complete.
 
-1. **Production secrets:** unique `APP_KEY`, database/Redis passwords, SMTP, Stripe/Flutterwave, Google OAuth and monitoring credentials. Supply through the deployment environment only; never commit them.
-2. **DNS + TLS:** configure the production domain and real certificates on the target VPS.
-3. **Legacy data ownership:** unresolved `business_records` rows need a human-approved ownership mapping. Back up first, dry-run `platform:legacy-backfill`, review `platform:legacy-ownership`, then apply only the approved mapping.
-4. **Global MFA policy:** decide whether platform administrators must have MFA enforced.
-5. **Production rate limits:** profile real traffic and approve final thresholds; current values are initial targets.
-6. **Real Scheme 45 media:** replace sample/stock video references with licensed, genuine media assets.
-7. **VPS access and deployment sign-off:** SSH access, production environment values, monitoring and rollback ownership are required before launch.
-
-## E. Release gates
-
-- Keep PR #4 as a draft until the full-stack integration job is green and all review findings are resolved.
-- Do not merge to `main` until the owner approves the reviewed diff and all required CI checks pass.
-- Do not deploy to production until Section D is resolved and Section C's relevant operational checks are completed.
-- Preserve a verified database/storage backup and rollback image tags before any production cutover.
-
-## F. Known cleanup items
-
-- Root `Dockerfile.prod` is deprecated; per-app Dockerfiles are authoritative.
-- Historical audit reports were removed during documentation cleanup because some claimed checks that had not actually been run. Use this file and linked CI evidence instead.
+**Safety:** no production database, storage, credentials, DNS or deployment has been modified by this QA work. No unresolved owner-dependent task is silently marked complete.
