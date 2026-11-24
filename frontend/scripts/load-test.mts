@@ -108,7 +108,8 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
     }),
   );
 
-  // --- concurrency safety: parallel booking of the SAME property ---
+  // --- concurrency integrity: allocate distinct deal numbers for parallel
+  // transaction writes against one disposable property ---
   // The API throttles to 60 requests/minute per IP, so the load phase above
   // consumes the window. Cooldown first, otherwise every parallel attempt is
   // rejected by the throttle and the test proves nothing.
@@ -199,7 +200,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
   console.log(`total error rate  : ${((errors / all.length) * 100).toFixed(2)}%`);
   if (serverErrors > 0 || networkErrors > 0) process.exitCode = 1;
 
-  console.log('\n--- concurrency safety (parallel booking of one property) ---');
+  console.log('\n--- concurrency integrity (parallel transaction writes) ---');
   bookingResults.forEach((r, i) =>
     console.log(
       `  attempt ${i + 1}: status=${r.status} ${r.ms}ms ${r.status === 201 ? 'CREATED' : ''} ${

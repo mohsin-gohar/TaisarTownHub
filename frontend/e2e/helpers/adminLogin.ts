@@ -6,9 +6,9 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
  * in quickly: driving the browser form for every role exhausts the 10/min
  * shared-IP auth limiter and produces failures unrelated to the role itself.
  *
- * The Node-side request can carry a TEST-NET-3 `X-Forwarded-For` without
- * triggering a browser CORS preflight, and the backend trusts that header
- * only because the test client itself is 127.0.0.1 (TRUSTED_PROXIES).
+ * Node-side and browser-side requests use a TEST-NET-3 `X-Forwarded-For`
+ * per role. The disposable CI nginx trusts that header only from its private
+ * Docker bridge; local dev keeps its normal loopback proxy configuration.
  *
  * The actual sign-in form keeps its dedicated coverage in admin-pages.spec.ts
  * (one real form login) and in interactive/security specs (invalid input).
@@ -18,7 +18,7 @@ const API_BASE =
   process.env.VITE_API_URL ||
   'http://127.0.0.1:8080/api';
 
-/** Stable, non-routable IP per demo role; repeat runs stay under 10/min. */
+/** Stable, non-routable IP per demo role; isolates role rate-limit buckets in CI. */
 export const DEMO_ROLE_IPS: Record<string, string> = {
   super_admin: '203.0.113.11',
   admin: '203.0.113.12',
