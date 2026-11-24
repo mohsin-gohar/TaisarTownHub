@@ -78,7 +78,7 @@ export const Navbar: React.FC = () => {
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20 items-center gap-4">
-            <button type="button" onClick={() => handleNavClick('/')} className="flex-shrink-0 flex items-center gap-3 cursor-pointer group" aria-label="Go to home">
+            <button type="button" onClick={() => handleNavClick('/')} className="flex-shrink-0 flex items-center gap-3 cursor-pointer group">
               <div className="w-11 h-11 rounded-full border-2 border-[#E7C878]/60 bg-[#0B1220] flex items-center justify-center shadow-md shadow-[#E7C878]/20 group-hover:border-[#F6E3B4] transition-colors shrink-0">
                 <img src="/logo.jpg" alt="" className="w-full h-full rounded-full object-contain" />
               </div>
@@ -89,6 +89,8 @@ export const Navbar: React.FC = () => {
                 </h1>
                 <p className="text-[11px] text-[#E7C878]">Find &middot; Sell &middot; Invest</p>
               </div>
+              {/* Accessible name on mobile, where the wordmark is display:none. */}
+              <span className="sr-only">Taisar Town Hub home</span>
             </button>
 
             <div className="hidden xl:flex items-center gap-1">

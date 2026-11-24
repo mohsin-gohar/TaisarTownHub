@@ -405,12 +405,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
               key={slide.id}
               onClick={() => setActiveSlideIndex(idx)}
               aria-label={`Switch to slide ${idx + 1}`}
-              className={`transition-all duration-300 rounded-full cursor-pointer ${
-                idx === activeSlideIndex
-                  ? 'w-6 h-2 bg-[#E7C878] shadow-sm shadow-[#E7C878]/50'
-                  : 'w-2 h-2 bg-slate-500 hover:bg-slate-300'
-              }`}
-            />
+              className="w-6 h-6 rounded-full cursor-pointer flex items-center justify-center"
+            >
+              <span
+                aria-hidden="true"
+                className={`transition-all duration-300 rounded-full ${
+                  idx === activeSlideIndex
+                    ? 'w-5 h-2 bg-[#E7C878] shadow-sm shadow-[#E7C878]/50'
+                    : 'w-2 h-2 bg-slate-500 group-hover:bg-slate-300'
+                }`}
+              />
+            </button>
           ))}
         </div>
         <button
