@@ -68,7 +68,7 @@ services:
       DB_DATABASE: taisartownhub_test
       DB_PASSWORD: test-password
       REDIS_PASSWORD: test-redis-password
-      CORS_ALLOWED_ORIGINS: http://localhost
+      CORS_ALLOWED_ORIGINS: http://localhost,http://127.0.0.1
       SANCTUM_STATEFUL_DOMAINS: localhost
       # Test keys (safe for CI)
       STRIPE_KEY: sk_test_ci

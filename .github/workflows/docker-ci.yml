@@ -98,8 +98,8 @@ jobs:
       - name: Run API-backed browser role matrix
         working-directory: frontend
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost
-          PLAYWRIGHT_API_URL: http://localhost/api
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1
+          PLAYWRIGHT_API_URL: http://127.0.0.1/api
           PLAYWRIGHT_SKIP_WEBSERVER: "true"
         run: npx playwright test e2e/role-based.spec.ts --workers=1
 
