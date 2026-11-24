@@ -25,7 +25,8 @@ class DemoStaffSeeder extends Seeder
         ['Super Admin', 'superadmin@taisartownhub.com', 'Super@Admin2026!', 'super_admin'],
         // Agency owners are agency-scoped members, never platform administrators.
         // Agency Owner is agency-scoped; the active membership prevents platform scope.
-        ['Agency Owner', 'admin@taisartownhub.com', 'Admin@Taisar2026', 'manager'],
+        // Agency owners use the same non-platform base role as public agency registration.
+        ['Agency Owner', 'admin@taisartownhub.com', 'Admin@Taisar2026', 'dealer'],
         ['Agency Manager', 'manager@taisartownhub.com', 'Manager@2026', 'manager'],
         ['Dealer', 'dealer@taisartownhub.com', 'Dealer@2026', 'dealer'],
         ['Operator', 'operator@taisartownhub.com', 'Operator@2026', 'operator'],

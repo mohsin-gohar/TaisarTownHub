@@ -236,8 +236,6 @@ export const AdminLayout: React.FC = () => {
     // Agency membership capabilities (including legacy aliases) are
     // authoritative for tenant navigation; retain the legacy role fallback.
     if (wanted.some(hasEnterprise)) return true;
-    if (l.id === 'file_management'
-      && (hasEnterprise('documents.upload') || hasEnterprise('documents.manage_permissions'))) return true;
     return hasAnyPermission(activeRole, wanted);
   });
 
