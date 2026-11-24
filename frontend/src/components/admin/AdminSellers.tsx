@@ -243,11 +243,11 @@ export const AdminSellers: React.FC = () => {
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-white font-medium">
-                        {hasPermission(currentUser.role, 'view_sensitive_cnic')
+                        {canViewSensitive
                           ? (isUnmasked ? (seller.cnic ?? seller.cnicMasked ?? 'N/A') : (seller.cnicMasked || maskCNIC(seller.cnic ?? '')))
                           : (seller.cnicMasked || maskCNIC(seller.cnic ?? ''))}
                       </span>
-                      {hasPermission(currentUser.role, 'view_sensitive_cnic') && (
+                      {canViewSensitive && (
                         <button
                           type="button"
                           onClick={() => toggleCnicMask(seller.id)}

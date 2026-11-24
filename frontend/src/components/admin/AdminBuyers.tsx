@@ -295,7 +295,7 @@ export const AdminBuyers: React.FC = () => {
                           ? (isUnmasked ? (buyer.cnic ?? buyer.cnicMasked ?? 'N/A') : (buyer.cnicMasked || maskCNIC(buyer.cnic ?? '')))
                           : (buyer.cnicMasked || maskCNIC(buyer.cnic ?? ''))}
                       </span>
-                      {hasPermission(currentUser.role, 'view_sensitive_cnic') && (
+                      {canViewSensitive && (
                         <button
                           type="button"
                           onClick={() => toggleCnicMask(buyer.id)}
