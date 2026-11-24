@@ -197,7 +197,7 @@ class ClamAVScanner implements MalwareScanner
 
             // clamd prefixes INSTREAM replies with the scanned stream name (usually `stream: OK`),
             // while simple/fake daemons may return the bare `OK`. Accept both exact verdicts.
-            if ($reply === 'OK' || str_ends_with($reply, ': OK')) {
+            if ($reply === 'OK' || $reply === 'stream: OK') {
                 return MalwareScanResult::clean('clamav');
             }
 
