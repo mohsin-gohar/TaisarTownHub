@@ -236,7 +236,10 @@ export const AdminLayout: React.FC = () => {
     // Agency membership capabilities (including legacy aliases) are
     // authoritative for tenant navigation; retain the legacy role fallback.
     if (wanted.some(hasEnterprise)) return true;
-    return hasAnyPermission(activeRole, wanted);
+    // Never authorize sidebar visibility from a mutable/display role. Use the
+    // authenticated principal's canonical role as the legacy fallback; agency
+    // membership capabilities above remain the only source of tenant grants.
+    return hasAnyPermission(currentUser.role, wanted);
   });
 
   useEffect(() => {
