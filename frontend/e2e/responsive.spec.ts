@@ -18,6 +18,7 @@ const viewports = [
   { name: 'tablet 1024px', width: 1024, height: 1366 },
   { name: 'desktop 1280px', width: 1280, height: 900 },
   { name: 'desktop 1440px', width: 1440, height: 900 },
+  { name: 'desktop 1920px', width: 1920, height: 1080 },
 ];
 
 const publicRoutes = [
