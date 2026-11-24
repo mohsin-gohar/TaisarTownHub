@@ -15,6 +15,20 @@ if ($socket === '') {
     exit(1);
 }
 
+[$clamHost, $clamPort] = array_pad(explode(':', $socket, 2), 2, null);
+$connection = @fsockopen((string) $clamHost, (int) $clamPort, $socketError, $socketMessage, 5);
+if ($connection === false) {
+    fwrite(STDERR, sprintf(
+        "Cannot connect to ClamAV TCP endpoint %s:%s: %s (%d).\n",
+        $clamHost,
+        $clamPort,
+        $socketMessage,
+        $socketError,
+    ));
+    exit(1);
+}
+fclose($connection);
+
 $scanner = new ClamAVScanner(
     (string) config('malware.clamav.command', 'clamscan'),
     $socket,
