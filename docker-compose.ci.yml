@@ -59,6 +59,10 @@ services:
   backend:
     image: taisartownhub-backend:test
     environment:
+      # Disposable integration stack only: seed demo personas and trust the
+      # private Docker bridge so Playwright can use isolated TEST-NET IP buckets.
+      APP_ENV: testing
+      TRUSTED_PROXIES: 172.16.0.0/12,127.0.0.1,::1
       APP_KEY: base64:FCkLXSSnmmfbGJwJic1ie3qcv8XYDzm78f9Ax91nIGM=
       APP_URL: http://localhost
       DB_DATABASE: taisartownhub_test

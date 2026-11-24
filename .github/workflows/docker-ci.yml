@@ -80,6 +80,29 @@ jobs:
         # This sends actual file bytes over clamd INSTREAM; no production data.
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php scripts/clamav-smoke.php
 
+      - name: Set up Node 22 for API-backed browser role matrix
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install browser test dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium for API-backed browser role matrix
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run API-backed browser role matrix
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost
+          PLAYWRIGHT_API_URL: http://localhost/api
+          PLAYWRIGHT_SKIP_WEBSERVER: "true"
+        run: npx playwright test e2e/role-based.spec.ts --workers=1
+
       - name: Dump diagnostics on failure
         if: failure()
         run: |
@@ -368,10 +391,10 @@ jobs:
           done
           echo "two-replica gateway health requests passed"
 
-      - name: Seed enterprise catalog (production-safe)
-        # APP_ENV=production makes DatabaseSeeder run EnterpriseSeeder only:
-        # permissions, roles, plans and settings. No demo accounts or fixtures.
-        # Registration below needs the agency-owner role and plan catalog.
+      - name: Seed disposable enterprise data and demo personas
+        # This CI-only backend runs APP_ENV=testing. DatabaseSeeder creates
+        # isolated demo roles/memberships here; no demo account is ever seeded
+        # into production. These personas drive the real API-backed browser matrix.
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php artisan db:seed --force --no-interaction
 
       - name: Run integration smoke tests
