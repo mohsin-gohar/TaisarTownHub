@@ -145,7 +145,7 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
         ];
 
         $this->asGuest();
-        $this->postJson('/api/inquiries', $payload)->assertStatus(201);
+        $this->postJson('/api/inquiries', $payload + $this->solveInquiryCaptcha())->assertStatus(201);
 
         $this->asGuest();
         $blocked = $this->postJson('/api/inquiries', [
@@ -153,7 +153,7 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
             'phone' => '0300-1112224',
             'message' => 'Me too, please share the details.',
             'propertyId' => $property->id,
-        ])
+        ] + $this->solveInquiryCaptcha())
             ->assertStatus(402)
             ->assertJsonPath('code', 'plan_limit_reached')
             // No internal quota numbers leak to public visitors.

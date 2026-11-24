@@ -7,6 +7,7 @@ use App\Models\Agency;
 use App\Models\BusinessRecord;
 use App\Models\Inquiry;
 use App\Models\Property;
+use App\Support\InquiryCaptcha;
 use App\Support\PlanLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -58,14 +59,39 @@ class InquiryController extends Controller
     }
 
     /**
+     * GET /api/inquiries/captcha — issue a signed, single-use, expiring
+     * math challenge for the public inquiry form (G-11). No third-party
+     * captcha tracker is involved; see App\Support\InquiryCaptcha.
+     */
+    public function captcha()
+    {
+        return response()->json(InquiryCaptcha::issue());
+    }
+
+    /**
      * Store a new public inquiry (guests allowed).
      *
      * When the inquiry references a listing (`propertyId` / `property_id`),
      * the listing's agency is attached server-side so the lead lands in the
      * right agency's CRM pipeline — clients never supply agency_id.
+     *
+     * Bot protection (G-11): submissions must carry a solved challenge plus
+     * an untouched honeypot field.
      */
     public function store(Request $request)
     {
+        // Honeypot: humans never see (nor fill) this field. Bots that do get
+        // a convincing 201 so they do not hammer the endpoint with retries —
+        // nothing is stored and no internal detail leaks.
+        if (trim((string) $request->input('companyWebsite', '')) !== '') {
+            return response()->json([
+                'id' => 'inq-' . Str::uuid(),
+                'subject' => $request->input('subject', 'Property Consultation'),
+                'status' => 'Pending',
+                'submittedAt' => now()->format('Y-m-d H:i'),
+            ], 201);
+        }
+
         $data = $request->validate([
             'fullName' => 'required|string|max:255',
             'phone' => 'required|string|max:20',
@@ -77,7 +103,22 @@ class InquiryController extends Controller
             'source' => 'nullable|string|max:50',
             'propertyId' => 'nullable|string|max:256',
             'property_id' => 'nullable|string|max:256',
+            'captchaToken' => 'required|string|max:1024',
+            'captchaAnswer' => 'required|string|max:8',
         ]);
+
+        // Bot gate: the answer must match the signed, single-use, unexpired
+        // challenge. Failures return a validation-style 422 with a distinct
+        // machine-readable code so the SPA can fetch a fresh question.
+        if (!InquiryCaptcha::verify($data['captchaToken'], $data['captchaAnswer'])) {
+            return response()->json([
+                'success' => false,
+                'code' => 'captcha_failed',
+                'message' => 'The security answer was missing, wrong, or expired. Please answer the new question and resubmit.',
+                'errors' => ['captchaAnswer' => ['The security answer is incorrect or has expired.']],
+            ], 422);
+        }
+        unset($data['captchaToken'], $data['captchaAnswer']);
 
         // Sanitize input
         $data['fullName'] = strip_tags($data['fullName']);

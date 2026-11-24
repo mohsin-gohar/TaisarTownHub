@@ -641,13 +641,42 @@ export const api = {
     preferredPropertyOrProject?: string;
     budgetRange?: string;
     propertyId?: string;
+    captchaToken?: string;
+    captchaAnswer?: string;
+    companyWebsite?: string;
   }): Promise<any | null> {
     try {
       const res = await apiFetch('/inquiries', {
         method: 'POST',
         body: JSON.stringify(inquiryData),
       });
-      if (!res.ok) return { ok: false, status: res.status };
+      if (!res.ok) {
+        // Surface the parsed error body (e.g. the `captcha_failed` code) so
+        // callers can react without a second request; falls back to
+        // status-only when the body is not JSON.
+        let data: unknown = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+        return { ok: false, status: res.status, data };
+      }
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * GET /inquiries/captcha — signed, single-use, expiring math challenge for
+   * the public inquiry form (bot protection without a third-party tracker).
+   * Returns null when the API is unreachable so callers can hide the field.
+   */
+  async getInquiryCaptcha(): Promise<any | null> {
+    try {
+      const res = await apiFetch('/inquiries/captcha');
+      if (!res.ok) return null;
       return await res.json();
     } catch {
       return null;

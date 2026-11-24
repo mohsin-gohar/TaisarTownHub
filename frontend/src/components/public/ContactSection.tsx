@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { api } from '../../services/api';
 import {
   MapPin,
   Phone,
@@ -16,7 +17,7 @@ import { WhatsAppCta } from '../common/WhatsAppCta';
 import { buildWhatsAppLink } from '../../utils/whatsapp';
 
 export const ContactSection: React.FC = () => {
-  const { cmsConfig, addInquiry, showToast } = useApp();
+  const { cmsConfig, addInquiry, showToast, backendConnected } = useApp();
   // This is the platform's own contact page; the number comes from CMS config
   // and is never used as a substitute for an agency's public contact.
   const platformWhatsapp = buildWhatsAppLink(
@@ -38,6 +39,30 @@ export const ContactSection: React.FC = () => {
   const [formSuccess, setFormSuccess] = useState<boolean>(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
 
+  // Bot protection (G-11): signed math challenge from the API plus a
+  // honeypot field that humans never see. The challenge only exists when the
+  // backend is reachable; on static deployments the field is simply absent.
+  const [captcha, setCaptcha] = useState<{ question: string; token: string } | null>(null);
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+  const [companyWebsite, setCompanyWebsite] = useState('');
+
+  const refreshCaptcha = async () => {
+    const challenge = await api.getInquiryCaptcha();
+    if (challenge && typeof challenge.token === 'string' && typeof challenge.question === 'string') {
+      setCaptcha({ question: challenge.question, token: challenge.token });
+    } else {
+      setCaptcha(null);
+    }
+    setCaptchaAnswer('');
+  };
+
+  useEffect(() => {
+    if (backendConnected) {
+      refreshCaptcha();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendConnected]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formSubmitting) return;
@@ -55,6 +80,11 @@ export const ContactSection: React.FC = () => {
       return;
     }
 
+    if (captcha && captchaAnswer.trim() === '') {
+      setFormError('Please answer the security question so we know you are not a bot.');
+      return;
+    }
+
     setFormSubmitting(true);
     const sent = await addInquiry({
       fullName: formData.fullName.trim(),
@@ -64,12 +94,19 @@ export const ContactSection: React.FC = () => {
       preferredPropertyOrProject: formData.preferredPropertyOrProject,
       budgetRange: formData.budgetRange,
       message: formData.message.trim(),
-      source: 'Contact Form'
+      source: 'Contact Form',
+      captchaToken: captcha?.token,
+      captchaAnswer: captchaAnswer.trim() || undefined,
+      companyWebsite
     });
     setFormSubmitting(false);
 
     if (!sent) {
       setFormError('Your inquiry was not sent. Please check the connection and try again.');
+      // The failed token is either consumed or rejected: always reissue.
+      if (backendConnected) {
+        refreshCaptcha();
+      }
       return;
     }
 
@@ -83,6 +120,10 @@ export const ContactSection: React.FC = () => {
       budgetRange: 'PKR 30 - 50 Lacs',
       message: ''
     });
+    setCompanyWebsite('');
+    if (backendConnected) {
+      refreshCaptcha();
+    }
   };
 
   return (
@@ -312,6 +353,49 @@ export const ContactSection: React.FC = () => {
                       className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-lg p-3.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
                     />
                   </div>
+
+                  {captcha && (
+                    <div className="space-y-1">
+                      <label htmlFor="inquiry-captcha-answer" className="text-xs font-semibold text-slate-300">
+                        Security Check <span className="text-rose-400">*</span>
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <span
+                          id="inquiry-captcha-question"
+                          className="text-xs sm:text-sm text-[#E7C878] font-semibold bg-[#07141E] border border-[#E7C878]/30 rounded-lg px-3.5 py-2.5 whitespace-nowrap"
+                        >
+                          {captcha.question}
+                        </span>
+                        <input
+                          id="inquiry-captcha-answer"
+                          type="text"
+                          inputMode="numeric"
+                          required
+                          value={captchaAnswer}
+                          onChange={(e) => setCaptchaAnswer(e.target.value)}
+                          placeholder="Your answer"
+                          aria-describedby="inquiry-captcha-question"
+                          className="w-full bg-[#07141E] text-white text-xs sm:text-sm rounded-lg px-3.5 py-2.5 border border-slate-700 focus:border-[#E7C878] focus:outline-none"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Answer the sum above so we can filter automated spam. A new question is issued after every submission.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Honeypot: hidden from humans and assistive tech; bots
+                      that autofill it are silently discarded server-side. */}
+                  <input
+                    type="text"
+                    name="companyWebsite"
+                    value={companyWebsite}
+                    onChange={(e) => setCompanyWebsite(e.target.value)}
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                    className="absolute -left-[9999px] w-px h-px opacity-0"
+                  />
 
                   <button
                     type="submit"

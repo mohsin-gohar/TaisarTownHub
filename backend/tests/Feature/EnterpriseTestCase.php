@@ -146,6 +146,31 @@ abstract class EnterpriseTestCase extends TestCase
         $this->app['auth']->forgetGuards();
     }
 
+    /**
+     * Solve the public inquiry captcha (G-11) for guest submissions.
+     *
+     * Fetches a real challenge from GET /api/inquiries/captcha, parses the
+     * math question and returns the fields that must accompany
+     * POST /api/inquiries. Tests must call this once per submission: the
+     * token is single-use.
+     */
+    protected function solveInquiryCaptcha(): array
+    {
+        $challenge = $this->getJson('/api/inquiries/captcha')
+            ->assertStatus(200)
+            ->json();
+
+        $this->assertIsArray($challenge, 'captcha endpoint must return JSON');
+        $this->assertArrayHasKey('token', $challenge);
+        $this->assertMatchesRegularExpression('/(\d+)\s*\+\s*(\d+)/', (string) $challenge['question']);
+        preg_match('/(\d+)\s*\+\s*(\d+)/', (string) $challenge['question'], $m);
+
+        return [
+            'captchaToken' => $challenge['token'],
+            'captchaAnswer' => (string) ((int) $m[1] + (int) $m[2]),
+        ];
+    }
+
     protected function authHeaders(string $token): array
     {
         return ['Authorization' => 'Bearer ' . $token, 'Accept' => 'application/json'];

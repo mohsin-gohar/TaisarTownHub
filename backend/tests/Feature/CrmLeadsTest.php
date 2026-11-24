@@ -49,7 +49,7 @@ class CrmLeadsTest extends EnterpriseTestCase
             'phone' => '03007654321',
             'message' => 'I want to visit this plot.',
             'propertyId' => $property->id,
-        ])->assertStatus(201);
+        ] + $this->solveInquiryCaptcha())->assertStatus(201);
 
         $lead = Inquiry::where('phone', '03007654321')->first();
         $this->assertNotNull($lead);
@@ -69,7 +69,7 @@ class CrmLeadsTest extends EnterpriseTestCase
             'fullName' => 'General Visitor',
             'phone' => '03001112223',
             'message' => 'General question.',
-        ])->assertStatus(201);
+        ] + $this->solveInquiryCaptcha())->assertStatus(201);
 
         $lead = Inquiry::where('phone', '03001112223')->first();
         $this->assertNull($lead->agency_id);
