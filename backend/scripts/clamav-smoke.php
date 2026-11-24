@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-use App\\Services\\ClamAVScanner;
+use App\Services\ClamAVScanner;
 
 require dirname(__DIR__).'/vendor/autoload.php';
 
 $app = require dirname(__DIR__).'/bootstrap/app.php';
-$app->make(Illuminate\\Contracts\\Console\\Kernel::class)->bootstrap();
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
 $socket = (string) config('malware.clamav.socket', '');
 if ($socket === '') {
@@ -32,7 +32,7 @@ if ($cleanPath === false || $eicarPath === false) {
 try {
     file_put_contents($cleanPath, "TaisarTownHub ClamAV clean smoke fixture\n");
     // Standard EICAR anti-malware test string; it is inert test data, not malware.
-    file_put_contents($eicarPath, 'X5O!P%@AP[4\\\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
+    file_put_contents($eicarPath, 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
 
     $clean = $scanner->scan($cleanPath);
     if (! $clean->isClean || $clean->skipped) {
