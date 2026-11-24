@@ -35,11 +35,18 @@ class WorkspaceController extends Controller
         'media', 'videos', 'inquiries', 'testimonials', 'subscribers',
     ];
 
-    /** Collections whose rows belong to an agency (tenancy-scoped). */
+    /**
+     * Collections whose rows belong to an agency (tenancy-scoped).
+     *
+     * `subscribers` is scoped too: the public subscribe endpoint creates
+     * platform-owned rows (agency_id NULL), and subscriber emails must never
+     * be visible to another tenant. Projects/testimonials are deliberately
+     * platform-global public content and are not listed here.
+     */
     private const AGENCY_SCOPED = [
         'properties', 'dealers', 'sellers', 'buyers', 'transactions',
         'payments', 'commissions', 'files', 'plots', 'media', 'videos',
-        'inquiries',
+        'inquiries', 'subscribers',
     ];
 
     /** Collections holding money — every sync on them is audit-logged. */
@@ -60,6 +67,7 @@ class WorkspaceController extends Controller
     ];
 
     private const MAX_ROWS_PER_COLLECTION = 2000;
+
     private const MAX_ROW_BYTES = 512 * 1024; // 512 KB per row
 
     private const PUBLIC_PROPERTY_KEYS = [
@@ -74,13 +82,64 @@ class WorkspaceController extends Controller
         'agencyName',
     ];
 
+    /**
+     * Public catalog projections are ALLOWLISTS, never blacklists: a new
+     * private field added to a workspace row must not become public by
+     * default. Dealer CNIC, phone, email and commission figures are internal.
+     */
+    private const PUBLIC_DEALER_KEYS = [
+        'id', 'fullName', 'avatar', 'role', 'designation',
+        'agencyAffiliation', 'agencyOrBranch', 'dealsClosed',
+        'completedDealsCount', 'status', 'createdAt', 'verified', 'rating',
+        'city', 'specialties', 'experienceYears',
+    ];
+
+    private const PUBLIC_VIDEO_KEYS = [
+        'id', 'title', 'description', 'videoUrl', 'thumbnailUrl', 'agencyId',
+        'agencyName', 'dealerName', 'dealerAvatar', 'phase', 'sector',
+        'duration', 'uploadedAt', 'likes', 'views', 'tags', 'comments',
+    ];
+
+    private const PUBLIC_VIDEO_COMMENT_KEYS = [
+        'id', 'userName', 'comment', 'createdAt', 'userAvatar', 'isDealer',
+    ];
+
+    private const PUBLIC_PLOT_KEYS = [
+        'id', 'plotNumber', 'sector', 'subSector', 'block', 'street',
+        'sizeSqYards', 'dimensions', 'roadWidth', 'status', 'pricePKR',
+        'roadFacing', 'is100ftRoadFacing', 'corner', 'isCorner', 'westOpen',
+        'isWestOpen', 'gridCol', 'gridRow', 'propertyId',
+    ];
+
+    private const PUBLIC_TESTIMONIAL_KEYS = [
+        'id', 'clientName', 'designation', 'quote', 'avatar',
+        'propertyPurchased', 'rating', 'isVerifiedDemo',
+    ];
+
+    private const PUBLIC_MEDIA_KEYS = [
+        'id', 'title', 'description', 'fileName', 'fileType', 'mimeType',
+        'type', 'folder', 'url', 'thumbnailUrl', 'width', 'height',
+        'dimensions', 'fileSizeKB', 'uploadedAt', 'usageCount', 'visibility',
+    ];
+
+    /** Mirrors the frontend CMSConfig contract; unknown payload keys are dropped. */
+    private const PUBLIC_CMS_KEYS = [
+        'agencyName', 'tagline', 'heroHeadline', 'heroSubtitle', 'heroBackground',
+        'statsProjectsCount', 'statsPropertiesCount', 'statsSatisfiedClients',
+        'statsAcresPlanned', 'aboutTitle', 'aboutDescription', 'aboutMission',
+        'aboutVision', 'officeAddress', 'contactPhone', 'contactWhatsApp',
+        'contactEmail', 'workingHours', 'googleMapEmbedUrl', 'facebookUrl',
+        'youtubeUrl', 'instagramUrl', 'seoTitle', 'seoDescription',
+        'noticeBannerText',
+    ];
+
     public function subscribe(Request $request)
     {
         $data = $request->validate([
             'email' => 'required|email|max:255',
         ]);
         $email = strtolower(trim($data['email']));
-        $id = 'sub-' . substr(sha1($email), 0, 16);
+        $id = 'sub-'.substr(sha1($email), 0, 16);
         BusinessRecord::put('subscribers', $id, [
             'id' => $id,
             'email' => $email,
@@ -106,45 +165,65 @@ class WorkspaceController extends Controller
                 fn ($row) => $this->onlyKeys($row, self::PUBLIC_PROPERTY_KEYS),
                 $listed
             )),
-            'dealers' => array_map(fn ($row) => $this->publicDealer($row), $this->publicRows('dealers')),
-            'videos' => array_map(fn ($row) => $this->publicVideo($row), $this->publicRows('videos')),
-            'plots' => array_map(fn ($row) => $this->publicPlot($row), $this->publicRows('plots')),
+            'dealers' => array_values(array_map(
+                fn (array $row) => $this->publicDealer($row),
+                $this->publiclyVisibleRows('dealers')
+            )),
+            'videos' => array_values(array_map(
+                fn (array $row) => $this->publicVideo($row),
+                $this->publiclyVisibleRows('videos')
+            )),
+            'plots' => array_values(array_map(
+                fn (array $row) => $this->publicPlot($row),
+                $this->publiclyVisibleRows('plots')
+            )),
             'media' => array_values(array_map(
                 fn (array $row) => $this->publicMedia($row),
                 array_filter(
                     $this->publicRows('media'),
                     fn (array $row) => ($row['visibility'] ?? 'private') === 'public'
+                        && $this->isPubliclyVisible($row)
                 )
             )),
-            'testimonials' => $this->publicRows('testimonials'),
-            'cms' => $this->cmsPayload(),
+            'testimonials' => array_values(array_map(
+                fn (array $row) => $this->onlyKeys($row, self::PUBLIC_TESTIMONIAL_KEYS),
+                $this->publiclyVisibleRows('testimonials')
+            )),
+            'cms' => $this->publicCms(),
         ]);
     }
 
     /**
      * Full workspace dump (legacy contract).
      *
-     * Entry requires a read permission; each collection is then filtered by
-     * its own view gate AND by the acting agency (agency members receive
-     * their own rows + unowned platform rows only).
+     * Each collection is filtered by its own view gate AND by the acting
+     * agency (agency members receive only their own rows; platform users see
+     * everything). A user with no readable collection receives 403.
      */
     public function show(Request $request)
     {
-        $this->requireAny($request, [
-            'view_properties', 'view_transactions', 'view_inquiries',
-            'view_reports', 'finance.view', 'crm.view', 'properties.view',
-        ]);
-
         $user = $request->user();
         $agencyId = $this->agencyId($request);
 
         $all = [];
+        $anyReadable = false;
         foreach (self::COLLECTIONS as $name) {
-            $all[$name] = $this->canRead($request, $user, $name, $agencyId)
-                ? $this->allRows($name, $agencyId)
-                : [];
+            $allowed = $this->canRead($request, $user, $name, $agencyId);
+            if ($allowed) {
+                $anyReadable = true;
+            }
+            $all[$name] = $allowed ? $this->allRows($name, $agencyId) : [];
         }
-        $all['cms'] = $this->canRead($request, $user, 'cms', $agencyId) ? $this->cmsPayload() : [];
+
+        $cmsAllowed = $this->canRead($request, $user, 'cms', $agencyId);
+        if ($cmsAllowed) {
+            $anyReadable = true;
+        }
+        $all['cms'] = $cmsAllowed ? $this->cmsPayload() : [];
+
+        if (! $anyReadable) {
+            abort(403, 'No workspace collection is readable with your permissions.');
+        }
 
         return response()->json($all);
     }
@@ -159,13 +238,18 @@ class WorkspaceController extends Controller
     public function save(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             abort(401, 'Authentication required.');
         }
 
         $validated = $request->validate([
             'collections' => 'required|array',
             'mode' => 'nullable|in:merge,replace',
+            // Destructive replace is never implicit. An empty payload would
+            // otherwise soft-delete every visible row (platform-wide for a
+            // Super Admin), so it is always refused. A non-empty platform-wide
+            // replace requires its own explicit confirmation.
+            'confirm_platform_replace' => 'sometimes|boolean',
         ]);
 
         $collections = $validated['collections'];
@@ -174,20 +258,23 @@ class WorkspaceController extends Controller
         $replaced = [];
         $written = [];
         $denied = [];
+        $skipped = [];
 
         foreach (self::COLLECTIONS as $name) {
-            if (!array_key_exists($name, $collections) || !is_array($collections[$name])) {
+            if (! array_key_exists($name, $collections) || ! is_array($collections[$name])) {
                 continue;
             }
 
             // ---- permission gate (per collection, agency-scoped) ----
-            if (!$this->canWrite($request, $user, $name, $agencyId)) {
+            if (! $this->canWrite($request, $user, $name, $agencyId)) {
                 $denied[] = $name;
+
                 continue;
             }
 
-            if ($mode === 'replace' && !$this->canReplace($request, $user, $name, $agencyId)) {
+            if ($mode === 'replace' && ! $this->canReplace($request, $user, $name, $agencyId)) {
                 $denied[] = $name; // replace needs delete-level rights
+
                 continue;
             }
 
@@ -197,7 +284,7 @@ class WorkspaceController extends Controller
             ));
 
             if (count($rows) > self::MAX_ROWS_PER_COLLECTION) {
-                abort(422, "Collection '{$name}' exceeds " . self::MAX_ROWS_PER_COLLECTION . " rows per request.");
+                abort(422, "Collection '{$name}' exceeds ".self::MAX_ROWS_PER_COLLECTION.' rows per request.');
             }
 
             // ---- per-row validation + server-owned field stamping ----
@@ -206,6 +293,35 @@ class WorkspaceController extends Controller
                 $sanitized = $this->sanitizeRow($name, $row, $agencyId, $user);
                 if ($sanitized !== null) {
                     $clean[] = $sanitized;
+                }
+            }
+
+            // ---- destructive replace safety interlocks ----
+            // `$clean` is empty when the client sent [] OR when every row was
+            // rejected by validation. Treat both as an empty replace: deleting
+            // on an accidental/malformed payload is never acceptable, so an
+            // empty replace is always skipped (there is no bypass flag).
+            if ($mode === 'replace') {
+                if (count($clean) === 0) {
+                    $skipped[] = $name;
+                    Log::warning('Workspace empty replace skipped', [
+                        'collection' => $name,
+                        'agency_id' => $agencyId,
+                        'user_id' => $user->id,
+                        'platform_wide' => $agencyId === null,
+                    ]);
+
+                    continue;
+                }
+
+                if ($agencyId === null && ! $request->boolean('confirm_platform_replace')) {
+                    $skipped[] = $name;
+                    Log::warning('Workspace platform-wide replace skipped (confirmation required)', [
+                        'collection' => $name,
+                        'user_id' => $user->id,
+                    ]);
+
+                    continue;
                 }
             }
 
@@ -244,13 +360,15 @@ class WorkspaceController extends Controller
         }
 
         if ($written) {
-            $this->writeAudit($request, 'workspace.save', 'workspace:' . implode(',', array_keys($written)),
-                'Workspace sync (' . $mode . '): ' . json_encode($written), [
+            $this->writeAudit($request, 'workspace.save', 'workspace:'.implode(',', array_keys($written)),
+                'Workspace sync ('.$mode.'): '.json_encode($written), [
                     'metadata' => [
                         'mode' => $mode,
                         'written' => $written,
                         'replaced' => $replaced,
                         'denied' => $denied,
+                        'skipped' => $skipped,
+                        'platform_wide' => $agencyId === null,
                     ],
                 ]);
         }
@@ -269,11 +387,12 @@ class WorkspaceController extends Controller
             'mode' => $mode,
             'written' => $written,
             'denied' => $denied,
+            'skipped' => $skipped,
         ]);
     }
 
     /* ================================================================ */
-    /* Validation & stamping                                             */
+    /* Validation & stamping */
     /* ================================================================ */
 
     /**
@@ -283,11 +402,11 @@ class WorkspaceController extends Controller
     private function sanitizeRow(string $collection, array $row, ?string $agencyId, $user): ?array
     {
         $id = $row['id'] ?? null;
-        if (!is_string($id) && !is_int($id)) {
+        if (! is_string($id) && ! is_int($id)) {
             return null;
         }
         $id = trim((string) $id);
-        if ($id === '' || strlen($id) > 64 || !preg_match('/^[A-Za-z0-9_\-.:]+$/', $id)) {
+        if ($id === '' || strlen($id) > 64 || ! preg_match('/^[A-Za-z0-9_\-.:]+$/', $id)) {
             return null;
         }
 
@@ -308,6 +427,7 @@ class WorkspaceController extends Controller
             Log::warning('Workspace row rejected (too large)', [
                 'collection' => $collection, 'id' => $id,
             ]);
+
             return null;
         }
 
@@ -318,7 +438,7 @@ class WorkspaceController extends Controller
             foreach (self::MONEY_KEYS as $key) {
                 if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') {
                     $value = (float) $row[$key];
-                    if (!is_finite($value) || $value < 0 || $value > 999999999999) {
+                    if (! is_finite($value) || $value < 0 || $value > 999999999999) {
                         $row[$key] = 0;
                     } else {
                         $row[$key] = $value;
@@ -354,13 +474,15 @@ class WorkspaceController extends Controller
                 }
                 $out[$key] = $filtered;
             }
+
             return $out;
         }
 
         if (is_string($value)) {
-            if (!mb_check_encoding($value, 'UTF-8')) {
+            if (! mb_check_encoding($value, 'UTF-8')) {
                 $value = mb_convert_encoding($value, 'UTF-8', 'UTF-8');
             }
+
             return strlen($value) > 65536 ? substr($value, 0, 65536) : $value;
         }
 
@@ -373,7 +495,7 @@ class WorkspaceController extends Controller
     }
 
     /* ================================================================ */
-    /* Sync                                                              */
+    /* Sync */
     /* ================================================================ */
 
     /**
@@ -401,6 +523,7 @@ class WorkspaceController extends Controller
         $changed = [];
         $removed = 0;
         $blocked = 0;
+        $accepted = 0;
         $scoped = in_array($collection, self::AGENCY_SCOPED, true);
 
         foreach ($rows as $row) {
@@ -416,6 +539,7 @@ class WorkspaceController extends Controller
             // ---- row-level ownership enforcement ----
             if ($scoped && $agencyId !== null && $existing && $owner !== null && $owner !== $agencyId) {
                 $blocked++; // another agency's row — never touch
+
                 continue;
             }
 
@@ -426,13 +550,16 @@ class WorkspaceController extends Controller
             // platform:legacy-backfill (resolver evidence or --mapping).
             if ($scoped && $agencyId !== null && $existing && $owner === null) {
                 $blocked++;
+
                 continue;
             }
+
+            $accepted++;
 
             if ($existing) {
                 // Preserve the original creator stamped by an earlier sync
                 $previous = $existing->payload ?? [];
-                if (isset($previous['created_by']) && !isset($row['created_by'])) {
+                if (isset($previous['created_by']) && ! isset($row['created_by'])) {
                     $row['created_by'] = $previous['created_by'];
                 }
             } elseif ($scoped && $agencyId !== null) {
@@ -446,14 +573,14 @@ class WorkspaceController extends Controller
 
             $newPayload = $row;
             $oldPayload = $existing?->payload ?? null;
-            $deletedAt = !empty($row['deletedAt']) ? now() : null;
+            $deletedAt = ! empty($row['deletedAt']) ? now() : null;
             $oldDeletedAt = $existing?->deleted_at;
 
             $payloadDiffers = $oldPayload === null
                 || json_encode($oldPayload) !== json_encode($newPayload);
             $deletedDiffers = ($oldDeletedAt === null) !== ($deletedAt === null);
 
-            if (!$payloadDiffers && !$deletedDiffers) {
+            if (! $payloadDiffers && ! $deletedDiffers) {
                 continue; // nothing changed — skip write
             }
 
@@ -483,6 +610,22 @@ class WorkspaceController extends Controller
             return ['changed' => $changed, 'removed' => 0]; // merge-only
         }
 
+        // Defence in depth: an empty id set — or a payload where every row was
+        // rejected as foreign/platform-owned — must never reach the
+        // destructive delete query. save() intercepts an empty payload, but
+        // this also stops a replace that only contains rows the writer cannot
+        // touch from wiping their own collection.
+        if (count($ids) === 0 || $accepted === 0) {
+            Log::warning('Workspace replace skipped at sync layer (no writable rows)', [
+                'collection' => $collection,
+                'agency_id' => $agencyId,
+                'user_id' => auth()->id(),
+                'blocked' => $blocked,
+            ]);
+
+            return ['changed' => $changed, 'removed' => 0];
+        }
+
         $query = BusinessRecord::where('collection', $collection)
             ->whereNull('deleted_at');
 
@@ -509,7 +652,7 @@ class WorkspaceController extends Controller
 
     private function mergeVideo(array $row, ?BusinessRecord $existing): array
     {
-        if (!$existing) {
+        if (! $existing) {
             return $row;
         }
         $old = $existing->payload ?? [];
@@ -517,11 +660,12 @@ class WorkspaceController extends Controller
         $row['views'] = max((int) ($old['views'] ?? 0), (int) ($row['views'] ?? 0));
         $comments = [];
         foreach (array_merge($old['comments'] ?? [], $row['comments'] ?? []) as $comment) {
-            if (is_array($comment) && !empty($comment['id'])) {
+            if (is_array($comment) && ! empty($comment['id'])) {
                 $comments[$comment['id']] = $comment;
             }
         }
         $row['comments'] = array_values($comments);
+
         return $row;
     }
 
@@ -538,7 +682,7 @@ class WorkspaceController extends Controller
             }
             $existing = BusinessRecord::where('collection', 'media')->where('record_id', (string) $row['id'])->first();
             $previous = $existing?->payload ?? [];
-            if (!empty($previous['soldAt'])) {
+            if (! empty($previous['soldAt'])) {
                 continue; // already audited on its original sale
             }
             $price = (float) ($row['soldPricePKR'] ?? 0);
@@ -563,7 +707,7 @@ class WorkspaceController extends Controller
     private function auditFinancialSync(Request $request, string $collection, array $rows, array $changedIds, ?string $agencyId): void
     {
         $changed = array_filter($rows, fn ($row) => in_array((string) $row['id'], $changedIds, true));
-        if (!$changed) {
+        if (! $changed) {
             return;
         }
 
@@ -575,7 +719,7 @@ class WorkspaceController extends Controller
                     ?? $row['agreementAmountPKR'] ?? $row['commissionAmountPKR'] ?? 0);
             }
 
-            $this->writeAudit($request, 'workspace.' . $collection, $collection . ':' . implode(',', $ids),
+            $this->writeAudit($request, 'workspace.'.$collection, $collection.':'.implode(',', $ids),
                 sprintf('%s sync: %d row(s) changed, total value PKR %s', $collection, count($changed), number_format($total)), [
                     'agency_id' => $agencyId,
                     'entity_type' => 'business_records',
@@ -592,7 +736,7 @@ class WorkspaceController extends Controller
     }
 
     /* ================================================================ */
-    /* Reads                                                             */
+    /* Reads */
     /* ================================================================ */
 
     private function publicRows(string $collection, bool $agencyOwnedOnly = false): array
@@ -610,14 +754,53 @@ class WorkspaceController extends Controller
             ->get()
             ->map(function (BusinessRecord $record) {
                 $payload = $record->payload ?? [];
-                if (!empty($payload['deletedAt'])) {
+                if (! empty($payload['deletedAt'])) {
                     return null;
                 }
+
                 return $payload;
             })
             ->filter()
             ->values()
             ->all();
+    }
+
+    /**
+     * Rows whose payload explicitly opts into public visibility. Legacy rows
+     * without governance keys remain eligible (they are the demo/public seed),
+     * but anything marked private/draft/rejected/inactive is never returned.
+     */
+    private function publiclyVisibleRows(string $collection): array
+    {
+        return array_values(array_filter(
+            $this->publicRows($collection),
+            fn (array $row) => $this->isPubliclyVisible($row)
+        ));
+    }
+
+    private function isPubliclyVisible(array $row): bool
+    {
+        if (array_key_exists('visibility', $row)
+            && ! in_array($row['visibility'], ['public', 'published'], true)) {
+            return false;
+        }
+        if (array_key_exists('approval_status', $row) && $row['approval_status'] !== 'approved') {
+            return false;
+        }
+        if (array_key_exists('isPublic', $row) && $row['isPublic'] !== true) {
+            return false;
+        }
+        if (array_key_exists('published', $row) && $row['published'] !== true) {
+            return false;
+        }
+        if (isset($row['status']) && is_string($row['status'])
+            && in_array(strtolower($row['status']), [
+                'inactive', 'disabled', 'archived', 'hidden', 'draft', 'private', 'rejected',
+            ], true)) {
+            return false;
+        }
+
+        return true;
     }
 
     /** Public catalog only lists agency-owned, explicitly approved sale listings. */
@@ -652,7 +835,7 @@ class WorkspaceController extends Controller
             ->limit(2000)
             ->get()
             ->map(fn (BusinessRecord $record) => $record->payload ?? [])
-            ->filter(fn ($row) => !empty($row['id']))
+            ->filter(fn ($row) => ! empty($row['id']))
             ->values()
             ->all();
     }
@@ -660,7 +843,13 @@ class WorkspaceController extends Controller
     private function cmsPayload(): array
     {
         $record = BusinessRecord::where('collection', 'cms')->where('record_id', 'default')->first();
+
         return $record?->payload ?? [];
+    }
+
+    private function publicCms(): array
+    {
+        return $this->onlyKeys($this->cmsPayload(), self::PUBLIC_CMS_KEYS);
     }
 
     private function onlyKeys(array $row, array $keys): array
@@ -671,50 +860,54 @@ class WorkspaceController extends Controller
                 $out[$key] = $row[$key];
             }
         }
+
         return $out;
     }
 
     private function publicDealer(array $row): array
     {
-        // Public catalog: strip all PII and financial fields.
-        unset(
-            $row['cnic'], $row['cnicMasked'], $row['CNIC'],
-            $row['phone'], $row['whatsApp'], $row['email'],
-            $row['totalEarnedPKR'], $row['pendingCommissionPKR'],
-            $row['commissionRate'], $row['commissionType'],
-            $row['commissionValue'], $row['accountNumber'],
-            $row['internalNotes'], $row['notes']
-        );
-        return $row;
+        // Public catalog: allowlist only. CNIC, contact details and commission
+        // figures are internal workspace data and must never be published.
+        return $this->onlyKeys($row, self::PUBLIC_DEALER_KEYS);
     }
 
     private function publicVideo(array $row): array
     {
-        // Strip internal user ids and sensitive fields from public videos.
-        unset($row['likedBy'], $row['liked_by'], $row['authorId'], $row['author_id'],
-            $row['internalNotes'], $row['notes']);
+        $row = $this->onlyKeys($row, self::PUBLIC_VIDEO_KEYS);
+
+        if (isset($row['comments']) && is_array($row['comments'])) {
+            $comments = [];
+            foreach ($row['comments'] as $comment) {
+                if (! is_array($comment)) {
+                    continue;
+                }
+                $clean = $this->onlyKeys($comment, self::PUBLIC_VIDEO_COMMENT_KEYS);
+                if ($clean !== []) {
+                    $comments[] = $clean;
+                }
+            }
+            $row['comments'] = $comments;
+        } else {
+            unset($row['comments']);
+        }
+
         return $row;
     }
 
     private function publicPlot(array $row): array
     {
-        // Strip owner names and sensitive fields from public plots.
-        unset($row['markerLabel'], $row['marker_label'], $row['ownerName'],
-            $row['owner_name'], $row['internalNotes'], $row['notes']);
-        return $row;
+        // Public catalog: allowlist only. Owner identity, marker labels and
+        // internal notes are workspace data, never public plot data.
+        return $this->onlyKeys($row, self::PUBLIC_PLOT_KEYS);
     }
 
     private function publicMedia(array $row): array
     {
-        $allowed = [
-            'id', 'title', 'description', 'fileName', 'fileType', 'mimeType',
-            'url', 'thumbnailUrl', 'width', 'height', 'visibility',
-        ];
-        return $this->onlyKeys($row, $allowed);
+        return $this->onlyKeys($row, self::PUBLIC_MEDIA_KEYS);
     }
 
     /* ================================================================ */
-    /* Permission gates                                                  */
+    /* Permission gates */
     /* ================================================================ */
 
     /**
@@ -730,6 +923,7 @@ class WorkspaceController extends Controller
         if ($agencyId !== null && $this->isCrossAgency($request) && $user->hasPermission($permission)) {
             return true;
         }
+
         return false;
     }
 
@@ -763,6 +957,7 @@ class WorkspaceController extends Controller
                 return true;
             }
         }
+
         return false;
     }
 
@@ -782,8 +977,8 @@ class WorkspaceController extends Controller
             'plots' => ['edit_properties', 'properties.update'],
             'media' => ['manage_media', 'upload_media'],
             'videos' => ['manage_media', 'upload_media'],
-            'inquiries' => ['view_inquiries', 'crm.update_lead'],
-            'subscribers' => ['view_inquiries'],
+            'inquiries' => ['crm.update_lead'],
+            'subscribers' => ['crm.update_lead'],
             'testimonials' => ['edit_cms'],
             'cms' => ['edit_cms'],
         ];
@@ -793,6 +988,7 @@ class WorkspaceController extends Controller
                 return true;
             }
         }
+
         return false;
     }
 
@@ -812,7 +1008,7 @@ class WorkspaceController extends Controller
             'media' => ['manage_media'],
             'videos' => ['manage_media'],
             'inquiries' => ['crm.delete_lead'],
-            'subscribers' => ['view_inquiries'],
+            'subscribers' => ['crm.delete_lead'],
             'testimonials' => ['edit_cms'],
             'projects' => ['manage_projects'],
         ];
@@ -822,10 +1018,7 @@ class WorkspaceController extends Controller
                 return true;
             }
         }
+
         return false;
     }
 }
-
-
-
-
