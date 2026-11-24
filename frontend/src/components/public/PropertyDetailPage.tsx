@@ -129,7 +129,8 @@ export const PropertyDetailPage: React.FC = () => {
       subject: `Property Inquiry: ${property.title}`,
       preferredPropertyOrProject: property.title,
       message,
-      source: 'Property Page'
+      source: 'Property Page',
+      propertyId: property.id,
     });
     setInquirySubmitting(false);
 
