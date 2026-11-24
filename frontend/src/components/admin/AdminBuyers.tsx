@@ -18,10 +18,13 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Buyer, BuyerPaymentStatus } from '../../types';
-import { maskCNIC, formatPKRCurrency, hasPermission } from '../../utils/logic';
+import { authorize } from '../../domain/permissions';
+import { maskCNIC, formatPKRCurrency } from '../../utils/logic';
 
 export const AdminBuyers: React.FC = () => {
   const { buyers, addBuyer, updateBuyer, deleteBuyer, properties, dealers, showToast, setSelectedPropertyId, setCurrentView, currentUser, confirmAction } = useApp();
+
+  const canViewSensitive = authorize(currentUser, 'view_sensitive_cnic').ok;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -288,7 +291,7 @@ export const AdminBuyers: React.FC = () => {
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-white font-medium">
-                        {hasPermission(currentUser.role, 'view_sensitive_cnic')
+                        {canViewSensitive
                           ? (isUnmasked ? (buyer.cnic ?? buyer.cnicMasked ?? 'N/A') : (buyer.cnicMasked || maskCNIC(buyer.cnic ?? '')))
                           : (buyer.cnicMasked || maskCNIC(buyer.cnic ?? ''))}
                       </span>

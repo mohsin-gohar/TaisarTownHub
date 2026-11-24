@@ -19,7 +19,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { PropertyFileItem, DocumentCategory, DocumentVerificationStatus } from '../../types';
-import { hasPermission } from '../../utils/logic';
+import { authorize } from '../../domain/permissions';
 import {
   DOCUMENT_UPLOAD_ACCEPT,
   hasViewableDocument,
@@ -33,7 +33,7 @@ export const AdminFileManagement: React.FC = () => {
   // P0-4: verify/reject are verifier actions. Operators (upload-only role) get
   // the upload path but never the decision buttons — and the context action
   // gates enforce this regardless of what the UI renders.
-  const canVerify = hasPermission(currentUser.role, 'verify_documents');
+  const canVerify = authorize(currentUser, 'verify_documents').ok;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');

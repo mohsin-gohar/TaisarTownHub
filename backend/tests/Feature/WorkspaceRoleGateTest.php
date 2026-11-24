@@ -57,6 +57,34 @@ class WorkspaceRoleGateTest extends EnterpriseTestCase
         $this->assertDatabaseMissing('business_records', ['collection' => 'testimonials', 'record_id' => 'owner-testimonial']);
     }
 
+    public function test_agency_owner_grants_include_the_legacy_aliases_required_by_the_admin_ui(): void
+    {
+        $grants = Permissions::agencyRoleGrants('agency_owner');
+
+        foreach ([
+            'view_properties',
+            'create_properties',
+            'edit_properties',
+            'delete_properties',
+            'upload_documents',
+            'verify_documents',
+            'view_sensitive_cnic',
+            'view_transactions',
+            'create_transactions',
+            'update_transactions',
+            'cancel_transactions',
+            'void_transactions',
+            'manage_payments',
+            'view_reports',
+        ] as $permission) {
+            $this->assertContains($permission, $grants, "agency_owner is missing legacy alias [{$permission}]");
+        }
+
+        $this->assertNotContains('edit_cms', $grants, 'global website CMS must remain platform-only');
+        $this->assertNotContains('manage_users', $grants, 'platform user management must remain platform-only');
+        $this->assertNotContains('admin.manage_agencies', $grants, 'agency verification must remain platform-only');
+    }
+
     public function test_a_member_with_no_read_permission_cannot_dump_the_workspace(): void
     {
         [$user] = $this->agencyUser([], 'viewer');

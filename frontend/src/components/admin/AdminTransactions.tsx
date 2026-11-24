@@ -20,8 +20,8 @@ import {
   FileCheck
 } from 'lucide-react';
 import { Transaction, TransactionStatus, CommissionStatus, PaymentEntry, CommissionEntry } from '../../types';
-import { formatPKRCurrency, calculateERPFinancials, calculateCommission, maskCNIC, hasPermission } from '../../utils/logic';
-import { normalizeRole } from '../../domain/permissions';
+import { formatPKRCurrency, calculateERPFinancials, calculateCommission, maskCNIC } from '../../utils/logic';
+import { authorize, normalizeRole } from '../../domain/permissions';
 import { dealMoney } from '../../domain/transactions';
 import { EmptyState } from '../common/EmptyState';
 
@@ -57,8 +57,8 @@ export const AdminTransactions: React.FC = () => {
     : transactions
   ).filter((t) => !t.deletedAt);
 
-  const canCreateDeals = hasPermission(currentUser.role, 'create_transactions');
-  const canUpdateDeals = hasPermission(currentUser.role, 'update_transactions');
+  const canCreateDeals = authorize(currentUser, 'create_transactions').ok;
+  const canUpdateDeals = authorize(currentUser, 'update_transactions').ok;
 
   const [formData, setFormData] = useState({
     propertyId: properties[0]?.id || '',
@@ -93,8 +93,8 @@ export const AdminTransactions: React.FC = () => {
 
   // P1-2/P1-1 UI gates: recording money and voiding records are privileged ops;
   // the context actions re-check these on every call (UI hiding is cosmetic).
-  const canRecordPayments = hasPermission(currentUser.role, 'manage_payments');
-  const canVoid = hasPermission(currentUser.role, 'void_transactions');
+  const canRecordPayments = authorize(currentUser, 'manage_payments').ok;
+  const canVoid = authorize(currentUser, 'void_transactions').ok;
 
   // Record-payment modal state
   const [paymentModalTxn, setPaymentModalTxn] = useState<Transaction | null>(null);
@@ -661,7 +661,7 @@ export const AdminTransactions: React.FC = () => {
                 holds view_sensitive_cnic (P0-5). Transactions reference parties
                 by id; values are joined and masked at render time. */}
             {(() => {
-              const canReveal = hasPermission(currentUser.role, 'view_sensitive_cnic');
+              const canReveal = authorize(currentUser, 'view_sensitive_cnic').ok;
               const seller = sellers.find((s) => s.id === selectedTxnForReceipt.sellerId);
               const buyer = buyers.find((b) => b.id === selectedTxnForReceipt.buyerId);
               const sellerLine = canReveal && seller?.cnic
