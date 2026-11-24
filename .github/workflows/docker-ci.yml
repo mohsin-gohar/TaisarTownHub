@@ -368,11 +368,13 @@ jobs:
           done
           echo "two-replica gateway health requests passed"
 
+      - name: Generate ephemeral demo password for disposable CI data
+        run: echo "CI_DEMO_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
       - name: Seed disposable enterprise data and demo personas
-        # This CI-only backend runs APP_ENV=testing. DatabaseSeeder creates
-        # isolated demo roles/memberships here; no demo account is ever seeded
-        # into production. These personas drive the real API-backed browser matrix.
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php artisan db:seed --force --no-interaction
+        # The password exists only for this isolated job; the seeder never
+        # writes it into production or source control.
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e DEMO_STAFF_PASSWORD="$CI_DEMO_PASSWORD" backend php artisan db:seed --force --no-interaction
 
       - name: Run integration smoke tests
         run: |
@@ -451,7 +453,18 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1
           PLAYWRIGHT_API_URL: http://127.0.0.1/api
           PLAYWRIGHT_SKIP_WEBSERVER: "true"
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
         run: npx playwright test e2e/role-based.spec.ts --workers=1
+
+      - name: Run disposable 10-worker API load and transaction integrity probe
+        working-directory: frontend
+        env:
+          PROBE_API: http://127.0.0.1/api
+          LOAD_TEST_EMAIL: admin@taisartownhub.com
+          LOAD_TEST_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+          LOAD_TEST_ALLOW_MUTATIONS: "true"
+          LOAD_COOLDOWN: "65"
+        run: npx tsx scripts/load-test.mts 10 10
 
       - name: Dump diagnostics on failure
         if: failure()

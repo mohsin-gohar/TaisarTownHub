@@ -6,12 +6,13 @@ import { DEMO_ROLE_IPS, loginToAdminViaApi } from './helpers/adminLogin';
  * Verifies each role can authenticate and sees role-appropriate admin shell content.
  */
 
+const ciDemoPassword = process.env.DEMO_STAFF_PASSWORD;
 const DEMO_ACCOUNTS = [
-  { role: 'super_admin', email: 'superadmin@taisartownhub.com', password: 'Super@Admin2026!' },
-  { role: 'admin', email: 'admin@taisartownhub.com', password: 'Admin@Taisar2026' },
-  { role: 'manager', email: 'manager@taisartownhub.com', password: 'Manager@2026' },
-  { role: 'dealer', email: 'dealer@taisartownhub.com', password: 'Dealer@2026' },
-  { role: 'operator', email: 'operator@taisartownhub.com', password: 'Operator@2026' },
+  { role: 'super_admin', email: 'superadmin@taisartownhub.com', password: ciDemoPassword || 'Super@Admin2026!' },
+  { role: 'admin', email: 'admin@taisartownhub.com', password: ciDemoPassword || 'Admin@Taisar2026' },
+  { role: 'manager', email: 'manager@taisartownhub.com', password: ciDemoPassword || 'Manager@2026' },
+  { role: 'dealer', email: 'dealer@taisartownhub.com', password: ciDemoPassword || 'Dealer@2026' },
+  { role: 'operator', email: 'operator@taisartownhub.com', password: ciDemoPassword || 'Operator@2026' },
 ] as const;
 
 async function loginAs(page: Page, request: APIRequestContext, account: (typeof DEMO_ACCOUNTS)[number]) {
