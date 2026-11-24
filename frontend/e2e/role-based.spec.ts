@@ -57,6 +57,7 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
       await loginAs(page, request, DEMO_ACCOUNTS[1]);
       await expect(page).toHaveURL(/\/admin/);
       await expect(page.locator('main')).toBeVisible();
+      await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /agency dashboard/i }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /staff & roles/i }).first()).toBeVisible();
     });
