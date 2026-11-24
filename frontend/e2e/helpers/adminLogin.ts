@@ -34,12 +34,18 @@ export interface DemoAccount {
   role?: string;
 }
 
+export interface DemoAuthUser {
+  is_platform?: boolean;
+  enterprise_permissions?: string[];
+  agencies?: Array<{ role_key?: string; role_name?: string }>;
+}
+
 export async function loginToAdminViaApi(
   page: Page,
   request: APIRequestContext,
   account: DemoAccount,
   ip: string,
-): Promise<void> {
+): Promise<DemoAuthUser> {
   const response = await request.post(`${API_BASE}/auth/login`, {
     headers: { 'X-Forwarded-For': ip, Accept: 'application/json' },
     data: { email: account.email, password: account.password },
@@ -49,6 +55,8 @@ export async function loginToAdminViaApi(
   const body = await response.json();
   const token = body.token as string;
   expect(token).toBeTruthy();
+  const user = body.user as DemoAuthUser;
+  expect(user).toBeTruthy();
 
   // When the SPA and API share an origin (the Docker integration stack), tag
   // browser API requests with the same per-role TEST-NET address used by the
@@ -75,4 +83,5 @@ export async function loginToAdminViaApi(
   // default 5s assertion timeout produces false negatives that do not occur
   // when the same tests run with one worker or against a real server.
   await expect(page.locator('main')).toBeVisible({ timeout: 20000 });
+  return user;
 }

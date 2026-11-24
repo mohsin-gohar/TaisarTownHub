@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { DEMO_ROLE_IPS, loginToAdminViaApi } from './helpers/adminLogin';
+import { DEMO_ROLE_IPS, loginToAdminViaApi, type DemoAuthUser } from './helpers/adminLogin';
 
 /**
  * PHASE 5 — Role-based testing for demo accounts.
@@ -15,11 +15,11 @@ const DEMO_ACCOUNTS = [
   { role: 'operator', email: 'operator@taisartownhub.com', password: ciDemoPassword || 'Operator@2026' },
 ] as const;
 
-async function loginAs(page: Page, request: APIRequestContext, account: (typeof DEMO_ACCOUNTS)[number]) {
+async function loginAs(page: Page, request: APIRequestContext, account: (typeof DEMO_ACCOUNTS)[number]): Promise<DemoAuthUser> {
   // Node-side API login with a per-role TEST-NET-3 bucket keeps the 10/min
   // shared-IP limiter from throttling unrelated parallel role tests. The
   // browser sign-in form itself is covered in admin-pages.spec.ts.
-  await loginToAdminViaApi(page, request, account, DEMO_ROLE_IPS[account.role]);
+  return loginToAdminViaApi(page, request, account, DEMO_ROLE_IPS[account.role]);
 }
 
 test.describe('Role-Based Access - Every role gets correct permissions', () => {
@@ -28,7 +28,9 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
   test.slow();
   test.describe('Super Admin - Full platform access', () => {
     test('can access key admin sections', async ({ page, request }) => {
-      await loginAs(page, request, DEMO_ACCOUNTS[0]);
+      const user = await loginAs(page, request, DEMO_ACCOUNTS[0]);
+      expect(user.is_platform).toBe(true);
+      expect(user.enterprise_permissions).toContain('admin.manage_agencies');
 
       await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /security & roles/i }).first()).toBeVisible();
@@ -54,7 +56,10 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
 
   test.describe('Agency Owner - Agency-scoped access', () => {
     test('can access the agency workspace without platform scope', async ({ page, request }) => {
-      await loginAs(page, request, DEMO_ACCOUNTS[1]);
+      const user = await loginAs(page, request, DEMO_ACCOUNTS[1]);
+      expect(user.is_platform).toBe(false);
+      expect(user.enterprise_permissions).not.toContain('admin.manage_agencies');
+      expect(user.agencies?.[0]?.role_key).toBe('agency_owner');
       await expect(page).toHaveURL(/\/admin/);
       await expect(page.locator('main')).toBeVisible();
       await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toBeVisible();
