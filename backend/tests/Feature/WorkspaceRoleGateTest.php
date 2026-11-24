@@ -75,11 +75,11 @@ class WorkspaceRoleGateTest extends EnterpriseTestCase
             'legacy.cancel_transactions',
             'legacy.void_transactions',
             'legacy.manage_payments',
-            'legacy.view_reports',
         ] as $permission) {
             $this->assertContains($permission, $grants, "agency_owner is missing legacy alias [{$permission}]");
         }
 
+        $this->assertNotContains('legacy.view_reports', $grants, 'agency profile access must not grant the reports dashboard');
         $this->assertNotContains('edit_cms', $grants, 'global website CMS must remain platform-only');
         $this->assertNotContains('manage_users', $grants, 'platform user management must remain platform-only');
         $this->assertNotContains('admin.manage_agencies', $grants, 'agency verification must remain platform-only');
@@ -105,11 +105,11 @@ class WorkspaceRoleGateTest extends EnterpriseTestCase
             'cancel_transactions',
             'void_transactions',
             'manage_payments',
-            'view_reports',
         ] as $permission) {
             $this->assertContains($permission, $permissions, "agency owner membership is missing resolved permission [{$permission}]");
         }
 
+        $this->assertNotContains('view_reports', $permissions, 'agency ownership must not inherit the legacy platform reports dashboard through agency.view');
         $this->assertFalse($user->isPlatformUser());
         $this->assertNotContains('admin.manage_agencies', $permissions);
         $this->assertNotContains('edit_cms', $permissions);
