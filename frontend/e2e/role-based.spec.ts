@@ -66,6 +66,7 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
       await expect(page.getByRole('button', { name: /staff & roles/i }).first()).toBeVisible();
       await page.getByRole('button', { name: /deals & transactions/i }).first().click();
       await expect(page.getByRole('button', { name: /execute new deal/i })).toBeVisible();
+      await expect(page.getByText(/scoped view: your deals only/i)).toHaveCount(0);
     });
   });
 

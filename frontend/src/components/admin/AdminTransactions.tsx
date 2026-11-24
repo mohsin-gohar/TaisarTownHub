@@ -49,8 +49,10 @@ export const AdminTransactions: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTxnForReceipt, setSelectedTxnForReceipt] = useState<Transaction | null>(null);
 
-  // ---- Role scoping (P0-4): dealers see ONLY deals booked under their dealer profile ----
-  const isDealer = normalizeRole(currentUser.role) === 'dealer';
+  // Dealer base accounts are scoped unless their active agency membership grants
+  // agency-wide finance visibility (e.g. an agency_owner membership).
+  const isDealer = normalizeRole(currentUser.role) === 'dealer'
+    && !currentUser.permissions.includes('finance.view');
   const scopedDealerId = isDealer ? currentUser.dealerId : undefined;
   const visibleTransactions = (isDealer
     ? transactions.filter((t) => t.dealerId && t.dealerId === scopedDealerId)
