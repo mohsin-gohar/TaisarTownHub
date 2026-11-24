@@ -116,7 +116,7 @@ class Permissions
         'finance.create_transaction' => ['create_transactions'],
         'finance.update_transaction' => ['update_transactions', 'cancel_transactions', 'void_transactions'],
         'finance.manage_payments' => ['manage_payments'],
-        'agency.view' => ['view_reports'],
+        // agency.view is profile/workspace access, not permission to view reports.
         'documents.manage_permissions' => ['verify_documents'],
         'documents.view_sensitive' => ['view_sensitive_cnic'],
     ];
