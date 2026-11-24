@@ -92,6 +92,7 @@ class Permissions
         'legacy.create_transactions' => ['(legacy) create_transactions', 'legacy', false],
         'legacy.update_transactions' => ['(legacy) update_transactions', 'legacy', false],
         'legacy.cancel_transactions' => ['(legacy) cancel_transactions', 'legacy', false],
+        'legacy.void_transactions' => ['(legacy) void_transactions', 'legacy', false],
         'legacy.view_commissions' => ['(legacy) view_commissions', 'legacy', false],
         'legacy.manage_payments' => ['(legacy) manage_payments', 'legacy', false],
         'legacy.view_inquiries' => ['(legacy) view_inquiries', 'legacy', false],
