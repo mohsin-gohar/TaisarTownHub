@@ -134,5 +134,15 @@ function indexWorkspace(body: any): Map<string, Set<string>> {
   console.log('\ntenant-exclusive record ids:');
   console.log(JSON.stringify({ onlyA, onlyB }, null, 2));
 
+  // BLK-06 Option B verdict: after the platform-owned policy, no agency
+  // workspace may expose a legacy row that both tenants can see (a shared
+  // row IS a cross-tenant leak). Tenant-exclusive rows must be zero too:
+  // a fresh probe agency owns nothing but what it creates during the probe.
+  const leak = Object.keys(shared).length > 0;
+  const foreign = ['onlyA', 'onlyB'].some((k) =>
+    Object.values(k === 'onlyA' ? onlyA : onlyB).some((ids) => ids.length > 0)
+  );
+  console.log(`\nPROBE VERDICT: ${leak || foreign ? 'FAIL' : 'PASS'} (shared collections: ${Object.keys(shared).length})`);
   console.log(JSON.stringify({ generatedAt: new Date().toISOString(), shared, onlyA, onlyB }, null, 2));
+  process.exit(leak || foreign ? 1 : 0);
 })();

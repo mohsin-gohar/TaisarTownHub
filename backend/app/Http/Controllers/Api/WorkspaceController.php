@@ -419,6 +419,16 @@ class WorkspaceController extends Controller
                 continue;
             }
 
+            // BLK-06 (Option B): unresolved legacy rows are platform-owned.
+            // Agency writers must not co-claim them via the sync surface —
+            // rows with no owner stay read/write for platform users only
+            // until a human-approved mapping is applied with
+            // platform:legacy-backfill (resolver evidence or --mapping).
+            if ($scoped && $agencyId !== null && $existing && $owner === null) {
+                $blocked++;
+                continue;
+            }
+
             if ($existing) {
                 // Preserve the original creator stamped by an earlier sync
                 $previous = $existing->payload ?? [];
@@ -452,7 +462,7 @@ class WorkspaceController extends Controller
 
             // Stamp tenancy COLUMN for new rows and rows already owned by the
             // writer. Shared legacy rows (NULL) stay NULL — never hijacked.
-            if ($scoped && $agencyId !== null && ($existing === null || $owner === $agencyId)) {
+            if ($scoped && $agencyId !== null && ($existing === null || ($owner !== null && $owner === $agencyId))) {
                 BusinessRecord::where('collection', $collection)
                     ->where('record_id', $recordId)
                     ->update(['agency_id' => $agencyId]);
