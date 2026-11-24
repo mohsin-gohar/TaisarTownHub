@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { formatPKRCurrency, toPublicProject } from '../../utils/logic';
 import { VideoModal } from '../common/VideoModal';
+import { DemoBadge } from '../common/DemoBadge';
+import { isDemoVideoUrl } from '../../utils/demoContent';
 import { Lightbox } from '../common/Lightbox';
 import { EmptyState } from '../common/EmptyState';
 import { ImageWithFallback } from '../common/ImageWithFallback';
@@ -164,6 +166,7 @@ export const ProjectDetailPage: React.FC = () => {
                   <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                 </div>
                 <span>Watch Architectural Tour</span>
+                {isDemoVideoUrl(project.videoUrl) && <DemoBadge />}
               </button>
             )}
           </div>

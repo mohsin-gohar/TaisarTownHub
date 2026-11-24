@@ -19,8 +19,11 @@ import {
   Compass
 } from 'lucide-react';
 import { hasPermission } from '../../utils/logic';
+import { isDemoVideoUrl } from '../../utils/demoContent';
 import { AgencyVideo } from '../../types';
 import { VideoModal } from '../common/VideoModal';
+import { DemoBadge } from '../common/DemoBadge';
+import { DemoCatalogNotice } from '../common/DemoCatalogNotice';
 
 export const MediaGallerySection: React.FC = () => {
   const { agencyVideos, likeAgencyVideo, addAgencyVideoComment, addAgencyVideo, dealers, showToast, currentUser } = useApp();
@@ -135,6 +138,9 @@ export const MediaGallerySection: React.FC = () => {
   return (
     <section className="py-20 px-4 sm:px-6 lg:px-8 bg-[#07141E] border-t border-[#E7C878]/15">
       <div className="max-w-7xl mx-auto space-y-12">
+        {/* Honest-state notice: bundled demo catalog vs live API data */}
+        <DemoCatalogNotice />
+
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-800">
           <div className="max-w-3xl space-y-3">
@@ -214,13 +220,14 @@ export const MediaGallerySection: React.FC = () => {
                     </div>
 
                     {/* Top Badges */}
-                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                    <div className="absolute top-3 left-3 flex items-center gap-2 flex-wrap">
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-black/80 text-[#F6E3B4] border border-[#E7C878]/40 backdrop-blur-md">
                         {video.phase}
                       </span>
                       <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#0B1220]/90 text-slate-300 border border-slate-700 backdrop-blur-md">
                         {video.sector}
                       </span>
+                      {isDemoVideoUrl(video.videoUrl) && <DemoBadge className="shadow" />}
                     </div>
 
                     {/* Duration badge */}

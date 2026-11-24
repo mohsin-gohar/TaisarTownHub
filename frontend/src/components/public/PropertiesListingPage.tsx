@@ -31,6 +31,7 @@ import {
   savedSearchFiltersFromState,
 } from '../../utils/savedSearchFilters';
 import { CompareModal } from './CompareModal';
+import { DemoCatalogNotice } from '../common/DemoCatalogNotice';
 import { WhatsAppCta } from '../common/WhatsAppCta';
 import { propertyWhatsAppMessage, resolveWhatsAppLink } from '../../utils/whatsapp';
 import { CompareTray } from './CompareTray';
@@ -322,6 +323,9 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
             Browse verified 80, 120, 240, 400 Sq. Yd. plots, commercial avenues, and luxury duplex villas.
           </p>
         </div>
+
+        {/* Honest-state notice: bundled demo catalog vs live API data */}
+        <DemoCatalogNotice />
 
         {/* Filter Controls Panel */}
         <div className="bg-white p-6 rounded-2xl border border-[#E7E3DA] space-y-5 shadow-xl">

@@ -26,6 +26,8 @@ import { Lightbox } from '../common/Lightbox';
 import { EmptyState } from '../common/EmptyState';
 import { ImageWithFallback } from '../common/ImageWithFallback';
 import { WhatsAppCta } from '../common/WhatsAppCta';
+import { DemoBadge } from '../common/DemoBadge';
+import { isDemoVideoUrl } from '../../utils/demoContent';
 import { propertyWhatsAppMessage, resolveWhatsAppLink } from '../../utils/whatsapp';
 
 const VIDEO_SENTINEL = '__tth_video__';
@@ -227,6 +229,13 @@ export const PropertyDetailPage: React.FC = () => {
                 decoding="async"
                 className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700"
               />
+            )}
+
+            {/* Demo badge: the bundled sample walkthrough is placeholder footage */}
+            {activeIsVideo && isDemoVideoUrl(property.videoUrl) && (
+              <div className="absolute top-4 left-4 z-10">
+                <DemoBadge className="shadow" />
+              </div>
             )}
 
             {/* Video indicator */}
