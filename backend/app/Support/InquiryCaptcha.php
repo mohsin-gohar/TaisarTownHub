@@ -84,21 +84,22 @@ final class InquiryCaptcha
             return false;
         }
 
-        // Replay protection: a solved token works exactly once.
-        $nonceKey = 'inquiry-captcha:' . $data['n'];
-        if (Cache::has($nonceKey)) {
-            return false;
-        }
-
         $expected = (int) $data['a'] + (int) $data['b'];
         $given = trim($answer);
         if (!ctype_digit($given) || (int) $given !== $expected) {
             return false;
         }
 
-        Cache::put($nonceKey, true, now()->addMinutes(self::NONCE_TTL_MINUTES));
+        // Atomic replay protection: Cache::add succeeds only when the nonce
+        // does not already exist. Unlike a separate has()+put() pair, this
+        // prevents two concurrent requests from consuming the same token.
+        $nonceKey = 'inquiry-captcha:' . $data['n'];
 
-        return true;
+        return Cache::add(
+            $nonceKey,
+            true,
+            now()->addMinutes(self::NONCE_TTL_MINUTES)
+        );
     }
 
     private static function sign(int $a, int $b, string $nonce, int $expiresAt): string
