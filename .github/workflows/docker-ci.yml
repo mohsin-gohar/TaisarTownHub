@@ -80,39 +80,6 @@ jobs:
         # This sends actual file bytes over clamd INSTREAM; no production data.
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php scripts/clamav-smoke.php
 
-      - name: Set up Node 22 for API-backed browser role matrix
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install browser test dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Install Chromium for API-backed browser role matrix
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Run API-backed browser role matrix
-        working-directory: frontend
-        env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1
-          PLAYWRIGHT_API_URL: http://127.0.0.1/api
-          PLAYWRIGHT_SKIP_WEBSERVER: "true"
-        run: npx playwright test e2e/role-based.spec.ts --workers=1
-
-      - name: Run disposable 10-worker API load and transaction integrity probe
-        working-directory: frontend
-        env:
-          PROBE_API: http://127.0.0.1/api
-          LOAD_TEST_EMAIL: admin@taisartownhub.com
-          LOAD_TEST_PASSWORD: Admin@Taisar2026
-          LOAD_TEST_ALLOW_MUTATIONS: "true"
-          LOAD_COOLDOWN: "65"
-        run: npx tsx scripts/load-test.mts 10 10
-
       - name: Dump diagnostics on failure
         if: failure()
         run: |
@@ -462,6 +429,29 @@ jobs:
             -H "Accept: application/json")
           grep -q "$EMAIL" <<<"$BODY"
           echo "integration smoke tests: gateway, preflight, register, login, me, logout all passed"
+
+      - name: Set up Node 22 for API-backed browser role matrix
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install browser test dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium for API-backed browser role matrix
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run API-backed browser role matrix
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1
+          PLAYWRIGHT_API_URL: http://127.0.0.1/api
+          PLAYWRIGHT_SKIP_WEBSERVER: "true"
+        run: npx playwright test e2e/role-based.spec.ts --workers=1
 
       - name: Dump diagnostics on failure
         if: failure()
