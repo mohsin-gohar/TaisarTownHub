@@ -63,7 +63,17 @@ export const MediaGallerySection: React.FC = () => {
 
   const phases = ['All', 'Phase 1', 'Phase 2', 'Phase 3'];
 
+  // Fake-footage policy: a tour without a real video is hidden from the
+  // gallery — sample/placeholder URLs must never render as if they were a
+  // real on-ground tour. Real videos go in frontend/public/ (served at the
+  // site root) or as absolute URLs; posters/thumbnails likewise.
+  const isRealVideo = (v: AgencyVideo) => {
+    const url = (v.videoUrl || '').toLowerCase();
+    return url.startsWith('http') || (url.startsWith('/') && !url.includes('sample-video'));
+  };
+
   const filteredVideos = agencyVideos.filter((v) => {
+    if (!isRealVideo(v)) return false;
     if (selectedPhase === 'All') return true;
     return v.phase === selectedPhase;
   });
