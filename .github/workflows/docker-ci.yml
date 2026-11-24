@@ -75,6 +75,11 @@ jobs:
       - name: Run backend healthcheck
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php scripts/healthcheck.php
 
+      - name: Verify real antivirus clean and threat verdicts
+        # The disposable CI stack has a healthy ClamAV daemon with signatures.
+        # This sends actual file bytes over clamd INSTREAM; no production data.
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php scripts/clamav-smoke.php
+
       - name: Dump diagnostics on failure
         if: failure()
         run: |
