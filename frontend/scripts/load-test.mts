@@ -209,7 +209,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
   );
   const dealNumbers = bookingResults
     .filter((r) => r.status === 201)
-    .map((r) => r.body?.dealNumber)
+    .map((r) => r.body?.transaction?.dealNumber || r.body?.dealNumber)
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
   const uniqueDealNumbers = new Set(dealNumbers);
   const bookingIntegrityPass = bookingResults.every((r) => r.status === 201)
