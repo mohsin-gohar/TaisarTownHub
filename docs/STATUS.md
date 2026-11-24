@@ -36,6 +36,7 @@ Evidence from the code-identical review run:
 The following checks have been added and must pass before their status is upgraded:
 - Firefox + WebKit public-route smoke tests using the existing cross-browser Playwright config.
 - Two-replica Docker backend test: scale backend to two containers, check each container's PHP health, then exercise the nginx gateway.
+- Real ClamAV scanner smoke: send a clean fixture and the standard harmless antivirus test signature through the actual clamd TCP INSTREAM protocol; require clean and threat verdicts.
 
 No claim is made that these new jobs have passed until GitHub Actions reports success on this QA branch.
 
@@ -43,12 +44,12 @@ No claim is made that these new jobs have passed until GitHub Actions reports su
 
 | Area | Current state | Closure evidence |
 |---|---|---|
-| Real ClamAV/EICAR integration | Unit-level fake-daemon protocol and upload fail-closed tests exist; real antivirus daemon + EICAR fixture has not been verified in CI | Start actual ClamAV with current signatures; clean file accepted, EICAR rejected/quarantined, scanner outage blocks uploads |
+| Real ClamAV scanner | Docker CI now runs a real clamd TCP smoke probe against a clean fixture and a harmless antivirus test signature; pending result on QA branch | Require real clean + threat verdicts; separately retain HTTP upload fail-closed regression tests |
 | API-dependent browser workflows | UI-only Chromium smoke is green; seeded API-backed role/CRUD browser matrix is not yet run as one full suite | Run Playwright against disposable MySQL-backed stack for guest, agency owner/staff and super-admin flows |
 | Firefox/WebKit | Newly added CI job pending | Both engines pass all seven public-route smoke tests |
 | Multi-replica | Newly added Docker CI step pending | Both PHP replicas healthy and gateway requests succeed after scale-up |
 | Lighthouse/accessibility | No production HTTPS origin has been supplied | Run Lighthouse/accessibility checks against real deployment and resolve material findings |
-| Load/capacity | Harness exists at `frontend/scripts/load-test.mts`; no representative production-like load result exists | Run approved 10/50/100-user tests against disposable staging; record p95/p99, 5xx and error rates |
+| Load/capacity | Harness exists at `frontend/scripts/load-test.mts`; now refuses to run without explicit mutation opt-in and dedicated test credentials, and never falls back to an existing property | Run approved 10/50/100-user tests against disposable staging; record p95/p99, 5xx and error rates |
 | Full source review | Repository inventory is 631 tracked paths; no honest line-by-line review of every source/config/test file is claimed | Complete risk-ranked review of auth, tenant boundaries, money, uploads, integrations, deployment and remaining modules with evidence |
 
 ## 5. Owner/environment blockers — do not fabricate or bypass
