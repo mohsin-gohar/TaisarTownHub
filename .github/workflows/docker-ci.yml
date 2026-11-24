@@ -329,6 +329,37 @@ jobs:
             backend:healthy frontend:healthy nginx:healthy \
             worker:healthy scheduler:healthy
 
+      - name: Verify two-replica backend operation
+        # Scale only the disposable CI stack. No production systems or data
+        # are involved. Both replicas must pass their own PHP healthcheck and
+        # the nginx gateway must continue serving API traffic after scaling.
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build --scale backend=2 backend
+          deadline=$((SECONDS + 180))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            mapfile -t replicas < <(docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -q backend)
+            if [ "${#replicas[@]}" -eq 2 ]; then
+              healthy=0
+              for id in "${replicas[@]}"; do
+                if docker exec "$id" php scripts/healthcheck.php >/dev/null 2>&1; then
+                  healthy=$((healthy + 1))
+                fi
+              done
+              if [ "$healthy" -eq 2 ]; then
+                echo "both backend replicas are healthy"
+                break
+              fi
+            fi
+            sleep 5
+          done
+          test "${#replicas[@]}" -eq 2
+          test "$healthy" -eq 2
+          for attempt in $(seq 1 12); do
+            BODY=$(curl -fsS --retry 3 --retry-delay 1 --retry-connrefused http://localhost/api/health)
+            grep -q "healthy" <<<"$BODY"
+          done
+          echo "two-replica gateway health requests passed"
       - name: Seed enterprise catalog (production-safe)
         # APP_ENV=production makes DatabaseSeeder run EnterpriseSeeder only:
         # permissions, roles, plans and settings. No demo accounts or fixtures.
