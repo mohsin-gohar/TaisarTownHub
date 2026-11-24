@@ -43,7 +43,13 @@ try {
 
     $clean = $scanner->scan($cleanPath);
     if (! $clean->isClean || $clean->skipped) {
-        throw new RuntimeException('ClamAV did not return a real CLEAN verdict for the clean fixture.');
+        throw new RuntimeException(sprintf(
+            'ClamAV clean fixture failed: scanner=%s skipped=%s reason=%s threats=%s',
+            $clean->scanner,
+            $clean->skipped ? 'yes' : 'no',
+            $clean->skipReason ?? 'none',
+            json_encode($clean->threats, JSON_UNESCAPED_SLASHES) ?: '[]',
+        ));
     }
 
     $infected = $scanner->scan($eicarPath);
