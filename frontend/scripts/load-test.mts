@@ -242,11 +242,15 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
     });
     console.log(`cleanup: void transaction ${id} -> ${res.status}`);
   }
-  if (propertyId && /^prop_[a-f0-9]+$/i.test(propertyId)) {
+  if (propertyId) {
     const res = await fetch(`${API}/properties/${propertyId}`, {
       method: 'DELETE',
       headers: authHeaders,
     });
-    console.log(`cleanup: delete load-test property ${propertyId} -> ${res.status}`);
+    console.log(`cleanup: delete disposable load-test property ${propertyId} -> ${res.status}`);
+    if (!res.ok) {
+      console.error('WARNING: disposable load-test property cleanup failed; inspect the test environment before re-running.');
+      process.exitCode = 1;
+    }
   }
 })();
