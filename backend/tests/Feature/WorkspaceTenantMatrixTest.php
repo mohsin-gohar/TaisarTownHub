@@ -150,4 +150,21 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         $this->assertSame('Platform project', $this->record('projects', 'global-project')->payload['title']);
         $this->assertSame('Public testimonial', $this->record('testimonials', 'global-testimonial')->payload['title']);
     }
+    public function test_soft_deleted_rows_are_not_returned_in_workspace_dumps(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.view', 'view_properties']);
+
+        $this->seedRecord('properties', 'visible-property', 'Visible property', $agency->id);
+        $this->seedRecord('properties', 'deleted-property', 'Deleted property', $agency->id);
+        $this->record('properties', 'deleted-property')->update(['deleted_at' => now()]);
+
+        $body = $this->getJson('/api/workspace', $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()
+            ->json('properties');
+
+        $ids = array_column($body, 'id');
+        $this->assertContains('visible-property', $ids);
+        $this->assertNotContains('deleted-property', $ids);
+    }
+
 }
