@@ -307,7 +307,7 @@ jobs:
           load: true
           tags: taisartownhub-frontend:test
           build-args: |
-            VITE_API_URL=http://localhost/api
+            VITE_API_URL=http://127.0.0.1/api
             VITE_APP_MODE=production
             VITE_STRIPE_PUBLIC_KEY=pk_test_ci
             VITE_SENTRY_DSN=
