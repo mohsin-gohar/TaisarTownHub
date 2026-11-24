@@ -23,7 +23,8 @@ class DemoStaffSeeder extends Seeder
 {
     private const ACCOUNTS = [
         ['Super Admin', 'superadmin@taisartownhub.com', 'Super@Admin2026!', 'super_admin'],
-        ['Agency Owner', 'admin@taisartownhub.com', 'Admin@Taisar2026', 'admin'],
+        // Agency owners are agency-scoped members, never platform administrators.
+        ['Agency Owner', 'admin@taisartownhub.com', 'Admin@Taisar2026', 'dealer'],
         ['Agency Manager', 'manager@taisartownhub.com', 'Manager@2026', 'manager'],
         ['Dealer', 'dealer@taisartownhub.com', 'Dealer@2026', 'dealer'],
         ['Operator', 'operator@taisartownhub.com', 'Operator@2026', 'operator'],

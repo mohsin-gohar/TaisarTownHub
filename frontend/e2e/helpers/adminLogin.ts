@@ -22,6 +22,7 @@ const API_BASE =
 export const DEMO_ROLE_IPS: Record<string, string> = {
   super_admin: '203.0.113.11',
   admin: '203.0.113.12',
+  agency_owner: '203.0.113.12',
   manager: '203.0.113.13',
   dealer: '203.0.113.14',
   operator: '203.0.113.15',

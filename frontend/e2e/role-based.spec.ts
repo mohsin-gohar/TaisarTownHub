@@ -9,7 +9,7 @@ import { DEMO_ROLE_IPS, loginToAdminViaApi } from './helpers/adminLogin';
 const ciDemoPassword = process.env.DEMO_STAFF_PASSWORD;
 const DEMO_ACCOUNTS = [
   { role: 'super_admin', email: 'superadmin@taisartownhub.com', password: ciDemoPassword || 'Super@Admin2026!' },
-  { role: 'admin', email: 'admin@taisartownhub.com', password: ciDemoPassword || 'Admin@Taisar2026' },
+  { role: 'agency_owner', email: 'admin@taisartownhub.com', password: ciDemoPassword || 'Admin@Taisar2026' },
   { role: 'manager', email: 'manager@taisartownhub.com', password: ciDemoPassword || 'Manager@2026' },
   { role: 'dealer', email: 'dealer@taisartownhub.com', password: ciDemoPassword || 'Dealer@2026' },
   { role: 'operator', email: 'operator@taisartownhub.com', password: ciDemoPassword || 'Operator@2026' },
@@ -52,12 +52,13 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
     });
   });
 
-  test.describe('Agency Admin - Agency-scoped access', () => {
-    test('can access core admin dashboard', async ({ page, request }) => {
+  test.describe('Agency Owner - Agency-scoped access', () => {
+    test('can access the agency workspace without platform scope', async ({ page, request }) => {
       await loginAs(page, request, DEMO_ACCOUNTS[1]);
       await expect(page).toHaveURL(/\/admin/);
       await expect(page.locator('main')).toBeVisible();
-      await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /agency dashboard/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /staff & roles/i }).first()).toBeVisible();
     });
   });
 
@@ -132,8 +133,10 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
       await expect(security(page)).toHaveCount(0);
       await expect(audit(page)).toHaveCount(0);
       await expect(approvals(page)).toHaveCount(0);
-      await expect(page.getByRole('button', { name: /website cms & builder/i }).first()).toBeVisible();
-      // manage_dealers is platform-only; admin may view commission but not the desk.
+      // The global website CMS and platform dealer desk are not agency-owner tools.
+      await expect(page.getByRole('button', { name: /website cms & builder/i }).first()).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /agency dashboard/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /staff & roles/i }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /dealers & commission/i }).first()).toHaveCount(0);
     });
 
