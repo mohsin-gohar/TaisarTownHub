@@ -823,7 +823,7 @@ public function update(Request $request, string $id)
             $data['schedules']
         ));
         if ((float) $retainedTotal + $submittedTotal > (float) $transaction->agreementAmountPKR) {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'schedules' => ['The total installment schedule cannot exceed the agreed deal amount.'],
             ]);
         }
