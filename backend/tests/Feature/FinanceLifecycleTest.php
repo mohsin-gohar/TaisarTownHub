@@ -224,6 +224,38 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             ->assertJsonValidationErrors('reason');
     }
 
+    public function test_deal_amounts_reject_fractional_rupees_and_advance_over_agreement(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $base = [
+            'propertyTitle' => 'Precision Test Plot',
+            'sellerName' => 'Seller Khan',
+            'buyerName' => 'Buyer Ali',
+            'transactionType' => 'Sale',
+        ];
+
+        $this->postJson('/api/agency/transactions', $base + [
+            'agreementAmountPKR' => '1000.50',
+            'advancePaymentPKR' => 100,
+        ], $headers)->assertStatus(422)->assertJsonValidationErrors('agreementAmountPKR');
+
+        $this->postJson('/api/agency/transactions', $base + [
+            'agreementAmountPKR' => 1000,
+            'advancePaymentPKR' => 1001,
+        ], $headers)->assertStatus(422)->assertJsonValidationErrors('advancePaymentPKR');
+
+        $deal = $this->createDeal($user, ['agreementAmountPKR' => 1000, 'advancePaymentPKR' => 100]);
+
+        $this->patchJson('/api/agency/transactions/' . $deal['id'], [
+            'advancePaymentPKR' => 1001,
+        ], $headers)->assertStatus(422)->assertJsonValidationErrors('advancePaymentPKR');
+
+        $this->patchJson('/api/agency/transactions/' . $deal['id'], [
+            'commissionAmountPKR' => '10.25',
+        ], $headers)->assertStatus(422)->assertJsonValidationErrors('commissionAmountPKR');
+    }
+
     public function test_payments_ledger_updates_collected_and_balance(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
