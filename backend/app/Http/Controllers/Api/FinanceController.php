@@ -154,12 +154,19 @@ public function store(Request $request)
             'buyerName' => 'required|string|max:255',
             'dealerId' => 'nullable|string|max:64|exists:dealers,id',
             'transactionType' => 'nullable|in:Sale,Rent,Lease,Transfer',
-            'agreementAmountPKR' => 'required|numeric|min:0|max:999999999999',
-            'advancePaymentPKR' => 'nullable|numeric|min:0|max:999999999999',
-            'commissionAmountPKR' => 'nullable|numeric|min:0|max:999999999999',
+            'agreementAmountPKR' => 'required|integer|min:0|max:999999999999',
+            'advancePaymentPKR' => 'nullable|integer|min:0|max:999999999999',
+            'commissionAmountPKR' => 'nullable|integer|min:0|max:999999999999',
             'dealStatus' => 'nullable|string|in:Draft,Negotiation,Agreed,Completed,Cancelled',
             'transactionDate' => 'nullable|date',
         ]);
+
+        $advanceInput = (int) ($data['advancePaymentPKR'] ?? 0);
+        if ($advanceInput > (int) $data['agreementAmountPKR']) {
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'advancePaymentPKR' => ['Advance payment cannot exceed the agreed deal amount.'],
+            ]);
+        }
 
         // Terminal states (Completed/Cancelled) must be reached through the
         // update state machine — never at creation time.
@@ -259,12 +266,20 @@ public function update(Request $request, string $id)
             'buyerName' => 'sometimes|string|max:255',
             'dealerId' => 'nullable|string|max:64|exists:dealers,id',
             'agreementAmountPKR' => 'sometimes|numeric|min:0|max:999999999999',
-            'advancePaymentPKR' => 'nullable|numeric|min:0|max:999999999999',
-            'commissionAmountPKR' => 'nullable|numeric|min:0|max:999999999999',
+            'advancePaymentPKR' => 'nullable|integer|min:0|max:999999999999',
+            'commissionAmountPKR' => 'nullable|integer|min:0|max:999999999999',
             'dealStatus' => 'sometimes|string|max:50',
             'status' => 'sometimes|string|max:50',
             'transactionDate' => 'nullable|date',
         ]);
+
+        $effectiveAgreement = (int) ($data['agreementAmountPKR'] ?? $transaction->agreementAmountPKR);
+        $effectiveAdvance = (int) ($data['advancePaymentPKR'] ?? $transaction->advancePaymentPKR);
+        if ($effectiveAdvance > $effectiveAgreement) {
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'advancePaymentPKR' => ['Advance payment cannot exceed the agreed deal amount.'],
+            ]);
+        }
 
         // Reject a dealer from another agency. Prefer dealers.agency_id and
         // fall back to active memberships for legacy unlinked rows.
