@@ -248,8 +248,12 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $deal = $this->createDeal($user, ['agreementAmountPKR' => 1000, 'advancePaymentPKR' => 100]);
 
         $this->patchJson('/api/agency/transactions/' . $deal['id'], [
-            'advancePaymentPKR' => 1001,
+            'advancePaymentPKR' => 200,
         ], $headers)->assertStatus(422)->assertJsonValidationErrors('advancePaymentPKR');
+
+        $this->patchJson('/api/agency/transactions/' . $deal['id'], [
+            'agreementAmountPKR' => 50,
+        ], $headers)->assertStatus(422)->assertJsonValidationErrors('agreementAmountPKR');
 
         $this->patchJson('/api/agency/transactions/' . $deal['id'], [
             'commissionAmountPKR' => '10.25',
