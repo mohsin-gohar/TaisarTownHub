@@ -288,6 +288,29 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->assertEquals(3000000, (int) $transaction->advancePaymentPKR);
     }
 
+    public function test_installment_schedule_cannot_exceed_agreement_even_across_partial_updates(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $deal = $this->createDeal($user, ['agreementAmountPKR' => 10000000, 'advancePaymentPKR' => 0]);
+        $url = '/api/agency/transactions/' . $deal['id'] . '/schedules';
+
+        $this->postJson($url, ['schedules' => [
+            ['installment_no' => 1, 'due_date' => now()->addDays(7)->toDateString(), 'amount' => 6000000],
+        ]], $headers)->assertStatus(201);
+
+        // The endpoint upserts partial schedule payloads, so the first
+        // installment remains part of the total when a second is submitted.
+        $this->postJson($url, ['schedules' => [
+            ['installment_no' => 2, 'due_date' => now()->addDays(14)->toDateString(), 'amount' => 5000000],
+        ]], $headers)->assertStatus(422)->assertJsonValidationErrors('schedules');
+
+        $this->postJson($url, ['schedules' => [
+            ['installment_no' => 3, 'due_date' => now()->addDays(21)->toDateString(), 'amount' => 1000000],
+            ['installment_no' => 3, 'due_date' => now()->addDays(28)->toDateString(), 'amount' => 1000000],
+        ]], $headers)->assertStatus(422)->assertJsonValidationErrors('schedules.1.installment_no');
+    }
+
     public function test_payment_cannot_exceed_server_limits_or_use_negative_amounts(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
