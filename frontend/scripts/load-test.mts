@@ -44,7 +44,8 @@ function record(endpoint: string, ms: number, status: number) {
   }
   const entry = families.get(family)!;
   entry.samples.push({ ms, status, endpoint });
-  if (status >= 400) entry.errors += 1;
+  // HTTP 429 is an expected rate-limit outcome during a deliberate load run.
+  if (status >= 400 && status !== 429) entry.errors += 1;
   if (status === 429) entry.throttled += 1;
   if (status >= 500) entry.serverErrors += 1;
 }
@@ -167,7 +168,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
 
   // --- report ---
   const all = [...families.values()].flatMap((f) => f.samples);
-  const errors = all.filter((s) => s.status === 0 || s.status >= 400).length;
+  const errors = all.filter((s) => s.status === 0 || (s.status >= 400 && s.status !== 429)).length;
   const throttled = all.filter((s) => s.status === 429).length;
   const serverErrors = all.filter((s) => s.status >= 500).length;
   const clientErrors = all.filter((s) => s.status >= 400 && s.status < 500 && s.status !== 429).length;

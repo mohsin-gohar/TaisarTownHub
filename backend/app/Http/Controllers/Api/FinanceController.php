@@ -20,6 +20,7 @@ use App\Models\SubscriptionInvoice;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
 use App\Models\User;
+use App\Services\DealNumberAllocator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -185,80 +186,46 @@ public function store(Request $request)
         $dealStatus = $data['dealStatus'] ?? 'Draft';
         $year = now()->year;
 
-        // Concurrency-safe deal number generation: generate inside a transaction
-        // with a locked read of the latest deal for the year, backed by the
-        // unique constraint on dealNumber and retry handling for races.
-        $maxAttempts = 5;
-        $deal = null;
-        $lastDealNumberError = null;
-        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            try {
-                $deal = DB::transaction(function () use ($data, $agencyId, $request, $year, $advance, $remainingBalance, $dealStatus) {
-                    $lastDeal = Transaction::query()
-                        ->where('dealNumber', 'like', "TXN-{$year}-%")
-                        ->orderByDesc('dealNumber')
-                        ->lockForUpdate()
-                        ->first();
+        $deal = DB::transaction(function () use ($data, $agencyId, $request, $year, $advance, $remainingBalance, $dealStatus) {
+            $dealNumber = app(DealNumberAllocator::class)->nextForYear($year);
 
-                    $nextNumber = 1;
-                    if ($lastDeal && preg_match('/TXN-\d{4}-(\d+)/', $lastDeal->dealNumber, $matches)) {
-                        $nextNumber = (int) $matches[1] + 1;
-                    }
-                    $dealNumber = sprintf('TXN-%d-%04d', $year, $nextNumber);
+            $deal = Transaction::create([
+                'id' => 'txn-' . Str::uuid(),
+                'dealNumber' => $dealNumber,
+                'agency_id' => $agencyId,
+                // Actual schema columns are propertyId / dealerId.
+                // The old property_id / dealer_id keys were silently
+                // discarded by mass-assignment, losing attribution.
+                'propertyId' => $data['propertyId'] ?? null,
+                'propertyTitle' => $data['propertyTitle'],
+                'plotNumber' => $data['plotNumber'] ?? null,
+                'sector' => $data['sector'] ?? null,
+                'sellerName' => $data['sellerName'],
+                'buyerName' => $data['buyerName'],
+                'dealerId' => $data['dealerId'] ?? null,
+                'transactionType' => $data['transactionType'] ?? 'Sale',
+                'agreementAmountPKR' => (int) $data['agreementAmountPKR'],
+                'advancePaymentPKR' => $advance,
+                'remainingBalancePKR' => $remainingBalance,
+                'commissionAmountPKR' => (int) ($data['commissionAmountPKR'] ?? 0),
+                'dealStatus' => $dealStatus,
+                'transactionDate' => $data['transactionDate'] ?? now()->toDateString(),
+                'created_by' => $request->user()->id,
+            ]);
 
-                    $deal = Transaction::create([
-                        'id' => 'txn-' . Str::uuid(),
-                        'dealNumber' => $dealNumber,
-                        'agency_id' => $agencyId,
-                        // Actual schema columns are propertyId / dealerId.
-                        // The old property_id / dealer_id keys were silently
-                        // discarded by mass-assignment, losing attribution.
-                        'propertyId' => $data['propertyId'] ?? null,
-                        'propertyTitle' => $data['propertyTitle'],
-                        'plotNumber' => $data['plotNumber'] ?? null,
-                        'sector' => $data['sector'] ?? null,
-                        'sellerName' => $data['sellerName'],
-                        'buyerName' => $data['buyerName'],
-                        'dealerId' => $data['dealerId'] ?? null,
-                        'transactionType' => $data['transactionType'] ?? 'Sale',
-                        'agreementAmountPKR' => (int) $data['agreementAmountPKR'],
-                        'advancePaymentPKR' => $advance,
-                        'remainingBalancePKR' => $remainingBalance,
-                        'commissionAmountPKR' => (int) ($data['commissionAmountPKR'] ?? 0),
-                        'dealStatus' => $dealStatus,
-                        'transactionDate' => $data['transactionDate'] ?? now()->toDateString(),
-                        'created_by' => $request->user()->id,
-                    ]);
-
-                    if ($deal->advancePaymentPKR > 0) {
-                        TransactionPayment::create([
-                            'agency_id' => $agencyId,
-                            'transaction_id' => $deal->id,
-                            'amount' => $deal->advancePaymentPKR,
-                            'type' => 'advance',
-                            'method' => 'cash',
-                            'received_at' => now(),
-                        ]);
-                    }
-
-                    return $deal->load(['payments', 'commissions']);
-                }, 3);
-                break;
-            } catch (\Illuminate\Database\QueryException $e) {
-                $lastDealNumberError = $e;
-                $sqlState = $e->getCode();
-                $driverCode = $e->errorInfo[1] ?? null;
-                $isDuplicateDealNumber = $sqlState === '23000' || $driverCode === 1062 || $driverCode === 19;
-                if (!$isDuplicateDealNumber || $attempt === $maxAttempts) {
-                    throw $e;
-                }
-                usleep(50000 * $attempt);
+            if ($deal->advancePaymentPKR > 0) {
+                TransactionPayment::create([
+                    'agency_id' => $agencyId,
+                    'transaction_id' => $deal->id,
+                    'amount' => $deal->advancePaymentPKR,
+                    'type' => 'advance',
+                    'method' => 'cash',
+                    'received_at' => now(),
+                ]);
             }
-        }
 
-        if ($deal === null) {
-            throw $lastDealNumberError ?? new \RuntimeException('Failed to generate a unique deal number.');
-        }
+            return $deal->load(['payments', 'commissions']);
+        }, 3);
 
         return response()->json([
             'success' => true,

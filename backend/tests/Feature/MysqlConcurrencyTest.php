@@ -260,8 +260,37 @@ class MysqlConcurrencyTest extends TestCase
             $this->assertNotEmpty($body['dealNumber'] ?? null);
         }
         $numbers = array_column(array_column($results, 1), 'dealNumber');
-        $this->assertCount(2, array_unique($numbers), 'deal numbers must be unique under concurrency');
-        $this->assertSame(2, DB::table('transactions')->count());
+        $this->assertCount(2, array_unique($numbers), 'legacy deal numbers must be unique under concurrency');
+
+        // Exercise the agency finance endpoint too; it previously had a
+        // separate allocator and failed intermittently under parallel writes.
+        $financeResults = [];
+        if ($this->mysql) {
+            $processes = [];
+            foreach ($users as [, $token]) {
+                $processes[] = $this->runProcess('/api/agency/transactions', $payload, $token);
+            }
+            foreach ($processes as $process) {
+                $financeResults[] = $this->workerResult($process);
+            }
+        } else {
+            foreach ($users as [, $token]) {
+                $this->asGuest();
+                $response = $this->postJson('/api/agency/transactions', $payload, $this->authHeaders($token));
+                $financeResults[] = [$response->getStatusCode(), $response->json()];
+            }
+        }
+
+        foreach ($financeResults as [$status, $body]) {
+            $this->assertSame(201, $status, 'every concurrent finance create must succeed');
+            $this->assertNotEmpty($body['transaction']['dealNumber'] ?? null);
+        }
+        $financeNumbers = array_map(
+            fn (array $result) => $result[1]['transaction']['dealNumber'] ?? null,
+            $financeResults
+        );
+        $this->assertCount(2, array_unique($financeNumbers), 'finance deal numbers must be unique under concurrency');
+        $this->assertSame(4, DB::table('transactions')->where('propertyId', $property->id)->count());
     }
 }
 
