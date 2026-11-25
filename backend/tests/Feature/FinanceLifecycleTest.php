@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Dealer;
 use App\Models\Transaction;
+use App\Models\PaymentSchedule;
 use Illuminate\Support\Str;
 
 /**
@@ -298,6 +299,12 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->postJson($url, ['schedules' => [
             ['installment_no' => 1, 'due_date' => now()->addDays(7)->toDateString(), 'amount' => 6000000],
         ]], $headers)->assertStatus(201);
+
+        PaymentSchedule::where('transaction_id', $deal['id'])->update(['status' => 'paid']);
+
+        $this->postJson($url, ['schedules' => [
+            ['installment_no' => 1, 'due_date' => now()->addDays(7)->toDateString(), 'amount' => 1000000],
+        ]], $headers)->assertStatus(422)->assertJsonValidationErrors('schedules');
 
         // The endpoint upserts partial schedule payloads, so the first
         // installment remains part of the total when a second is submitted.
