@@ -370,20 +370,29 @@ class PaymentController extends Controller
                 ], 422);
             }
 
-            $activated = false;
-            if ($invoice->status === 'pending') {
-                DB::transaction(function () use ($invoice, $remote, $txRef): void {
-                    $invoice->update([
-                        'status' => 'paid',
-                        'payment_method' => 'flutterwave',
-                        'payment_reference' => $txRef,
-                        'flutterwave_tx_id' => isset($remote['id']) ? (string) $remote['id'] : null,
-                        'paid_at' => now(),
-                    ]);
-                    $this->activateSubscriptionFromInvoice($invoice);
-                });
-                $activated = true;
-            }
+            // The gateway call happens before the DB transaction. Re-check
+            // the invoice under a row lock so concurrent verify requests can
+            // activate a pending invoice only once.
+            $activated = DB::transaction(function () use ($invoice, $remote, $txRef): bool {
+                $lockedInvoice = SubscriptionInvoice::where('id', $invoice->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($lockedInvoice->status !== 'pending') {
+                    return false;
+                }
+
+                $lockedInvoice->update([
+                    'status' => 'paid',
+                    'payment_method' => 'flutterwave',
+                    'payment_reference' => $txRef,
+                    'flutterwave_tx_id' => isset($remote['id']) ? (string) $remote['id'] : null,
+                    'paid_at' => now(),
+                ]);
+                $this->activateSubscriptionFromInvoice($lockedInvoice);
+
+                return true;
+            }, 3);
 
             if ($activated) {
                 $this->writeAudit(
