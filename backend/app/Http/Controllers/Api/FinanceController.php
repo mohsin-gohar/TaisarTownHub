@@ -810,58 +810,75 @@ public function update(Request $request, string $id)
             'schedules.*.notes' => 'nullable|string|max:500',
         ]);
 
-        // The schedule endpoint upserts submitted installment numbers; rows
-        // omitted from a partial update remain active. Validate the resulting
-        // complete schedule total, not just the incoming payload.
-        $submittedNumbers = array_column($data['schedules'], 'installment_no');
-        $retainedTotal = PaymentSchedule::where('agency_id', $transaction->agency_id)
-            ->where('transaction_id', $transaction->id)
-            ->whereNotIn('installment_no', $submittedNumbers)
-            ->sum('amount');
-        $submittedTotal = array_sum(array_map(
-            static fn (array $row): float => (float) $row['amount'],
-            $data['schedules']
-        ));
-        if ((float) $retainedTotal + $submittedTotal > (float) $transaction->agreementAmountPKR) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'schedules' => ['The total installment schedule cannot exceed the agreed deal amount.'],
+        // Serialize schedule changes with payment writes on the same deal.
+        return DB::transaction(function () use ($data, $transaction, $request) {
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->firstOrFail();
+            if ($locked->isVoided()) {
+                return response()->json(['success' => false, 'message' => 'Voided deal cannot have payment schedules.'], 422);
+            }
+
+            $submittedNumbers = array_column($data['schedules'], 'installment_no');
+            $paidInstallmentExists = PaymentSchedule::where('agency_id', $locked->agency_id)
+                ->where('transaction_id', $locked->id)
+                ->whereIn('installment_no', $submittedNumbers)
+                ->where('status', 'paid')
+                ->exists();
+            if ($paidInstallmentExists) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'schedules' => ['Paid installments cannot be edited.'],
+                ]);
+            }
+
+            // The endpoint upserts submitted installment numbers; rows omitted
+            // from a partial update remain active. Validate the complete total.
+            $retainedTotal = PaymentSchedule::where('agency_id', $locked->agency_id)
+                ->where('transaction_id', $locked->id)
+                ->whereNotIn('installment_no', $submittedNumbers)
+                ->sum('amount');
+            $submittedTotal = array_sum(array_map(
+                static fn (array $row): float => (float) $row['amount'],
+                $data['schedules']
+            ));
+            if ((float) $retainedTotal + $submittedTotal > (float) $locked->agreementAmountPKR) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'schedules' => ['The total installment schedule cannot exceed the agreed deal amount.'],
+                ]);
+            }
+
+            $schedules = [];
+            foreach ($data['schedules'] as $row) {
+                $schedules[] = PaymentSchedule::updateOrCreate(
+                    [
+                        'transaction_id' => $locked->id,
+                        'installment_no' => $row['installment_no'],
+                    ],
+                    [
+                        'agency_id' => $locked->agency_id,
+                        'due_date' => $row['due_date'],
+                        'amount' => $row['amount'],
+                        'notes' => $row['notes'] ?? null,
+                    ]
+                );
+            }
+
+            PaymentSchedule::where('agency_id', $locked->agency_id)
+                ->where('transaction_id', $locked->id)
+                ->where('status', 'pending')
+                ->where('due_date', '<', now()->toDateString())
+                ->update(['status' => 'overdue']);
+
+            $this->writeAudit($request, 'schedule.save', $locked->id, "Installment schedule saved for {$locked->dealNumber}", [
+                'agency_id' => $locked->agency_id,
+                'entity_type' => 'transaction',
+                'entity_id' => $locked->id,
+                'metadata' => ['installments' => count($data['schedules'])],
             ]);
-        }
 
-        $schedules = [];
-        foreach ($data['schedules'] as $row) {
-            $schedules[] = PaymentSchedule::updateOrCreate(
-                [
-                    'transaction_id' => $transaction->id,
-                    'installment_no' => $row['installment_no'],
-                ],
-                [
-                    'agency_id' => $transaction->agency_id,
-                    'due_date' => $row['due_date'],
-                    'amount' => $row['amount'],
-                    'notes' => $row['notes'] ?? null,
-                ]
-            );
-        }
-
-        // Mark overdue installments (same agency scope).
-        PaymentSchedule::where('agency_id', $transaction->agency_id)
-            ->where('transaction_id', $transaction->id)
-            ->where('status', 'pending')
-            ->where('due_date', '<', now()->toDateString())
-            ->update(['status' => 'overdue']);
-
-        $this->writeAudit($request, 'schedule.save', $transaction->id, "Installment schedule saved for {$transaction->dealNumber}", [
-            'agency_id' => $transaction->agency_id,
-            'entity_type' => 'transaction',
-            'entity_id' => $transaction->id,
-            'metadata' => ['installments' => count($data['schedules'])],
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'schedules' => $schedules,
-        ], 201);
+            return response()->json([
+                'success' => true,
+                'schedules' => $schedules,
+            ], 201);
+        }, 3);
     }
 
     /**
