@@ -804,11 +804,29 @@ public function update(Request $request, string $id)
 
         $data = $request->validate([
             'schedules' => 'required|array|min:1|max:120',
-            'schedules.*.installment_no' => 'required|integer|min:1|max:9999',
+            'schedules.*.installment_no' => 'required|integer|min:1|max:9999|distinct',
             'schedules.*.due_date' => 'required|date',
             'schedules.*.amount' => 'required|numeric|min:0.01|max:999999999999',
             'schedules.*.notes' => 'nullable|string|max:500',
         ]);
+
+        // The schedule endpoint upserts submitted installment numbers; rows
+        // omitted from a partial update remain active. Validate the resulting
+        // complete schedule total, not just the incoming payload.
+        $submittedNumbers = array_column($data['schedules'], 'installment_no');
+        $retainedTotal = PaymentSchedule::where('agency_id', $transaction->agency_id)
+            ->where('transaction_id', $transaction->id)
+            ->whereNotIn('installment_no', $submittedNumbers)
+            ->sum('amount');
+        $submittedTotal = array_sum(array_map(
+            static fn (array $row): float => (float) $row['amount'],
+            $data['schedules']
+        ));
+        if ((float) $retainedTotal + $submittedTotal > (float) $transaction->agreementAmountPKR) {
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'schedules' => ['The total installment schedule cannot exceed the agreed deal amount.'],
+            ]);
+        }
 
         $schedules = [];
         foreach ($data['schedules'] as $row) {
