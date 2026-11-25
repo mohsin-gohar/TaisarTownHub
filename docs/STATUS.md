@@ -2,7 +2,7 @@
 
 **Current main:** `e780f1f7cf104a04e3855fb61ec2bfd43422ad52` (PR #4 merged)  
 **QA branch:** `qa/cross-browser-multireplica`  
-**Date:** 2026-11-24
+**Date:** 2026-11-25
 
 This document separates verified engineering work from checks that require a real production environment, licensed assets, or owner decisions. A green CI pipeline is not equivalent to a production launch.
 
@@ -31,23 +31,23 @@ Evidence from the code-identical review run:
 - MySQL 8 backup/restore drill: passed.
 - Full-stack Docker integration: passed (services ready, enterprise catalog seed, gateway/auth smoke, cleanup).
 
-## 3. Additional CI hardening on QA branch
+## 3. Additional CI hardening on QA branch — verified 2026-11-25
 
-The following checks have been added and must pass before their status is upgraded:
-- Firefox + WebKit public-route smoke tests using the existing cross-browser Playwright config.
-- Two-replica Docker backend test: scale backend to two containers, check each container's PHP health, then exercise the nginx gateway.
-- Real ClamAV scanner smoke: send a clean fixture and the standard harmless antivirus test signature through the actual clamd TCP INSTREAM protocol; require clean and threat verdicts.
+At QA head `9807dab71e894367721afd66c06fbf4a96e02801`, both workflow runs completed successfully:
+- [CI run 144](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45542849480): backend PHP 8.3/MySQL 8, frontend verify, Chromium Playwright, Firefox + WebKit regression, and OpenAPI parse jobs all successful.
+- [Docker CI run 86](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45542849505): backend image, frontend image, MySQL 8 backup/restore drill, and full-stack integration jobs all successful.
+- The QA head includes the per-year locked deal-number allocator and concurrent finance transaction regression coverage (commit `9807dab`).
 
-No claim is made that these new jobs have passed until GitHub Actions reports success on this QA branch.
+These results verify the named CI jobs on this exact commit; they do not establish production readiness or prove unexecuted manual/staging workflows.
 
 ## 4. Remaining engineering verification
 
 | Area | Current state | Closure evidence |
 |---|---|---|
-| Real ClamAV scanner | Docker CI now runs a real clamd TCP smoke probe against a clean fixture and a harmless antivirus test signature; pending result on QA branch | Require real clean + threat verdicts; separately retain HTTP upload fail-closed regression tests |
-| API-dependent browser workflows | UI-only Chromium smoke is green; seeded API-backed role/CRUD browser matrix is not yet run as one full suite | Run Playwright against disposable MySQL-backed stack for guest, agency owner/staff and super-admin flows |
-| Firefox/WebKit | Newly added CI job pending | Both engines pass all seven public-route smoke tests |
-| Multi-replica | Newly added Docker CI step pending | Both PHP replicas healthy and gateway requests succeed after scale-up |
+| Real ClamAV scanner | Docker CI workflow is green; confirm job logs/artifacts include clean + threat verdicts and retain HTTP upload fail-closed regression tests | Preserve scanner verdict evidence and upload-path regression coverage |
+| API-dependent browser workflows | Chromium and Firefox/WebKit CI jobs are green, but a single seeded API-backed end-to-end role/CRUD matrix is not evidenced | Run Playwright against disposable MySQL-backed stack for guest, customer, agency owner/staff, dealer and super-admin journeys |
+| Firefox/WebKit | CI run 144 job successful | Both engines pass the configured public-route smoke suite |
+| Multi-replica | Docker CI run 86 successful; inspect job log for explicit replica health/gateway assertions if stronger evidence is needed | Both PHP replicas healthy and gateway requests succeed after scale-up |
 | Lighthouse/accessibility | No production HTTPS origin has been supplied | Run Lighthouse/accessibility checks against real deployment and resolve material findings |
 | Load/capacity | Harness exists at `frontend/scripts/load-test.mts`; now refuses to run without explicit mutation opt-in and dedicated test credentials, and never falls back to an existing property | Run approved 10/50/100-user tests against disposable staging; record p95/p99, 5xx and error rates |
 | Full source review | Repository inventory is 631 tracked paths; no honest line-by-line review of every source/config/test file is claimed | Complete risk-ranked review of auth, tenant boundaries, money, uploads, integrations, deployment and remaining modules with evidence |
