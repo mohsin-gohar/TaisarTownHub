@@ -163,7 +163,7 @@ public function store(Request $request)
 
         $advanceInput = (int) ($data['advancePaymentPKR'] ?? 0);
         if ($advanceInput > (int) $data['agreementAmountPKR']) {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'advancePaymentPKR' => ['Advance payment cannot exceed the agreed deal amount.'],
             ]);
         }
@@ -265,7 +265,7 @@ public function update(Request $request, string $id)
             'sellerName' => 'sometimes|string|max:255',
             'buyerName' => 'sometimes|string|max:255',
             'dealerId' => 'nullable|string|max:64|exists:dealers,id',
-            'agreementAmountPKR' => 'sometimes|numeric|min:0|max:999999999999',
+            'agreementAmountPKR' => 'sometimes|integer|min:0|max:999999999999',
             'advancePaymentPKR' => 'nullable|integer|min:0|max:999999999999',
             'commissionAmountPKR' => 'nullable|integer|min:0|max:999999999999',
             'dealStatus' => 'sometimes|string|max:50',
@@ -276,7 +276,7 @@ public function update(Request $request, string $id)
         $effectiveAgreement = (int) ($data['agreementAmountPKR'] ?? $transaction->agreementAmountPKR);
         $effectiveAdvance = (int) ($data['advancePaymentPKR'] ?? $transaction->advancePaymentPKR);
         if ($effectiveAdvance > $effectiveAgreement) {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'advancePaymentPKR' => ['Advance payment cannot exceed the agreed deal amount.'],
             ]);
         }
