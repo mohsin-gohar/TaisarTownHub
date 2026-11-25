@@ -274,10 +274,19 @@ public function update(Request $request, string $id)
         ]);
 
         $effectiveAgreement = (int) ($data['agreementAmountPKR'] ?? $transaction->agreementAmountPKR);
-        $effectiveAdvance = (int) ($data['advancePaymentPKR'] ?? $transaction->advancePaymentPKR);
-        if ($effectiveAdvance > $effectiveAgreement) {
+        $collectedAmount = (float) $transaction->totalPaid();
+        if ($collectedAmount > $effectiveAgreement) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'advancePaymentPKR' => ['Advance payment cannot exceed the agreed deal amount.'],
+                'agreementAmountPKR' => ['The agreed amount cannot be reduced below payments already recorded.'],
+            ]);
+        }
+
+        // advancePaymentPKR is a cached ledger total, not an independent
+        // editable amount. All changes must be represented by payment rows.
+        if (array_key_exists('advancePaymentPKR', $data)
+            && (float) $data['advancePaymentPKR'] !== $collectedAmount) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'advancePaymentPKR' => ['Advance is derived from the payment ledger. Record a payment or refund instead.'],
             ]);
         }
 
