@@ -48,7 +48,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         ]), $headers)
             ->assertStatus(201)
             ->assertJsonPath('isFeatured', false)
-            ->assertJsonPath('featured_status', 'none');
+            ->assertJsonPath('featured_status', null);
 
         $id = $created->json('id');
 
@@ -57,7 +57,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         ], $headers)
             ->assertStatus(200)
             ->assertJsonPath('isFeatured', false)
-            ->assertJsonPath('featured_status', 'none');
+            ->assertJsonPath('featured_status', null);
 
         $this->assertDatabaseHas('properties', [
             'id' => $id,
