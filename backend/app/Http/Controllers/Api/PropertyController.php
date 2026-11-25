@@ -263,7 +263,6 @@ class PropertyController extends Controller
             'type' => 'nullable|string|max:50',
             'status' => 'nullable|max:50',
             'listing_purpose' => 'nullable|in:sale',
-            'isFeatured' => 'nullable|boolean',
             'possessionReady' => 'nullable|boolean',
             'mdaApproved' => 'nullable|boolean',
             'westOpen' => 'nullable|boolean',
@@ -307,6 +306,8 @@ class PropertyController extends Controller
         $payload['submitted_at'] = $request->boolean('submit') ? $now : null;
         $payload['slug'] = $this->uniqueSlug($data['title'], $propertyId);
         $payload['listing_purpose'] = 'sale';
+        // Featured placement is granted only through the moderation endpoint.
+        $payload['isFeatured'] = false;
 
         $property = Property::create($payload);
 
@@ -358,7 +359,6 @@ class PropertyController extends Controller
             'type' => 'nullable|string|max:50',
             'status' => 'nullable|max:50',
             'listing_purpose' => 'sometimes|in:sale',
-            'isFeatured' => 'nullable|boolean',
             'possessionReady' => 'nullable|boolean',
             'mdaApproved' => 'nullable|boolean',
             'westOpen' => 'nullable|boolean',
