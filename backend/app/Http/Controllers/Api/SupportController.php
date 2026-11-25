@@ -7,6 +7,7 @@ use App\Models\SupportMessage;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * Module 15 — platform support desk.
@@ -285,7 +286,13 @@ class SupportController extends Controller
         $ticket = SupportTicket::findOrFail($id);
 
         $data = $request->validate([
-            'assigned_to' => 'required|integer|exists:users,id',
+            'assigned_to' => [
+                'required',
+                'integer',
+                Rule::exists('users', 'id')->where(fn ($query) => $query
+                    ->where('status', 'active')
+                    ->whereIn('role', ['super_admin', 'admin', 'support', 'operator', 'manager'])),
+            ],
         ]);
 
         $ticket->forceFill(['assigned_to' => $data['assigned_to']])->save();
