@@ -82,12 +82,19 @@ class TransactionController extends Controller
             'dealerId' => 'nullable|string|exists:dealers,id',
             'dealerName' => 'nullable|string|max:255',
             'transactionType' => 'required|string|in:Sale,Purchase,Lease,Transfer',
-            'agreementAmountPKR' => 'required|numeric|min:0',
-            'advancePaymentPKR' => 'nullable|numeric|min:0',
-            'commissionAmountPKR' => 'nullable|numeric|min:0',
+            'agreementAmountPKR' => 'required|integer|min:0|max:999999999999',
+            'advancePaymentPKR' => 'nullable|integer|min:0|max:999999999999',
+            'commissionAmountPKR' => 'nullable|integer|min:0|max:999999999999',
             'commissionStatus' => 'nullable|string|in:Pending Accrual,Accrued,Partially Paid,Completed,Cancelled',
             'dealStatus' => 'nullable|string|in:Draft,Negotiation,Agreement Signed,Token Paid,Advance Received,Payment Pending,Partially Paid,Fully Paid,Under Transfer,Completed,Cancelled',
         ]);
+
+        $advance = (int) ($data['advancePaymentPKR'] ?? 0);
+        if ($advance > (int) $data['agreementAmountPKR']) {
+            throw ValidationException::withMessages([
+                'advancePaymentPKR' => ['Advance payment cannot exceed the agreed deal amount.'],
+            ]);
+        }
 
         // Prefer dealers.agency_id (the real ownership link); membership
         // remains the fallback for legacy rows.
@@ -97,7 +104,6 @@ class TransactionController extends Controller
             ]);
         }
 
-        $advance = $data['advancePaymentPKR'] ?? 0;
         $data['remainingBalancePKR'] = max(0, $data['agreementAmountPKR'] - $advance);
         $data['dealStatus'] ??= 'Draft';
         $data['commissionStatus'] ??= 'Pending Accrual';
