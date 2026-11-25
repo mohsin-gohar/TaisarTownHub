@@ -346,6 +346,13 @@ class AgencyStaffController extends Controller
             }
 
             if ($request->has('status')) {
+                if ($member->role_id === 'role_agency_owner' && $request->status === 'deactivated'
+                    && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Only an agency owner may deactivate an owner membership.',
+                    ], 403);
+                }
                 if ($member->role_id === 'role_agency_owner' && $member->status === 'active'
                     && $request->status === 'deactivated' && $this->activeOwnerCount($agencyId) <= 1) {
                     return response()->json([
@@ -393,6 +400,13 @@ class AgencyStaffController extends Controller
                 ->lockForUpdate()
                 ->findOrFail($id);
 
+            if ($member->role_id === 'role_agency_owner'
+                && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only an agency owner may remove an owner membership.',
+                ], 403);
+            }
             if ($member->role_id === 'role_agency_owner' && $member->status === 'active'
                 && $this->activeOwnerCount($agencyId) <= 1) {
                 return response()->json([
