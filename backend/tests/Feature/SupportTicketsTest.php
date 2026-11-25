@@ -149,6 +149,22 @@ class SupportTicketsTest extends EnterpriseTestCase
         ], $this->authHeaders($this->tokenFor($user)))
             ->assertStatus(403);
 
+        // Assignment is restricted to active platform support staff, not
+        // merely any existing user id.
+        $this->postJson('/api/admin/support-tickets/' . $ticket . '/assign', [
+            'assigned_to' => $user->id,
+        ], $this->authHeaders($this->tokenFor($staff)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('assigned_to');
+
+        $inactiveStaff = $this->makeUser('support');
+        $inactiveStaff->update(['status' => 'suspended']);
+        $this->postJson('/api/admin/support-tickets/' . $ticket . '/assign', [
+            'assigned_to' => $inactiveStaff->id,
+        ], $this->authHeaders($this->tokenFor($staff)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('assigned_to');
+
         // A same-agency colleague may see + comment but not change status.
         [$colleague] = $this->agencyUser(['agency.view'], 'agent', $agency);
         $this->postJson('/api/support/tickets/' . $ticket . '/messages', [
