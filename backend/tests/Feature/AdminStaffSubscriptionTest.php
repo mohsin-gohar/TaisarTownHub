@@ -275,6 +275,34 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->getJson('/api/agency/members', $headers)->assertOk();
     }
 
+    public function test_only_an_agency_owner_can_remove_an_owner_and_last_owner_is_protected(): void
+    {
+        $ownerRole = $this->makeRole('agency', 'agency_owner', $this->staffPermissions());
+        $ownerRole->forceFill(['id' => 'role_agency_owner'])->save();
+
+        [$owner, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $ownerMembership = $owner->memberships()->where('agency_id', $agency->id)->firstOrFail();
+        $ownerMembership->update(['role_id' => $ownerRole->id]);
+
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager', $agency);
+
+        $this->patchJson('/api/agency/members/' . $ownerMembership->id, [
+            'status' => 'deactivated',
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Only an agency owner may deactivate an owner membership.');
+
+        $this->deleteJson('/api/agency/members/' . $ownerMembership->id, [], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Only an agency owner may remove an owner membership.');
+
+        $this->patchJson('/api/agency/members/' . $ownerMembership->id, [
+            'status' => 'deactivated',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'An agency must keep at least one active owner.');
+    }
+
     public function test_agency_manager_cannot_invite_another_owner(): void
     {
         $ownerRole = $this->makeRole('agency', 'agency_owner', $this->staffPermissions());
