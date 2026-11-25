@@ -36,6 +36,36 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         return ['view_properties', 'properties.view', 'properties.approve', 'properties.feature'];
     }
 
+    public function test_agency_cannot_self_assign_featured_status_when_creating_or_updating_listing(): void
+    {
+        [$agent] = $this->agencyUser($this->agentPermissions());
+        $headers = $this->authHeaders($this->tokenFor($agent));
+
+        $created = $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Cannot Self Feature Listing',
+            'isFeatured' => true,
+            'submit' => true,
+        ]), $headers)
+            ->assertStatus(201)
+            ->assertJsonPath('isFeatured', false)
+            ->assertJsonPath('featured_status', 'none');
+
+        $id = $created->json('id');
+
+        $this->patchJson("/api/properties/{$id}", [
+            'isFeatured' => true,
+        ], $headers)
+            ->assertStatus(200)
+            ->assertJsonPath('isFeatured', false)
+            ->assertJsonPath('featured_status', 'none');
+
+        $this->assertDatabaseHas('properties', [
+            'id' => $id,
+            'isFeatured' => false,
+            'featured_status' => 'none',
+        ]);
+    }
+
     public function test_member_creates_submits_and_moderator_approves_listing(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
