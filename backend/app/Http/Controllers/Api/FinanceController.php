@@ -4,13 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
-use App\Models\AgencyInvitation;
 use App\Models\AgencyMember;
-use App\Models\BusinessRecord;
 use App\Models\Commission;
 use App\Models\Dealer;
-use App\Models\DealerFile;
-use App\Models\Document;
 use App\Models\Expense;
 use App\Models\Inquiry;
 use App\Models\PaymentSchedule;
@@ -20,26 +16,26 @@ use App\Models\SubscriptionInvoice;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class FinanceController extends Controller
 {
-use AuthorizesApi;
+    use AuthorizesApi;
 
     /**
      * Find a transaction scoped to the given agency with access control.
      *
-     * @param string|null $agencyId The acting agency context (null for platform-wide)
-     * @param string $id The transaction ID to find
-     * @param User $user The authenticated user
-     * @return Transaction
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @param  string|null  $agencyId  The acting agency context (null for platform-wide)
+     * @param  string  $id  The transaction ID to find
+     * @param  User  $user  The authenticated user
+     *
+     * @throws AuthorizationException
      */
     protected function findScoped(?string $agencyId, string $id, $user): Transaction
     {
@@ -48,7 +44,7 @@ use AuthorizesApi;
         // Scope to agency if one is set, otherwise check platform access
         if ($agencyId !== null) {
             $query->where('agency_id', $agencyId);
-        } elseif (!$user->hasPermission('admin.view_reports')) {
+        } elseif (! $user->hasPermission('admin.view_reports')) {
             // Non-admin users without agency context cannot access transactions
             abort(404, 'Transaction not found.');
         }
@@ -57,7 +53,7 @@ use AuthorizesApi;
 
         // Additional check: if the transaction has an agency_id and the user
         // doesn't have platform-wide access, ensure they can only see their own agency
-        if ($transaction->agency_id !== null && $agencyId === null && !$user->hasPermission('admin.view_reports')) {
+        if ($transaction->agency_id !== null && $agencyId === null && ! $user->hasPermission('admin.view_reports')) {
             abort(404, 'Transaction not found.');
         }
 
@@ -68,7 +64,7 @@ use AuthorizesApi;
      * GET /api/agency/transactions
      * Agency-scoped or platform-wide list with filters.
      */
-public function index(Request $request)
+    public function index(Request $request)
     {
         $this->requireAny($request, ['view_transactions', 'finance.view', 'admin.view_reports', 'transactions.view']);
 
@@ -82,7 +78,7 @@ public function index(Request $request)
         }
 
         // Legacy support: if no agency context and user is agent (dealer_id null), scope to their agency
-        if ($agencyId === null && $user->hasPermission('finance.view') && !$user->hasPermission('admin.view_reports')) {
+        if ($agencyId === null && $user->hasPermission('finance.view') && ! $user->hasPermission('admin.view_reports')) {
             if ($user->dealer_id === null && $user->agency_id !== null) {
                 $query->where('agency_id', $user->agency_id);
             }
@@ -124,7 +120,7 @@ public function index(Request $request)
         ]);
     }
 
-public function store(Request $request)
+    public function store(Request $request)
     {
         $agencyId = $this->agencyId($request);
         // Creating a deal is a finance operation. The previous gate used
@@ -172,16 +168,24 @@ public function store(Request $request)
         // A dealer must belong to the acting agency. Prefer the explicit
         // dealers.agency_id link (set by DealerController); fall back to an
         // active membership for legacy rows that predate the link.
-        if (!empty($data['dealerId']) && $agencyId !== null
-            && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+        if (! empty($data['dealerId']) && $agencyId !== null
+            && ! $this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
+            throw ValidationException::withMessages([
                 'dealerId' => ['Dealer does not belong to the acting agency.'],
             ]);
         }
 
         // Calculate remaining balance and defaults before creating the deal.
-        $advance = (int) ($data['advancePaymentPKR'] ?? 0);
-        $remainingBalance = (int) max(0, $data['agreementAmountPKR'] - $advance);
+        $agreement = round((float) $data['agreementAmountPKR'], 2);
+        $advance = round((float) ($data['advancePaymentPKR'] ?? 0), 2);
+
+        if ($advance > $agreement) {
+            throw ValidationException::withMessages([
+                'advancePaymentPKR' => ['Advance payment cannot exceed the agreement amount.'],
+            ]);
+        }
+
+        $remainingBalance = round(max(0, $agreement - $advance), 2);
         $dealStatus = $data['dealStatus'] ?? 'Draft';
         $year = now()->year;
 
@@ -193,7 +197,7 @@ public function store(Request $request)
         $lastDealNumberError = null;
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
-                $deal = DB::transaction(function () use ($data, $agencyId, $request, $year, $advance, $remainingBalance, $dealStatus) {
+                $deal = DB::transaction(function () use ($data, $agencyId, $request, $year, $agreement, $advance, $remainingBalance, $dealStatus) {
                     $lastDeal = Transaction::query()
                         ->where('dealNumber', 'like', "TXN-{$year}-%")
                         ->orderByDesc('dealNumber')
@@ -207,7 +211,7 @@ public function store(Request $request)
                     $dealNumber = sprintf('TXN-%d-%04d', $year, $nextNumber);
 
                     $deal = Transaction::create([
-                        'id' => 'txn-' . Str::uuid(),
+                        'id' => 'txn-'.Str::uuid(),
                         'dealNumber' => $dealNumber,
                         'agency_id' => $agencyId,
                         // Actual schema columns are propertyId / dealerId.
@@ -221,10 +225,10 @@ public function store(Request $request)
                         'buyerName' => $data['buyerName'],
                         'dealerId' => $data['dealerId'] ?? null,
                         'transactionType' => $data['transactionType'] ?? 'Sale',
-                        'agreementAmountPKR' => (int) $data['agreementAmountPKR'],
+                        'agreementAmountPKR' => $agreement,
                         'advancePaymentPKR' => $advance,
                         'remainingBalancePKR' => $remainingBalance,
-                        'commissionAmountPKR' => (int) ($data['commissionAmountPKR'] ?? 0),
+                        'commissionAmountPKR' => round((float) ($data['commissionAmountPKR'] ?? 0), 2),
                         'dealStatus' => $dealStatus,
                         'transactionDate' => $data['transactionDate'] ?? now()->toDateString(),
                         'created_by' => $request->user()->id,
@@ -244,12 +248,12 @@ public function store(Request $request)
                     return $deal->load(['payments', 'commissions']);
                 }, 3);
                 break;
-            } catch (\Illuminate\Database\QueryException $e) {
+            } catch (QueryException $e) {
                 $lastDealNumberError = $e;
                 $sqlState = $e->getCode();
                 $driverCode = $e->errorInfo[1] ?? null;
                 $isDuplicateDealNumber = $sqlState === '23000' || $driverCode === 1062 || $driverCode === 19;
-                if (!$isDuplicateDealNumber || $attempt === $maxAttempts) {
+                if (! $isDuplicateDealNumber || $attempt === $maxAttempts) {
                     throw $e;
                 }
                 usleep(50000 * $attempt);
@@ -267,7 +271,7 @@ public function store(Request $request)
         ], 201);
     }
 
-public function update(Request $request, string $id)
+    public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
         // Same catalogue gap as store(): use the real update-transaction
@@ -301,9 +305,9 @@ public function update(Request $request, string $id)
 
         // Reject a dealer from another agency. Prefer dealers.agency_id and
         // fall back to active memberships for legacy unlinked rows.
-        if (!empty($data['dealerId']) && $agencyId !== null
-            && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+        if (! empty($data['dealerId']) && $agencyId !== null
+            && ! $this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
+            throw ValidationException::withMessages([
                 'dealerId' => ['Dealer does not belong to the acting agency.'],
             ]);
         }
@@ -318,6 +322,7 @@ public function update(Request $request, string $id)
                 $message = $currentStatus === 'Cancelled'
                     ? 'Deal is cancelled — the record is read-only for bookkeeping.'
                     : 'Completed deals are read-only.';
+
                 return response()->json([
                     'success' => false,
                     'message' => $message,
@@ -339,7 +344,7 @@ public function update(Request $request, string $id)
 
             // Check if this is a valid forward transition
             $allowedNext = $validForward[$currentStatus] ?? [];
-            if (!in_array($newStatus, $allowedNext, true)) {
+            if (! in_array($newStatus, $allowedNext, true)) {
                 // Check if it's a backward transition (one step back is allowed)
                 $backwardMap = [
                     'Negotiation' => 'Draft',
@@ -373,6 +378,19 @@ public function update(Request $request, string $id)
             if ($newStatus === 'Cancelled') {
                 $data['dealStatus'] = 'Cancelled';
             }
+        }
+
+        // Normalise monetary fields to the schema's 2-decimal precision and
+        // keep the derived balance in sync when amounts change.
+        foreach (['agreementAmountPKR', 'advancePaymentPKR', 'commissionAmountPKR'] as $moneyKey) {
+            if (array_key_exists($moneyKey, $data) && $data[$moneyKey] !== null) {
+                $data[$moneyKey] = round((float) $data[$moneyKey], 2);
+            }
+        }
+        if (array_key_exists('agreementAmountPKR', $data) || array_key_exists('advancePaymentPKR', $data)) {
+            $agreement = (float) ($data['agreementAmountPKR'] ?? $transaction->agreementAmountPKR);
+            $advance = (float) ($data['advancePaymentPKR'] ?? $transaction->advancePaymentPKR);
+            $data['remainingBalancePKR'] = round(max(0, $agreement - $advance), 2);
         }
 
         $transaction->update($data);
@@ -431,7 +449,7 @@ public function update(Request $request, string $id)
      * GET /api/agency/expenses
      * List expenses for the agency with totals.
      */
-/**
+    /**
      * POST /api/agency/transactions/{id}/approve
      * Approve a deal (bookkeeping sign-off).
      *
@@ -448,7 +466,7 @@ public function update(Request $request, string $id)
         $approved = DB::transaction(function () use ($transaction, $request): ?Transaction {
             $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
 
-            if (!$locked || $locked->isVoided()) {
+            if (! $locked || $locked->isVoided()) {
                 return null;
             }
 
@@ -526,15 +544,15 @@ public function update(Request $request, string $id)
 
         $data = $request->validate([
             'expense_date' => 'required|date|before_or_equal:today',
-            'category' => 'nullable|string|in:' . implode(',', Expense::CATEGORIES),
+            'category' => 'nullable|string|in:'.implode(',', Expense::CATEGORIES),
             'amount_pkr' => 'required|integer|min:1|max:9999999999',
             'description' => 'nullable|string|max:500',
-            'payment_method' => 'nullable|string|in:' . implode(',', Expense::PAYMENT_METHODS),
+            'payment_method' => 'nullable|string|in:'.implode(',', Expense::PAYMENT_METHODS),
             'reference' => 'nullable|string|max:120',
         ]);
 
         $expense = Expense::create([
-            'id' => 'exp_' . bin2hex(random_bytes(8)),
+            'id' => 'exp_'.bin2hex(random_bytes(8)),
             'agency_id' => $agencyId,
             'expense_date' => $data['expense_date'],
             'category' => $data['category'] ?? 'other',
@@ -613,9 +631,9 @@ public function update(Request $request, string $id)
             'success' => true,
             'payments' => $payments,
             'totals' => [
-                'collected' => $totalCollected,
-                'agreement' => $agreementAmount,
-                'balance' => max(0, $agreementAmount - $totalCollected),
+                'collected' => round($totalCollected, 2),
+                'agreement' => round($agreementAmount, 2),
+                'balance' => round(max(0, $agreementAmount - $totalCollected), 2),
             ],
         ]);
     }
@@ -643,7 +661,7 @@ public function update(Request $request, string $id)
 
         $transaction = $this->findScoped($agencyId, $id, $request->user());
 
-        if (!$transaction->isVoided()) {
+        if (! $transaction->isVoided()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Only voided transactions can be deleted.',
@@ -697,20 +715,26 @@ public function update(Request $request, string $id)
 
             // Refunds are stored as negative amounts so they reduce collected totals.
             $isRefund = $request->get('type', 'advance') === 'refund';
-            $amount = (float) $request->amount;
+            $amount = round((float) $request->amount, 2);
             if ($isRefund) {
                 $amount = -abs($amount);
             }
 
-            // Overpayment guard: collected + amount must not exceed agreement
+            // Overpayment guard: collected + amount must not exceed agreement.
+            // All comparisons run on integer minor units (paisa) so binary
+            // float drift cannot let an overpayment slip through (or falsely
+            // reject a payment that exactly fills the balance).
             $existingCollected = (float) $locked->totalPaid();
             $agreementAmount = (float) $locked->agreementAmountPKR;
-            if ($existingCollected + $amount > $agreementAmount) {
+            $existingCents = (int) round($existingCollected * 100);
+            $amountCents = (int) round($amount * 100);
+            $agreementCents = (int) round($agreementAmount * 100);
+            if ($existingCents + $amountCents > $agreementCents) {
                 return [null, [
                     'overpayment' => true,
-                    'collected' => $existingCollected,
-                    'agreement' => $agreementAmount,
-                    'amount' => $amount,
+                    'collected' => round($existingCollected, 2),
+                    'agreement' => round($agreementAmount, 2),
+                    'amount' => round($amount, 2),
                 ]];
             }
 
@@ -735,9 +759,10 @@ public function update(Request $request, string $id)
 
         if (isset($result[1]['overpayment'])) {
             $over = $result[1];
+
             return response()->json([
                 'success' => false,
-                'message' => 'Overpayment: collected (' . number_format($over['collected'], 2) . ') plus amount (' . number_format($over['amount'], 2) . ') exceeds agreement (' . number_format($over['agreement'], 2) . ').',
+                'message' => 'Overpayment: collected ('.number_format($over['collected'], 2).') plus amount ('.number_format($over['amount'], 2).') exceeds agreement ('.number_format($over['agreement'], 2).').',
             ], 422);
         }
 
@@ -752,9 +777,9 @@ public function update(Request $request, string $id)
             'message' => 'Payment recorded.',
             'payment' => $payment,
             'totals' => [
-                'collected' => $collected,
-                'agreement' => $agreement,
-                'balance' => max(0, $agreement - $collected),
+                'collected' => round($collected, 2),
+                'agreement' => round($agreement, 2),
+                'balance' => round(max(0, $agreement - $collected), 2),
             ],
         ], 201);
     }
@@ -819,6 +844,18 @@ public function update(Request $request, string $id)
             'schedules.*.notes' => 'nullable|string|max:500',
         ]);
 
+        // Payment schedules may not exceed the agreed amount of the deal.
+        $scheduleTotal = 0.0;
+        foreach ($data['schedules'] as $row) {
+            $scheduleTotal += (float) $row['amount'];
+        }
+        $agreementAmount = (float) $transaction->agreementAmountPKR;
+        if ((int) round($scheduleTotal * 100) > (int) round($agreementAmount * 100)) {
+            throw ValidationException::withMessages([
+                'schedules' => ['Installment schedule total cannot exceed the agreement amount.'],
+            ]);
+        }
+
         $schedules = [];
         foreach ($data['schedules'] as $row) {
             $schedules[] = PaymentSchedule::updateOrCreate(
@@ -829,7 +866,7 @@ public function update(Request $request, string $id)
                 [
                     'agency_id' => $transaction->agency_id,
                     'due_date' => $row['due_date'],
-                    'amount' => $row['amount'],
+                    'amount' => round((float) $row['amount'], 2),
                     'notes' => $row['notes'] ?? null,
                 ]
             );
@@ -885,7 +922,7 @@ public function update(Request $request, string $id)
 
         $user = $request->user();
         $canSeeAll = $this->can($request, 'finance.view') || $this->can($request, 'view_commissions');
-        if (!$canSeeAll) {
+        if (! $canSeeAll) {
             if ($user->dealer_id === null) {
                 return response()->json([
                     'success' => false,
@@ -941,18 +978,18 @@ public function update(Request $request, string $id)
 
         // Beneficiary identifiers are references, not free text: validate that
         // they belong to the deal's tenant before writing to the ledger.
-        if (!empty($data['dealer_id']) && !$this->dealerBelongsToAgency((string) $data['dealer_id'], $transaction->agency_id)) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+        if (! empty($data['dealer_id']) && ! $this->dealerBelongsToAgency((string) $data['dealer_id'], $transaction->agency_id)) {
+            throw ValidationException::withMessages([
                 'dealer_id' => 'The selected dealer does not belong to this agency.',
             ]);
         }
-        if (!empty($data['user_id'])) {
+        if (! empty($data['user_id'])) {
             $member = AgencyMember::where('agency_id', $transaction->agency_id)
                 ->where('user_id', (int) $data['user_id'])
                 ->where('status', 'active')
                 ->exists();
-            if (!$member) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
+            if (! $member) {
+                throw ValidationException::withMessages([
                     'user_id' => 'The selected user is not an active member of this agency.',
                 ]);
             }
@@ -961,7 +998,7 @@ public function update(Request $request, string $id)
         $commission = Commission::create([
             'agency_id' => $transaction->agency_id,
             'transaction_id' => $transaction->id,
-            'amount' => (float) $data['amount'],
+            'amount' => round((float) $data['amount'], 2),
             'rate' => $data['rate'] ?? null,
             'dealer_id' => $data['dealer_id'] ?? null,
             'user_id' => $data['user_id'] ?? null,
@@ -1011,7 +1048,7 @@ public function update(Request $request, string $id)
         ]);
 
         $allowed = ['pending', 'accrued', 'paid', 'cancelled'];
-        if (!in_array($request->status, $allowed, true)) {
+        if (! in_array($request->status, $allowed, true)) {
             return response()->json(['success' => false, 'message' => 'Invalid commission status.'], 422);
         }
 
@@ -1185,20 +1222,20 @@ public function update(Request $request, string $id)
             'agencies' => $agencies,
             'deals' => [
                 'count' => (int) $dealAgreed->n,
-                'agreed_pkr' => (float) $dealAgreed->total,
+                'agreed_pkr' => round((float) $dealAgreed->total, 2),
                 'voided_count' => (clone $deals)->whereNotNull('voided_at')->count(),
             ],
-            'collected_pkr' => (float) $collected->total,
+            'collected_pkr' => round((float) $collected->total, 2),
             'payments_count' => (int) $collected->n,
             'commissions' => [
-                'paid_pkr' => (float) $paidCommissions,
-                'pending_pkr' => (float) $pendingCommissions,
+                'paid_pkr' => round((float) $paidCommissions, 2),
+                'pending_pkr' => round((float) $pendingCommissions, 2),
             ],
             'expenses' => [
-                'total_pkr' => (int) $totalExpenses,
+                'total_pkr' => round((float) $totalExpenses, 2),
                 'by_category' => $expensesByCategory->toArray(),
             ],
-            'net_pkr' => (float) $collected->total - $totalExpenses,
+            'net_pkr' => round((float) $collected->total - $totalExpenses, 2),
             'invoices' => $invoices,
             'listings' => $listings,
             'leads_in_range' => $leads,

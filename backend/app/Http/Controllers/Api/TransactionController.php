@@ -36,12 +36,12 @@ class TransactionController extends Controller
         if ($agencyId !== null && $agencyId !== '') {
             // Explicit agency context: only that agency's rows.
             $query->where('agency_id', $agencyId);
-        } elseif (!$platformView) {
+        } elseif (! $platformView) {
             // No agency and no explicit platform grant: fail closed.
             $query->whereNull('agency_id');
         }
 
-        if (!$platformView) {
+        if (! $platformView) {
             $query->where('dealerId', $request->user()->dealer_id);
         }
 
@@ -91,20 +91,37 @@ class TransactionController extends Controller
 
         // Prefer dealers.agency_id (the real ownership link); membership
         // remains the fallback for legacy rows.
-        if (!empty($data['dealerId']) && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
+        if (! empty($data['dealerId']) && ! $this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
             throw ValidationException::withMessages([
                 'dealerId' => ['Dealer does not belong to the acting agency.'],
             ]);
         }
 
-        $advance = $data['advancePaymentPKR'] ?? 0;
-        $data['remainingBalancePKR'] = max(0, $data['agreementAmountPKR'] - $advance);
+        $agreement = (float) $data['agreementAmountPKR'];
+        $advance = (float) ($data['advancePaymentPKR'] ?? 0);
+
+        if ($advance > $agreement) {
+            throw ValidationException::withMessages([
+                'advancePaymentPKR' => ['Advance payment cannot exceed the agreement amount.'],
+            ]);
+        }
+
+        // Monetary values are stored as decimal(14,2); do all arithmetic on
+        // integer minor units (paisa) so binary float drift cannot corrupt
+        // the derived balance.
+        $remaining = (int) round($agreement * 100) - (int) round($advance * 100);
+        if ($remaining < 0) {
+            $remaining = 0;
+        }
+        $data['remainingBalancePKR'] = $remaining / 100;
+        $data['advancePaymentPKR'] = $advance;
+        $data['agreementAmountPKR'] = $agreement;
         $data['dealStatus'] ??= 'Draft';
         $data['commissionStatus'] ??= 'Pending Accrual';
         // Tenant ownership is bound server-side; body agency_id is ignored.
         $data['agency_id'] = $agencyId;
         $data['created_by'] = $request->user()->id;
-        $data['id'] = 'txn-' . Str::uuid();
+        $data['id'] = 'txn-'.Str::uuid();
 
         $year = now()->year;
         $transaction = null;
@@ -127,7 +144,7 @@ class TransactionController extends Controller
                     return Transaction::create($data);
                 }, 3);
             } catch (QueryException $e) {
-                if (!str_contains(strtolower($e->getMessage()), 'duplicate') && $e->getCode() !== '23000') {
+                if (! str_contains(strtolower($e->getMessage()), 'duplicate') && $e->getCode() !== '23000') {
                     throw $e;
                 }
             }
