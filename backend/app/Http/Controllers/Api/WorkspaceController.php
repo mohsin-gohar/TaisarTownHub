@@ -751,8 +751,6 @@ class WorkspaceController extends Controller
                 continue;
             }
 
-            $accepted++;
-
             if ($existing) {
                 // Preserve the original creator stamped by an earlier sync
                 $previous = $existing->payload ?? [];
@@ -791,6 +789,11 @@ class WorkspaceController extends Controller
             $deletedDiffers = ($oldDeletedAt === null) !== ($deletedAt === null);
 
             if (! $payloadDiffers && ! $deletedDiffers) {
+                // A valid, already-current row is part of the caller's intended
+                // replacement set. Invalid or unauthorized rows must never count
+                // as accepted, or they could trigger deletion of every other row.
+                $accepted++;
+
                 continue; // nothing changed — skip write
             }
 
@@ -814,6 +817,11 @@ class WorkspaceController extends Controller
 
                 continue;
             }
+
+            // Count a row only after ownership, reference, delete and row-level
+            // create/update checks have all passed. Replace mode uses this count
+            // as a safety interlock before its destructive NOT IN update.
+            $accepted++;
 
             if ($scoped && $agencyId !== null) {
                 // Persist ownership in the same insert/update statement. A
