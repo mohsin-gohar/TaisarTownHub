@@ -113,6 +113,9 @@ class InquiryController extends Controller
         $property = !empty($data['propertyId'])
             ? Property::publiclyVisible()->where('id', $data['propertyId'])->first()
             : null;
+        if (!empty($data['propertyId']) && !$property) {
+            return response()->json(['success' => false, 'message' => 'This listing is no longer available.'], 404);
+        }
         $agencyId = $property?->agency_id;
         $preferred = trim((string) ($data['preferredPropertyOrProject'] ?? $property?->title ?? ''));
         $id = 'inq_' . bin2hex(random_bytes(8));
@@ -178,7 +181,12 @@ class InquiryController extends Controller
         }, 3);
 
         if (isset($result['blocked'])) {
-            return PlanLimits::deny('Your plan has reached its monthly lead limit. Upgrade to receive more enquiries.', $result['blocked']);
+            // Public visitors must not learn an agency's internal plan or quota.
+            return response()->json([
+                'success' => false,
+                'code' => 'plan_limit_reached',
+                'message' => 'This agency is not accepting new inquiries right now. Please try again later.',
+            ], 402);
         }
         if (($result['error'] ?? null) === 'listing_unavailable') {
             return response()->json(['success' => false, 'message' => 'This listing is no longer available.'], 404);
@@ -228,7 +236,7 @@ class InquiryController extends Controller
                 'metadata' => ['from' => $from, 'to' => $data['status']],
             ]);
 
-        return response()->json($updated);
+        return response()->json($this->presentInquiry($updated));
     }
 
     public function updateNotes(Request $request, $id)
@@ -267,7 +275,7 @@ class InquiryController extends Controller
                 'entity_id' => (string) $updated->id,
             ]);
 
-        return response()->json($updated);
+        return response()->json($this->presentInquiry($updated));
     }
 
     public function destroy(Request $request, $id)
@@ -320,6 +328,18 @@ class InquiryController extends Controller
         }
 
         return $inquiry;
+    }
+
+    private function presentInquiry(Inquiry $inquiry): array
+    {
+        $payload = $inquiry->toArray();
+        if (array_key_exists('cnic', $payload)) {
+            $payload['cnic'] = filled($payload['cnic'])
+                ? $this->maskCnic((string) $payload['cnic'])
+                : null;
+        }
+
+        return $payload;
     }
 
     private function maskCnic(string $cnic): string
