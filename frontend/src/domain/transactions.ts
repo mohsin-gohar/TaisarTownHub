@@ -386,7 +386,12 @@ export function computeFinancials(
     voidedDealsCount: 0,
   };
 
-  const commissionByTx = new Map(commissions.map((c) => [c.transactionId, c]));
+  const commissionsByTx = new Map<string, CommissionEntry[]>();
+  for (const commission of commissions) {
+    const entries = commissionsByTx.get(commission.transactionId) ?? [];
+    entries.push(commission);
+    commissionsByTx.set(commission.transactionId, entries);
+  }
 
   for (const t of transactions) {
     if (t.voided) {
@@ -406,10 +411,10 @@ export function computeFinancials(
     if (t.status === 'Completed') totals.completedDealsCount += 1;
     else totals.activeDealsCount += 1;
 
-    const entry = commissionByTx.get(t.id);
-    if (entry) {
-      totals.totalCommissionAccrued += entry.amountPKR;
-      totals.totalCommissionPaid += Math.min(entry.paidPKR, entry.amountPKR);
+    for (const entry of commissionsByTx.get(t.id) ?? []) {
+      const isAccrued = ['Accrued', 'Partially Paid', 'Paid'].includes(entry.status);
+      if (isAccrued) totals.totalCommissionAccrued += Math.max(0, entry.amountPKR);
+      totals.totalCommissionPaid += Math.min(Math.max(0, entry.paidPKR), Math.max(0, entry.amountPKR));
       if (entry.status === 'Accrued' || entry.status === 'Partially Paid') {
         totals.totalCommissionPayable += Math.max(0, entry.amountPKR - entry.paidPKR);
       }
