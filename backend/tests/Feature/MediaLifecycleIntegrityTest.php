@@ -53,7 +53,7 @@ class MediaLifecycleIntegrityTest extends EnterpriseTestCase
             ->assertOk()
             ->assertJsonPath('media.0.id', $media->id)
             ->assertJsonPath('media.0.buyer_name', 'Buyer Private Name')
-            ->assertJsonPath('media.0.sold_price_pk', 100.0);
+            ->assertJsonPath('media.0.sold_price_pk', 100);
     }
 
     public function test_public_media_requires_an_active_agency_and_available_status(): void
