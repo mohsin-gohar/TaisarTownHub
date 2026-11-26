@@ -1,33 +1,25 @@
-# Security Audit
+# Security Audit — Integrated QA Candidate
 
-Branch: `fix/workspace-transaction-lifecycle-20261126`
-Date: 2026-11-26
+**Commit:** `1e43393fc728fb9ce11746869a331f5e852d4b58`  
+**CI:** https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45864429885  
+**Docker CI:** https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45864438598
 
-## Scope
-Risk-ranked OWASP-oriented review of tenant isolation, RBAC, authentication/MFA, file storage, input validation, security headers, CORS, rate limiting, secrets handling and CI. This is not a third-party penetration test or proof that every tracked file was exhaustively reviewed.
+## Verified controls
 
-## Findings addressed
-1. Dealer creation undefined commission-type variable: fixed.
-2. Dealer commission update rate validation inconsistent with create: fixed in follow-up commit `2ab933c`; Percentage is capped at 100 while Fixed/Custom may use whole-PKR values up to the configured validation bound. Regression test added in `668c83e`, refined in `8b66034`; validator syntax corrected in `50cf80e`. These follow-up commits are pending CI verification.
-3. Platform commission update incorrectly required agency context: nullable platform scope with permission checks.
-4. Workspace platform lookups filtered agency-owned rows as null-agency rows: fixed.
-5. Metadata-only workspace payment/commission edits were rejected: fixed.
-6. Workspace transaction write gates omitted cancellation permissions: fixed.
-7. Frontend transaction ledger calculation double-counted recorded advance: fixed with legacy/refund handling.
+- Backend permission checks and tenant-scoped agency context are enforced server-side; frontend visibility is not treated as an authorization boundary.
+- Workspace tenant-isolation and finance-isolation suites are included in the 547 passing MySQL tests.
+- Transaction lifecycle, cancellation/void rules, ledger/refund calculations and unique deal-number allocation have regression coverage.
+- MFA enforcement and token-scoped verification tests pass.
+- Private document vault encryption, key rotation, malware scanning, quarantine retention and share-link access controls have backend coverage.
+- Docker CI verifies fail-closed ClamAV behavior, shared private/quarantine storage across replicas, backup/restore and API-backed role journeys.
+- Public bundle guard passed: no private ERP data or demo credentials found in public chunks.
+- Production env examples contain placeholders rather than live secrets.
 
-## CI evidence
-Run #641 at `d4ba0e4` passed backend MySQL 8 (540), frontend (173), Chromium (46), Firefox/WebKit (14 combined), and OpenAPI validation. This predates the dealer commission validation follow-up and does not verify it.
+## Remaining security work
 
-## Tenant isolation and RBAC
-- Tenant-isolation regression matrix covers 13 agency-scoped workspace collections.
-- Finance isolation tests cover agency/platform boundaries.
-- Server-side authorization is enforced by backend permission checks; frontend visibility is not treated as a security boundary.
-- Platform cross-agency workflows require explicit platform permissions and agency context where the endpoint contract requires it.
+- Production ClamAV daemon, DNS/TLS, proxy allow-list and actual secret provisioning must be verified on the owner-controlled host.
+- Off-site backups and APP_KEY separation/restore must be rehearsed against production-like data.
+- Independent penetration testing, live dependency monitoring, incident-response and retention-policy approval remain outstanding.
+- A supplemental PR #9 workflow probe was 15/20 due test-fixture setup gaps (captcha, trial staff quota, dealer agency context, scan-clearance timing); it is not counted as a passed release gate.
 
-## File storage and secrets
-- Private document vault, scoped document access, MIME/extension/size checks and malware-scanner fail-closed behavior were reviewed.
-- Real ClamAV service scanning was not available in this environment; fake-scanner tests are not equivalent to a live daemon test.
-- Earlier repository grep reported no committed live secrets. This is not a substitute for GitHub secret scanning and rotation of any exposed credential.
-
-## Unresolved
-Authenticated role-journey browser tests, live ClamAV, deep security penetration testing, production secret provisioning, TLS, SMTP, DNS and production operational controls remain unverified.
+No production secrets were changed, no live data was accessed or modified, and no production deployment was performed.
