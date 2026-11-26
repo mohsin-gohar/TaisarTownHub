@@ -75,6 +75,7 @@ class DealerFilesController extends Controller
 
         // Serialize the count-and-create operation on the agency row so
         // concurrent app replicas cannot both consume the last dealer-file slot.
+        $agencyId = $this->agencyId($request);
         $result = DB::transaction(function () use ($agencyId, $dealerId, $validated): array {
             if ($agencyId !== null) {
                 $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
