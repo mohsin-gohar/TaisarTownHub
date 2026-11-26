@@ -278,4 +278,39 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
         ], $headers)->assertStatus(422);
     }
 
+    public function test_pending_placements_cannot_be_activated_twice_for_the_same_agency(): void
+    {
+        [$admin] = $this->platformAdmin();
+        $agency = $this->makeAgency('Single Active Placement Agency');
+        $service = app(AgencyPromotionService::class);
+
+        $first = $service->promote($agency, ['status' => 'pending'], $admin);
+        $second = $service->promote($agency, ['status' => 'pending'], $admin);
+
+        $service->update($first, ['status' => 'active'], $admin);
+
+        try {
+            $service->update($second, ['status' => 'active'], $admin);
+            $this->fail('A second active placement for the same agency must be rejected.');
+        } catch (\\DomainException $exception) {
+            $this->assertStringContainsString('already has a current featured placement', $exception->getMessage());
+        }
+
+        $this->assertSame(1, AgencyPromotion::query()->current()->where('agency_id', $agency->id)->count());
+    }
+
+    public function test_reorder_requires_the_complete_current_placement_set(): void
+    {
+        [$admin] = $this->platformAdmin();
+        $service = app(AgencyPromotionService::class);
+        $first = $this->makeAgency('Complete Reorder Agency One');
+        $second = $this->makeAgency('Complete Reorder Agency Two');
+
+        $one = $service->promote($first, [], $admin);
+        $service->promote($second, [], $admin);
+
+        $this->expectException(\\DomainException::class);
+        $service->reorder([$one->id], $admin);
+    }
+
 }
