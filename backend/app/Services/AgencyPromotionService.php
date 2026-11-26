@@ -94,6 +94,7 @@ class AgencyPromotionService
     {
         $now = now();
         $liveCount = AgencyPromotion::query()->live()->count();
+        $reservedCount = AgencyPromotion::query()->current()->count();
         $scheduled = AgencyPromotion::query()
             ->where('status', 'active')
             ->whereNotNull('starts_at')
@@ -110,7 +111,8 @@ class AgencyPromotionService
             'scheduled' => $scheduled,
             'expiring_7d' => $expiring,
             'max_slots' => $this->maxSlots(),
-            'available_slots' => max(0, $this->maxSlots() - $liveCount),
+            'reserved' => $reservedCount,
+            'available_slots' => max(0, $this->maxSlots() - $reservedCount),
             'free_launch' => true,
             'total_placements' => AgencyPromotion::query()->count(),
         ];
@@ -122,111 +124,123 @@ class AgencyPromotionService
     public function promote(Agency $agency, array $data, User $actor): AgencyPromotion
     {
         $this->assertEligible($agency);
+        $capacityLock = $this->acquireCapacityLock();
 
-        if (AgencyPromotion::query()->current()->where('agency_id', $agency->id)->exists()) {
-            throw new \DomainException('This agency already has a current featured placement. Edit or cancel it first.');
+        try {
+            return DB::transaction(function () use ($agency, $data, $actor) {
+                // Re-check inside the serialized transaction: two replicas
+                // must not create duplicate scheduled/live placements.
+                $this->assertEligible($agency);
+                if (AgencyPromotion::query()->current()->where('agency_id', $agency->id)->exists()) {
+                    throw new \DomainException('This agency already has a scheduled or current featured placement. Edit or cancel it first.');
+                }
+
+                $this->assertSlotAvailable();
+                $package = !empty($data['package_id'])
+                    ? PromotionPackage::where('is_active', true)->findOrFail($data['package_id'])
+                    : null;
+
+                $startsAt = !empty($data['starts_at'])
+                    ? Carbon::parse($data['starts_at'])
+                    : now();
+                $duration = (int) ($data['duration_days'] ?? $package?->duration_days ?? $this->defaultDurationDays());
+                $endsAt = !empty($data['ends_at'])
+                    ? Carbon::parse($data['ends_at'])
+                    : $startsAt->copy()->addDays(max(1, $duration));
+
+                if ($endsAt->lessThanOrEqualTo($startsAt)) {
+                    throw new \DomainException('The promotion end date must be after its start date.');
+                }
+
+                $promotion = AgencyPromotion::create([
+                    'agency_id' => $agency->id,
+                    'package_id' => $package?->id,
+                    'status' => $data['status'] ?? 'active',
+                    'position' => 0,
+                    'starts_at' => $startsAt,
+                    'ends_at' => $endsAt,
+                    'price' => 0,
+                    'currency' => 'PKR',
+                    'payment_status' => 'waived',
+                    'payment_method' => null,
+                    'payment_reference' => null,
+                    'notes' => $data['notes'] ?? null,
+                    'created_by' => $actor->id,
+                    'approved_by' => $actor->id,
+                ]);
+
+                $requestedPosition = isset($data['position']) ? (int) $data['position'] : null;
+                $this->reorderCurrent($promotion->id, $requestedPosition);
+                $promotion->refresh();
+
+                $this->notifyOwner(
+                    $agency,
+                    'Featured placement confirmed',
+                    "{$agency->name} is now scheduled in the homepage featured roster (position {$promotion->position})."
+                );
+
+                return $promotion->load(['agency:id,name,slug', 'package']);
+            });
+        } finally {
+            $this->releaseCapacityLock($capacityLock);
         }
-
-        $package = !empty($data['package_id'])
-            ? PromotionPackage::where('is_active', true)->findOrFail($data['package_id'])
-            : null;
-
-        return DB::transaction(function () use ($agency, $data, $actor, $package) {
-            $this->assertSlotAvailable();
-
-            $startsAt = !empty($data['starts_at'])
-                ? Carbon::parse($data['starts_at'])
-                : now();
-            $duration = (int) ($data['duration_days'] ?? $package?->duration_days ?? $this->defaultDurationDays());
-            $endsAt = !empty($data['ends_at'])
-                ? Carbon::parse($data['ends_at'])
-                : $startsAt->copy()->addDays(max(1, $duration));
-
-            if ($endsAt->lessThanOrEqualTo($startsAt)) {
-                throw new \DomainException('The promotion end date must be after its start date.');
-            }
-
-            $price = 0; // Free launch: placement is never billed or sold.
-            $paymentStatus = 'waived';
-            $requestedPosition = isset($data['position']) ? (int) $data['position'] : null;
-
-            $promotion = AgencyPromotion::create([
-                'agency_id' => $agency->id,
-                'package_id' => $package?->id,
-                'status' => $data['status'] ?? 'active',
-                // Renumbered immediately below; this is only a starting value.
-                'position' => 0,
-                'starts_at' => $startsAt,
-                'ends_at' => $endsAt,
-                'price' => $price,
-                'currency' => 'PKR',
-                'payment_status' => $paymentStatus,
-                'payment_method' => null,
-                'payment_reference' => null,
-                'notes' => $data['notes'] ?? null,
-                'created_by' => $actor->id,
-                'approved_by' => $actor->id,
-            ]);
-
-            $this->reorderCurrent($promotion->id, $requestedPosition);
-            $promotion->refresh();
-
-            $this->notifyOwner(
-                $agency,
-                'Featured placement confirmed',
-                "{$agency->name} is now scheduled in the homepage featured roster (position {$promotion->position})."
-            );
-
-            return $promotion->load(['agency:id,name,slug', 'package']);
-        });
     }
 
     public function update(AgencyPromotion $promotion, array $data, User $actor): AgencyPromotion
     {
-        return DB::transaction(function () use ($promotion, $data, $actor) {
-            $status = $data['status'] ?? $promotion->status;
+        $capacityLock = $this->acquireCapacityLock();
 
-            if (in_array($status, ['active', 'pending'], true)) {
-                $this->assertEligible($promotion->agency);
-                $this->assertSlotAvailable($promotion->id);
-            }
+        try {
+            return DB::transaction(function () use ($promotion, $data, $actor) {
+                $promotion = AgencyPromotion::query()
+                    ->whereKey($promotion->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $status = $data['status'] ?? $promotion->status;
 
-            $requestedPosition = array_key_exists('position', $data) && $data['position'] !== null
-                ? (int) $data['position']
-                : null;
+                if (in_array($status, ['active', 'pending'], true)) {
+                    $this->assertEligible($promotion->agency);
+                    $this->assertSlotAvailable($promotion->id);
+                }
 
-            if (array_key_exists('starts_at', $data)) {
-                $promotion->starts_at = $data['starts_at'] ? Carbon::parse($data['starts_at']) : null;
-            }
-            if (array_key_exists('ends_at', $data)) {
-                $promotion->ends_at = $data['ends_at'] ? Carbon::parse($data['ends_at']) : null;
-            }
-            if ($promotion->starts_at && $promotion->ends_at && $promotion->ends_at->lessThanOrEqualTo($promotion->starts_at)) {
-                throw new \DomainException('The promotion end date must be after its start date.');
-            }
+                $requestedPosition = array_key_exists('position', $data) && $data['position'] !== null
+                    ? (int) $data['position']
+                    : null;
 
-            // Free launch: payment metadata is retained in the schema for a
-            // future billing release, but it is not writable now and the public
-            // roster never labels a placement as Sponsored.
-            $promotion->price = 0;
-            $promotion->currency = 'PKR';
-            $promotion->payment_status = 'waived';
-            $promotion->payment_method = null;
-            $promotion->payment_reference = null;
-            if (array_key_exists('notes', $data)) {
-                $promotion->notes = $data['notes'];
-            }
+                if (array_key_exists('starts_at', $data)) {
+                    $promotion->starts_at = $data['starts_at'] ? Carbon::parse($data['starts_at']) : null;
+                }
+                if (array_key_exists('ends_at', $data)) {
+                    $promotion->ends_at = $data['ends_at'] ? Carbon::parse($data['ends_at']) : null;
+                }
+                if ($promotion->starts_at && $promotion->ends_at && $promotion->ends_at->lessThanOrEqualTo($promotion->starts_at)) {
+                    throw new \DomainException('The promotion end date must be after its start date.');
+                }
 
-            $promotion->status = $status;
-            $promotion->approved_by = $actor->id;
-            $promotion->cancelled_at = $status === 'cancelled' ? now() : null;
-            $promotion->save();
+                // Free launch: payment metadata is retained for a future billing
+                // release, but it is not writable now.
+                $promotion->price = 0;
+                $promotion->currency = 'PKR';
+                $promotion->payment_status = 'waived';
+                $promotion->payment_method = null;
+                $promotion->payment_reference = null;
+                if (array_key_exists('notes', $data)) {
+                    $promotion->notes = $data['notes'];
+                }
 
-            $this->reorderCurrent($promotion->id, $requestedPosition);
-            $promotion->refresh();
+                $promotion->status = $status;
+                $promotion->approved_by = $actor->id;
+                $promotion->cancelled_at = $status === 'cancelled' ? now() : null;
+                $promotion->save();
 
-            return $promotion->load(['agency:id,name,slug', 'package']);
-        });
+                $this->reorderCurrent($promotion->id, $requestedPosition);
+                $promotion->refresh();
+
+                return $promotion->load(['agency:id,name,slug', 'package']);
+            });
+        } finally {
+            $this->releaseCapacityLock($capacityLock);
+        }
     }
 
     public function cancel(AgencyPromotion $promotion, User $actor, ?string $reason = null): AgencyPromotion
@@ -248,16 +262,21 @@ class AgencyPromotionService
             throw new \DomainException('The requested order exceeds the configured featured-slot limit.');
         }
 
-        DB::transaction(function () use ($ids) {
-            $rows = AgencyPromotion::query()->current()->whereIn('id', $ids)->get()->keyBy('id');
-            if ($rows->count() !== count($ids)) {
-                throw new \DomainException('One or more placements are no longer active. Refresh and try again.');
-            }
+        $capacityLock = $this->acquireCapacityLock();
+        try {
+            DB::transaction(function () use ($ids) {
+                $rows = AgencyPromotion::query()->current()->whereIn('id', $ids)->lockForUpdate()->get()->keyBy('id');
+                if ($rows->count() !== count($ids)) {
+                    throw new \DomainException('One or more scheduled/current placements are no longer active. Refresh and try again.');
+                }
 
-            foreach ($ids as $index => $id) {
-                AgencyPromotion::whereKey($id)->update(['position' => $index + 1]);
-            }
-        });
+                foreach ($ids as $index => $id) {
+                    AgencyPromotion::whereKey($id)->update(['position' => $index + 1]);
+                }
+            });
+        } finally {
+            $this->releaseCapacityLock($capacityLock);
+        }
 
         Log::info('Featured placement order updated', ['ids' => $ids, 'by' => $actor->id]);
     }
@@ -268,33 +287,76 @@ class AgencyPromotionService
      */
     public function expireDue(): int
     {
-        $due = AgencyPromotion::query()->expiredDue()->get();
-        if ($due->isEmpty()) {
-            return 0;
-        }
+        $capacityLock = $this->acquireCapacityLock();
 
-        DB::transaction(function () use ($due) {
-            foreach ($due as $promotion) {
-                $promotion->status = 'expired';
-                $promotion->save();
-
-                if ($promotion->agency) {
-                    $this->notifyOwner(
-                        $promotion->agency,
-                        'Featured placement ended',
-                        "The homepage featured placement for {$promotion->agency->name} has ended. Its listings and files remain available."
-                    );
+        try {
+            return DB::transaction(function () {
+                $due = AgencyPromotion::query()->expiredDue()->lockForUpdate()->get();
+                if ($due->isEmpty()) {
+                    return 0;
                 }
-            }
-        });
 
-        return $due->count();
+                foreach ($due as $promotion) {
+                    $promotion->status = 'expired';
+                    $promotion->save();
+
+                    if ($promotion->agency) {
+                        $this->notifyOwner(
+                            $promotion->agency,
+                            'Featured placement ended',
+                            "The homepage featured placement for {$promotion->agency->name} has ended. Its listings and files remain available."
+                        );
+                    }
+                }
+
+                return $due->count();
+            });
+        } finally {
+            $this->releaseCapacityLock($capacityLock);
+        }
     }
 
     public function assertEligible(Agency $agency): void
     {
         if ($agency->status !== 'active' || $agency->verification_status !== 'verified') {
             throw new \DomainException('Only approved, verified and active agencies can receive a featured placement.');
+        }
+    }
+
+    /**
+     * Serialize placement capacity decisions across all MySQL app replicas.
+     * Named locks are connection-scoped, so release happens only after the
+     * surrounding DB transaction has committed or rolled back.
+     */
+    private function acquireCapacityLock(): bool
+    {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            return false;
+        }
+
+        $lock = DB::selectOne('SELECT GET_LOCK(?, 15) AS acquired', ['tth:agency-promotions:capacity']);
+        if ((int) ($lock->acquired ?? 0) !== 1) {
+            throw new \DomainException('Featured placement capacity is busy. Please retry in a moment.');
+        }
+
+        return true;
+    }
+
+    private function releaseCapacityLock(bool $acquired): void
+    {
+        if (! $acquired) {
+            return;
+        }
+
+        try {
+            DB::selectOne('SELECT RELEASE_LOCK(?) AS released', ['tth:agency-promotions:capacity']);
+        } catch (\Throwable $exception) {
+            // Closing a lost MySQL connection releases its named locks. Keep
+            // the committed result, but make an unexpected release failure
+            // visible to operators.
+            Log::critical('Could not explicitly release featured placement capacity lock', [
+                'error' => $exception->getMessage(),
+            ]);
         }
     }
 
