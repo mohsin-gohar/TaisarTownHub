@@ -7,6 +7,7 @@ use App\Models\Document;
 use App\Models\DocumentQuarantine;
 use App\Models\DocumentVersion;
 use App\Models\MediaFile;
+use App\Models\SystemSetting;
 use App\Models\SubscriptionPlan;
 use App\Services\FileVaultCrypto;
 use App\Services\MalwareScanner;
@@ -729,4 +730,91 @@ class FileVaultSecurityTest extends EnterpriseTestCase
 
         Storage::disk('documents')->assertExists($row->disk_path);
     }
+    public function test_sensitive_categories_remain_protected_when_admin_setting_is_empty(): void
+    {
+        [$owner, $agency] = $this->agencyUser(['documents.upload', 'documents.update'], 'document_editor');
+        $headers = $this->authHeaders($this->tokenFor($owner));
+        SystemSetting::set('document.sensitive_categories', []);
+
+        $documentId = $this->upload($owner, ['category' => 'other'])
+            ->assertStatus(201)
+            ->json('document.id');
+
+        $this->patchJson("/api/agency/documents/{$documentId}", [
+            'category' => 'cnic',
+        ], $headers)->assertStatus(403);
+
+        $this->assertDatabaseHas('documents', [
+            'id' => $documentId,
+            'agency_id' => $agency->id,
+            'is_sensitive' => false,
+            'category' => 'other',
+        ]);
+    }
+
+    public function test_sensitive_upload_is_authorized_before_malware_scan_or_quarantine_storage(): void
+    {
+        [$clerk] = $this->agencyUser(['documents.upload'], 'document_clerk');
+        $this->bindVerdict(MalwareScanResult::skipped('clamav', 'clamav_not_available'));
+
+        $this->upload($clerk, ['category' => 'cnic'])->assertStatus(403);
+
+        $this->assertDatabaseCount('documents', 0);
+        $this->assertDatabaseCount('document_quarantines', 0);
+        $this->assertSame([], Storage::disk('documents')->allFiles());
+        $this->assertSame([], Storage::disk('quarantine')->allFiles());
+    }
+
+    public function test_infected_rescan_moves_bytes_and_current_version_metadata_together(): void
+    {
+        [$user] = $this->uploader();
+        $headers = $this->authHeaders($this->tokenFor($user));
+        config(['malware.fail_closed' => false]);
+
+        $this->bindVerdict(MalwareScanResult::skipped('clamav', 'clamav_not_available'));
+        $documentId = $this->upload($user)
+            ->assertStatus(201)
+            ->assertJsonPath('document.status', 'quarantined')
+            ->json('document.id');
+
+        $document = Document::findOrFail($documentId);
+        $sourcePath = $document->disk_path;
+        Storage::disk('documents')->assertExists($sourcePath);
+
+        DocumentVersion::create([
+            'document_id' => $document->id,
+            'version' => 1,
+            'stored_name' => $document->stored_name,
+            'disk_path' => $sourcePath,
+            'storage_disk' => 'documents',
+            'mime_type' => $document->mime_type,
+            'size_bytes' => $document->size_bytes,
+            'checksum' => $document->checksum,
+            'uploaded_by' => $user->id,
+            'note' => 'Initial version',
+        ]);
+
+        $this->bindVerdict(MalwareScanResult::infected('clamav', ['Eicar-Test-Signature FOUND']));
+        $this->post("/api/agency/documents/{$documentId}/rescan", [], $headers)
+            ->assertStatus(200)
+            ->assertJsonPath('document.status', 'quarantined')
+            ->assertJsonPath('document.scan_status', 'infected');
+
+        $updated = Document::findOrFail($documentId);
+        $this->assertSame('quarantine', $updated->storage_disk);
+        $this->assertNotSame($sourcePath, $updated->disk_path);
+        Storage::disk('documents')->assertMissing($sourcePath);
+        Storage::disk('quarantine')->assertExists($updated->disk_path);
+
+        $version = DocumentVersion::where('document_id', $documentId)->where('version', 1)->firstOrFail();
+        $this->assertSame($updated->disk_path, $version->disk_path);
+        $this->assertSame('quarantine', $version->storage_disk);
+
+        $this->assertDatabaseHas('document_quarantines', [
+            'document_id' => $documentId,
+            'disk_path' => $updated->disk_path,
+            'reason' => 'infected',
+        ]);
+    }
+
 }
