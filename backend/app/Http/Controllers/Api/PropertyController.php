@@ -150,7 +150,7 @@ class PropertyController extends Controller
             if ($isPublicScope) {
                 $page->through(fn (Property $p) => $this->publicPropertyPayload($p));
             } elseif ($request->boolean('with_meta')) {
-                $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
+                $canSeeSensitive = $this->canViewSensitivePropertyData($request);
                 $page->through(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive));
             }
 
@@ -171,7 +171,7 @@ class PropertyController extends Controller
         if ($isPublicScope) {
             $results->transform(fn (Property $p) => $this->publicPropertyPayload($p));
         } elseif ($request->boolean('with_meta')) {
-            $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
+            $canSeeSensitive = $this->canViewSensitivePropertyData($request);
             $results->transform(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive));
         }
 
@@ -219,13 +219,12 @@ class PropertyController extends Controller
             $this->recordView($property, $user);
         }
 
-        if ($isOwnerAgency || $isModerator) {
-            // Owner/moderator may see confidential deal fields. No server-side
-            // storage path exists on a Property (and none is ever serialized),
-            // so only the confidential business columns are un-hidden here.
+        if ($this->canViewSensitivePropertyData($request)) {
             $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes']);
-        } elseif ($user && $this->can($request, 'view_sensitive_cnic')) {
-            $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
+        } elseif ($isOwnerAgency || $isModerator) {
+            // Internal agency/moderation views may see staged edits, but
+            // confidential deal fields require the explicit sensitive-data grant.
+            $property->makeVisible(['pending_changes']);
         } else {
             return response()->json($this->publicPropertyPayload($property));
         }
@@ -281,6 +280,8 @@ class PropertyController extends Controller
             'expires_at' => 'nullable|date',
             'submit' => 'nullable|boolean',
         ]);
+
+        $this->assertSensitivePropertyFieldsPermission($request, $data);
 
         if (!empty($data['assignedDealerId'])) {
             $this->assertDealerInAgency($data['assignedDealerId'], $agencyId);
@@ -380,6 +381,7 @@ public function update(Request $request, $id)
             'expires_at' => 'nullable|date',
         ]);
 
+        $this->assertSensitivePropertyFieldsPermission($request, $data);
         unset($data['id'], $data['agency_id'], $data['created_by']);
 
         // Listing expiry is a subscription/moderation control, never an agency-editable field.
@@ -462,7 +464,9 @@ public function update(Request $request, $id)
             ],
         ]);
 
-        $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes']);
+        if ($this->canViewSensitivePropertyData($request)) {
+            $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
+        }
 
         return response()->json($property);
     }
@@ -750,7 +754,9 @@ public function setMarketplaceVisibility(Request $request, $id)
             'metadata' => ['visibility' => $target, 'approval_status' => $property->approval_status],
         ]);
 
-        $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes']);
+        if ($this->canViewSensitivePropertyData($request)) {
+            $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
+        }
 
         return response()->json([
             'success' => true,
@@ -1050,6 +1056,21 @@ public function feature(Request $request, $id)
                 ->update(['agency_id' => $property->agency_id, 'deleted_at' => null]);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('Legacy property mirror failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    private function canViewSensitivePropertyData(Request $request): bool
+    {
+        // Accept the canonical permission and the legacy alias during migration.
+        return $this->can($request, 'documents.view_sensitive')
+            || $this->can($request, 'view_sensitive_cnic');
+    }
+
+    private function assertSensitivePropertyFieldsPermission(Request $request, array $data): void
+    {
+        $sensitive = ['purchasePricePKR', 'sellingPricePKR', 'internalNotes'];
+        if (array_intersect($sensitive, array_keys($data)) && !$this->canViewSensitivePropertyData($request)) {
+            abort(403, 'Permission denied for confidential property fields.');
         }
     }
 
