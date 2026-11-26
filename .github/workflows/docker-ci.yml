@@ -32,6 +32,7 @@ env:
   # base file BEFORE merging docker-compose.ci.yml, so the values must exist in
   # the environment; setting them only at service level in the override is not
   # enough and aborts every `docker compose` command in this workflow.
+  APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
   DB_ROOT_PASSWORD: test-root-password
   DB_PASSWORD: test-password
   REDIS_PASSWORD: test-redis-password
