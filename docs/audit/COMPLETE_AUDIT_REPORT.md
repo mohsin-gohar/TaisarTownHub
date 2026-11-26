@@ -8,7 +8,7 @@ Date: 2026-11-26
 - PR #22 is open and Draft; base is `audit/full-repository-hardening-20261126`, not `main`.
 - Main baseline observed: `f26b070e2f3ccae60ac9e033dc41065a65eddfa8`; main was not changed or merged.
 - Latest fully verified GitHub Actions run before the follow-up dealer validation fix: run #641, commit `d4ba0e4a2e82620a8cf95dc7c4b0b192f11b8e05`, all five jobs successful.
-- Follow-up code fix: `2ab933cd8fe228c3c44b5f36ef365fc02c862b5b`; regression test commit: `668c83edf7c141d332daa908e751e5f39734dfaf`. These later commits have not yet been covered by a CI run.
+- Follow-up code fix: `2ab933cd8fe228c3c44b5f36ef365fc02c862b5b`; validator syntax correction: `50cf80e91fe0c8b30cfd6079402aa3dfb2b3bc83`; regression test commits: `668c83edf7c141d332daa908e751e5f39734dfaf` and `8b660344ca71012f6379f4ffd49ed490694eea84`. These later commits have not yet been covered by a CI run.
 
 ## Findings fixed
 1. Dealer creation referenced an undefined effective commission type; defined the type before validation.
