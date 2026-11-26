@@ -13,6 +13,8 @@ Taiser Town Scheme 45, Karachi: a **sale-only public property marketplace** plus
 ```bash
 # backend (API on :8080)
 cd backend && composer install && cp .env.example .env
+# Configure a local database user and local CORS origins in backend/.env.
+# Example: DB_USERNAME=root and CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 php artisan key:generate && php artisan migrate --seed
 php artisan serve --host=127.0.0.1 --port=8080
 
