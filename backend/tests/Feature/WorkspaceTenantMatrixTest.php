@@ -200,6 +200,28 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         }
     }
 
+    public function test_property_viewer_without_sensitive_permission_receives_redacted_workspace_rows(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.view']);
+        BusinessRecord::put('properties', 'redacted-property', [
+            'id' => 'redacted-property',
+            'title' => 'Public-facing title',
+            'purchasePricePKR' => 4000000,
+            'sellingPricePKR' => 5000000,
+            'internalNotes' => 'Confidential owner note',
+        ], $agency->id);
+
+        $rows = $this->getJson('/api/workspace', $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()
+            ->json('properties');
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('Public-facing title', $rows[0]['title']);
+        $this->assertArrayNotHasKey('purchasePricePKR', $rows[0]);
+        $this->assertArrayNotHasKey('sellingPricePKR', $rows[0]);
+        $this->assertArrayNotHasKey('internalNotes', $rows[0]);
+    }
+
     public function test_dealer_self_service_reads_are_scoped_to_the_authenticated_dealer(): void
     {
         [$user, $agency] = $this->agencyUser(['view_my_deals', 'view_my_commission'], 'dealer');

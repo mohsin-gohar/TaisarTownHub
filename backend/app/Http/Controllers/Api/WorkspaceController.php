@@ -769,6 +769,18 @@ class WorkspaceController extends Controller
             $newPayload = $row;
             $oldPayload = $existing?->payload ?? null;
 
+            if ($collection === 'properties' && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
+                $newPayload = $this->preserveSensitivePropertyFields($oldPayload ?? [], $newPayload);
+                $row = $newPayload;
+            }
+
+            if ($collection === 'properties'
+                && $this->sensitivePropertyFieldsChanged($oldPayload ?? [], $newPayload)
+                && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
+                $blocked++;
+                continue;
+            }
+
             if ($scoped && $agencyId !== null
                 && ! $this->agencyReferencesValid($collection, $newPayload, $oldPayload ?? [], $agencyId)) {
                 $blocked++;
@@ -1089,6 +1101,13 @@ class WorkspaceController extends Controller
         $rows = $query->orderBy('record_id')->limit(self::MAX_ROWS_PER_COLLECTION)
             ->get()->map(fn ($record) => $record->payload ?? [])->all();
 
+        if ($collection === 'properties' && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
+            foreach ($rows as &$row) {
+                unset($row['purchasePricePKR'], $row['sellingPricePKR'], $row['internalNotes']);
+            }
+            unset($row);
+        }
+
         $hasBroadFinanceRead = $this->perm($request, $user, 'finance.view', $agencyId)
             || $this->perm($request, $user, 'view_transactions', $agencyId);
         $hasBroadCommissionRead = $this->perm($request, $user, 'finance.view', $agencyId)
@@ -1137,6 +1156,38 @@ class WorkspaceController extends Controller
         return $rows;
     }
 
+
+    private function canViewSensitivePropertyData(Request $request, $user, ?string $agencyId): bool
+    {
+        return $this->perm($request, $user, 'documents.view_sensitive', $agencyId)
+            || $this->perm($request, $user, 'view_sensitive_cnic', $agencyId);
+    }
+
+    private function preserveSensitivePropertyFields(array $oldPayload, array $newPayload): array
+    {
+        // Workspace reads redact these values. When a normal editor saves the
+        // remaining property fields, preserve the stored confidential values
+        // rather than silently erasing them from the JSON payload.
+        foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes'] as $field) {
+            if (!array_key_exists($field, $newPayload) && array_key_exists($field, $oldPayload)) {
+                $newPayload[$field] = $oldPayload[$field];
+            }
+        }
+
+        return $newPayload;
+    }
+
+    private function sensitivePropertyFieldsChanged(array $oldPayload, array $newPayload): bool
+    {
+        foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes'] as $field) {
+            if (array_key_exists($field, $newPayload)
+                && ($oldPayload[$field] ?? null) !== $newPayload[$field]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /**
      * Permission check mirroring AuthorizesApi: agency-scoped grants when the
