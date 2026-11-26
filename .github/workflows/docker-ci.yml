@@ -268,6 +268,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up PHP CLI for Docker-volume backup helper
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
       # Images built in the other jobs live on different runners, so they are
       # not available here. Rebuild the same two images with the shared GHA
       # cache and force Compose to reuse them (`--no-build`), instead of letting
