@@ -282,4 +282,30 @@ class PaymentGatewayTest extends EnterpriseTestCase
         $this->assertSame('pending', $invoice->fresh()->status);
         $this->assertDatabaseMissing('agency_subscriptions', ['agency_id' => $agency->id]);
     }
+
+    public function test_subscription_checkout_rejects_untrusted_return_origins(): void
+    {
+        config([
+            'app.url' => 'https://api.taisartownhub.com',
+            'cors.allowed_origins' => ['https://taisartownhub.com', 'http://localhost:3000'],
+        ]);
+
+        $plan = $this->makePlan();
+        [$owner, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+
+        $this->postJson('/api/payments/subscription/checkout', [
+            'plan_id' => $plan->id,
+            'success_url' => 'https://attacker.example/fake-success',
+            'cancel_url' => 'https://taisartownhub.com/billing/cancel',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('success_url');
+
+        $this->assertDatabaseMissing('subscription_invoices', [
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+        ]);
+    }
+
+
 }
