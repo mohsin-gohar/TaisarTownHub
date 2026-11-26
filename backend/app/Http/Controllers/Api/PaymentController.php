@@ -100,7 +100,7 @@ class PaymentController extends Controller
                     ],
                     'quantity' => 1,
                 ]],
-                'success_url' => $request->success_url . '?session_id={CHECKOUT_SESSION_ID}',
+                'success_url' => $this->appendCheckoutSessionId((string) $request->success_url),
                 'cancel_url' => $request->cancel_url,
                 'client_reference_id' => $agencyId,
                 'metadata' => [
@@ -454,6 +454,21 @@ class PaymentController extends Controller
      * user-supplied hosts that could turn Stripe Checkout into a phishing
      * redirect. Compare origins, not URL prefixes.
      */
+    private function appendCheckoutSessionId(string $url): string
+    {
+        // Preserve existing query parameters and keep the fragment last.
+        $fragment = '';
+        $fragmentPosition = strpos($url, '#');
+        if ($fragmentPosition !== false) {
+            $fragment = substr($url, $fragmentPosition);
+            $url = substr($url, 0, $fragmentPosition);
+        }
+
+        $separator = str_contains($url, '?') ? '&' : '?';
+
+        return $url . $separator . 'session_id={CHECKOUT_SESSION_ID}' . $fragment;
+    }
+
     private function isTrustedCheckoutReturnUrl(string $url): bool
     {
         $parts = parse_url($url);
