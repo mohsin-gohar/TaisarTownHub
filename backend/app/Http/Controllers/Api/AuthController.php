@@ -66,24 +66,19 @@ class AuthController extends Controller
 
         // Locked account check
         if ($user->locked_until !== null && $user->locked_until->isFuture()) {
-            $minutes = (int) ceil($user->locked_until->diffInMinutes(now()));
             $this->recordLoginAttempt($request, $user, $user->email, false, false, 'account_locked');
 
             throw ValidationException::withMessages([
-                'email' => ["Account temporarily locked. Try again in {$minutes} minute(s)."],
+                'email' => ['The provided credentials are incorrect.'],
             ]);
         }
 
         if (($blocked = $user->authenticationBlockedReason()) !== null) {
             $this->recordLoginAttempt($request, $user, $user->email, false, false, 'account_' . $blocked);
 
-            $message = $blocked === 'suspended'
-                ? 'This account has been suspended. Contact support.'
-                : ($blocked === 'rejected'
-                    ? 'This account has been rejected. Contact support.'
-                    : 'This account is inactive. Contact support.');
-
-            throw ValidationException::withMessages(['email' => [$message]]);
+            throw ValidationException::withMessages([
+                'email' => ['The provided credentials are incorrect.'],
+            ]);
         }
 
         if (!Hash::check($request->password, $user->password)) {
@@ -297,38 +292,53 @@ class AuthController extends Controller
             'email' => 'required|email',
             'token' => 'required|string|min:20|max:120',
         ]);
+        $email = mb_strtolower(trim((string) $data['email']));
 
-        $row = EmailVerificationToken::where('email', strtolower($data['email']))->first();
+        // Lock the one-time token row before validating/consuming it. Without
+        // this lock, two simultaneous requests could both verify the same link.
+        $result = DB::transaction(function () use ($email, $data): array {
+            $row = EmailVerificationToken::where('email', $email)
+                ->lockForUpdate()
+                ->first();
 
-        if (!$row || !hash_equals($row->token_hash, hash('sha256', $data['token']))) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This verification link is invalid.',
-            ], 400);
-        }
+            if (!$row || !hash_equals((string) $row->token_hash, hash('sha256', $data['token']))) {
+                return ['error' => ['status' => 400, 'message' => 'This verification link is invalid.']];
+            }
 
-        if ($row->created_at !== null && $row->created_at->lt(now()->subMinutes(60))) {
-            $row->delete();
+            if ($row->created_at !== null && $row->created_at->lt(now()->subMinutes(60))) {
+                $row->delete();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'This verification link has expired. Request a new one after signing in.',
-            ], 400);
-        }
+                return ['error' => ['status' => 400, 'message' => 'This verification link has expired. Request a new one after signing in.']];
+            }
 
-        $user = User::where('email', strtolower($data['email']))->first();
-        if (!$user) {
-            return response()->json(['success' => false, 'message' => 'Account not found.'], 404);
-        }
+            $user = User::whereRaw('LOWER(email) = ?', [$email])
+                ->lockForUpdate()
+                ->first();
 
-        $alreadyVerified = $user->email_verified_at !== null;
+            if (!$user) {
+                return ['error' => ['status' => 404, 'message' => 'Account not found.']];
+            }
 
-        DB::transaction(function () use ($user, $row, $alreadyVerified): void {
+            $alreadyVerified = $user->email_verified_at !== null;
             if (!$alreadyVerified) {
                 $user->markEmailVerified();
             }
+
             $row->delete();
-        });
+
+            return ['user' => $user->fresh(), 'already_verified' => $alreadyVerified];
+        }, 3);
+
+        if (isset($result['error'])) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['error']['message'],
+            ], $result['error']['status']);
+        }
+
+        /** @var User $user */
+        $user = $result['user'];
+        $alreadyVerified = (bool) $result['already_verified'];
 
         if (!$alreadyVerified) {
             $this->writeAudit($request, 'auth.email_verified', (string) $user->id, 'Email address verified.', [
@@ -551,76 +561,95 @@ class AuthController extends Controller
         ]);
 
         $key = $this->mfaChallengeKey($data['challenge']);
-        $payload = Cache::get($key);
+        $lockKey = 'mfa_challenge_verify_lock:' . hash('sha256', $key);
 
-        if (!is_array($payload) || !isset($payload['user_id'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This verification session expired. Please sign in again.',
-            ], 401);
-        }
+        try {
+            return Cache::lock($lockKey, 10)->block(5, function () use ($request, $data, $key) {
+                $payload = Cache::get($key);
 
-        $user = User::find($payload['user_id']);
-        if (!$user || !$user->hasMfaEnabled()) {
-            Cache::forget($key);
+                if (!is_array($payload) || !isset($payload['user_id'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This verification session expired. Please sign in again.',
+                    ], 401);
+                }
 
-            return response()->json([
-                'success' => false,
-                'message' => 'This verification session is no longer valid.',
-            ], 401);
-        }
+                $user = User::find($payload['user_id']);
+                $challengePasswordHash = $payload['password_hash'] ?? null;
 
-        $verified = $this->mfa->verify((string) $user->mfa_secret, $data['code']);
-        $usedRecovery = false;
+                if (
+                    !$user
+                    || !$user->hasMfaEnabled()
+                    || !is_string($challengePasswordHash)
+                    || !hash_equals($challengePasswordHash, (string) $user->password)
+                    || $user->authenticationBlockedReason() !== null
+                ) {
+                    Cache::forget($key);
 
-        if (!$verified) {
-            $usedRecovery = $this->mfa->consumeRecoveryCode($user, $data['code']);
-        }
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This verification session is no longer valid. Please sign in again.',
+                    ], 401);
+                }
 
-        if (!$verified && !$usedRecovery) {
-            $attempts = (int) ($payload['attempts'] ?? 0) + 1;
-            if ($attempts >= self::MFA_MAX_ATTEMPTS) {
+                $verified = $this->mfa->verify((string) $user->mfa_secret, $data['code']);
+                $usedRecovery = false;
+
+                if (!$verified) {
+                    $usedRecovery = $this->mfa->consumeRecoveryCode($user, $data['code']);
+                }
+
+                if (!$verified && !$usedRecovery) {
+                    $attempts = (int) ($payload['attempts'] ?? 0) + 1;
+                    if ($attempts >= self::MFA_MAX_ATTEMPTS) {
+                        Cache::forget($key);
+                    } else {
+                        $payload['attempts'] = $attempts;
+                        Cache::put($key, $payload, now()->addSeconds(self::MFA_CHALLENGE_TTL));
+                    }
+
+                    $this->recordLoginAttempt($request, $user, $user->email, false, false, 'invalid_mfa_code');
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'That verification code is not valid.',
+                    ], 422);
+                }
+
+                // The challenge is single-use and locked for the entire
+                // verification operation, so concurrent replay cannot mint
+                // a second access token.
                 Cache::forget($key);
-            } else {
-                $payload['attempts'] = $attempts;
-                Cache::put($key, $payload, now()->addSeconds(self::MFA_CHALLENGE_TTL));
-            }
 
-            $this->recordLoginAttempt($request, $user, $user->email, false, false, 'invalid_mfa_code');
+                if ($usedRecovery) {
+                    MfaVerification::forgetAll((int) $user->id);
+                }
 
+                $token = $user->createToken('auth-token');
+                MfaVerification::stamp((int) $user->id, (int) $token->accessToken->id);
+                $plainTextToken = $token->plainTextToken;
+
+                $this->recordLoginAttempt($request, $user, $user->email, true, true, $usedRecovery ? 'recovery_code' : 'totp');
+
+                $this->writeAudit($request, 'auth.mfa_verified', (string) $user->id, 'Two-factor sign-in completed.', [
+                    'entity_type' => 'user',
+                    'entity_id' => (string) $user->id,
+                    'metadata' => ['method' => $usedRecovery ? 'recovery_code' : 'totp'],
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'token' => $plainTextToken,
+                    'mfa_used' => true,
+                    'user' => $this->userPayload($user, $request->header('X-Agency-Id')),
+                ]);
+            });
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $exception) {
             return response()->json([
                 'success' => false,
-                'message' => 'That verification code is not valid.',
-            ], 422);
+                'message' => 'Another verification attempt is already processing. Please retry.',
+            ], 409);
         }
-
-        // The challenge is single-use: it is destroyed as soon as it succeeds.
-        Cache::forget($key);
-
-        // A recovery code is a "lost device" signal: revoke every other
-        // verified session before issuing this one.
-        if ($usedRecovery) {
-            MfaVerification::forgetAll((int) $user->id);
-        }
-
-        // Create the token first, then stamp verification for THAT token only.
-        $token = $user->createToken('auth-token');
-        MfaVerification::stamp((int) $user->id, (int) $token->accessToken->id);
-        $token = $token->plainTextToken;
-        $this->recordLoginAttempt($request, $user, $user->email, true, true, $usedRecovery ? 'recovery_code' : 'totp');
-
-        $this->writeAudit($request, 'auth.mfa_verified', (string) $user->id, 'Two-factor sign-in completed.', [
-            'entity_type' => 'user',
-            'entity_id' => (string) $user->id,
-            'metadata' => ['method' => $usedRecovery ? 'recovery_code' : 'totp'],
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'token' => $token,
-            'mfa_used' => true,
-            'user' => $this->userPayload($user, $request->header('X-Agency-Id')),
-        ]);
     }
 
     /**
@@ -666,6 +695,7 @@ class AuthController extends Controller
 
         Cache::put($this->mfaChallengeKey($challenge), [
             'user_id' => $user->id,
+            'password_hash' => $user->password,
             'attempts' => 0,
         ], now()->addSeconds(self::MFA_CHALLENGE_TTL));
 
