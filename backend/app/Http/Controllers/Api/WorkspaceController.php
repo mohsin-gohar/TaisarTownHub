@@ -771,11 +771,15 @@ class WorkspaceController extends Controller
             $newPayload = $row;
             $oldPayload = $existing?->payload ?? null;
 
-            if ($collection === 'transactions' && $oldPayload !== null) {
-                foreach (['voidedAt', 'voidedBy', 'commissionStatus', 'cancelledAt'] as $serverField) {
-                    if (! array_key_exists($serverField, $newPayload) && array_key_exists($serverField, $oldPayload)) {
-                        $newPayload[$serverField] = $oldPayload[$serverField];
+            if ($collection === 'transactions') {
+                if ($oldPayload !== null) {
+                    foreach (['voidedAt', 'voidedBy', 'commissionStatus', 'cancelledAt'] as $serverField) {
+                        if (! array_key_exists($serverField, $newPayload) && array_key_exists($serverField, $oldPayload)) {
+                            $newPayload[$serverField] = $oldPayload[$serverField];
+                        }
                     }
+                } elseif (! array_key_exists('commissionStatus', $newPayload)) {
+                    $newPayload['commissionStatus'] = 'Pending Accrual';
                 }
                 $row = $newPayload;
             }
@@ -1475,6 +1479,13 @@ class WorkspaceController extends Controller
         ];
         $fromIndex = array_search($from, $stages, true);
         $toIndex = array_search($to, $stages, true);
+
+        // Older workspace rows used labels such as "Active". Permit a move
+        // into a known non-terminal stage, but never let an unknown legacy
+        // state jump directly to Completed.
+        if ($fromIndex === false) {
+            return $toIndex !== false && $to !== 'completed';
+        }
 
         return $fromIndex !== false && $toIndex !== false && $toIndex >= $fromIndex - 1;
     }
