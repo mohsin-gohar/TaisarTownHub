@@ -382,6 +382,11 @@ public function update(Request $request, $id)
 
         unset($data['id'], $data['agency_id'], $data['created_by']);
 
+        // Listing expiry is a subscription/moderation control, never an agency-editable field.
+        if (! $this->can($request, 'properties.approve')) {
+            unset($data['expires_at']);
+        }
+
         $result = DB::transaction(function () use ($request, $id, $agencyId, $data): array {
             $property = Property::whereNull('deleted_at')
                 ->when($agencyId !== null, fn ($query) => $query->where('agency_id', $agencyId))
