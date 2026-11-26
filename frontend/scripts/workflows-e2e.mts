@@ -31,6 +31,7 @@ function record(workflow: string, step: string, ok: boolean, evidence: string) {
 async function call(path: string, options: any = {}) {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
+  if (options.ip) headers['X-Forwarded-For'] = options.ip;
   if (options.agency) headers['X-Agency-Id'] = options.agency;
   let body: BodyInit | undefined;
   if (options.form) {
@@ -60,16 +61,16 @@ async function callWithBackoff(path: string, options: any = {}, attempts = 4) {
   return response;
 }
 
-async function login(email: string, password: string) {
-  const res = await callWithBackoff('/auth/login', { method: 'POST', body: { email, password } });
+async function login(email: string, password: string, ip: string) {
+  const res = await callWithBackoff('/auth/login', { method: 'POST', body: { email, password }, ip });
   return { status: res.status, token: res.json?.token as string | undefined };
 }
 
 (async () => {
   // Shared personas (real accounts, throttled sign-ins).
-  const owner = await login('admin@taisartownhub.com', sharedDemoPassword || 'Admin@Taisar2026');
+  const owner = await login('admin@taisartownhub.com', sharedDemoPassword || 'Admin@Taisar2026', '203.0.113.31');
   const ownerToken = owner.token;
-  const sa = await login('superadmin@taisartownhub.com', sharedDemoPassword || 'Super@Admin2026!');
+  const sa = await login('superadmin@taisartownhub.com', sharedDemoPassword || 'Super@Admin2026!', '203.0.113.32');
   record('setup', 'personas signed in', Boolean(ownerToken) && Boolean(sa.token), `owner=${owner.status} superadmin=${sa.status}`);
 
   // ===================== W2: property lifecycle (first — W1 uses its listing)
@@ -104,7 +105,7 @@ async function login(email: string, password: string) {
       record('W2 property', 'approved listing is publicly visible', detail.status === 200, `status=${detail.status}`);
 
       // manager@ must NOT be able to moderate (no properties.approve/reject)
-      const mgr = await login('manager@taisartownhub.com', sharedDemoPassword || 'Manager@2026');
+      const mgr = await login('manager@taisartownhub.com', sharedDemoPassword || 'Manager@2026', '203.0.113.33');
       if (mgr.token) {
         const reject = await call(`/properties/${w2PropertyId}/reject`, { method: 'POST', token: mgr.token, agency: 'agency-demo' });
         record('W2 property', 'agency manager cannot moderate (403)', reject.status === 403, `status=${reject.status}`);
@@ -146,7 +147,7 @@ async function login(email: string, password: string) {
     record('W1 buyer', 'platform admin verifies the buyer agency', verify.status === 200, `status=${verify.status}`);
   }
 
-  const buyer = await login(buyerEmail, buyerPassword);
+  const buyer = await login(buyerEmail, buyerPassword, '203.0.113.35');
   record('W1 buyer', 'sign-in issues a token', buyer.status === 200 && Boolean(buyer.token), `status=${buyer.status}`);
 
   if (buyer.token) {
@@ -222,7 +223,7 @@ async function login(email: string, password: string) {
     }
   }
 
-  const dealer = await login('dealer@taisartownhub.com', sharedDemoPassword || 'Dealer@2026');
+  const dealer = await login('dealer@taisartownhub.com', sharedDemoPassword || 'Dealer@2026', '203.0.113.34');
   if (dealer.token) {
     const file = await call('/dealer-files', {
       method: 'POST',
