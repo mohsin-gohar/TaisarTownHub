@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * A billing invoice for one agency/plan period. PAID invoices are immutable
- * financial history — only pending → paid (verify) and pending → void
- * transitions exist, both audited server-side.
+ * financial history. Gateway retries may transition failed → paid; staff can
+ * verify pending invoices or void pending invoices through audited actions.
  */
 class SubscriptionInvoice extends Model
 {
