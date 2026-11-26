@@ -83,6 +83,39 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             ->assertStatus(422);
     }
 
+    public function test_subscription_plan_prices_are_whole_pkr_only(): void
+    {
+        $this->seedPlatformRole('super_admin');
+        $admin = $this->makeUser('super_admin');
+        $headers = $this->authHeaders($this->tokenFor($admin));
+        $payload = [
+            'key' => 'precision-' . substr(md5(uniqid('', true)), 0, 8),
+            'name' => 'Precision Plan',
+            'price' => 4999.50,
+            'currency' => 'PKR',
+            'interval' => 'month',
+        ];
+
+        $this->postJson('/api/admin/plans', $payload, $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('price');
+
+        $payload['key'] = 'currency-' . substr(md5(uniqid('', true)), 0, 8);
+        $payload['price'] = 4999;
+        $payload['currency'] = 'USD';
+        $this->postJson('/api/admin/plans', $payload, $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('currency');
+
+        $plan = $this->makePlan();
+        $this->patchJson("/api/admin/plans/{$plan->id}", ['price' => 4999.50], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('price');
+        $this->patchJson("/api/admin/plans/{$plan->id}", ['currency' => 'USD'], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('currency');
+    }
+
     public function test_platform_surfaces_reject_agency_members(): void
     {
         [$agent] = $this->agencyUser($this->staffPermissions());
