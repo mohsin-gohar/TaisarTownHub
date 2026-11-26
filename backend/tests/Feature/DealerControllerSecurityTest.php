@@ -20,6 +20,7 @@ class DealerControllerSecurityTest extends EnterpriseTestCase
 
     public function test_platform_dealer_manager_cannot_delete_a_dealer_outside_the_selected_agency(): void
     {
+        $this->seedPlatformRole('super_admin');
         $manager = $this->makeUser('super_admin');
         $agencyA = $this->makeAgency('Selected Dealer Agency');
         $agencyB = $this->makeAgency('Other Dealer Agency');
