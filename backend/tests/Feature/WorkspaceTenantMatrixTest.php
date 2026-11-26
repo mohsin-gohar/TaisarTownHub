@@ -467,6 +467,112 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_workspace_payment_and_refund_movements_cannot_overdraw_or_overpay(): void
+    {
+        [$manager, $agency] = $this->agencyUser(['finance.manage_payments']);
+        BusinessRecord::put('transactions', 'payment-guard-deal', [
+            'id' => 'payment-guard-deal',
+            'status' => 'Under Transfer',
+            'agreementAmountPKR' => 100000,
+            'advancePaymentPKR' => 0,
+        ], $agency->id);
+        $headers = $this->authHeaders($this->tokenFor($manager));
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['payments' => [[
+                'id' => 'payment-guard-1',
+                'transactionId' => 'payment-guard-deal',
+                'amountPKR' => 70000,
+                'type' => 'payment',
+            ]]],
+        ], $headers)->assertOk();
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['payments' => [[
+                'id' => 'refund-overdraw',
+                'transactionId' => 'payment-guard-deal',
+                'amountPKR' => 80000,
+                'type' => 'refund',
+                'note' => 'Attempted over-refund',
+            ]]],
+        ], $headers)->assertStatus(422);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['payments' => [[
+                'id' => 'payment-overpay',
+                'transactionId' => 'payment-guard-deal',
+                'amountPKR' => 40000,
+                'type' => 'payment',
+            ]]],
+        ], $headers)->assertStatus(422);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['payments' => [[
+                'id' => 'refund-valid',
+                'transactionId' => 'payment-guard-deal',
+                'amountPKR' => 20000,
+                'type' => 'refund',
+                'note' => 'Buyer refund approved by agency manager.',
+            ]]],
+        ], $headers)->assertOk();
+
+        BusinessRecord::put('transactions', 'payment-guard-deal', [
+            'id' => 'payment-guard-deal',
+            'status' => 'Cancelled',
+            'agreementAmountPKR' => 100000,
+            'advancePaymentPKR' => 0,
+        ], $agency->id);
+        $this->putJson('/api/workspace', [
+            'collections' => ['payments' => [[
+                'id' => 'payment-after-cancel',
+                'transactionId' => 'payment-guard-deal',
+                'amountPKR' => 1,
+                'type' => 'payment',
+            ]]],
+        ], $headers)->assertStatus(422);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['payments' => [[
+                'id' => 'refund-after-cancel',
+                'transactionId' => 'payment-guard-deal',
+                'amountPKR' => 50000,
+                'type' => 'refund',
+                'note' => 'Final cancellation refund.',
+            ]]],
+        ], $headers)->assertOk();
+    }
+
+    public function test_first_advance_ledger_entry_does_not_double_count_legacy_advance(): void
+    {
+        [$manager, $agency] = $this->agencyUser(['finance.manage_payments']);
+        BusinessRecord::put('transactions', 'advance-migration-deal', [
+            'id' => 'advance-migration-deal',
+            'status' => 'Fully Paid',
+            'agreementAmountPKR' => 100000,
+            'advancePaymentPKR' => 100000,
+        ], $agency->id);
+        $headers = $this->authHeaders($this->tokenFor($manager));
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['payments' => [[
+                'id' => 'advance-migration-ledger-row',
+                'transactionId' => 'advance-migration-deal',
+                'amountPKR' => 100000,
+                'type' => 'payment',
+                'note' => 'Advance recorded at deal creation.',
+            ]]],
+        ], $headers)->assertOk();
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['payments' => [[
+                'id' => 'advance-migration-overpay',
+                'transactionId' => 'advance-migration-deal',
+                'amountPKR' => 1,
+                'type' => 'payment',
+            ]]],
+        ], $headers)->assertStatus(422);
+    }
+
     public function test_workspace_commission_accrual_and_payout_ledger_are_server_enforced(): void
     {
         [$manager, $agency] = $this->agencyUser(['finance.manage_payments']);
