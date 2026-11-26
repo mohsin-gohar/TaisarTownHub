@@ -36,8 +36,9 @@ php artisan route:cache
 # needed when the runtime user can safely create it for a single-container
 # deployment. Never emit a production ERROR merely because a read-only app
 # image runs as www-data.
-if [ -L public/storage ]; then
-  echo "[entrypoint] public/storage symlink already exists; leaving it unchanged."
+expected_public_storage="$(pwd)/storage/app/public"
+if [ -L public/storage ] && [ "$(readlink public/storage 2>/dev/null || true)" = "$expected_public_storage" ]; then
+  echo "[entrypoint] public/storage symlink already points to the shared public disk."
 elif [ -w public ]; then
   php artisan storage:link --force
 else
