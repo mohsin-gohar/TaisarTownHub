@@ -1,7 +1,7 @@
 # TaisarTownHub — Release Readiness
 
-**Main baseline:** `e780f1f7cf104a04e3855fb61ec2bfd43422ad52`  
-**QA code snapshot validated:** `0166e8b6f9762471669aac27afd4cf58361a19f5`  
+**Main baseline: `f26b070e2f3ccae60ac9e033dc41065a65eddfa8`
+**Audit branch validated: `fix/workspace-transaction-lifecycle-20261126` @ `1fa757ddd1b9aa2a45d9fdc21e757d13a02731ff`
 **QA branch:** `qa/cross-browser-multireplica`  
 **PR #5:** open, Draft, unmerged  
 **PR #8:** merged into QA only (`9ac3987`); not merged into `main`  
