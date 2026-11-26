@@ -756,115 +756,151 @@ public function setMarketplaceVisibility(Request $request, $id)
 
 public function feature(Request $request, $id)
     {
-        $property = Property::whereNull('deleted_at')->findOrFail($id);
         $agencyId = $this->agencyId($request);
         $user = $request->user();
-
         $isModerator = $this->can($request, 'properties.approve')
-            || $user->hasPermission('properties.feature', null) && $user->isPlatformUser();
+            || ($user->hasPermission('properties.feature', null) && $user->isPlatformUser());
 
         if ($isModerator && $request->has('status')) {
-            $request->validate(['status' => 'in:granted,denied']);
+            $data = $request->validate(['status' => 'required|in:granted,denied']);
+            $result = DB::transaction(function () use ($id, $data): array {
+                $property = Property::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
 
-            if ($request->status === 'granted') {
-                $result = DB::transaction(function () use ($id): array {
-                    $lockedProperty = Property::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
-                    if ($lockedProperty->expires_at && $lockedProperty->expires_at->isPast()) {
+                if ($data['status'] === 'granted') {
+                    if ($property->expires_at && $property->expires_at->isPast()) {
                         return ['error' => 'listing_expired'];
                     }
-                    if ($lockedProperty->approval_status !== 'approved') {
+                    if ($property->approval_status !== 'approved') {
                         return ['error' => 'listing_not_approved'];
                     }
-                    if (! $lockedProperty->agency_id) {
+                    if (!$property->agency_id) {
                         return ['error' => 'agency_missing'];
                     }
 
-                    $agency = Agency::whereKey($lockedProperty->agency_id)->lockForUpdate()->first();
-                    if (! $agency) {
+                    $agency = Agency::whereKey($property->agency_id)->lockForUpdate()->first();
+                    if (!$agency) {
                         return ['error' => 'agency_missing'];
                     }
-                    if (! PlanLimits::subscriptionActive($agency)) {
+                    if (!PlanLimits::subscriptionActive($agency)) {
                         return ['error' => 'subscription_inactive'];
                     }
-
-                    // The agency row lock serializes grants across different
-                    // listings so concurrent moderation cannot overspend slots.
-                    if (! $lockedProperty->isFeatured
-                        && ($block = PlanLimits::featuredSlotBlock($agency))) {
+                    if (!$property->isFeatured && ($block = PlanLimits::featuredSlotBlock($agency))) {
                         return ['block' => $block];
                     }
 
-                    $lockedProperty->featured_status = 'granted';
-                    $lockedProperty->isFeatured = true;
-                    $lockedProperty->save();
-
-                    return ['property' => $lockedProperty];
-                }, 3);
-
-                if (isset($result['block'])) {
-                    return PlanLimits::deny('Featured placement slots are exhausted for this subscription plan.', $result['block']);
-                }
-                if (($result['error'] ?? null) === 'subscription_inactive') {
-                    return PlanLimits::subscriptionDenied();
-                }
-                if (($result['error'] ?? null) === 'listing_expired') {
-                    return response()->json(['success' => false, 'message' => 'Expired listings cannot receive featured placement.'], 422);
-                }
-                if (($result['error'] ?? null) === 'listing_not_approved') {
-                    return response()->json(['success' => false, 'message' => 'Only approved listings can receive featured placement.'], 422);
-                }
-                if (($result['error'] ?? null) === 'agency_missing') {
-                    return response()->json(['success' => false, 'message' => 'Featured placement requires an agency-owned listing.'], 422);
+                    $property->featured_status = 'granted';
+                    $property->isFeatured = true;
+                } else {
+                    $property->featured_status = 'denied';
+                    $property->isFeatured = false;
                 }
 
-                $property = $result['property'];
-            } else {
-                $property->featured_status = 'denied';
-                $property->isFeatured = false;
                 $property->save();
+
+                return ['property' => $property->fresh()];
+            }, 3);
+
+            if (isset($result['block'])) {
+                return PlanLimits::deny('Featured placement slots are exhausted for this subscription plan.', $result['block']);
+            }
+            $errors = [
+                'subscription_inactive' => [PlanLimits::subscriptionDenied(), 403],
+                'listing_expired' => [response()->json(['success' => false, 'message' => 'Expired listings cannot receive featured placement.'], 422), 422],
+                'listing_not_approved' => [response()->json(['success' => false, 'message' => 'Only approved listings can receive featured placement.'], 422), 422],
+                'agency_missing' => [response()->json(['success' => false, 'message' => 'Featured placement requires an agency-owned listing.'], 422), 422],
+            ];
+            if (isset($errors[$result['error'] ?? ''])) {
+                return $errors[$result['error']][0];
             }
 
-            $this->writeAudit($request, 'property.feature.' . $request->status, $property->id, "Featured {$request->status}: {$property->title}", [
+            $property = $result['property'];
+            $this->writeAudit($request, 'property.feature.' . $data['status'], $property->id, "Featured {$data['status']}: {$property->title}", [
                 'agency_id' => $property->agency_id,
                 'entity_type' => 'property',
                 'entity_id' => $property->id,
             ]);
 
-            return response()->json(['success' => true, 'message' => 'Featured status ' . $request->status . '.', 'property' => $property]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Featured status ' . $data['status'] . '.',
+                'property' => $property,
+            ]);
         }
 
-        // Agency side: request featuring for an approved listing only.
         $this->requireAny($request, ['properties.feature']);
-        $this->assertCanManage($request, $property, $agencyId);
 
-        if ($property->expires_at && $property->expires_at->isPast()) {
-            return response()->json(['success' => false, 'message' => 'Expired listings cannot request featured placement.'], 422);
-        }
-        if ($property->approval_status !== 'approved') {
-            return response()->json(['success' => false, 'message' => 'Only approved listings can request featured placement.'], 422);
-        }
-        if ($property->isFeatured && $property->featured_status === 'granted') {
-            return response()->json(['success' => false, 'message' => 'This listing already has featured placement.'], 409);
-        }
-        if ($property->featured_status === 'requested') {
-            return response()->json(['success' => true, 'message' => 'Featured placement is already awaiting platform review.', 'property' => $property]);
-        }
+        $result = DB::transaction(function () use ($request, $id, $agencyId): array {
+            $property = Property::whereNull('deleted_at')
+                ->when($agencyId !== null, fn ($query) => $query->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $this->assertCanManage($request, $property, $agencyId);
 
-        $agency = $property->agency_id ? Agency::find($property->agency_id) : null;
-        if ($agency && ! PlanLimits::subscriptionActive($agency)) {
+            if ($property->expires_at && $property->expires_at->isPast()) {
+                return ['error' => 'listing_expired'];
+            }
+            if ($property->approval_status !== 'approved') {
+                return ['error' => 'listing_not_approved'];
+            }
+            if ($property->isFeatured && $property->featured_status === 'granted') {
+                return ['error' => 'already_featured'];
+            }
+            if ($property->featured_status === 'requested') {
+                return ['already_requested' => true, 'property' => $property];
+            }
+            if (!$property->agency_id) {
+                return ['error' => 'agency_missing'];
+            }
+
+            $agency = Agency::whereKey($property->agency_id)->lockForUpdate()->first();
+            if (!$agency) {
+                return ['error' => 'agency_missing'];
+            }
+            if (!PlanLimits::subscriptionActive($agency)) {
+                return ['error' => 'subscription_inactive'];
+            }
+
+            $property->featured_status = 'requested';
+            $property->save();
+
+            return ['property' => $property->fresh()];
+        }, 3);
+
+        if (($result['error'] ?? null) === 'subscription_inactive') {
             return PlanLimits::subscriptionDenied();
         }
+        $errors = [
+            'listing_expired' => 'Expired listings cannot request featured placement.',
+            'listing_not_approved' => 'Only approved listings can request featured placement.',
+            'already_featured' => 'This listing already has featured placement.',
+            'agency_missing' => 'Featured placement requires an agency-owned listing.',
+        ];
+        if (isset($errors[$result['error'] ?? ''])) {
+            return response()->json([
+                'success' => false,
+                'message' => $errors[$result['error']],
+            ], ($result['error'] ?? '') === 'already_featured' ? 409 : 422);
+        }
+        if (!empty($result['already_requested'])) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Featured placement is already awaiting platform review.',
+                'property' => $result['property'],
+            ]);
+        }
 
-        $property->featured_status = 'requested';
-        $property->save();
-
+        $property = $result['property'];
         $this->writeAudit($request, 'property.feature.request', $property->id, "Featured requested: {$property->title}", [
             'agency_id' => $property->agency_id,
             'entity_type' => 'property',
             'entity_id' => $property->id,
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Featured listing requested — pending platform review.', 'property' => $property]);
+        return response()->json([
+            'success' => true,
+            'message' => 'Featured listing requested — pending platform review.',
+            'property' => $property,
+        ]);
     }
 
     /* ================================================================ */
