@@ -87,6 +87,47 @@ export function validateTransition(
     }
     return { ok: true };
   }
+
+  const fromIndex = stageIndex(from);
+  const toIndex = stageIndex(to);
+  if (fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex - 1) {
+    return { ok: false, error: 'A deal can only be corrected back by one lifecycle stage at a time.' };
+  }
+
+  return { ok: true };
+}
+
+export function validateVoid(
+  txn: Transaction,
+  payments: PaymentEntry[] = [],
+  commissions: CommissionEntry[] = [],
+): TransitionResult {
+  if (txn.voided || txn.status === 'Completed' || txn.status === 'Cancelled') {
+    return { ok: false, error: 'Completed, cancelled or already-voided deals cannot be voided again.' };
+  }
+
+  const advance = Math.max(0, Number(txn.advancePKR ?? txn.advancePaymentPKR ?? 0));
+  if (advance > 0) {
+    return { ok: false, error: 'Refund or reconcile the recorded advance before voiding this deal.' };
+  }
+
+  const netLedger = payments
+    .filter((entry) => entry.transactionId === txn.id)
+    .reduce((sum, entry) => {
+      const isRefund = String(entry.type ?? '').toLowerCase().includes('refund');
+      return sum + (isRefund ? -Math.abs(entry.amountPKR) : Math.abs(entry.amountPKR));
+    }, 0);
+  if (netLedger > 0) {
+    return { ok: false, error: 'Refund or reconcile all collected payments before voiding this deal.' };
+  }
+
+  const hasPaidCommission = commissions.some((entry) =>
+    entry.transactionId === txn.id && (entry.status === 'Paid' || (entry.paidPKR ?? 0) > 0),
+  );
+  if (hasPaidCommission) {
+    return { ok: false, error: 'A deal with a paid commission cannot be voided; use the audited commission reversal process.' };
+  }
+
   return { ok: true };
 }
 
