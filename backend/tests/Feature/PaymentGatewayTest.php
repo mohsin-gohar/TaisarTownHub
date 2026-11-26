@@ -189,6 +189,8 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'agency_id' => $agency->id,
             'plan_id' => $plan->id,
             'status' => 'active',
+            'provider' => 'flutterwave',
+            'auto_renew' => false,
         ]);
     }
 
@@ -302,6 +304,60 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'current_period_end' => $paidPeriodEnd,
         ]);
         $this->assertSame('active', $subscription->fresh()->status);
+    }
+
+    public function test_stripe_cancel_at_period_end_disables_auto_renew_without_ending_paid_access(): void
+    {
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $subscription = AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now()->subMonth(),
+            'ends_at' => now()->addMonth(),
+            'auto_renew' => true,
+            'stripe_subscription_id' => 'sub-cancel-at-period-end',
+            'provider' => 'stripe',
+        ]);
+
+        $controller = app(\App\Http\Controllers\Api\PaymentController::class);
+        $handler = new \ReflectionMethod($controller, 'handleStripeSubscriptionChanged');
+        $handler->setAccessible(true);
+        $paidEnd = $subscription->fresh()->ends_at;
+
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-cancel-at-period-end',
+            'status' => 'active',
+            'cancel_at_period_end' => true,
+            'current_period_end' => $paidEnd->getTimestamp(),
+        ]);
+
+        $this->assertSame('active', $subscription->fresh()->status);
+        $this->assertFalse((bool) $subscription->fresh()->auto_renew);
+        $this->assertSame($paidEnd->getTimestamp(), $subscription->fresh()->ends_at->getTimestamp());
+
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-cancel-at-period-end',
+            'status' => 'active',
+            'cancel_at_period_end' => false,
+            'current_period_end' => $paidEnd->copy()->addMonth()->getTimestamp(),
+        ]);
+
+        $this->assertTrue((bool) $subscription->fresh()->auto_renew);
+
+        // Stripe sends the deleted event for the exact paid period end;
+        // a stale event for an older period must not cancel a later renewal.
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-cancel-at-period-end',
+            'status' => 'canceled',
+            'cancel_at_period_end' => false,
+            'current_period_end' => $subscription->fresh()->ends_at->getTimestamp(),
+        ]);
+
+        $this->assertSame('cancelled', $subscription->fresh()->status);
+        $this->assertFalse((bool) $subscription->fresh()->auto_renew);
+        $this->assertNotNull($subscription->fresh()->cancelled_at);
     }
 
     public function test_failed_flutterwave_invoice_can_be_paid_on_a_later_retry(): void
@@ -550,6 +606,105 @@ class PaymentGatewayTest extends EnterpriseTestCase
         }
 
         $this->assertDatabaseMissing('subscription_invoices', ['agency_id' => $agency->id]);
+    }
+
+    public function test_checkout_is_rejected_while_an_active_subscription_exists(): void
+    {
+        config([
+            'app.url' => 'https://taisartownhub.com',
+            'cors.allowed_origins' => ['https://taisartownhub.com'],
+        ]);
+        [$owner, $agency] = $this->agencyUser(['agency.subscribe'], 'agency_owner');
+        $plan = $this->makePlan();
+        AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addMonth(),
+            'auto_renew' => false,
+            'provider' => 'manual',
+        ]);
+
+        $this->postJson('/api/payments/subscription/checkout', [
+            'plan_id' => $plan->id,
+            'success_url' => 'https://taisartownhub.com/agency/billing/success',
+            'cancel_url' => 'https://taisartownhub.com/agency/billing/cancel',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(409)
+            ->assertJsonPath('success', false);
+
+        $this->assertSame(0, SubscriptionInvoice::where('agency_id', $agency->id)->count());
+    }
+
+    public function test_checkout_rejects_a_pending_invoice_for_a_different_plan(): void
+    {
+        config([
+            'app.url' => 'https://taisartownhub.com',
+            'cors.allowed_origins' => ['https://taisartownhub.com'],
+        ]);
+        [$owner, $agency] = $this->agencyUser(['agency.subscribe'], 'agency_owner');
+        $existingPlan = $this->makePlan();
+        $requestedPlan = $this->makePlan();
+        SubscriptionInvoice::create([
+            'id' => (string) Str::uuid(),
+            'invoice_number' => 'TTH-PENDING-' . strtoupper(substr((string) $agency->id, 0, 8)),
+            'agency_id' => $agency->id,
+            'plan_id' => $existingPlan->id,
+            'amount_pkr' => 10000,
+            'tax_pkr' => 0,
+            'total_pkr' => 10000,
+            'currency' => 'PKR',
+            'period_start' => now()->toDateString(),
+            'period_end' => now()->addMonth()->toDateString(),
+            'status' => 'pending',
+            'due_at' => now()->addDays(7),
+        ]);
+
+        $this->postJson('/api/payments/subscription/checkout', [
+            'plan_id' => $requestedPlan->id,
+            'success_url' => 'https://taisartownhub.com/agency/billing/success',
+            'cancel_url' => 'https://taisartownhub.com/agency/billing/cancel',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(409)
+            ->assertJsonPath('success', false);
+
+        $this->assertSame(1, SubscriptionInvoice::where('agency_id', $agency->id)->count());
+    }
+
+    public function test_stripe_checkout_does_not_reuse_a_pending_flutterwave_invoice(): void
+    {
+        config([
+            'app.url' => 'https://taisartownhub.com',
+            'cors.allowed_origins' => ['https://taisartownhub.com'],
+        ]);
+        [$owner, $agency] = $this->agencyUser(['agency.subscribe'], 'agency_owner');
+        $plan = $this->makePlan();
+        SubscriptionInvoice::create([
+            'id' => (string) Str::uuid(),
+            'invoice_number' => 'TTH-FLW-PENDING-' . strtoupper(substr((string) $agency->id, 0, 8)),
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'amount_pkr' => 5000,
+            'tax_pkr' => 0,
+            'total_pkr' => 5000,
+            'currency' => 'PKR',
+            'period_start' => now()->toDateString(),
+            'period_end' => now()->addMonth()->toDateString(),
+            'status' => 'pending',
+            'flutterwave_tx_ref' => 'FLW-REF-' . Str::random(8),
+            'due_at' => now()->addDays(7),
+        ]);
+
+        $this->postJson('/api/payments/subscription/checkout', [
+            'plan_id' => $plan->id,
+            'success_url' => 'https://taisartownhub.com/agency/billing/success',
+            'cancel_url' => 'https://taisartownhub.com/agency/billing/cancel',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(409)
+            ->assertJsonPath('success', false);
+
+        $this->assertSame(1, SubscriptionInvoice::where('agency_id', $agency->id)->count());
     }
 
     public function test_stripe_checkout_webhook_rejects_currency_or_amount_mismatch(): void
