@@ -19,8 +19,9 @@ use Illuminate\Support\Facades\Storage;
  *   php artisan vault:encrypt          # documents + versions + media
  *   php artisan vault:encrypt --disk=documents|quarantine
  *
- * Run it again after an APP_KEY rotation: files still readable under the OLD
- * key are re-encrypted with the new one. Files that fail to decrypt (written
+ * For APP_KEY rotation, keep the old key in APP_PREVIOUS_KEYS while running
+ * this command: files readable with a previous key are re-encrypted with the
+ * active key. Files that fail to decrypt (written
  * under an unknown key) are reported and left untouched — never overwritten.
  */
 class EncryptVault extends Command
