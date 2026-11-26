@@ -427,11 +427,10 @@ class DocumentController extends Controller
         $this->requirePermission($request, 'documents.update');
 
         $document = $this->findScoped($agencyId, $id);
-
-        if ($document->status !== 'active') {
+        if ($document->status !== 'active' || $document->scan_status !== 'scanned_clean') {
             return response()->json([
                 'success' => false,
-                'message' => 'Versions can only be uploaded for active documents.',
+                'message' => 'Versions can only be uploaded for active documents that have cleared malware verification.',
             ], 422);
         }
 
@@ -442,9 +441,6 @@ class DocumentController extends Controller
         ]);
 
         $file = $request->file('file');
-
-        // Same content-security pipeline as the first upload — a version must
-        // never be a validation bypass.
         $check = UploadSecurity::evaluate($file, UploadSecurity::allowedExtensions());
         if ($check['error'] !== null) {
             return $check['error'];
@@ -453,27 +449,20 @@ class DocumentController extends Controller
         $scan = $scanner->scan($file->getRealPath());
         $scannerUnavailable = $scan->skipped || in_array('scan_unavailable', $scan->threats, true);
 
-        if ($scannerUnavailable) {
-            if (config('malware.fail_closed', false)) {
-                $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats, $document->id);
-                Log::warning('Version rejected: malware scanner unavailable (fail-closed)', [
-                    'document_id' => $document->id,
-                    'agency_id' => $agencyId,
-                ]);
+        if ($scannerUnavailable && config('malware.fail_closed', false)) {
+            $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats, $document->id);
+            Log::warning('Version rejected: malware scanner unavailable (fail-closed)', [
+                'document_id' => $document->id,
+                'agency_id' => $agencyId,
+            ]);
 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Malware scanner unavailable; upload rejected.',
-                ], 422);
-            }
+            return response()->json([
+                'success' => false,
+                'message' => 'Malware scanner unavailable; upload rejected.',
+            ], 422);
+        }
 
-            if (config('malware.log_skipped', true)) {
-                Log::warning('Version accepted without malware scan (quarantined)', [
-                    'document_id' => $document->id,
-                    'agency_id' => $agencyId,
-                ]);
-            }
-        } elseif (!$scan->isClean) {
+        if (!$scannerUnavailable && !$scan->isClean) {
             $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'infected', $scan->threats, $document->id);
             Log::warning('Version rejected: malware detected', [
                 'document_id' => $document->id,
@@ -488,75 +477,132 @@ class DocumentController extends Controller
         }
 
         $scanClean = $scan->isClean;
-        $storedName = $document->id . '_v' . ($document->version + 1) . '.' . $check['ext'];
-        $relativePath = $agencyId . '/' . now()->format('Y/m') . '/' . $storedName;
+        $originalName = UploadSecurity::sanitizeOriginalName($file->getClientOriginalName());
+        $sizeBytes = (int) $file->getSize();
+        $checksum = hash_file('sha256', $file->getRealPath()) ?: null;
+        $writtenPaths = [];
 
-        // Storage quota/trial enforcement is not part of this release.
-        // Individual file size, type, malware and authorization checks above
-        // still apply. Write the bytes first (encrypted at rest); only then
-        // flip the DB pointers inside a transaction so the document never
-        // points at bytes that were not stored.
-        SecureFileStore::storeUpload('documents', $relativePath, $file);
+        try {
+            $document = DB::transaction(function () use (
+                $id, $agencyId, $file, $check, $scan, $scanClean, $originalName,
+                $sizeBytes, $checksum, $request, &$writtenPaths
+            ): Document {
+                // Serialize all version uploads for this document. The current
+                // version is read only after the row lock, never from the
+                // potentially stale pre-scan model.
+                $locked = Document::where('agency_id', $agencyId)
+                    ->lockForUpdate()
+                    ->findOrFail($id);
 
-        $previous = [
-            'version' => $document->version,
-            'stored_name' => $document->stored_name,
-            'disk_path' => $document->disk_path,
-            'storage_disk' => $document->storage_disk ?? 'documents',
-            'mime_type' => $document->mime_type,
-            'size_bytes' => $document->size_bytes,
-            'checksum' => $document->checksum,
-            'uploaded_by' => $document->uploaded_by,
-            'created_at' => $document->updated_at ?? now(),
-        ];
+                if ($locked->status !== 'active' || $locked->scan_status !== 'scanned_clean') {
+                    abort(409, 'The document changed while the new version was being scanned. Refresh and retry.');
+                }
 
-        DB::transaction(function () use ($document, $previous, $relativePath, $storedName, $check, $file, $scan, $scanClean, $request) {
-            // Archive the current version.
-            DocumentVersion::create([
-                'document_id' => $document->id,
-                'version' => $previous['version'],
-                'stored_name' => $previous['stored_name'],
-                'disk_path' => $previous['disk_path'],
-                'storage_disk' => $previous['storage_disk'],
-                'mime_type' => $previous['mime_type'],
-                'size_bytes' => $previous['size_bytes'],
-                'checksum' => $previous['checksum'],
-                'uploaded_by' => $previous['uploaded_by'],
-                'note' => 'Superseded',
-                'created_at' => $previous['created_at'],
-            ]);
+                $nextVersion = (int) $locked->version + 1;
+                $storedName = $locked->id . '_v' . $nextVersion . '_' . bin2hex(random_bytes(6)) . '.' . $check['ext'];
+                $relativePath = $agencyId . '/' . now()->format('Y/m') . '/' . $storedName;
 
-            $document->version += 1;
-            $document->stored_name = $storedName;
-            $document->disk_path = $relativePath;
-            $document->storage_disk = 'documents';
-            $document->mime_type = $check['mime'] ?: $document->mime_type;
-            $document->size_bytes = (int) $file->getSize();
-            $document->checksum = hash_file('sha256', $file->getRealPath()) ?: $document->checksum;
-            $document->original_name = UploadSecurity::sanitizeOriginalName($file->getClientOriginalName());
-            $document->scan_status = $scanClean ? 'scanned_clean' : 'skipped';
-            $document->scan_threats = $scanClean ? null : [$scan->skipReason ?? 'scan_unavailable'];
-            $document->scan_completed_at = $scanClean ? now() : null;
-            $document->scanner = $scanClean ? $scan->scanner : null;
-            $document->status = $scanClean ? 'active' : 'quarantined';
-            $document->save();
+                // Track before writing so even a partial failed write is cleaned.
+                $writtenPaths[] = $relativePath;
+                SecureFileStore::storeUpload('documents', $relativePath, $file);
 
-            DocumentVersion::create([
-                'document_id' => $document->id,
-                'version' => $document->version,
-                'stored_name' => $storedName,
-                'disk_path' => $relativePath,
-                'storage_disk' => 'documents',
-                'mime_type' => $document->mime_type,
-                'size_bytes' => $document->size_bytes,
-                'checksum' => $document->checksum,
-                'uploaded_by' => $request->user()->id,
-                'note' => $request->note,
-                'created_at' => now(),
-            ]);
-        });
+                $previous = [
+                    'version' => $locked->version,
+                    'stored_name' => $locked->stored_name,
+                    'disk_path' => $locked->disk_path,
+                    'storage_disk' => $locked->storage_disk ?? 'documents',
+                    'mime_type' => $locked->mime_type,
+                    'size_bytes' => $locked->size_bytes,
+                    'checksum' => $locked->checksum,
+                    'uploaded_by' => $locked->uploaded_by,
+                    'created_at' => $locked->updated_at ?? now(),
+                ];
 
+                DocumentVersion::create([
+                    'document_id' => $locked->id,
+                    'version' => $previous['version'],
+                    'stored_name' => $previous['stored_name'],
+                    'disk_path' => $previous['disk_path'],
+                    'storage_disk' => $previous['storage_disk'],
+                    'mime_type' => $previous['mime_type'],
+                    'size_bytes' => $previous['size_bytes'],
+                    'checksum' => $previous['checksum'],
+                    'uploaded_by' => $previous['uploaded_by'],
+                    'note' => 'Superseded',
+                    'created_at' => $previous['created_at'],
+                ]);
 
+                $locked->version = $nextVersion;
+                $locked->stored_name = $storedName;
+                $locked->disk_path = $relativePath;
+                $locked->storage_disk = 'documents';
+                $locked->mime_type = $check['mime'] ?: $locked->mime_type;
+                $locked->size_bytes = $sizeBytes;
+                $locked->checksum = $checksum;
+                $locked->original_name = $originalName;
+                $locked->scan_status = $scanClean ? 'scanned_clean' : 'skipped';
+                $locked->scan_threats = $scanClean ? null : [$scan->skipReason ?? 'scan_unavailable'];
+                $locked->scan_completed_at = $scanClean ? now() : null;
+                $locked->scanner = $scanClean ? $scan->scanner : null;
+                $locked->status = $scanClean ? 'active' : 'quarantined';
+                $locked->save();
+
+                DocumentVersion::create([
+                    'document_id' => $locked->id,
+                    'version' => $nextVersion,
+                    'stored_name' => $storedName,
+                    'disk_path' => $relativePath,
+                    'storage_disk' => 'documents',
+                    'mime_type' => $locked->mime_type,
+                    'size_bytes' => $locked->size_bytes,
+                    'checksum' => $locked->checksum,
+                    'uploaded_by' => $request->user()->id,
+                    'note' => $request->note,
+                    'created_at' => now(),
+                ]);
+
+                return $locked;
+            }, 3);
+        } catch (\Throwable $exception) {
+            foreach ($writtenPaths as $path) {
+                try {
+                    if (Storage::disk('documents')->exists($path) && !Storage::disk('documents')->delete($path)) {
+                        Log::critical('Failed to clean an uncommitted document version file', [
+                            'document_id' => $id,
+                            'path_len' => strlen($path),
+                        ]);
+                    }
+                } catch (\Throwable $cleanupException) {
+                    Log::critical('Exception while cleaning an uncommitted document version file', [
+                        'document_id' => $id,
+                        'error' => $cleanupException->getMessage(),
+                    ]);
+                }
+            }
+
+            throw $exception;
+        }
+
+        // A deadlock retry may have written an earlier random path before the
+        // successful attempt. Remove those unreferenced copies after commit.
+        foreach ($writtenPaths as $path) {
+            if ($path === $document->disk_path) {
+                continue;
+            }
+            try {
+                if (Storage::disk('documents')->exists($path) && !Storage::disk('documents')->delete($path)) {
+                    Log::warning('Orphaned document version cleanup failed', [
+                        'document_id' => $id,
+                        'path_len' => strlen($path),
+                    ]);
+                }
+            } catch (\Throwable $cleanupException) {
+                Log::warning('Orphaned document version cleanup raised an exception', [
+                    'document_id' => $id,
+                    'error' => $cleanupException->getMessage(),
+                ]);
+            }
+        }
 
         $this->logAccess($document, $agencyId, $request, 'upload');
         $this->writeAudit($request, 'document.version', $document->id, "New version v{$document->version}: {$document->title}", [
@@ -717,21 +763,46 @@ class DocumentController extends Controller
 
         $document = Document::where('agency_id', $agencyId)->withTrashed()->findOrFail($id);
 
-        $document->status = 'active';
+        if (!$document->trashed() || $document->status !== 'trashed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only documents in the trash can be restored.',
+            ], 422);
+        }
+
+        $disk = $document->storage_disk ?: 'documents';
+        if (!$document->disk_path || !Storage::disk($disk)->exists($document->disk_path)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'File is no longer available on storage.',
+            ], 410);
+        }
+
+        // A restore is not a malware approval. Previously this endpoint
+        // unconditionally set status=active, bypassing the scan gate for
+        // fail-open/infected documents that had been moved to the trash.
+        $isClean = $document->scan_status === 'scanned_clean';
+        $document->status = $isClean ? 'active' : 'quarantined';
         $document->deleted_by = null;
-        $document->save();
         $document->restore();
 
         $this->writeAudit($request, 'document.restore', $document->id, "Restored: {$document->title}", [
             'agency_id' => $agencyId,
             'entity_type' => 'document',
             'entity_id' => $document->id,
+            'metadata' => ['restored_status' => $document->status, 'scan_status' => $document->scan_status],
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Document restored.']);
+        return response()->json([
+            'success' => true,
+            'message' => $isClean
+                ? 'Document restored.'
+                : 'Document restored to quarantine; a clean malware rescan is required before download.',
+            'status' => $document->status,
+            'scan_status' => $document->scan_status,
+        ]);
     }
 
-    /** DELETE /api/agency/documents/{id}/permanent — erase bytes + row (trashed only). */
     public function forceDestroy(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);
@@ -739,7 +810,7 @@ class DocumentController extends Controller
 
         $document = Document::where('agency_id', $agencyId)->withTrashed()->findOrFail($id);
 
-        if ($document->status !== 'trashed') {
+        if (!$document->trashed() || $document->status !== 'trashed') {
             return response()->json([
                 'success' => false,
                 'message' => 'Move the document to trash first.',
@@ -747,16 +818,62 @@ class DocumentController extends Controller
         }
 
         try {
-            if ($document->disk_path && Storage::disk($document->storage_disk ?: 'documents')->exists($document->disk_path)) {
-                Storage::disk($document->storage_disk ?: 'documents')->delete($document->disk_path);
-            }
-            foreach (DocumentVersion::where('document_id', $document->id)->get() as $version) {
-                if ($version->disk_path && Storage::disk($version->storage_disk ?: 'documents')->exists($version->disk_path)) {
-                    Storage::disk($version->storage_disk ?: 'documents')->delete($version->disk_path);
+            $deleted = DB::transaction(function () use ($agencyId, $id): bool {
+                $locked = Document::where('agency_id', $agencyId)
+                    ->withTrashed()
+                    ->lockForUpdate()
+                    ->findOrFail($id);
+
+                if (!$locked->trashed() || $locked->status !== 'trashed') {
+                    return false;
                 }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Document file deletion failed', ['error' => $e->getMessage()]);
+
+                $paths = [];
+                if ($locked->disk_path) {
+                    $paths[] = [$locked->storage_disk ?: 'documents', $locked->disk_path];
+                }
+                foreach (DocumentVersion::where('document_id', $locked->id)->get() as $version) {
+                    if ($version->disk_path) {
+                        $paths[] = [$version->storage_disk ?: 'documents', $version->disk_path];
+                    }
+                }
+
+                $seen = [];
+                foreach ($paths as [$disk, $path]) {
+                    $key = $disk . '|' . $path;
+                    if (isset($seen[$key])) {
+                        continue;
+                    }
+                    $seen[$key] = true;
+
+                    $storage = Storage::disk($disk);
+                    if ($storage->exists($path) && !$storage->delete($path)) {
+                        throw new \RuntimeException('A document file could not be removed from private storage.');
+                    }
+                }
+
+                $locked->forceDelete();
+
+                return true;
+            }, 3);
+        } catch (\Throwable $exception) {
+            Log::warning('Permanent document deletion stopped because private storage cleanup failed', [
+                'document_id' => $id,
+                'agency_id' => $agencyId,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Private storage could not confirm deletion. The document record was retained; retry after storage is healthy.',
+            ], 503);
+        }
+
+        if (!$deleted) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Document state changed; refresh before permanently deleting it.',
+            ], 409);
         }
 
         $this->writeAudit($request, 'document.permanent_delete', $document->id, "Permanently deleted: {$document->title}", [
@@ -765,20 +882,9 @@ class DocumentController extends Controller
             'entity_id' => $document->id,
         ]);
 
-        $document->forceDelete();
-
         return response()->json(['success' => true, 'message' => 'Document permanently deleted.']);
     }
 
-    /* ==================== Scan lifecycle: quarantine & rescan ==================== */
-
-    /**
-     * GET /api/agency/documents-quarantine — administrator visibility into
-     * every upload that did NOT clear malware verification:
-     *   - vault rows held in quarantine (fail-open, awaiting rescan),
-     *   - rejected uploads whose isolated bytes sit on the quarantine disk.
-     * Requires documents.manage_permissions. Never exposes disk paths.
-     */
     public function quarantineIndex(Request $request)
     {
         $agencyId = $this->requireAgency($request);
