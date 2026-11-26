@@ -2027,7 +2027,7 @@ class WorkspaceController extends Controller
             return max(0, $base - $refunds);
         }
 
-        $transactionQuery = \\App\\Models\\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
         $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
         $transaction = $transactionQuery->first();
         if ($transaction !== null) {
@@ -2068,7 +2068,7 @@ class WorkspaceController extends Controller
             return $advance;
         }
 
-        $transactionQuery = \\App\\Models\\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
         $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
         return (int) ($transactionQuery->value('advancePaymentPKR') ?? 0);
     }
@@ -2081,7 +2081,7 @@ class WorkspaceController extends Controller
         $isRefund = str_contains($type, 'refund');
 
         if ($transactionId === '' || $amount === null || $amount <= 0) {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'collections.payments' => ['A payment movement requires a deal id and positive whole-PKR amount.'],
             ]);
         }
@@ -2092,7 +2092,7 @@ class WorkspaceController extends Controller
         $agencyId === null ? $legacyQuery->whereNull('agency_id') : $legacyQuery->where('agency_id', $agencyId);
         $legacy = $legacyQuery->first()?->payload ?? [];
 
-        $transactionQuery = \\App\\Models\\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
         $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
         $transaction = $transactionQuery->first();
 
@@ -2103,12 +2103,12 @@ class WorkspaceController extends Controller
         $voided = ! empty($legacy['voided']) || ($transaction !== null && $transaction->isVoided());
         $status = strtolower((string) ($legacy['status'] ?? $legacy['dealStatus'] ?? $transaction?->dealStatus ?? ''));
         if ($voided || $status === 'voided') {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'collections.payments' => ['No payment or refund can be recorded against a voided deal.'],
             ]);
         }
         if (! $isRefund && $status === 'cancelled') {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'collections.payments' => ['New payments are frozen after a deal is cancelled; record a refund instead.'],
             ]);
         }
@@ -2116,12 +2116,12 @@ class WorkspaceController extends Controller
         $collected = $this->netCollectedForTransaction($transactionId, $agencyId);
         if ($isRefund) {
             if (trim((string) ($payload['note'] ?? '')) === '') {
-                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                throw \Illuminate\Validation\ValidationException::withMessages([
                     'collections.payments.note' => ['A reason/reference note is required for every refund.'],
                 ]);
             }
             if ($amount > $collected) {
-                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                throw \Illuminate\Validation\ValidationException::withMessages([
                     'collections.payments.amountPKR' => ['Refund cannot exceed the deal\'s net collected balance.'],
                 ]);
             }
@@ -2141,14 +2141,14 @@ class WorkspaceController extends Controller
 
         $agreement = $this->normalizeWholePkr($legacy['agreementAmountPKR'] ?? $legacy['dealAmountPKR'] ?? $transaction?->agreementAmountPKR ?? null) ?? 0;
         if ($agreement <= 0) {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'collections.payments' => ['A valid agreed deal amount is required before recording payments.'],
             ]);
         }
 
         $remaining = max(0, $agreement - $collected);
         if ($amount > $remaining && ! $this->perm($request, $request->user(), 'approve_transactions', $agencyId)) {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'collections.payments.amountPKR' => ['Payment exceeds the remaining deal balance; supervisor approval is required.'],
             ]);
         }
