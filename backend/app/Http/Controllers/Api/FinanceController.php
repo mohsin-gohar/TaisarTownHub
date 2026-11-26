@@ -663,6 +663,9 @@ public function update(Request $request, string $id)
                 'integer',
                 'max:999999999999',
                 function ($attribute, $value, $fail) use ($request) {
+                    if ((int) $value === 0) {
+                        $fail('Payment amount must be greater than zero.');
+                    }
                     if ($value < 0 && ($request->type ?? 'advance') !== 'refund') {
                         $fail('Negative amounts are only allowed for refund payments.');
                     }
