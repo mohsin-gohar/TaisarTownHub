@@ -91,7 +91,11 @@ function attachSink(page: Page): Sink {
     }
   });
   page.on('requestfailed', (req) => {
-    sink.failedRequests.push(`${req.method()} ${req.url().slice(0, 160)} — ${req.failure()?.errorText || 'failed'}`);
+    const failure = req.failure()?.errorText || 'failed';
+    // Navigation intentionally aborts in-flight third-party map/image scripts.
+    // This is not a page error or broken resource in the destination document.
+    if (failure === 'net::ERR_ABORTED') return;
+    sink.failedRequests.push(`${req.method()} ${req.url().slice(0, 160)} — ${failure}`);
   });
   page.on('response', (res) => {
     if (res.status() >= 400) {
