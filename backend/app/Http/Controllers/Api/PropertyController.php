@@ -239,14 +239,7 @@ class PropertyController extends Controller
     public function store(Request $request)
     {
         $this->requireAny($request, ['properties.create', 'create_properties']);
-
         $agencyId = $this->requireAgencyForWrite($request);
-
-        // G-8: plan limit — listings quota is enforced server-side.
-        $agency = Agency::find($agencyId);
-        if ($agency && ($block = PlanLimits::block($agency, 'listings'))) {
-            return PlanLimits::deny('Listing limit reached for your plan. Upgrade to create more listings.', $block);
-        }
 
         $data = $request->validate([
             'title' => 'required|string|max:255',
@@ -295,7 +288,6 @@ class PropertyController extends Controller
 
         $propertyId = 'prop_' . bin2hex(random_bytes(8));
         $now = now();
-
         $payload = collect($data)->except(['submit', 'id'])->all();
         $payload['id'] = $propertyId;
         $payload['agency_id'] = $agencyId;
@@ -306,18 +298,32 @@ class PropertyController extends Controller
         $payload['submitted_at'] = $request->boolean('submit') ? $now : null;
         $payload['slug'] = $this->uniqueSlug($data['title'], $propertyId);
         $payload['listing_purpose'] = 'sale';
-        // Featured placement is granted only through the moderation endpoint.
         $payload['isFeatured'] = false;
 
-        $property = Property::create($payload);
+        $result = DB::transaction(function () use ($agencyId, $payload, $request): array {
+            $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
 
-        if ($request->boolean('submit')) {
-            $this->recordTransition($property, null, 'pending', 'Submitted for approval');
-        } else {
-            $this->recordTransition($property, null, 'draft', 'Created as draft');
+            if ($block = PlanLimits::block($agency, 'listings')) {
+                return ['blocked' => $block];
+            }
+
+            $property = Property::create($payload);
+            $this->recordTransition(
+                $property,
+                null,
+                $request->boolean('submit') ? 'pending' : 'draft',
+                $request->boolean('submit') ? 'Submitted for approval' : 'Created as draft'
+            );
+            $this->mirrorToLegacyStore($property, 'create');
+
+            return ['property' => $property];
+        }, 3);
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Listing limit reached for your plan. Upgrade to create more listings.', $result['blocked']);
         }
 
-        $this->mirrorToLegacyStore($property, 'create');
+        $property = $result['property'];
         $this->writeAudit($request, 'property.create', $property->id, "Property created: {$property->title}", [
             'agency_id' => $agencyId,
             'entity_type' => 'property',
@@ -328,21 +334,10 @@ class PropertyController extends Controller
         return response()->json($property, 201);
     }
 
-    /**
-     * PUT/PATCH /api/properties/{id}
-     *
-     * Edits to public-facing (REAPPROVAL_FIELDS) content on an APPROVED
-     * listing are staged in `pending_changes` — the live public copy is not
-     * altered until a moderator approves them.
-     */
-    public function update(Request $request, $id)
+public function update(Request $request, $id)
     {
         $this->requireAny($request, ['properties.update', 'edit_properties']);
-
-        $property = Property::whereNull('deleted_at')->findOrFail($id);
         $agencyId = $this->agencyId($request);
-
-        $this->assertCanManage($request, $property, $agencyId);
 
         $data = $request->validate([
             'title' => 'sometimes|string|max:255',
@@ -386,63 +381,78 @@ class PropertyController extends Controller
 
         unset($data['id'], $data['agency_id'], $data['created_by']);
 
-        if (array_key_exists('assignedDealerId', $data) && $data['assignedDealerId'] !== null) {
-            $this->assertDealerInAgency($data['assignedDealerId'], $agencyId);
-        }
+        $result = DB::transaction(function () use ($request, $id, $agencyId, $data): array {
+            $property = Property::whereNull('deleted_at')
+                ->when($agencyId !== null, fn ($query) => $query->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        $isModerator = $this->can($request, 'properties.approve');
-        $needsReapproval = $property->approval_status === 'approved' && !$isModerator;
+            $this->assertCanManage($request, $property, $agencyId);
 
-        $immediate = [];
-        $staged = [];
+            if (array_key_exists('assignedDealerId', $data) && $data['assignedDealerId'] !== null) {
+                $this->assertDealerInAgency($data['assignedDealerId'], $agencyId);
+            }
 
-        foreach ($data as $key => $value) {
-            if ($needsReapproval && in_array($key, Property::REAPPROVAL_FIELDS, true)) {
-                $current = $property->{$key};
-                $equal = is_array($value) && is_array($current)
-                    ? $value == $current
-                    : (string) ($value ?? '') === (string) ($current ?? '');
-                if (!$equal) {
-                    $staged[$key] = $value;
+            $isModerator = $this->can($request, 'properties.approve');
+            $needsReapproval = $property->approval_status === 'approved' && !$isModerator;
+            $immediate = [];
+            $staged = [];
+
+            foreach ($data as $key => $value) {
+                if ($needsReapproval && in_array($key, Property::REAPPROVAL_FIELDS, true)) {
+                    $current = $property->{$key};
+                    $equal = is_array($value) && is_array($current)
+                        ? $value == $current
+                        : (string) ($value ?? '') === (string) ($current ?? '');
+                    if (!$equal) {
+                        $staged[$key] = $value;
+                    }
+                } else {
+                    $immediate[$key] = $value;
                 }
-            } else {
-                $immediate[$key] = $value;
             }
-        }
 
-        if ($immediate) {
-            $property->fill($immediate);
-        }
-
-        if ($staged) {
-            $pending = array_merge($property->pending_changes ?? [], $staged);
-            $property->pending_changes = $pending;
-            $property->submitted_at = now();
-            if ($property->approval_status === 'approved') {
-                $property->approval_status = 'pending'; // pending edits, live copy untouched
+            if ($immediate) {
+                $property->fill($immediate);
             }
-        }
 
-        $property->updated_by = $request->user()->id;
-        $property->save();
+            if ($staged) {
+                $property->pending_changes = array_merge($property->pending_changes ?? [], $staged);
+                $property->submitted_at = now();
+                if ($property->approval_status === 'approved') {
+                    $property->approval_status = 'pending';
+                }
+            }
 
-        if ($staged) {
-            $this->recordTransition(
-                $property,
-                'approved',
-                'pending',
-                'Public-facing content edited — re-approval required'
-            );
-        }
+            $property->updated_by = $request->user()->id;
+            $property->save();
 
-        $this->mirrorToLegacyStore($property, 'update');
+            if ($staged) {
+                $this->recordTransition(
+                    $property,
+                    'approved',
+                    'pending',
+                    'Public-facing content edited — re-approval required'
+                );
+            }
+
+            $this->mirrorToLegacyStore($property, 'update');
+
+            return [
+                'property' => $property->fresh(),
+                'immediate' => array_keys($immediate),
+                'staged' => array_keys($staged),
+            ];
+        }, 3);
+
+        $property = $result['property'];
         $this->writeAudit($request, 'property.update', $property->id, "Property updated: {$property->title}", [
             'agency_id' => $property->agency_id,
             'entity_type' => 'property',
             'entity_id' => $property->id,
             'metadata' => [
-                'immediate' => array_keys($immediate),
-                'staged_for_reapproval' => array_keys($staged),
+                'immediate' => $result['immediate'],
+                'staged_for_reapproval' => $result['staged'],
             ],
         ]);
 
@@ -451,22 +461,26 @@ class PropertyController extends Controller
         return response()->json($property);
     }
 
-    /**
-     * DELETE /api/properties/{id} — soft delete.
-     */
-    public function destroy(Request $request, $id)
+public function destroy(Request $request, $id)
     {
         $this->requireAny($request, ['properties.delete', 'delete_properties']);
-
-        $property = Property::whereNull('deleted_at')->findOrFail($id);
         $agencyId = $this->agencyId($request);
-        $this->assertCanManage($request, $property, $agencyId);
 
-        $property->deletedBy = (string) $request->user()->id;
-        $property->save();
-        $property->delete();
+        $property = DB::transaction(function () use ($request, $id, $agencyId): Property {
+            $property = Property::whereNull('deleted_at')
+                ->when($agencyId !== null, fn ($query) => $query->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $this->assertCanManage($request, $property, $agencyId);
 
-        $this->mirrorToLegacyStore($property, 'delete');
+            $property->deletedBy = (string) $request->user()->id;
+            $property->save();
+            $property->delete();
+            $this->mirrorToLegacyStore($property, 'delete');
+
+            return $property;
+        }, 3);
+
         $this->writeAudit($request, 'property.delete', $property->id, "Property soft-deleted: {$property->title}", [
             'agency_id' => $property->agency_id,
             'entity_type' => 'property',
@@ -476,33 +490,40 @@ class PropertyController extends Controller
         return response()->json(['message' => 'Property deleted successfully']);
     }
 
-    /* ================================================================ */
-    /* Approval workflow                                                 */
-    /* ================================================================ */
-
-    /** POST /api/properties/{id}/submit — draft|rejected → pending */
-    public function submit(Request $request, $id)
+public function submit(Request $request, $id)
     {
         $this->requireAny($request, ['properties.publish', 'create_properties', 'edit_properties']);
-
-        $property = Property::whereNull('deleted_at')->findOrFail($id);
         $agencyId = $this->agencyId($request);
-        $this->assertCanManage($request, $property, $agencyId);
+        $data = $request->validate(['reason' => 'nullable|string|max:500']);
 
-        if (!in_array($property->approval_status, ['draft', 'rejected'], true)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only draft or rejected listings can be submitted.',
-            ], 422);
+        $result = DB::transaction(function () use ($request, $id, $agencyId, $data): array {
+            $property = Property::whereNull('deleted_at')
+                ->when($agencyId !== null, fn ($query) => $query->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $this->assertCanManage($request, $property, $agencyId);
+
+            if (!in_array($property->approval_status, ['draft', 'rejected'], true)) {
+                return ['error' => 'Only draft or rejected listings can be submitted.'];
+            }
+
+            $from = $property->approval_status;
+            $property->approval_status = 'pending';
+            $property->submitted_at = now();
+            $property->rejection_reason = null;
+            $property->save();
+
+            $this->recordTransition($property, $from, 'pending', $data['reason'] ?? null);
+            $this->mirrorToLegacyStore($property, 'update');
+
+            return ['property' => $property->fresh()];
+        }, 3);
+
+        if (isset($result['error'])) {
+            return response()->json(['success' => false, 'message' => $result['error']], 422);
         }
 
-        $property->approval_status = 'pending';
-        $property->submitted_at = now();
-        $property->rejection_reason = null;
-        $property->save();
-
-        $this->recordTransition($property, 'draft', 'pending', $request->get('reason'));
-        $this->mirrorToLegacyStore($property, 'update');
+        $property = $result['property'];
         $this->writeAudit($request, 'property.submit', $property->id, "Submitted for approval: {$property->title}", [
             'agency_id' => $property->agency_id,
             'entity_type' => 'property',
@@ -512,8 +533,7 @@ class PropertyController extends Controller
         return response()->json(['success' => true, 'message' => 'Listing submitted for approval.', 'property' => $property]);
     }
 
-    /** GET /api/moderation/queue — pending listings (platform moderation). */
-    public function moderationQueue(Request $request)
+public function moderationQueue(Request $request)
     {
         $this->requirePermission($request, 'properties.approve');
 
