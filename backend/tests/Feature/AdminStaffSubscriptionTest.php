@@ -22,7 +22,7 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
 {
     private function staffPermissions(): array
     {
-        return ['agency.view', 'agency.manage_staff', 'view_properties'];
+        return ['agency.view', 'agency.manage_staff', 'view_properties', 'properties.view'];
     }
 
     private function makePlan(array $attrs = []): SubscriptionPlan
@@ -202,6 +202,13 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             'permissions' => ['agency.subscribe'],
         ], $this->authHeaders($this->tokenFor($manager)))
             ->assertForbidden();
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'privileged-invitee@example.test',
+            'role_id' => $privilegedRole->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+        $this->assertDatabaseMissing('agency_invitations', ['email' => 'privileged-invitee@example.test']);
 
         $this->assertFalse($manager->fresh()->hasPermission('agency.subscribe', $agency->id));
         $this->assertFalse($manager->fresh()->hasPermission('agency.manage_settings', $agency->id));
