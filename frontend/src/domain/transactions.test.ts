@@ -291,6 +291,19 @@ describe('financials: ledger-backed totals', () => {
     assert.equal(fin.activeDealsCount, 2);
   });
 
+  test('multiple beneficiary commissions on one deal are all included in financial totals', () => {
+    const rows = [txn({ id: 'tx-shared', dealAmountPKR: 4000000, status: 'Fully Paid' })];
+    const commissions = [
+      comm({ id: 'cm-dealer', transactionId: 'tx-shared', amountPKR: 20000, status: 'Accrued' }),
+      comm({ id: 'cm-agent', transactionId: 'tx-shared', amountPKR: 10000, paidPKR: 4000, status: 'Partially Paid' }),
+      comm({ id: 'cm-pending', transactionId: 'tx-shared', amountPKR: 5000, status: 'Pending Accrual' }),
+    ];
+    const fin = computeFinancials(rows, [pay('p1', 'tx-shared', 4000000)], commissions);
+    assert.equal(fin.totalCommissionAccrued, 30000);
+    assert.equal(fin.totalCommissionPaid, 4000);
+    assert.equal(fin.totalCommissionPayable, 26000);
+  });
+
   test('accrued but unpaid commission shows as payable', () => {
     const rows = [txn({ id: 'tx-1', dealAmountPKR: 4000000, status: 'Fully Paid' })];
     const commissions = [comm({ transactionId: 'tx-1', amountPKR: 20000, status: 'Accrued' })];
