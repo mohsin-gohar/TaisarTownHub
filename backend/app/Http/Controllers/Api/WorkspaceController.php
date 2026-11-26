@@ -73,6 +73,8 @@ class WorkspaceController extends Controller
     private const RESERVED_KEYS = [
         'agency_id', 'created_by', 'updated_by', 'deleted_by',
         'uploaded_by', 'recorded_by', 'verified_by',
+        'voidedAt', 'voidedBy', 'voided_at', 'voided_by',
+        'commissionStatus', 'commission_status', 'cancelledAt', 'cancelled_at',
     ];
 
     private const MAX_ROWS_PER_COLLECTION = 2000;
@@ -769,6 +771,15 @@ class WorkspaceController extends Controller
             $newPayload = $row;
             $oldPayload = $existing?->payload ?? null;
 
+            if ($collection === 'transactions' && $oldPayload !== null) {
+                foreach (['voidedAt', 'voidedBy', 'commissionStatus', 'cancelledAt'] as $serverField) {
+                    if (! array_key_exists($serverField, $newPayload) && array_key_exists($serverField, $oldPayload)) {
+                        $newPayload[$serverField] = $oldPayload[$serverField];
+                    }
+                }
+                $row = $newPayload;
+            }
+
             if ($collection === 'properties' && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
                 $newPayload = $this->preserveSensitivePropertyFields($oldPayload ?? [], $newPayload);
                 $row = $newPayload;
@@ -817,6 +828,14 @@ class WorkspaceController extends Controller
                 continue;
             }
 
+            if ($collection === 'transactions' && $existing === null) {
+                $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? 'draft')));
+                if (! empty($newPayload['voided']) || in_array($newStatus, ['completed', 'cancelled', 'voided'], true)) {
+                    $blocked++;
+                    continue;
+                }
+            }
+
             if ($existing === null && ! $this->canCreateRow($request, $user, $collection, $agencyId)) {
                 $blocked++;
 
@@ -828,6 +847,16 @@ class WorkspaceController extends Controller
                 $blocked++;
 
                 continue;
+            }
+
+            $isTransactionCloseout = $collection === 'transactions'
+                && $this->isTransactionCloseout($oldPayload ?? [], $newPayload);
+            $isTransactionVoid = $isTransactionCloseout
+                && $this->isTransactionVoidTransition($oldPayload ?? [], $newPayload);
+
+            if ($isTransactionCloseout) {
+                $row = $this->stampTransactionCloseout($row, $user, $isTransactionVoid);
+                $newPayload = $row;
             }
 
             // Count a row only after ownership, reference, delete and row-level
@@ -860,6 +889,10 @@ class WorkspaceController extends Controller
             } else {
                 // Platform-wide writes retain the current owner column.
                 BusinessRecord::put($collection, $recordId, $row);
+            }
+
+            if ($isTransactionCloseout) {
+                $this->applyTransactionCloseout($recordId, $agencyId, $user, $row, $isTransactionVoid);
             }
 
             $changed[] = $recordId;
@@ -1340,24 +1373,51 @@ class WorkspaceController extends Controller
                 'agreementAmountPKR', 'advancePaymentPKR', 'remainingBalancePKR',
                 'totalPaidPKR', 'commissionAmountPKR', 'paymentStatus',
             ];
-            $moneyChanged = false;
             foreach ($moneyKeys as $key) {
-                if (($oldPayload[$key] ?? null) !== ($newPayload[$key] ?? null)) {
-                    $moneyChanged = true;
-                    break;
+                if (($oldPayload[$key] ?? null) !== ($newPayload[$key] ?? null)
+                    && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+                    return false;
                 }
             }
-            if ($moneyChanged && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+
+            $oldStatus = strtolower(trim((string) ($oldPayload['status'] ?? $oldPayload['dealStatus'] ?? 'draft')));
+            $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? $oldStatus)));
+            $oldVoided = ! empty($oldPayload['voided']) || $oldStatus === 'voided';
+
+            if ($oldVoided) {
                 return false;
             }
 
-            $oldStatus = strtolower((string) ($oldPayload['status'] ?? ''));
-            $newStatus = strtolower((string) ($newPayload['status'] ?? ''));
-            if ($newStatus === 'voided' && $oldStatus !== 'voided') {
+            if ($this->isTransactionVoidTransition($oldPayload, $newPayload)) {
+                if (in_array($oldStatus, ['completed', 'cancelled', 'voided'], true)) {
+                    return false;
+                }
+
                 return $this->perm($request, $user, 'void_transactions', $agencyId)
-                    && filled($newPayload['voidReason'] ?? $newPayload['notes'] ?? null)
-                    && (int) ($oldPayload['advancePaymentPKR'] ?? 0) === 0
-                    && $this->netCollectedForTransaction((string) ($newPayload['id'] ?? ''), $agencyId) === 0;
+                    && $this->transactionCloseoutReason($newPayload) !== null
+                    && (int) ($oldPayload['advancePaymentPKR'] ?? $oldPayload['advancePKR'] ?? 0) === 0
+                    && ! $this->hasCollectedPaymentsForTransaction((string) ($newPayload['id'] ?? ''), $agencyId)
+                    && ! $this->hasPaidCommissionForTransaction((string) ($newPayload['id'] ?? ''), $agencyId);
+            }
+
+            if ($newStatus === 'cancelled' && $newStatus !== $oldStatus) {
+                $reason = $this->transactionCloseoutReason($newPayload) ?? $this->transactionCloseoutReason($oldPayload);
+                return $this->perm($request, $user, 'cancel_transactions', $agencyId)
+                    && $reason !== null
+                    && (! in_array($oldStatus, ['completed', 'cancelled'], true)
+                        || $this->perm($request, $user, 'approve_transactions', $agencyId));
+            }
+
+            if (in_array($oldStatus, ['completed', 'cancelled'], true)
+                && $oldPayload !== $newPayload
+                && ! $this->perm($request, $user, 'approve_transactions', $agencyId)) {
+                return false;
+            }
+
+            if ($newStatus !== $oldStatus
+                && ! $this->validDealStatusTransition($oldStatus, $newStatus)
+                && ! $this->perm($request, $user, 'approve_transactions', $agencyId)) {
+                return false;
             }
         }
 
@@ -1371,7 +1431,7 @@ class WorkspaceController extends Controller
                     return false;
                 }
             }
-            if ($oldStatus === 'paid' && $oldPayload !== $newPayload) {
+            if (in_array($oldStatus, ['paid', 'cancelled'], true) && $oldPayload !== $newPayload) {
                 return false;
             }
             if ($newStatus === 'paid' && $oldStatus !== 'paid'
@@ -1388,6 +1448,173 @@ class WorkspaceController extends Controller
         }
 
         return false;
+    }
+
+    private function validDealStatusTransition(string $from, string $to): bool
+    {
+        if ($from === $to) {
+            return true;
+        }
+
+        if (in_array($from, ['completed', 'cancelled', 'voided'], true)) {
+            return false;
+        }
+
+        if ($to === 'cancelled') {
+            return true; // separately gated by cancel_transactions + a reason
+        }
+
+        if ($to === 'completed') {
+            return $from === 'under transfer';
+        }
+
+        $stages = [
+            'draft', 'negotiation', 'agreement signed', 'token paid',
+            'advance received', 'payment pending', 'partially paid',
+            'fully paid', 'under transfer', 'completed',
+        ];
+        $fromIndex = array_search($from, $stages, true);
+        $toIndex = array_search($to, $stages, true);
+
+        return $fromIndex !== false && $toIndex !== false && $toIndex >= $fromIndex - 1;
+    }
+
+    private function isTransactionVoidTransition(array $oldPayload, array $newPayload): bool
+    {
+        $oldStatus = strtolower(trim((string) ($oldPayload['status'] ?? $oldPayload['dealStatus'] ?? '')));
+        $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? '')));
+
+        return (empty($oldPayload['voided']) && ! empty($newPayload['voided']))
+            || ($newStatus === 'voided' && $oldStatus !== 'voided');
+    }
+
+    private function isTransactionCloseout(array $oldPayload, array $newPayload): bool
+    {
+        if ($this->isTransactionVoidTransition($oldPayload, $newPayload)) {
+            return true;
+        }
+
+        $oldStatus = strtolower(trim((string) ($oldPayload['status'] ?? $oldPayload['dealStatus'] ?? '')));
+        $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? '')));
+
+        return $newStatus === 'cancelled' && $oldStatus !== 'cancelled';
+    }
+
+    private function transactionCloseoutReason(array $payload): ?string
+    {
+        $reason = trim((string) ($payload['voidReason'] ?? $payload['notes'] ?? $payload['internalRemarks'] ?? ''));
+        return strlen($reason) >= 3 && strlen($reason) <= 2000 ? $reason : null;
+    }
+
+    private function stampTransactionCloseout(array $row, $user, bool $isVoid): array
+    {
+        $now = now()->toIso8601String();
+        $row['status'] = 'Cancelled';
+        if (array_key_exists('dealStatus', $row)) {
+            $row['dealStatus'] = 'Cancelled';
+        }
+        $row['commissionStatus'] = 'Cancelled';
+        $row['cancelledAt'] = $now;
+
+        if ($isVoid) {
+            $row['voided'] = true;
+            $row['voidReason'] = $this->transactionCloseoutReason($row);
+            $row['voidedAt'] = $now;
+            $row['voidedBy'] = (string) ($user->name ?? $user->id);
+        }
+
+        return $row;
+    }
+
+    private function hasCollectedPaymentsForTransaction(string $transactionId, ?string $agencyId): bool
+    {
+        if ($transactionId === '' || $this->netCollectedForTransaction($transactionId, $agencyId) !== 0) {
+            return true;
+        }
+
+        $query = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $agencyId === null ? $query->whereNull('agency_id') : $query->where('agency_id', $agencyId);
+        $transaction = $query->first();
+
+        return $transaction !== null && abs((float) $transaction->totalPaid()) > 0.00001;
+    }
+
+    private function hasPaidCommissionForTransaction(string $transactionId, ?string $agencyId): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+
+        $query = \App\Models\Commission::where('transaction_id', $transactionId)
+            ->where(function ($q) {
+                $q->where('status', 'paid')->orWhereNotNull('paid_at');
+            });
+        $agencyId === null ? $query->whereNull('agency_id') : $query->where('agency_id', $agencyId);
+        if ($query->exists()) {
+            return true;
+        }
+
+        $legacy = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
+        $agencyId === null ? $legacy->whereNull('agency_id') : $legacy->where('agency_id', $agencyId);
+
+        return $legacy->get()->contains(function (BusinessRecord $record) use ($transactionId): bool {
+            $row = $record->payload ?? [];
+            $linkedId = (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '');
+            return $linkedId === $transactionId
+                && (strtolower((string) ($row['status'] ?? '')) === 'paid' || (int) ($row['paidPKR'] ?? 0) > 0);
+        });
+    }
+
+    private function applyTransactionCloseout(
+        string $transactionId,
+        ?string $agencyId,
+        $user,
+        array $row,
+        bool $isVoid
+    ): void {
+        $now = now();
+        $reason = $this->transactionCloseoutReason($row) ?? 'Deal cancelled';
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        $transaction = $transactionQuery->lockForUpdate()->first();
+        if ($transaction) {
+            $transaction->dealStatus = 'Cancelled';
+            $transaction->commissionStatus = 'Cancelled';
+            if ($isVoid) {
+                $transaction->voided_at = $now;
+                $transaction->void_reason = $reason;
+                $transaction->voided_by = $user->id;
+            }
+            $transaction->save();
+        }
+
+        $commissionQuery = \App\Models\Commission::where('transaction_id', $transactionId)
+            ->whereIn('status', ['pending', 'accrued']);
+        $agencyId === null ? $commissionQuery->whereNull('agency_id') : $commissionQuery->where('agency_id', $agencyId);
+        $commissionQuery->update(['status' => 'cancelled']);
+
+        $scheduleQuery = \App\Models\PaymentSchedule::where('transaction_id', $transactionId)
+            ->whereIn('status', ['pending', 'overdue']);
+        $agencyId === null ? $scheduleQuery->whereNull('agency_id') : $scheduleQuery->where('agency_id', $agencyId);
+        $scheduleQuery->update(['status' => 'cancelled']);
+
+        $legacy = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
+        $agencyId === null ? $legacy->whereNull('agency_id') : $legacy->where('agency_id', $agencyId);
+        foreach ($legacy->get() as $record) {
+            $payload = $record->payload ?? [];
+            $linkedId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+            if ($linkedId !== $transactionId
+                || strtolower((string) ($payload['status'] ?? '')) === 'paid'
+                || (int) ($payload['paidPKR'] ?? 0) > 0) {
+                continue;
+            }
+
+            $payload['status'] = 'Cancelled';
+            $payload['cancelledAt'] = $now->toIso8601String();
+            $record->payload = $payload;
+            $record->save();
+        }
     }
 
     private function netCollectedForTransaction(string $transactionId, ?string $agencyId): int
