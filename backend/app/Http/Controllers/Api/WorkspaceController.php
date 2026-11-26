@@ -2132,7 +2132,9 @@ class WorkspaceController extends Controller
         // The initial advance is already represented in the transaction row.
         // Its first ledger row is a one-time migration of that existing money,
         // not a second collection.
-        if ($type === 'advance' && ! $this->hasBusinessPaymentLedger($transactionId, $agencyId)) {
+        $isLegacyAdvanceEntry = $type === 'advance'
+            || str_contains(strtolower((string) ($payload['note'] ?? '')), 'advance recorded at deal creation');
+        if ($isLegacyAdvanceEntry && ! $this->hasBusinessPaymentLedger($transactionId, $agencyId)) {
             $advance = $this->legacyAdvanceForTransaction($transactionId, $agencyId);
             if ($advance > 0 && $amount === $advance) {
                 return;
