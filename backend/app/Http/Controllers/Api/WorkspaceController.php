@@ -859,6 +859,11 @@ class WorkspaceController extends Controller
                 continue;
             }
 
+            if ($collection === 'commissions') {
+                $newPayload = $this->enforceCommissionLedger($request, $newPayload, $oldPayload, $agencyId);
+                $row = $newPayload;
+            }
+
             $isTransactionCloseout = $collection === 'transactions'
                 && $this->isTransactionCloseout($oldPayload ?? [], $newPayload);
             $isTransactionVoid = $isTransactionCloseout
@@ -1322,6 +1327,282 @@ class WorkspaceController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Enforce the append-only commission payout ledger at the server boundary.
+     * Client state is not trusted for paidPKR, payout history or accrual status.
+     */
+    private function enforceCommissionLedger(Request $request, array $payload, ?array $previous, ?string $agencyId): array
+    {
+        $amount = $this->normalizeWholePkr(
+            $payload['amountPKR'] ?? $payload['commissionAmountPKR'] ?? $payload['commissionAmount'] ?? null
+        );
+        if ($amount === null || $amount <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.amountPKR' => ['Commission amount must be a positive whole-PKR value.'],
+            ]);
+        }
+
+        $paid = $this->normalizeWholePkr($payload['paidPKR'] ?? 0);
+        if ($paid === null) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.paidPKR' => ['Paid commission must be a non-negative whole-PKR value.'],
+            ]);
+        }
+
+        $statusMap = [
+            'pending' => 'Pending Accrual',
+            'pending accrual' => 'Pending Accrual',
+            'accrued' => 'Accrued',
+            'partially paid' => 'Partially Paid',
+            'paid' => 'Paid',
+            'cancelled' => 'Cancelled',
+        ];
+        $statusKey = strtolower(trim((string) ($payload['status'] ?? 'pending accrual')));
+        if (! isset($statusMap[$statusKey])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['Commission status is not supported.'],
+            ]);
+        }
+        $status = $statusMap[$statusKey];
+        $payload['status'] = $status;
+
+        $payouts = $payload['payouts'] ?? [];
+        if (! is_array($payouts)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.payouts' => ['Payout history must be an array.'],
+            ]);
+        }
+        $payouts = array_values($payouts);
+
+        $oldPayouts = is_array($previous['payouts'] ?? null) ? array_values($previous['payouts']) : [];
+        $oldPaid = $this->normalizeWholePkr($previous['paidPKR'] ?? 0) ?? 0;
+        $oldStatus = strtolower(trim((string) ($previous['status'] ?? 'pending accrual')));
+        $oldAmount = $previous === null
+            ? null
+            : $this->normalizeWholePkr($previous['amountPKR'] ?? $previous['commissionAmountPKR'] ?? $previous['commissionAmount'] ?? null);
+
+        if ($previous === null) {
+            if ($status !== 'Pending Accrual' || $paid !== 0 || $payouts !== [] || ! empty($payload['accruedOn'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions' => ['New commissions must start as Pending Accrual with no payout history.'],
+                ]);
+            }
+        } else {
+            $oldCanonical = $statusMap[$oldStatus] ?? 'Pending Accrual';
+            $allowed = [
+                'pending accrual' => ['Pending Accrual', 'Accrued'],
+                'pending' => ['Pending Accrual', 'Accrued'],
+                'accrued' => ['Accrued', 'Partially Paid'],
+                'partially paid' => ['Partially Paid', 'Paid'],
+                'paid' => ['Paid'],
+                'cancelled' => ['Cancelled'],
+            ];
+            if (! in_array($status, $allowed[$oldStatus] ?? [$oldCanonical], true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.status' => ['Commission status transition is not permitted.'],
+                ]);
+            }
+
+            if ($oldAmount !== null && $amount !== $oldAmount
+                && ($oldCanonical !== 'Pending Accrual' || $oldPaid > 0 || $oldPayouts !== [])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.amountPKR' => ['Commission amount is immutable after accrual or payout.'],
+                ]);
+            }
+
+            foreach (['transactionId', 'transaction_id', 'dealerId', 'dealer_id', 'beneficiary_type'] as $field) {
+                if (array_key_exists($field, $previous)
+                    && ($payload[$field] ?? null) !== $previous[$field]) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collections.commissions.'.$field => ['Commission ownership and deal linkage cannot be changed.'],
+                    ]);
+                }
+            }
+
+            $oldAccruedOn = $previous['accruedOn'] ?? null;
+            $newAccruedOn = $payload['accruedOn'] ?? null;
+            if ($oldAccruedOn !== null && $newAccruedOn !== $oldAccruedOn) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.accruedOn' => ['The original accrual date is immutable.'],
+                ]);
+            }
+
+            if ($oldCanonical === 'Pending Accrual' && $status === 'Accrued') {
+                $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+                if (! $this->commissionMilestoneReached($transactionId, $agencyId)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collections.commissions.status' => ['Commission cannot accrue until the deal is fully paid or completed.'],
+                    ]);
+                }
+                $payload['accruedOn'] = now()->toDateString();
+            }
+        }
+
+        if (count($payouts) < count($oldPayouts)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.payouts' => ['Payout history is append-only and cannot be removed.'],
+            ]);
+        }
+
+        foreach ($oldPayouts as $index => $oldPayout) {
+            $newPayout = $payouts[$index] ?? null;
+            if (! is_array($oldPayout) || ! is_array($newPayout)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts' => ['Existing payout records cannot be changed.'],
+                ]);
+            }
+            foreach (['id', 'amountPKR', 'paidAt', 'recordedBy', 'note'] as $field) {
+                if (($oldPayout[$field] ?? null) !== ($newPayout[$field] ?? null)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collections.commissions.payouts' => ['Existing payout records cannot be edited.'],
+                    ]);
+                }
+            }
+        }
+
+        $payoutTotal = 0;
+        $payoutIds = [];
+        foreach ($payouts as $index => $payout) {
+            if (! is_array($payout)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts.'.$index => ['Payout entry must be an object.'],
+                ]);
+            }
+            $payoutAmount = $this->normalizeWholePkr($payout['amountPKR'] ?? null);
+            $payoutId = trim((string) ($payout['id'] ?? ''));
+            if ($payoutAmount === null || $payoutAmount <= 0 || $payoutId === '' || strlen($payoutId) > 64) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts.'.$index => ['Each payout needs a unique id and a positive whole-PKR amount.'],
+                ]);
+            }
+            if (isset($payoutIds[$payoutId])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts.'.$index.'.id' => ['Payout ids must be unique.'],
+                ]);
+            }
+            $payoutIds[$payoutId] = true;
+            $payoutTotal += $payoutAmount;
+
+            if ($index >= count($oldPayouts)) {
+                $payouts[$index]['amountPKR'] = $payoutAmount;
+                $payouts[$index]['paidAt'] = now()->toDateString();
+                $payouts[$index]['recordedBy'] = (string) ($request->user()->name ?? $request->user()->id);
+            }
+        }
+
+        // Old imported paid balances may pre-date payout-level history. Preserve
+        // that baseline, but every new movement must be represented by a new row.
+        $legacyPaidBaseline = $oldPayouts === [] && $oldPaid > 0 ? $oldPaid : 0;
+        $ledgerPaid = $legacyPaidBaseline + $payoutTotal;
+        if ($paid !== $ledgerPaid || $paid > $amount) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.paidPKR' => ['Paid total must equal the immutable payout ledger and cannot exceed the commission amount.'],
+            ]);
+        }
+
+        if (in_array($status, ['Pending Accrual', 'Accrued'], true) && $paid !== 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.paidPKR' => ['An unpaid commission cannot have a paid balance.'],
+            ]);
+        }
+        if ($status === 'Partially Paid' && ($paid <= 0 || $paid >= $amount)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['Partially Paid requires a payout total between zero and the full commission amount.'],
+            ]);
+        }
+        if ($status === 'Paid' && $paid !== $amount) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['A commission can be marked Paid only after its full amount is recorded in payouts.'],
+            ]);
+        }
+        if ($status === 'Cancelled' && $paid > 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['A commission with recorded payouts cannot be cancelled.'],
+            ]);
+        }
+
+        if (count($payouts) > count($oldPayouts)) {
+            if (! $this->perm($request, $request->user(), 'pay_commissions', $agencyId)) {
+                abort(403, 'Only users with commission payout authority may record a payout.');
+            }
+            if (! in_array($status, ['Partially Paid', 'Paid'], true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.status' => ['A new payout must move the commission to Partially Paid or Paid.'],
+                ]);
+            }
+        }
+
+        if ($previous !== null && $status !== $oldCanonical
+            && $status === 'Paid' && count($payouts) === count($oldPayouts)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['A commission cannot be marked Paid without recording its final payout.'],
+            ]);
+        }
+
+        if (in_array($status, ['Accrued', 'Partially Paid', 'Paid'], true) && empty($payload['accruedOn'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.accruedOn' => ['An accrual date is required before a commission can be paid.'],
+            ]);
+        }
+
+        $payload['amountPKR'] = $amount;
+        $payload['paidPKR'] = $paid;
+        $payload['payouts'] = $payouts;
+
+        return $payload;
+    }
+
+    private function commissionMilestoneReached(string $transactionId, ?string $agencyId): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+
+        $legacyQuery = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        $agencyId === null ? $legacyQuery->whereNull('agency_id') : $legacyQuery->where('agency_id', $agencyId);
+        $legacy = $legacyQuery->first()?->payload ?? [];
+        $legacyStatus = strtolower(trim((string) ($legacy['status'] ?? $legacy['dealStatus'] ?? '')));
+        if (in_array($legacyStatus, ['fully paid', 'completed'], true)
+            || strtolower((string) ($legacy['paymentStatus'] ?? '')) === 'fully paid') {
+            return true;
+        }
+
+        $agreement = $this->normalizeWholePkr($legacy['agreementAmountPKR'] ?? $legacy['dealAmountPKR'] ?? null) ?? 0;
+        if ($agreement > 0) {
+            $paymentQuery = BusinessRecord::where('collection', 'payments')->whereNull('deleted_at');
+            $agencyId === null ? $paymentQuery->whereNull('agency_id') : $paymentQuery->where('agency_id', $agencyId);
+            $hasLedger = $paymentQuery->get()->contains(function (BusinessRecord $record) use ($transactionId): bool {
+                $row = $record->payload ?? [];
+                return (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '') === $transactionId;
+            });
+            $collected = $hasLedger
+                ? $this->netCollectedForTransaction($transactionId, $agencyId)
+                : ($this->normalizeWholePkr($legacy['advancePaymentPKR'] ?? $legacy['advancePKR'] ?? 0) ?? 0);
+            if ($collected >= $agreement) {
+                return true;
+            }
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        $transaction = $transactionQuery->first();
+        if ($transaction === null) {
+            return false;
+        }
+        if (in_array(strtolower((string) $transaction->dealStatus), ['fully paid', 'completed'], true)) {
+            return true;
+        }
+        $relationalAgreement = (int) $transaction->agreementAmountPKR;
+        $relationalPaid = (int) $transaction->totalPaid();
+        if ($relationalPaid === 0 && (int) $transaction->advancePaymentPKR > 0) {
+            $relationalPaid = (int) $transaction->advancePaymentPKR;
+        }
+
+        return $relationalAgreement > 0 && $relationalPaid >= $relationalAgreement;
     }
 
     private function canCreateRow(Request $request, $user, string $collection, ?string $agencyId): bool
