@@ -352,7 +352,7 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'id' => 'sub-cancel-at-period-end',
             'status' => 'canceled',
             'cancel_at_period_end' => false,
-            'current_period_end' => $paidEnd->getTimestamp(),
+            'current_period_end' => $subscription->fresh()->ends_at->getTimestamp(),
         ]);
 
         $this->assertSame('cancelled', $subscription->fresh()->status);
