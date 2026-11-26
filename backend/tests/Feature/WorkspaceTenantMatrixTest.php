@@ -421,8 +421,7 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         ], $this->authHeaders($this->tokenFor($updater)))->assertOk();
         $this->assertSame('Draft', $this->record('transactions', 'cancelled-deal')->payload['status']);
 
-        // finance.update_transaction includes the legacy cancel_transactions alias.
-        [$canceller, $otherAgency] = $this->agencyUser(['finance.update_transaction']);
+        [$canceller, $otherAgency] = $this->agencyUser(['legacy.cancel_transactions']);
         BusinessRecord::put('transactions', 'reason-required-deal', [
             'id' => 'reason-required-deal',
             'status' => 'Draft',
