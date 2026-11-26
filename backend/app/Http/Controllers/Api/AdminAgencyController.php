@@ -275,7 +275,7 @@ class AdminAgencyController extends Controller
             // Never overwrite the local link to a live Stripe subscription:
             // doing so would orphan an external recurring charge.
             if ($current && $current->stripe_subscription_id
-                && in_array($current->status, ['active', 'past_due'], true)) {
+                && in_array($current->status, ['trialing', 'active', 'past_due'], true)) {
                 return ['conflict' => true];
             }
 
