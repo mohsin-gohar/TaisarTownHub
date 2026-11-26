@@ -55,6 +55,12 @@ class AgencySubscription extends Model
         if (array_key_exists($key, $this->limits_override ?? [])) {
             return $this->limits_override[$key];
         }
-        return ($this->plan->limits[$key] ?? null) ?? $default;
+
+        $planLimits = $this->plan?->limits ?? [];
+        if (array_key_exists($key, $planLimits)) {
+            return $planLimits[$key]; // explicit null means unlimited
+        }
+
+        return $default;
     }
 }
