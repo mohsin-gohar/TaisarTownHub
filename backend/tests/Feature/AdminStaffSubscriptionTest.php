@@ -478,6 +478,22 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->assertSame('stripe', $subscription->fresh()->provider);
         $this->assertSame('sub-current-live', $subscription->fresh()->stripe_subscription_id);
         $this->assertTrue((bool) $subscription->fresh()->auto_renew);
+
+        $subscription->forceFill(['status' => 'trialing'])->save();
+        $this->putJson('/api/admin/agencies/' . $agency->id . '/subscription', [
+            'plan_id' => $replacementPlan->id,
+            'status' => 'active',
+        ], $headers)->assertStatus(409);
+
+        $subscription->forceFill(['status' => 'cancelled'])->save();
+        $this->putJson('/api/admin/agencies/' . $agency->id . '/subscription', [
+            'plan_id' => $replacementPlan->id,
+            'status' => 'active',
+        ], $headers)
+            ->assertOk()
+            ->assertJsonPath('subscription.provider', 'manual')
+            ->assertJsonPath('subscription.auto_renew', false)
+            ->assertJsonPath('subscription.stripe_subscription_id', null);
     }
 
     public function test_dashboard_separates_platform_wide_and_agency_scoped_data(): void
