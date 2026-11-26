@@ -476,7 +476,7 @@ class WorkspaceController extends Controller
             }
 
             if ($this->normalizeWholePkr($row[$key]) === null) {
-                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                throw \Illuminate\Validation\ValidationException::withMessages([
                     "collections.{$collection}.{$rowIndex}.{$key}" => [
                         'This amount must be a whole PKR value between 0 and ' . self::MAX_WHOLE_PKR . '.',
                     ],
@@ -486,7 +486,7 @@ class WorkspaceController extends Controller
 
         if ($collection === 'commissions' && isset($row['payouts'])) {
             if (! is_array($row['payouts'])) {
-                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                throw \Illuminate\Validation\ValidationException::withMessages([
                     "collections.{$collection}.{$rowIndex}.payouts" => ['Payouts must be an array.'],
                 ]);
             }
@@ -498,7 +498,7 @@ class WorkspaceController extends Controller
                 }
 
                 if ($this->normalizeWholePkr($payout['amountPKR']) === null) {
-                    throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                    throw \Illuminate\Validation\ValidationException::withMessages([
                         "collections.{$collection}.{$rowIndex}.payouts.{$payoutIndex}.amountPKR" => [
                             'This payout must be a whole PKR value between 0 and ' . self::MAX_WHOLE_PKR . '.',
                         ],
