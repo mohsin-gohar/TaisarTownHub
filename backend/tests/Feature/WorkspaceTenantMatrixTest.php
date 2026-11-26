@@ -122,6 +122,37 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         );
     }
 
+    public function test_first_workspace_writer_owns_new_rows_and_a_second_agency_cannot_claim_them(): void
+    {
+        [$agencyAUser, $agencyA] = $this->agencyUser(['properties.view', 'properties.create']);
+        [$agencyBUser] = $this->agencyUser(['properties.view', 'properties.create']);
+
+        $payload = [
+            'collections' => [
+                'properties' => [['id' => 'shared-new-id', 'title' => 'Agency A listing']],
+            ],
+        ];
+
+        $this->putJson('/api/workspace', $payload, $this->authHeaders($this->tokenFor($agencyAUser)))
+            ->assertOk();
+
+        $this->assertDatabaseHas('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'shared-new-id',
+            'agency_id' => $agencyA->id,
+        ]);
+
+        $this->putJson('/api/workspace', [
+            'collections' => [
+                'properties' => [['id' => 'shared-new-id', 'title' => 'Agency B takeover']],
+            ],
+        ], $this->authHeaders($this->tokenFor($agencyBUser)))->assertOk();
+
+        $record = $this->record('properties', 'shared-new-id');
+        $this->assertSame($agencyA->id, $record->agency_id);
+        $this->assertSame('Agency A listing', $record->payload['title']);
+    }
+
     public function test_global_project_and_testimonial_content_is_read_only_for_standard_agency_roles(): void
     {
         [$user, $agency] = $this->agencyUser([
