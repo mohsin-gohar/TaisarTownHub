@@ -292,7 +292,7 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
         try {
             $service->update($second, ['status' => 'active'], $admin);
             $this->fail('A second active placement for the same agency must be rejected.');
-        } catch (\\DomainException $exception) {
+        } catch (\DomainException $exception) {
             $this->assertStringContainsString('already has a current featured placement', $exception->getMessage());
         }
 
