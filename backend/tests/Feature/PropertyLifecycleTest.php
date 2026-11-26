@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\AgencySubscription;
 use App\Models\Property;
+use App\Models\SubscriptionPlan;
 
 /**
  * Property lifecycle: draft → pending → approved/rejected, agency ownership,
@@ -122,7 +124,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->assertContains('Public Marketplace Plot', $publicTitlesAfter);
         $this->assertSame(
             now()->addDays(60)->toDateString(),
-            \\App\\Models\\Property::findOrFail($id)->expires_at->toDateString(),
+            Property::findOrFail($id)->expires_at->toDateString(),
             'Approved listings must use the agency plan listing_days value.'
         );
 
