@@ -999,7 +999,7 @@ class AuthController extends Controller
             // membership for tenant users. A stale users.role value such as
             // "admin" must never leak platform capabilities into an agency UI.
             'permissions' => $access['allowed']
-                ? ($user->isPlatformUser() ? RolePermissions::forRole($user->role) : $user->permissionsFor($actingAgency))
+                ? ($user->isPlatformUser() ? RolePermissions::forRole($user->role) : $this->legacyAgencyPermissions($user->permissionsFor($actingAgency)))
                 : [],
             'enterprise_permissions' => $access['allowed']
                 ? $user->permissionsFor($user->isPlatformUser() ? null : $actingAgency) : [],
@@ -1007,6 +1007,21 @@ class AuthController extends Controller
             'is_platform' => $user->isPlatformUser(),
             'workspace_access' => $access,
         ];
+    }
+
+    /** @param array<int, string> $permissions */
+    private function legacyAgencyPermissions(array $permissions): array
+    {
+        foreach (\App\Support\Permissions::LEGACY_ALIASES as $legacy => $canonical) {
+            if (str_starts_with($canonical, 'admin.')) {
+                continue;
+            }
+            if (in_array($canonical, $permissions, true)) {
+                $permissions[] = $legacy;
+            }
+        }
+
+        return array_values(array_unique($permissions));
     }
 
 }
