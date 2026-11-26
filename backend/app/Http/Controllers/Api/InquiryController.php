@@ -135,7 +135,7 @@ class InquiryController extends Controller
 
             BusinessRecord::put('inquiries', $id, $record);
             if ($agencyId !== null) {
-                BusinessRecord::where('type', 'inquiries')
+                BusinessRecord::where('collection', 'inquiries')
                     ->where('record_id', $id)
                     ->update(['agency_id' => $agencyId]);
             }
