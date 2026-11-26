@@ -108,18 +108,75 @@ class PaymentController extends Controller
             ]);
         }, 3);
 
-        if ($invoice->stripe_session_id) {
-            return response()->json([
-                'success' => true,
-                'message' => 'A recent checkout session already exists for this plan. Complete it or wait for it to expire before retrying.',
-                'session_id' => $invoice->stripe_session_id,
-            ], 409);
-        }
-
         $amount = (int) $invoice->total_pkr;
 
         try {
             $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
+
+            if ($invoice->stripe_session_id) {
+                $existingSession = $stripe->checkout->sessions->retrieve($invoice->stripe_session_id, []);
+                if (($existingSession->status ?? null) === 'open' && !empty($existingSession->url)) {
+                    return response()->json([
+                        'success' => true,
+                        'checkout_url' => $existingSession->url,
+                        'session_id' => $existingSession->id,
+                    ]);
+                }
+                if (($existingSession->status ?? null) === 'complete') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This checkout has already completed. Refresh the subscription status before starting another payment.',
+                    ], 409);
+                }
+                if (($existingSession->status ?? null) !== 'expired') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The existing checkout status could not be confirmed. Please retry shortly.',
+                    ], 503);
+                }
+
+                $invoice = DB::transaction(function () use ($agencyId, $plan, $invoice): SubscriptionInvoice {
+                    DB::table('agencies')->where('id', $agencyId)->lockForUpdate()->first();
+                    $locked = SubscriptionInvoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+                    if ($locked->status !== 'pending') {
+                        throw new \RuntimeException('The expired checkout invoice is no longer pending.');
+                    }
+                    $locked->update(['status' => 'failed']);
+
+                    $replacement = SubscriptionInvoice::where('agency_id', $agencyId)
+                        ->where('plan_id', $plan->id)
+                        ->where('status', 'pending')
+                        ->whereNull('stripe_session_id')
+                        ->whereNull('flutterwave_tx_ref')
+                        ->latest()
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($replacement) {
+                        return $replacement;
+                    }
+
+                    $periodStart = now();
+                    $periodEnd = $plan->interval === 'year'
+                        ? $periodStart->copy()->addYear()
+                        : $periodStart->copy()->addMonth();
+
+                    return SubscriptionInvoice::create([
+                        'id' => (string) Str::uuid(),
+                        'invoice_number' => SubscriptionInvoice::nextNumber(),
+                        'agency_id' => $agencyId,
+                        'plan_id' => $plan->id,
+                        'amount_pkr' => (int) $locked->total_pkr,
+                        'tax_pkr' => 0,
+                        'total_pkr' => (int) $locked->total_pkr,
+                        'currency' => $locked->currency,
+                        'period_start' => $periodStart->toDateString(),
+                        'period_end' => $periodEnd->toDateString(),
+                        'status' => 'pending',
+                        'due_at' => now()->addDays(7),
+                    ]);
+                }, 3);
+            }
 
             $session = $stripe->checkout->sessions->create([
                 'mode' => 'subscription',
