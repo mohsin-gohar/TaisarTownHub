@@ -241,7 +241,7 @@ class AuthFlowsTest extends EnterpriseTestCase
     }
     public function test_canonical_finance_permissions_expand_to_all_legacy_ui_aliases(): void
     {
-        $user = $this->memberUser('agency_owner', [
+        $user = $this->memberUser('viewer', [
             'agency.view',
             'properties.view',
             'finance.view',
