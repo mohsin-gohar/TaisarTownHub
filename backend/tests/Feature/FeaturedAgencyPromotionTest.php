@@ -309,7 +309,7 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
         $one = $service->promote($first, [], $admin);
         $service->promote($second, [], $admin);
 
-        $this->expectException(\\DomainException::class);
+        $this->expectException(\DomainException::class);
         $service->reorder([$one->id], $admin);
     }
 
