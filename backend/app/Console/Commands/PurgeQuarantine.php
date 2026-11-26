@@ -33,11 +33,13 @@ class PurgeQuarantine extends Command
         $cutoff = now()->subDays(max(1, $days));
 
         $purgedRejected = 0;
-        DocumentQuarantine::where('created_at', '<', $cutoff)->get()->each(function (DocumentQuarantine $row) use (&$purgedRejected) {
+        $retainedRejected = 0;
+        DocumentQuarantine::where('created_at', '<', $cutoff)->get()->each(function (DocumentQuarantine $row) use (&$purgedRejected, &$retainedRejected) {
             try {
                 $disk = Storage::disk('quarantine');
                 if ($row->disk_path && $disk->exists($row->disk_path)
                     && $disk->delete($row->disk_path) === false) {
+                    $retainedRejected++;
                     Log::warning('Quarantine purge retained metadata because byte deletion returned false', [
                         'id' => $row->id,
                         'disk_path' => $row->disk_path,
@@ -46,6 +48,7 @@ class PurgeQuarantine extends Command
                     return;
                 }
             } catch (\Throwable $e) {
+                $retainedRejected++;
                 Log::warning('Quarantine purge byte delete failed; metadata retained for retry', [
                     'id' => $row->id,
                     'error' => $e->getMessage(),
@@ -59,15 +62,17 @@ class PurgeQuarantine extends Command
         });
 
         $purgedHolds = 0;
+        $retainedHolds = 0;
         Document::withTrashed()
             ->where('status', 'quarantined')
             ->where('created_at', '<', $cutoff)
             ->get()
-            ->each(function (Document $document) use (&$purgedHolds) {
+            ->each(function (Document $document) use (&$purgedHolds, &$retainedHolds) {
                 try {
                     $disk = Storage::disk($document->storage_disk ?: 'documents');
                     if ($document->disk_path && $disk->exists($document->disk_path)
                         && $disk->delete($document->disk_path) === false) {
+                        $retainedHolds++;
                         Log::warning('Quarantine hold retained because document byte deletion returned false', [
                             'id' => $document->id,
                             'disk_path' => $document->disk_path,
@@ -80,6 +85,7 @@ class PurgeQuarantine extends Command
                         $versionDisk = Storage::disk($version->storage_disk ?: 'documents');
                         if ($version->disk_path && $versionDisk->exists($version->disk_path)
                             && $versionDisk->delete($version->disk_path) === false) {
+                            $retainedHolds++;
                             Log::warning('Quarantine hold retained because version byte deletion returned false', [
                                 'id' => $document->id,
                                 'version_id' => $version->id,
@@ -90,6 +96,7 @@ class PurgeQuarantine extends Command
                         }
                     }
                 } catch (\Throwable $e) {
+                    $retainedHolds++;
                     Log::warning('Quarantine hold purge failed; metadata retained for retry', [
                         'id' => $document->id,
                         'error' => $e->getMessage(),
@@ -113,8 +120,8 @@ class PurgeQuarantine extends Command
                 $purgedHolds++;
             });
 
-        $this->info("Quarantine purge: {$purgedRejected} rejected upload(s), {$purgedHolds} expired hold(s) removed.");
+        $this->info("Quarantine purge: {$purgedRejected} rejected upload(s), {$purgedHolds} expired hold(s) removed; {$retainedRejected} rejected upload(s) and {$retainedHolds} document hold(s) retained for retry.");
 
-        return self::SUCCESS;
+        return ($retainedRejected + $retainedHolds) > 0 ? self::FAILURE : self::SUCCESS;
     }
 }
