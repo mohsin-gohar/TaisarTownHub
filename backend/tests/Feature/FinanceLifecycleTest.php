@@ -276,10 +276,10 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         ], $headers)->assertStatus(409)
             ->assertJsonPath('message', 'Refund or reconcile all collected payments before voiding this deal.');
 
-        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+        $refund = $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 2500000,
             'type' => 'refund',
-        ], $headers)->assertStatus(201);
+        ], $headers)->assertStatus(201)->json('payment');
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
             'reason' => 'Buyer withdrew after full refund',
@@ -287,6 +287,15 @@ class FinanceLifecycleTest extends EnterpriseTestCase
 
         $this->assertSame('cancelled', Commission::findOrFail($commission['id'])->status);
         $this->assertSame('cancelled', PaymentSchedule::where('transaction_id', $deal['id'])->value('status'));
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
+            'amount' => 1000,
+            'beneficiary_type' => 'agency',
+        ], $headers)->assertStatus(422);
+
+        $this->deleteJson("/api/agency/payments/{$refund['id']}", [
+            'reason' => 'Attempt to change a voided ledger',
+        ], $headers)->assertStatus(409);
     }
 
     public function test_void_is_blocked_when_a_commission_has_already_been_paid(): void
