@@ -13,6 +13,7 @@ import {
 import { initialAgencyVideos } from '../data/agencyVideosSeed';
 import type { Property } from '../types';
 import { mapApiProperty } from '../utils/apiProperty';
+import { APP_MODE, allowsPublicSeedFallback } from '../config/appMode';
 
 // Production builds should set VITE_API_URL. If it is missing, fall back to the
 // same-origin `/api` reverse-proxy layout (the default in Dockerfile.prod) and
@@ -20,7 +21,7 @@ import { mapApiProperty } from '../utils/apiProperty';
 // aborts the whole SPA before React mounts and leaves a blank page.
 const configuredApiUrl = import.meta.env.VITE_API_URL;
 if (!configuredApiUrl && import.meta.env.PROD) {
-  console.error('VITE_API_URL is not set for this production build; using the bundled public catalog.');
+  console.error('VITE_API_URL is not set for this production build; using same-origin /api. Sample catalog fallback is disabled.');
 }
 export const API_BASE_URL = configuredApiUrl || (import.meta.env.PROD ? '/api' : 'http://127.0.0.1:8080/api');
 
@@ -203,7 +204,7 @@ export const api = {
   async getPublicProperties(): Promise<Property[] | null> {
     // Static deployments have no API origin; the bundled seed is already
     // sale-only and is the documented offline fallback.
-    if (!configuredApiUrl) return initialProperties.map((property) => ({ ...property }));
+    if (!configuredApiUrl && allowsPublicSeedFallback(APP_MODE)) return initialProperties.map((property) => ({ ...property }));
 
     try {
       const query = new URLSearchParams({ purpose: 'sale', per_page: '500' });
@@ -339,7 +340,7 @@ export const api = {
   },
 
   async getCatalog(): Promise<Record<string, unknown> | null> {
-    if (!configuredApiUrl) return buildStaticPublicCatalog();
+    if (!configuredApiUrl && allowsPublicSeedFallback(APP_MODE)) return buildStaticPublicCatalog();
     try {
       const res = await apiFetch('/catalog');
       if (!res.ok) return null;
