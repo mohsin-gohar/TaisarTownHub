@@ -1,10 +1,11 @@
 # TaisarTownHub — Release Readiness
 
 **Main baseline:** `e780f1f7cf104a04e3855fb61ec2bfd43422ad52`  
-**QA code snapshot validated:** `d1a09d3ef1a13cc53d22851df6e24999cd980cfd`  
+**QA code snapshot validated:** `9ac3987dabeb08a663f9989e01bacb876eb20893`  
 **QA branch:** `qa/cross-browser-multireplica`  
 **PR #5:** open, Draft, unmerged  
-**Audit snapshot inventory:** 561 tracked files; QA was 184 commits ahead of main, 0 behind, with 54 changed files before this status-document update  
+**PR #8:** merged into QA only (`9ac3987`); not merged into `main`  
+**Audit snapshot inventory:** 561 tracked files; QA is 186 commits ahead of main, 0 behind, with 54 changed files  
 **Date:** 2026-11-26
 
 This document separates verified repository/CI work from production checks that require owner-controlled credentials, data, infrastructure, or decisions. Green CI does not mean a production launch has occurred.
@@ -17,28 +18,32 @@ The merged baseline includes tenant-scoped agency data, safe workspace replaceme
 
 ## 2. Latest completed CI evidence
 
-Both latest workflows completed successfully on the validated QA code snapshot.
+Both latest workflows completed successfully on QA snapshot `9ac3987dabeb08a663f9989e01bacb876eb20893`.
 
-### CI run 45754283139
+### CI run 45776131147 (#269)
 - Backend PHP 8.3 + MySQL 8: **448 passed, 3,921 assertions**.
-- Frontend verify on Node 24: **158 tests passed**, typecheck and production build/prerender/bundle checks passed.
-- Chromium Playwright: **46 passed, 2 skipped**.
+- Frontend verify on Node 24: **158 tests passed**; TypeScript check, production build, SEO prerender and public bundle guard passed.
+- SEO prerender: **29 pages** and sitemap with **9 URLs**.
+- Chromium Playwright: **46 passed**.
 - Firefox + WebKit cross-browser smoke: **14 passed**.
 - OpenAPI validation: passed.
 
-### Docker CI run 45754283114
+### Docker CI run 45776131178 (#210)
 - Backend and frontend production image builds: passed.
 - Production and CI Nginx configuration validation using Nginx **1.30.8**: passed.
-- MySQL backup/restore drill: passed.
+- MySQL 8 backup/restore drill: passed, including isolated restore and scratch cleanup.
 - Real ClamAV TCP scan: clean-file verdict and EICAR threat detection passed.
-- Full-stack disposable deployment: readiness and integration smoke (gateway, CORS preflight, register, login, current-user and logout): passed.
-- Two backend replicas: both healthy; Nginx gateway health requests passed.
+- Full-stack disposable deployment: readiness, gateway, CORS preflight, register, login, current-user and logout smoke tests passed.
+- Two backend replicas: both healthy; gateway health checks passed.
 - API-backed browser role matrix: **13 passed**.
-- 10-worker synthetic API load probe: **57,639 requests over 10 seconds**, reported 5,763.9 requests/second, **0 server 5xx**.
-- Concurrent deal-number integrity: **8/8 transactions created**, all 8 deal numbers unique.
-- Disposable fixtures were cleaned up successfully.
+- 10-worker synthetic API probe: **76,198 requests over 10 seconds**, observed **7,619.8 requests/second**, **0 server 5xx**. The 76,160 HTTP 429 responses were expected rate-limit responses, not successful application requests.
+- Concurrent deal-number integrity: **8/8 transactions created**, all 8 received unique deal numbers.
+- All disposable transactions were voided and the test property was deleted successfully.
 
 The load result is a loopback CI probe, not a production capacity benchmark. It does not replace staging tests against the actual VPS, domain, mail provider, payment providers or real traffic.
+
+### Finance concurrency correction
+The previous disposable run had one HTTP 500 during an 8-way finance deal-creation probe. The finance transaction retry budget was aligned from 3 to 10, matching the shared deal-number allocation path. PR #8 was merged into the QA branch as `9ac3987`; the latest full-stack run above passed the 8-way concurrency check. This is verified for the disposable CI environment only.
 
 ## 3. QA engineering changes
 
@@ -97,4 +102,4 @@ The load result is a loopback CI probe, not a production capacity benchmark. It 
 5. Run HTTPS, tenant isolation, role matrix, upload/download, queue, scheduler, mail/payment webhook, monitoring and restore checks on staging.
 6. Obtain explicit owner approval for production deployment; run post-deploy smoke and restore checks.
 
-**Safety:** `main` remains unchanged. PR #5 remains Draft and unmerged. No production database, storage, credentials, DNS or deployment has been modified by this QA work. No owner-dependent task is silently marked complete.
+**Safety:** `main` remains unchanged. PR #5 remains Draft and unmerged. PR #8 was merged into the QA branch only. No production database, storage, credentials, DNS or deployment has been modified by this QA work. No owner-dependent task is silently marked complete.
