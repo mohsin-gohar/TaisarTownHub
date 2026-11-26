@@ -11,7 +11,7 @@ Backup = **database** + **application storage** (private documents, quarantine a
 | Database | MySQL data dir (or logical dump) | All tenants, RBAC, finance, audit |
 | Private storage | `backend/storage/app/private` | Documents, versions, encrypted uploads, quarantine and any future private disks |
 | Public storage | `backend/storage/app/public` | Public map images and media assets |
-| Quarantine volume | `private/quarantine` inside the shared private volume | Rejected uploads retained for rescan and audit |
+| Quarantine volume | Docker named volume `quarantine_storage`, mounted at `private/quarantine` | Rejected uploads retained for rescan and audit |
 | Environment | repository-root `.env` for Docker Compose (or `backend/.env` for host-only Laravel) | Keys/credentials — never in the same bucket as the data |
 | Laravel secrets | `APP_KEY` | Without it the encrypted columns (CNIC, MFA secrets) are unreadable |
 
@@ -49,7 +49,7 @@ set -euo pipefail
 export TTH_BACKUP_DIR=/secure/backups/taisartownhub
 
 # 0. Stop application writers; leave MySQL running.
-docker compose stop backend worker scheduler
+docker compose stop nginx frontend backend worker scheduler
 
 # 1. Read the database name from the root Compose .env (no password printed).
 TMP_MYSQL_CNF="$(mktemp)"
@@ -61,15 +61,7 @@ rm -f "$TMP_MYSQL_CNF" "$TMP_DB_META"
 # 2. Restore the database inside the MySQL container using a protected
 #    temporary option file (the password never appears in process arguments).
 gunzip -c "$TTH_BACKUP_DIR/tth_db_<STAMP>.sql.gz" | docker compose exec -T mysql sh -c '
-  set -u
-  defaults="$(mktemp)"
-  escaped_password="$(printf "%s" "$MYSQL_ROOT_PASSWORD" | sed '''s/\/\\/g; s/"/\"/g''')"
-  printf "[client]\nuser=root\npassword=\"%s\"\nhost=127.0.0.1\n" "$escaped_password" > "$defaults"
-  chmod 600 "$defaults"
-  mysql --defaults-extra-file="$defaults" "$1"
-  status=$?
-  rm -f "$defaults"
-  exit "$status"
+  MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u root "$1"
 ' tth-restore "$DB_NAME"
 
 # 3. Restore the storage archive into the named volumes via a one-off backend
@@ -77,10 +69,10 @@ gunzip -c "$TTH_BACKUP_DIR/tth_db_<STAMP>.sql.gz" | docker compose exec -T mysql
 docker compose run --rm --no-deps -T --entrypoint sh backend -c 'tar -xzf - -C /var/www/html/storage/app' < "$TTH_BACKUP_DIR/tth_vault_<STAMP>.tar.gz"
 
 # 4. Restore ownership/permissions in the same mounted volumes.
-docker compose run --rm --no-deps --entrypoint sh backend -c 'chown -R www-data:www-data /var/www/html/storage/app/private /var/www/html/storage/app/public && chmod -R 750 /var/www/html/storage/app/private'
+docker compose run --rm --no-deps --user root --entrypoint sh backend -c 'chown -R www-data:www-data /var/www/html/storage/app/private /var/www/html/storage/app/public && chmod -R 750 /var/www/html/storage/app/private'
 
 # 5. Start services and verify.
-docker compose up -d backend worker scheduler
+docker compose up -d frontend nginx backend worker scheduler
 docker compose exec backend php artisan migrate:status
 docker compose exec backend php artisan app:production-check --strict --json
 ```
