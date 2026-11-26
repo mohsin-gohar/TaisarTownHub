@@ -537,6 +537,42 @@ class FileVaultSecurityTest extends EnterpriseTestCase
 
     /* ============ Audit of denied attempts ============ */
 
+    public function test_sensitive_document_versions_and_activity_metadata_require_sensitive_clearance(): void
+    {
+        [$owner, $agency] = $this->uploader();
+        $documentId = $this->upload($owner, ['category' => 'cnic'], 'sensitive-cnic.pdf')
+            ->assertStatus(201)
+            ->json('document.id');
+
+        $ownerHeaders = $this->authHeaders($this->tokenFor($owner));
+        $this->getJson("/api/agency/documents/{$documentId}/download", $ownerHeaders)->assertOk();
+
+        [$limited] = $this->agencyUser([
+            'documents.view',
+            'documents.update',
+            'documents.manage_permissions',
+        ], 'limited_document_manager', $agency);
+        $limitedHeaders = $this->authHeaders($this->tokenFor($limited));
+
+        $this->post("/api/agency/documents/{$documentId}/versions", [
+            'file' => UploadedFile::fake()->createWithContent('replacement.pdf', $this->pdfBytes(20)),
+        ], $limitedHeaders)->assertForbidden();
+
+        $this->getJson("/api/agency/documents/{$documentId}/versions", $limitedHeaders)
+            ->assertForbidden();
+        $this->getJson("/api/agency/documents/{$documentId}/shares", $limitedHeaders)
+            ->assertForbidden();
+        $this->getJson("/api/agency/documents/{$documentId}/access-logs", $limitedHeaders)
+            ->assertForbidden();
+
+        $activity = $this->getJson('/api/agency/documents-activity', $limitedHeaders)
+            ->assertOk()
+            ->json('activity');
+        $this->assertNotContains($documentId, array_column($activity, 'document_id'));
+        $this->assertSame(1, Document::findOrFail($documentId)->version);
+        $this->assertSame([], DocumentVersion::where('document_id', $documentId)->get()->all());
+    }
+
     public function test_unauthorized_and_sensitive_download_attempts_are_audited(): void
     {
         [$owner, $agency] = $this->agencyUser([
