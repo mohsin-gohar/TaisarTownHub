@@ -106,7 +106,7 @@ export function validateVoid(
     return { ok: false, error: 'Completed, cancelled or already-voided deals cannot be voided again.' };
   }
 
-  const advance = Math.max(0, Number(txn.advancePKR ?? txn.advancePaymentPKR ?? 0));
+  const advance = Math.max(0, Number(txn.advancePKR ?? 0), Number(txn.advancePaymentPKR ?? 0));
   if (advance > 0) {
     return { ok: false, error: 'Refund or reconcile the recorded advance before voiding this deal.' };
   }
