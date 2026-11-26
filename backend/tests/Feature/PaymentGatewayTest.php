@@ -363,6 +363,32 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_checkout_rejects_legacy_non_pkr_or_fractional_plan_prices(): void
+    {
+        config([
+            'app.url' => 'https://api.taisartownhub.com',
+            'cors.allowed_origins' => ['https://taisartownhub.com'],
+        ]);
+
+        [$owner, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $plans = [
+            $this->makePlan(['currency' => 'USD']),
+            $this->makePlan(['price' => 5000.50, 'currency' => 'PKR']),
+        ];
+
+        foreach ($plans as $plan) {
+            $this->postJson('/api/payments/subscription/checkout', [
+                'plan_id' => $plan->id,
+                'success_url' => 'https://taisartownhub.com/billing/success',
+                'cancel_url' => 'https://taisartownhub.com/billing/cancel',
+            ], $this->authHeaders($this->tokenFor($owner)))
+                ->assertStatus(422)
+                ->assertJsonPath('success', false);
+        }
+
+        $this->assertDatabaseMissing('subscription_invoices', ['agency_id' => $agency->id]);
+    }
+
     public function test_stripe_checkout_webhook_rejects_currency_or_amount_mismatch(): void
     {
         $secret = 'whsec_test_secret';
