@@ -963,6 +963,17 @@ class PaymentController extends Controller
                     $agencySubscription->ends_at = $eventEnd;
                 }
             }
+
+            // A Stripe subscription may remain active until the paid period
+            // ends while cancel_at_period_end is true. Keep access active but
+            // accurately reflect that no further renewal will be attempted.
+            if ($status === 'active') {
+                $agencySubscription->auto_renew = !((bool) ($subscription->cancel_at_period_end ?? false));
+            } elseif ($status === 'cancelled') {
+                $agencySubscription->auto_renew = false;
+                $agencySubscription->cancelled_at ??= now();
+            }
+
             $agencySubscription->save();
         }, 3);
     }
@@ -978,22 +989,27 @@ class PaymentController extends Controller
             throw new \RuntimeException('Only PKR subscription invoices can activate an agency plan.');
         }
 
-        // Determine interval ends_at
-        $endsAt = match ($plan->interval) {
-            'year' => now()->addYear(),
-            default => now()->addMonth(),
-        };
+        // Stripe subscriptions renew automatically; Flutterwave and manual
+        // invoices represent a paid term only and must never be labelled
+        // auto-renewing unless a recurring provider subscription exists.
+        $provider = $invoice->stripe_subscription_id
+            ? 'stripe'
+            : ($invoice->payment_method === 'flutterwave' ? 'flutterwave' : 'manual');
+        $startsAt = $invoice->paid_at ?? now();
+        $endsAt = $plan->interval === 'year'
+            ? $startsAt->copy()->addYear()
+            : $startsAt->copy()->addMonth();
 
         AgencySubscription::updateOrCreate(
             ['agency_id' => $agencyId],
             [
                 'plan_id' => $planId,
                 'status' => 'active',
-                'starts_at' => now(),
+                'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
-                'auto_renew' => true,
+                'auto_renew' => $provider === 'stripe',
                 'stripe_subscription_id' => $invoice->stripe_subscription_id,
-                'provider' => $invoice->stripe_subscription_id ? 'stripe' : 'manual',
+                'provider' => $provider,
                 'cancelled_at' => null,
                 'updated_at' => now(),
             ]
