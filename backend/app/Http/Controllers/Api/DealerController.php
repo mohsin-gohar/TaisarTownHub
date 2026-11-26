@@ -54,7 +54,14 @@ class DealerController extends Controller
             'agencyOrBranch' => 'nullable|string|max:255',
             'role' => 'nullable|string|max:50',
             'commissionType' => 'nullable|string|in:Fixed,Percentage,Custom',
-            'commissionRate' => 'nullable|numeric|min:0|max:100',
+            'commissionRate' => [
+                'nullable', 'numeric', 'min:0', 'max:999999999999',
+                function (string $attribute, mixed $value, \Closure $fail) use ($effectiveCommissionType): void {
+                    if ($effectiveCommissionType === 'Percentage' && (float) $value > 100) {
+                        $fail('Percentage commission rate cannot exceed 100.');
+                    }
+                },
+            ],
             'status' => 'nullable|string|max:50',
             'avatar' => 'nullable|string',
             'agencyId' => 'nullable|string|max:64|exists:agencies,id',
@@ -100,6 +107,7 @@ class DealerController extends Controller
 
         $dealer = Dealer::findOrFail($id);
 
+        $effectiveCommissionType = $request->input('commissionType', $dealer->commissionType ?? 'Fixed');
         $data = $request->validate([
             'fullName' => 'sometimes|required|string|max:255',
             'phone' => 'sometimes|required|string|max:20',
