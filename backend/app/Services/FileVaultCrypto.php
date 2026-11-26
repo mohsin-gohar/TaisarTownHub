@@ -71,10 +71,16 @@ class FileVaultCrypto
         }
 
         [$iv, $tag, $cipher] = self::parts($blob);
-        $keys = array_values(array_unique(array_filter(array_merge(
-            [(string) config('app.key')],
-            (array) config('app.previous_keys', [])
-        ), fn ($key) => is_string($key) && $key !== '')));
+        $keys = array_values(array_unique(array_filter(
+            array_map(
+                static fn ($key): string => trim((string) $key),
+                array_merge(
+                    [(string) config('app.key')],
+                    (array) config('app.previous_keys', [])
+                )
+            ),
+            static fn (string $key): bool => $key !== ''
+        )));
 
         foreach ($keys as $appKey) {
             $plain = self::decryptWithAppKey($cipher, $iv, $tag, $appKey);
