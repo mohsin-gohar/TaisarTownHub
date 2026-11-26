@@ -80,126 +80,98 @@ class InquiryController extends Controller
      */
     public function store(Request $request)
     {
-        // Honeypot: humans never see (nor fill) this field. Bots that do get
-        // a convincing 201 so they do not hammer the endpoint with retries —
-        // nothing is stored and no internal detail leaks.
-        if (trim((string) $request->input('companyWebsite', '')) !== '') {
-            return response()->json([
-                'id' => 'inq-' . Str::uuid(),
-                'subject' => $request->input('subject', 'Property Consultation'),
-                'status' => 'Pending',
-                'submittedAt' => now()->format('Y-m-d H:i'),
-            ], 201);
-        }
-
         $data = $request->validate([
-            'fullName' => 'required|string|max:255',
-            'phone' => 'required|string|max:20',
-            'message' => 'required|string|max:2000',
-            'email' => 'nullable|email|max:255',
-            'subject' => 'nullable|string|max:255',
-            'preferredPropertyOrProject' => 'nullable|string|max:255',
-            'budgetRange' => 'nullable|string|max:50',
-            'source' => 'nullable|string|max:50',
+            'preferredPropertyOrProject' => 'required|string|max:255',
             'propertyId' => 'nullable|string|max:256',
-            'property_id' => 'nullable|string|max:256',
-            'captchaToken' => 'required|string|max:1024',
-            'captchaAnswer' => 'required|string|max:8',
+            'phone' => 'required|string|max:30',
+            'email' => 'nullable|email|max:255',
+            'message' => 'required|string|max:5000',
+            'captchaToken' => 'required|string|max:120',
+            'captchaAnswer' => 'required|string|max:20',
         ]);
 
-        // Bot gate: the answer must match the signed, single-use, unexpired
-        // challenge. Failures return a validation-style 422 with a distinct
-        // machine-readable code so the SPA can fetch a fresh question.
-        if (!InquiryCaptcha::verify($data['captchaToken'], $data['captchaAnswer'])) {
-            return response()->json([
-                'success' => false,
-                'code' => 'captcha_failed',
-                'message' => 'The security answer was missing, wrong, or expired. Please answer the new question and resubmit.',
-                'errors' => ['captchaAnswer' => ['The security answer is incorrect or has expired.']],
-            ], 422);
-        }
-        unset($data['captchaToken'], $data['captchaAnswer']);
-
-        // Sanitize input
-        $data['fullName'] = strip_tags($data['fullName']);
-        $data['message'] = strip_tags($data['message']);
-
-        // Resolve the referenced listing → its agency owns this lead.
-        $propertyId = $data['property_id'] ?? $data['propertyId'] ?? null;
-        unset($data['property_id'], $data['propertyId']);
-
-        $property = null;
-        if ($propertyId) {
-            $property = Property::publiclyVisible()->where('id', $propertyId)->first();
-            if (!$property) {
-                // Never leak whether a foreign/nonexistent id exists
-                $property = null;
-            }
+        if (!$this->captcha->verify($data['captchaToken'], $data['captchaAnswer'], $request->ip())) {
+            return response()->json(['success' => false, 'message' => 'Verification failed. Please solve the security check again.'], 422);
         }
 
-        // G-8: plan limit — an agency whose lead quota is exhausted stops
-        // receiving public leads. The public message stays generic (no
-        // internal quota details leak to visitors).
-        if ($property && $property->agency_id) {
-            $leadAgency = Agency::find($property->agency_id);
-            if ($leadAgency && ($block = PlanLimits::block($leadAgency, 'leads'))) {
-                return response()->json([
-                    'success' => false,
-                    'code' => 'plan_limit_reached',
-                    'message' => 'This agency is not accepting new inquiries right now. Please contact them directly.',
-                ], 402);
-            }
-        }
-
+        $property = !empty($data['propertyId'])
+            ? Property::publiclyVisible()->where('id', $data['propertyId'])->first()
+            : null;
+        $agencyId = $property?->agency_id;
+        $id = 'inq_' . bin2hex(random_bytes(8));
         $record = [
-            'id' => 'inq-' . Str::uuid(),
-            'fullName' => $data['fullName'],
-            'email' => $data['email'] ?? null,
+            'id' => $id,
+            'preferredPropertyOrProject' => $data['preferredPropertyOrProject'],
+            'propertyId' => $property?->id,
             'phone' => $data['phone'],
-            'subject' => $data['subject'] ?? 'Property Consultation',
+            'email' => $data['email'] ?? '',
             'message' => $data['message'],
-            'preferredPropertyOrProject' => $data['preferredPropertyOrProject']
-                ?? ($property?->title),
-            'budgetRange' => $data['budgetRange'] ?? null,
-            'status' => 'Pending',
-            'adminNotes' => 'Received via the public website.',
-            'source' => $data['source'] ?? 'React Web Portal',
-            'submittedAt' => now()->format('Y-m-d H:i'),
+            'status' => 'new',
+            'createdAt' => now()->toIso8601String(),
+            'source' => 'public_website',
+            'ipAddress' => $request->ip(),
         ];
-        BusinessRecord::put('inquiries', $record['id'], $record);
 
-        Inquiry::updateOrCreate(['id' => $record['id']], [
-            'fullName' => $record['fullName'],
-            'email' => $record['email'],
-            'phone' => $record['phone'],
-            'subject' => $record['subject'],
-            'message' => $record['message'],
-            'preferredPropertyOrProject' => $record['preferredPropertyOrProject'],
-            'budgetRange' => $record['budgetRange'],
-            'status' => 'Pending',
-            'adminNotes' => $record['adminNotes'],
-            'source' => $record['source'],
-            'agency_id' => $property?->agency_id,
-            'property_id' => $property?->id,
-            'lead_status' => 'new',
-        ]);
+        $result = DB::transaction(function () use ($agencyId, $id, $record, $data, $property, $request): array {
+            if ($agencyId !== null) {
+                $agency = Agency::whereKey($agencyId)->lockForUpdate()->first();
+                if (!$agency || $agency->status !== 'active') {
+                    return ['error' => 'listing_unavailable'];
+                }
 
-        // Keep the legacy mirror row agency-tagged too
-        if ($property?->agency_id) {
-            BusinessRecord::where('collection', 'inquiries')
-                ->where('record_id', $record['id'])
-                ->update(['agency_id' => $property->agency_id]);
+                if ($block = PlanLimits::block($agency, 'leads', fn () => PlanLimits::leadUsed($agencyId))) {
+                    return ['blocked' => $block];
+                }
+
+                // Re-check public visibility while holding the agency lock,
+                // then commit the tenant and legacy records together.
+                $currentProperty = Property::where('agency_id', $agencyId)
+                    ->lockForUpdate()
+                    ->find($property?->id);
+                if (!$currentProperty || !$currentProperty->isPubliclyVisible()) {
+                    return ['error' => 'listing_unavailable'];
+                }
+            }
+
+            BusinessRecord::put('inquiries', $id, $record);
+            if ($agencyId !== null) {
+                BusinessRecord::where('type', 'inquiries')
+                    ->where('record_id', $id)
+                    ->update(['agency_id' => $agencyId]);
+            }
+
+            Inquiry::updateOrCreate(
+                ['id' => $id],
+                [
+                    'agency_id' => $agencyId,
+                    'property_id' => $property?->id,
+                    'name' => 'Website Visitor',
+                    'email' => $data['email'] ?? null,
+                    'phone' => $data['phone'],
+                    'message' => $data['message'],
+                    'status' => 'new',
+                    'source' => 'public_website',
+                    'ip_address' => $request->ip(),
+                ]
+            );
+
+            return ['saved' => true];
+        }, 3);
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Your plan has reached its monthly lead limit. Upgrade to receive more enquiries.', $result['blocked']);
+        }
+        if (($result['error'] ?? null) === 'listing_unavailable') {
+            return response()->json(['success' => false, 'message' => 'This listing is no longer available.'], 404);
         }
 
-        return response()->json($record, 201);
+        return response()->json([
+            'success' => true,
+            'message' => 'Your enquiry has been sent. Our team will contact you soon.',
+            'id' => $id,
+        ], 201);
     }
 
-    /**
-     * Update inquiry status.
-     *
-     * Requires a write-level CRM permission — read-only `view_inquiries` /
-     * `crm.view` must never be able to mutate inquiry state.
-     */
     public function updateStatus(Request $request, $id)
     {
         $this->requireAny($request, ['crm.update_lead', 'crm.delete_lead']);
