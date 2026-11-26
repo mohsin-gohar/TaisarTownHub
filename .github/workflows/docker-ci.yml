@@ -21,9 +21,9 @@ concurrency:
 
 on:
   push:
-    branches: [main]
+    branches: [main, qa/cross-browser-multireplica]
   pull_request:
-    branches: [main]
+    branches: [main, qa/cross-browser-multireplica]
 
 env:
   REGISTRY: ghcr.io
