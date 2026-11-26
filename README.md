@@ -2,7 +2,7 @@
 
 Taiser Town Scheme 45, Karachi: a **sale-only public property marketplace** plus multi-tenant agency ERP. The public portal serves searchable listings, verified agencies and maps; the ERP gives agencies properties, inquiries/CRM, a private document vault, finance, subscriptions and team management.
 
-> **Status:** feature-complete application code with automated tests. **Not cleared for a live production launch** — TLS, real secrets and external services are still required. Single source of truth for status: [`docs/STATUS.md`](docs/STATUS.md).
+> **Status:** active QA release candidate. Core application workflows and security controls are implemented, but final feature acceptance and live production readiness are still under verification. Never infer production readiness from a green unit-test run; use [`docs/STATUS.md`](docs/STATUS.md) for evidence and blockers.
 
 ## Stack
 
@@ -39,7 +39,7 @@ Demo accounts and walkthrough: `docs/DEMO_GUIDE.md`. Deployment/VPS/TLS/env chec
 ## Test it
 
 ```bash
-cd backend  && php artisan test        # full backend suite (SQLite default; MySQL 8 in CI)
+cd backend  && php artisan test        # full backend suite (requires MySQL 8 test DB; see backend/README.md)
 cd frontend && npm run verify          # tsc + unit tests + build + prerender + bundle check
 cd frontend && npm run e2e             # Playwright (backend must be on :8080)
 ```
