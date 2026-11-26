@@ -226,6 +226,20 @@ class DocumentController extends Controller
         ]);
 
         $file = $request->file('file');
+        $category = $request->get('category', 'other');
+        $isSensitive = in_array($category, $this->sensitiveCategories(), true);
+
+        // Authorize sensitive uploads and validate tenant relationships before
+        // spending scanner resources or retaining a rejected/quarantined copy.
+        if ($isSensitive) {
+            $this->requirePermission($request, 'documents.view_sensitive');
+        }
+        if ($request->folder_id) {
+            DocumentFolder::where('agency_id', $agencyId)->where('id', $request->folder_id)->firstOrFail();
+        }
+        if ($request->property_id) {
+            Property::where('agency_id', $agencyId)->where('id', $request->property_id)->firstOrFail();
+        }
 
         // Content security: extension allowlist + sniffed MIME blocklist +
         // magic bytes (offset 0). The browser-declared type is never trusted.
@@ -242,7 +256,6 @@ class DocumentController extends Controller
         // 'scan_unavailable' threat token from scanner wrappers.
         $scannerUnavailable = $scan->skipped || in_array('scan_unavailable', $scan->threats, true);
         $scanClean = false;
-        $scanHold = false; // fail-open: stored but quarantined (not downloadable)
 
         if ($scannerUnavailable) {
             if (config('malware.fail_closed', false)) {
@@ -261,7 +274,6 @@ class DocumentController extends Controller
 
             // Fail-open: keep for administrators on the vault disk but mark
             // the row quarantined — downloads stay blocked until a rescan.
-            $scanHold = true;
             if (config('malware.log_skipped', true)) {
                 Log::warning('Upload accepted without malware scan (quarantined)', [
                     'file' => $file->getClientOriginalName(),
@@ -285,26 +297,9 @@ class DocumentController extends Controller
             $scanClean = true;
         }
 
-        $category = $request->get('category', 'other');
-        $sensitiveCategories = SystemSetting::get('document.sensitive_categories', [
-            'cnic', 'registry', 'ownership', 'sale_agreement', 'transfer_letter', 'allotment_letter',
-        ]);
-        $isSensitive = in_array($category, $sensitiveCategories, true);
-
-        if ($isSensitive) {
-            $this->requirePermission($request, 'documents.view_sensitive');
-        }
-
         // Storage quota/trial enforcement is not part of this release.
         // Individual file size, type, malware and authorization checks above
         // and below still apply.
-
-        if ($request->folder_id) {
-            DocumentFolder::where('agency_id', $agencyId)->where('id', $request->folder_id)->firstOrFail();
-        }
-        if ($request->property_id) {
-            Property::where('agency_id', $agencyId)->where('id', $request->property_id)->firstOrFail();
-        }
 
         $documentId = 'doc_' . bin2hex(random_bytes(8));
         $storedName = $documentId . '.' . $check['ext'];
@@ -409,9 +404,8 @@ class DocumentController extends Controller
         }
 
         if ($request->has('category')) {
-            $sensitiveCategories = SystemSetting::get('document.sensitive_categories', []);
             $wasSensitive = $document->is_sensitive;
-            $document->is_sensitive = in_array($request->category, $sensitiveCategories, true);
+            $document->is_sensitive = in_array($request->category, $this->sensitiveCategories(), true);
             if ($document->is_sensitive || $wasSensitive) {
                 $this->requirePermission($request, 'documents.view_sensitive');
             }
@@ -1379,6 +1373,22 @@ class DocumentController extends Controller
             $document->mime_type,
             'attachment'
         );
+    }
+
+    /**
+     * Categories that always require sensitive-document clearance. Admin
+     * settings may add categories, but cannot silently downgrade these
+     * default identity/ownership document types to ordinary files.
+     */
+    private function sensitiveCategories(): array
+    {
+        $defaults = ['cnic', 'registry', 'ownership', 'sale_agreement', 'transfer_letter', 'allotment_letter'];
+        $configured = SystemSetting::get('document.sensitive_categories', []);
+
+        return array_values(array_unique(array_merge(
+            $defaults,
+            is_array($configured) ? array_filter($configured, 'is_string') : []
+        )));
     }
 
     private function findScoped(string $agencyId, string $id): Document
