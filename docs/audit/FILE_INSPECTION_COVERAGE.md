@@ -1,6 +1,6 @@
 # File Inspection Coverage
 
-Branch: `fix/workspace-transaction-lifecycle-20261126` (HEAD `0903e92` + local audit fixes)
+Branch: `fix/workspace-transaction-lifecycle-20261126` (HEAD `5fbf3e0`)
 Date: 2026-11-26
 
 ## Scope method

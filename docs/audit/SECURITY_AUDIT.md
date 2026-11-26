@@ -1,6 +1,6 @@
 # Security Audit
 
-Branch: `fix/workspace-transaction-lifecycle-20261126` (HEAD `0903e92` + local fixes)
+Branch: `fix/workspace-transaction-lifecycle-20261126` (HEAD `5fbf3e0` + local fixes)
 Date: 2026-11-26
 
 ## Scope
