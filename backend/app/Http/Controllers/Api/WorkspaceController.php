@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BusinessRecord;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Legacy workspace sync (JSON store) — HARDENED.
@@ -259,144 +260,150 @@ class WorkspaceController extends Controller
         $collections = $validated['collections'];
         $mode = $validated['mode'] ?? 'merge';
         $agencyId = $this->agencyId($request);
-        $replaced = [];
-        $written = [];
-        $denied = [];
-        $skipped = [];
-
-        foreach (self::COLLECTIONS as $name) {
-            if (! array_key_exists($name, $collections) || ! is_array($collections[$name])) {
-                continue;
+        return DB::transaction(function () use ($request, $user, $collections, $mode, $agencyId) {
+            if ($agencyId !== null) {
+                \\App\\Models\\Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
             }
 
-            // ---- permission gate (per collection, agency-scoped) ----
-            if (! $this->canWrite($request, $user, $name, $agencyId)) {
-                $denied[] = $name;
-
-                continue;
-            }
-
-            if ($mode === 'replace' && ! $this->canReplace($request, $user, $name, $agencyId)) {
-                $denied[] = $name; // replace needs delete-level rights
-
-                continue;
-            }
-
-            $rows = array_values(array_filter(
-                $collections[$name],
-                fn ($row) => is_array($row) && isset($row['id'])
-            ));
-
-            if (count($rows) > self::MAX_ROWS_PER_COLLECTION) {
-                abort(422, "Collection '{$name}' exceeds ".self::MAX_ROWS_PER_COLLECTION.' rows per request.');
-            }
-
-            // ---- per-row validation + server-owned field stamping ----
-            $clean = [];
-            foreach ($rows as $rowIndex => $row) {
-                if (in_array($name, self::FINANCIAL, true)) {
-                    $this->validateWholePkrAmounts($name, $row, (int) $rowIndex);
-                }
-
-                $sanitized = $this->sanitizeRow($name, $row, $agencyId, $user);
-                if ($sanitized !== null) {
-                    $clean[] = $sanitized;
-                }
-            }
-
-            // ---- destructive replace safety interlocks ----
-            // `$clean` is empty when the client sent [] OR when every row was
-            // rejected by validation. Treat both as an empty replace: deleting
-            // on an accidental/malformed payload is never acceptable, so an
-            // empty replace is always skipped (there is no bypass flag).
-            if ($mode === 'replace') {
-                if (count($clean) === 0) {
-                    $skipped[] = $name;
-                    Log::warning('Workspace empty replace skipped', [
-                        'collection' => $name,
-                        'agency_id' => $agencyId,
-                        'user_id' => $user->id,
-                        'platform_wide' => $agencyId === null,
-                    ]);
-
+            $replaced = [];
+            $written = [];
+            $denied = [];
+            $skipped = [];
+    
+            foreach (self::COLLECTIONS as $name) {
+                if (! array_key_exists($name, $collections) || ! is_array($collections[$name])) {
                     continue;
                 }
-
-                if ($agencyId === null && ! $request->boolean('confirm_platform_replace')) {
-                    $skipped[] = $name;
-                    Log::warning('Workspace platform-wide replace skipped (confirmation required)', [
-                        'collection' => $name,
-                        'user_id' => $user->id,
-                    ]);
-
+    
+                // ---- permission gate (per collection, agency-scoped) ----
+                if (! $this->canWrite($request, $user, $name, $agencyId)) {
+                    $denied[] = $name;
+    
                     continue;
                 }
-            }
-
-            // Financial integrity: audit newly-sold media assets (sale
-            // attribution) BEFORE the payload sync overwrites previous state.
-            if ($name === 'media') {
-                $this->auditNewMediaSales($request, $clean);
-            }
-
-            $result = $this->syncList($request, $user, $name, $clean, $agencyId, $mode);
-            $changedIds = $result['changed'];
-            $removed = $result['removed'];
-
-            if (in_array($name, self::FINANCIAL, true) && $changedIds) {
-                $this->auditFinancialSync($request, $name, $clean, $changedIds, $agencyId);
-            }
-
-            if ($changedIds || $removed) {
-                $written[$name] = count($changedIds) + $removed;
-            }
-            if ($mode === 'replace' && $removed) {
-                $replaced[] = $name;
-            }
-        }
-
-        if (isset($collections['cms']) && is_array($collections['cms'])) {
-            if ($this->canWrite($request, $user, 'cms', $agencyId)) {
-                if (strlen(json_encode($collections['cms'])) > self::MAX_ROW_BYTES) {
-                    abort(422, 'CMS payload too large.');
+    
+                if ($mode === 'replace' && ! $this->canReplace($request, $user, $name, $agencyId)) {
+                    $denied[] = $name; // replace needs delete-level rights
+    
+                    continue;
                 }
-                BusinessRecord::put('cms', 'default', $collections['cms']);
-                $written['cms'] = 1;
-            } else {
-                $denied[] = 'cms';
+    
+                $rows = array_values(array_filter(
+                    $collections[$name],
+                    fn ($row) => is_array($row) && isset($row['id'])
+                ));
+    
+                if (count($rows) > self::MAX_ROWS_PER_COLLECTION) {
+                    abort(422, "Collection '{$name}' exceeds ".self::MAX_ROWS_PER_COLLECTION.' rows per request.');
+                }
+    
+                // ---- per-row validation + server-owned field stamping ----
+                $clean = [];
+                foreach ($rows as $rowIndex => $row) {
+                    if (in_array($name, self::FINANCIAL, true)) {
+                        $this->validateWholePkrAmounts($name, $row, (int) $rowIndex);
+                    }
+    
+                    $sanitized = $this->sanitizeRow($name, $row, $agencyId, $user);
+                    if ($sanitized !== null) {
+                        $clean[] = $sanitized;
+                    }
+                }
+    
+                // ---- destructive replace safety interlocks ----
+                // `$clean` is empty when the client sent [] OR when every row was
+                // rejected by validation. Treat both as an empty replace: deleting
+                // on an accidental/malformed payload is never acceptable, so an
+                // empty replace is always skipped (there is no bypass flag).
+                if ($mode === 'replace') {
+                    if (count($clean) === 0) {
+                        $skipped[] = $name;
+                        Log::warning('Workspace empty replace skipped', [
+                            'collection' => $name,
+                            'agency_id' => $agencyId,
+                            'user_id' => $user->id,
+                            'platform_wide' => $agencyId === null,
+                        ]);
+    
+                        continue;
+                    }
+    
+                    if ($agencyId === null && ! $request->boolean('confirm_platform_replace')) {
+                        $skipped[] = $name;
+                        Log::warning('Workspace platform-wide replace skipped (confirmation required)', [
+                            'collection' => $name,
+                            'user_id' => $user->id,
+                        ]);
+    
+                        continue;
+                    }
+                }
+    
+                // Financial integrity: audit newly-sold media assets (sale
+                // attribution) BEFORE the payload sync overwrites previous state.
+                if ($name === 'media') {
+                    $this->auditNewMediaSales($request, $clean);
+                }
+    
+                $result = $this->syncList($request, $user, $name, $clean, $agencyId, $mode);
+                $changedIds = $result['changed'];
+                $removed = $result['removed'];
+    
+                if (in_array($name, self::FINANCIAL, true) && $changedIds) {
+                    $this->auditFinancialSync($request, $name, $clean, $changedIds, $agencyId);
+                }
+    
+                if ($changedIds || $removed) {
+                    $written[$name] = count($changedIds) + $removed;
+                }
+                if ($mode === 'replace' && $removed) {
+                    $replaced[] = $name;
+                }
             }
-        }
-
-        if ($written) {
-            $this->writeAudit($request, 'workspace.save', 'workspace:'.implode(',', array_keys($written)),
-                'Workspace sync ('.$mode.'): '.json_encode($written), [
-                    'metadata' => [
-                        'mode' => $mode,
-                        'written' => $written,
-                        'replaced' => $replaced,
-                        'denied' => $denied,
-                        'skipped' => $skipped,
-                        'platform_wide' => $agencyId === null,
-                    ],
+    
+            if (isset($collections['cms']) && is_array($collections['cms'])) {
+                if ($this->canWrite($request, $user, 'cms', $agencyId)) {
+                    if (strlen(json_encode($collections['cms'])) > self::MAX_ROW_BYTES) {
+                        abort(422, 'CMS payload too large.');
+                    }
+                    BusinessRecord::put('cms', 'default', $collections['cms']);
+                    $written['cms'] = 1;
+                } else {
+                    $denied[] = 'cms';
+                }
+            }
+    
+            if ($written) {
+                $this->writeAudit($request, 'workspace.save', 'workspace:'.implode(',', array_keys($written)),
+                    'Workspace sync ('.$mode.'): '.json_encode($written), [
+                        'metadata' => [
+                            'mode' => $mode,
+                            'written' => $written,
+                            'replaced' => $replaced,
+                            'denied' => $denied,
+                            'skipped' => $skipped,
+                            'platform_wide' => $agencyId === null,
+                        ],
+                    ]);
+            }
+    
+            if ($denied) {
+                Log::info('Workspace save: collections denied', [
+                    'user_id' => $user->id, 'denied' => $denied,
                 ]);
-        }
-
-        if ($denied) {
-            Log::info('Workspace save: collections denied', [
-                'user_id' => $user->id, 'denied' => $denied,
+            }
+    
+            // Writes are enforced per collection above; a user with no write
+            // rights simply persists nothing (matches legacy no-op behaviour and
+            // avoids error toasts for read-only viewers of the workspace).
+            return response()->json([
+                'success' => true,
+                'mode' => $mode,
+                'written' => $written,
+                'denied' => $denied,
+                'skipped' => $skipped,
             ]);
-        }
-
-        // Writes are enforced per collection above; a user with no write
-        // rights simply persists nothing (matches legacy no-op behaviour and
-        // avoids error toasts for read-only viewers of the workspace).
-        return response()->json([
-            'success' => true,
-            'mode' => $mode,
-            'written' => $written,
-            'denied' => $denied,
-            'skipped' => $skipped,
-        ]);
+        }, 3);
     }
 
     /* ================================================================ */
