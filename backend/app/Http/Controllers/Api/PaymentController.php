@@ -655,6 +655,17 @@ class PaymentController extends Controller
                 ->lockForUpdate()
                 ->first();
 
+            // checkout.session.completed and invoice.paid are delivered
+            // independently. Match the first checkout invoice by its stored
+            // period when the Checkout event did not expose invoice.id.
+            if (!$localInvoice) {
+                $localInvoice = SubscriptionInvoice::where('stripe_subscription_id', $stripeSubId)
+                    ->whereDate('period_start', $periodStartAt->toDateString())
+                    ->whereDate('period_end', $periodEndAt->toDateString())
+                    ->lockForUpdate()
+                    ->first();
+            }
+
             if ($localInvoice && !in_array($localInvoice->status, ['pending', 'paid'], true)) {
                 Log::warning('Stripe paid invoice references a non-payable local invoice', [
                     'stripe_invoice_id' => $stripeInvoiceId,
@@ -691,7 +702,10 @@ class PaymentController extends Controller
                     'payment_method' => 'stripe',
                     'payment_reference' => $stripeInvoiceId,
                     'stripe_subscription_id' => $stripeSubId,
+                    'stripe_invoice_id' => $stripeInvoiceId,
                 ]);
+            } elseif (!$localInvoice->stripe_invoice_id) {
+                $localInvoice->update(['stripe_invoice_id' => $stripeInvoiceId]);
             }
 
             // Stripe period.end is the authoritative renewal boundary. Never
@@ -730,10 +744,15 @@ class PaymentController extends Controller
             $periodEnd = $line->period->end ?? null;
             $currentEnd = $subscription->ends_at;
 
+            // A missing period cannot safely distinguish a current failure
+            // from a delayed event for an older, already-paid invoice.
+            if (!is_numeric($periodEnd)) {
+                return;
+            }
+
             // Ignore a delayed failure from an older period after a later
             // renewal has already extended access.
-            if (is_numeric($periodEnd) && $currentEnd
-                && (int) $periodEnd <= $currentEnd->getTimestamp()) {
+            if ($currentEnd && (int) $periodEnd <= $currentEnd->getTimestamp()) {
                 return;
             }
 
