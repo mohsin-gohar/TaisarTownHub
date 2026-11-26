@@ -978,7 +978,7 @@ class DocumentController extends Controller
 
         try {
             $checksumBeforeScan = SecureFileStore::checksum($sourceDisk, $sourcePath);
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             Log::warning('Rescan could not verify the quarantined file before scanning', [
                 'document_id' => $document->id,
                 'error' => $exception->getMessage(),
