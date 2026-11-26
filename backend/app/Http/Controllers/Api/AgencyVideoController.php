@@ -8,6 +8,7 @@ use App\Models\AgencyVideo;
 use App\Models\BusinessRecord;
 use App\Models\Dealer;
 use App\Models\VideoComment;
+use App\Support\UploadSecurity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -57,8 +58,29 @@ class AgencyVideoController extends Controller
             'id' => 'nullable|string',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:2000',
-            'videoUrl' => 'required|url|max:2048',
-            'thumbnailUrl' => 'nullable|url|max:2048',
+            'videoUrl' => [
+                'required', 'string', 'max:2048',
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (!is_string($value) || !UploadSecurity::isAllowedExternalUrl($value)) {
+                        $fail('Video URLs must use HTTPS and point to a public host.');
+                        return;
+                    }
+
+                    $path = (string) parse_url($value, PHP_URL_PATH);
+                    $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                    if (!in_array($extension, ['mp4', 'webm', 'ogg', 'mov', 'm4v'], true)) {
+                        $fail('Use a direct MP4, WebM, OGG, MOV or M4V video URL.');
+                    }
+                },
+            ],
+            'thumbnailUrl' => [
+                'nullable', 'string', 'max:2048',
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (is_string($value) && $value !== '' && !UploadSecurity::isAllowedExternalUrl($value)) {
+                        $fail('Thumbnail URLs must use HTTPS and point to a public host.');
+                    }
+                },
+            ],
             'agencyId' => 'nullable|string|max:50',
             'agencyName' => 'required|string|max:255',
             'dealerName' => 'nullable|string|max:255',
