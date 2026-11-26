@@ -2,6 +2,9 @@
 
 **Version:** 3.0.0 · **Last updated:** 2026-11-10
 
+> **SUPERSEDED — do not use this file as the current go-live runbook.** It contains older host-based PHP deployment and database queue/cache settings. The current production stack is the root `docker-compose.yml`; follow `../docs/DEPLOYMENT.md`, `../docs/BACKUP_RESTORE.md` and `../docs/STATUS.md` instead.
+
+
 This document is the go-live runbook for the Laravel 12 API (`backend/`) and the
 React 19 + Vite frontend (`frontend/`). The application is token-authenticated
 (Sanctum bearer tokens), serves private documents/media only through
