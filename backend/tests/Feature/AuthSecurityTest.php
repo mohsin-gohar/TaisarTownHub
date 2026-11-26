@@ -54,6 +54,25 @@ class AuthSecurityTest extends EnterpriseTestCase
             ->assertJsonValidationErrors('email');
     }
 
+    public function test_suspended_account_state_is_not_disclosed_by_login_errors(): void
+    {
+        $user = $this->makeUser('operator', ['email' => 'suspended@example.test']);
+        $user->forceFill(['status' => 'suspended'])->save();
+
+        $wrongPassword = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'WrongPassword!',
+        ])->assertStatus(422)->json('errors.email.0');
+
+        $correctPassword = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'Secret123!',
+        ])->assertStatus(422)->json('errors.email.0');
+
+        $this->assertSame('The provided credentials are incorrect.', $wrongPassword);
+        $this->assertSame($wrongPassword, $correctPassword);
+    }
+
     public function test_successful_login_issues_token_and_me_returns_user(): void
     {
         $this->makeUser('super_admin', ['email' => 'boss@example.test']);
