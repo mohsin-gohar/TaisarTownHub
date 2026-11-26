@@ -3,7 +3,7 @@
 Branch: `fix/workspace-transaction-lifecycle-20261126`
 Date: 2026-11-26
 
-## Latest successful GitHub Actions run
+## Latest successful GitHub Actions run before follow-up dealer fix
 Run #641 — commit `d4ba0e4a2e82620a8cf95dc7c4b0b192f11b8e05`
 https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45854444158
 
@@ -18,10 +18,12 @@ All five jobs completed successfully:
 The Chromium workflow runs cross-browser smoke, responsive, maps, interactive-elements, WhatsApp and public-page suites. Responsive tests exercise 11 widths: 320, 360, 375, 390, 414, 430, 768, 1024, 1280, 1440 and 1920px across public routes.
 Firefox and WebKit use the cross-browser smoke suite. These tests do not constitute authenticated Super Admin/agency/staff role-journey coverage.
 
-## Follow-up change after run #641
-- Commit `2ab933cd8fe228c3c44b5f36ef365fc02c862b5b`: aligns dealer commission update validation with create validation, allowing Fixed/Custom PKR amounts above 100 while retaining a 100% cap.
-- Commit `668c83edf7c141d332daa908e751e5f39734dfaf`: adds regression coverage for valid fixed amount and rejected percentage above 100.
-- These follow-up commits have not yet been covered by a completed GitHub Actions run. Do not mark them verified until a new run passes.
+## Follow-up dealer validation change — pending CI
+- `2ab933cd8fe228c3c44b5f36ef365fc02c862b5b`: aligns dealer commission update validation with create validation, allowing Fixed/Custom PKR amounts above 100 while retaining a 100% Percentage cap.
+- `668c83edf7c141d332daa908e751e5f39734dfaf`: adds regression coverage for valid fixed amount and rejected percentage above 100%.
+- `50cf80e91fe0c8b30cfd6079402aa3dfb2b3bc83`: corrects the validator closure type hint.
+- `8b660344ca71012f6379f4ffd49ed490694eea84`: removes a brittle assertion that depended on JSON numeric casting.
+- These commits were made after run #641 and have not yet been covered by a completed CI run. Do not mark them verified until a new run passes.
 
 ## Environment limitations
 Docker image/Compose tests were not triggered for PR #22's audit-branch base. Real ClamAV, TLS, SMTP, DNS, payment-provider credentials, Lighthouse and production deployment were not tested. No production data or service was modified.
