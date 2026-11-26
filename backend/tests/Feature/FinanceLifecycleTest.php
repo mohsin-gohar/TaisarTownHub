@@ -180,7 +180,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 1000,
             'type' => 'advance',
-        ], $headers)->assertStatus(409);
+        ], $headers)->assertStatus(422);
 
         $this->assertDatabaseMissing('transaction_payments', [
             'transaction_id' => $deal['id'],
