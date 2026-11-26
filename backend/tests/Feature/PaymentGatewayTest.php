@@ -295,6 +295,13 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ]);
         $this->assertSame('active', $subscription->fresh()->status);
         $this->assertGreaterThan($failedPeriodEnd, $subscription->fresh()->ends_at->getTimestamp());
+
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-stale-event',
+            'status' => 'canceled',
+            'current_period_end' => $paidPeriodEnd,
+        ]);
+        $this->assertSame('active', $subscription->fresh()->status);
     }
 
     public function test_failed_flutterwave_invoice_can_be_paid_on_a_later_retry(): void
