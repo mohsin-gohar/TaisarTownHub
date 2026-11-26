@@ -432,7 +432,7 @@ public function update(Request $request, string $id)
     public function approve(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        $this->requireAny($request, ['approve_transactions', 'finance.update_transaction', 'update_transactions']);
+        $this->requireAny($request, ['approve_transactions']);
 
         $transaction = $this->findScoped($agencyId, $id, $request->user());
 
