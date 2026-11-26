@@ -52,6 +52,9 @@ class PlanLimits
                 ->whereNull('deleted_at')
                 ->where('approval_status', 'approved')
                 ->where('isFeatured', true)
+                ->where(function ($query) {
+                    $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+                })
                 ->count(),
         ];
     }
