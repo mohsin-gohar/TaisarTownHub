@@ -371,4 +371,36 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         ]);
     }
 
+
+    public function test_workspace_creates_parent_dealer_before_property_reference_in_one_sync(): void
+    {
+        [$user, $agency] = $this->agencyUser(['manage_dealers', 'properties.create']);
+
+        $this->putJson('/api/workspace', [
+            'collections' => [
+                'dealers' => [[
+                    'id' => 'workspace-new-dealer',
+                    'fullName' => 'New Workspace Dealer',
+                    'status' => 'Active',
+                ]],
+                'properties' => [[
+                    'id' => 'property-assigned-to-new-dealer',
+                    'title' => 'Property with new dealer',
+                    'assignedDealerId' => 'workspace-new-dealer',
+                ]],
+            ],
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertDatabaseHas('business_records', [
+            'collection' => 'dealers',
+            'record_id' => 'workspace-new-dealer',
+            'agency_id' => $agency->id,
+        ]);
+        $this->assertDatabaseHas('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'property-assigned-to-new-dealer',
+            'agency_id' => $agency->id,
+        ]);
+    }
+
 }
