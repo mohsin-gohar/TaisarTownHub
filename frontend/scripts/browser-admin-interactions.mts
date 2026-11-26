@@ -83,7 +83,7 @@ async function gotoAdmin(page: Page) {
   await page.waitForTimeout(1500);
 }
 
-async function login(page: Page, email: string, password: string) {
+async function login(page: Page, email: string, password: string): Promise<boolean> {
   const loginForm = page
     .locator('form')
     .filter({ has: page.locator('input[placeholder="Enter password"]') })
@@ -92,6 +92,8 @@ async function login(page: Page, email: string, password: string) {
   await loginForm.locator('input[type="password"]').fill(password);
   await loginForm.locator('button[type="submit"]').click();
   await page.waitForTimeout(4500);
+  return /\/admin(?:\/|$)/.test(new URL(page.url()).pathname)
+    && !(await page.locator('input[placeholder="Enter password"]').isVisible().catch(() => false));
 }
 
 async function logout(page: Page) {
@@ -260,9 +262,22 @@ async function runRole(
   const page = await context.newPage();
   await page.goto(BASE + '/admin-login', { waitUntil: 'domcontentloaded', timeout: 45_000 });
   await page.waitForTimeout(1500);
-  await login(page, email, password);
+  const loggedIn = await login(page, email, password);
 
   const findings: ProbeResult[] = [];
+  if (!loggedIn) {
+    findings.push({
+      page: 'admin login',
+      button: '__login__',
+      effect: 'LOGIN FAILED',
+      urlBefore: page.url(),
+      urlAfter: page.url(),
+      errors: ['The expected persona did not reach the authenticated admin route.'],
+    });
+    await context.close();
+    return { role: label, findings };
+  }
+
   for (const tabLabel of TAB_LABELS) {
     if (!page.url().includes('/admin')) {
       await page.goto(BASE + '/admin', { waitUntil: 'domcontentloaded', timeout: 45_000 });
@@ -313,7 +328,7 @@ async function runRole(
 
   const hasInteractionFailures = report.results.some((run) =>
     run.findings.some((finding) =>
-      (finding.effect === 'NO VISIBLE EFFECT' || finding.effect.startsWith('CLICK FAILED'))
+      (finding.effect === 'LOGIN FAILED' || finding.effect === 'NO VISIBLE EFFECT' || finding.effect.startsWith('CLICK FAILED'))
       || (finding.button !== '__tab__' && finding.errors.length > 0)
     )
   );
