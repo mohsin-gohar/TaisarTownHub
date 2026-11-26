@@ -202,7 +202,7 @@ class Permissions
     /** Platform role key => permission keys (legacy + enterprise). */
     public const PLATFORM_ROLE_GRANTS = [
         'super_admin' => null, // null = ALL catalog keys
-        'admin' => null,       // ALL except platform-settings/users management below
+        'admin' => null,       // ALL except the explicit exclusions below
         'moderator' => [
             'properties.approve', 'properties.view', 'properties.update',
             'admin.view_audit_logs', 'admin.view_reports', 'admin.view_security_events',
@@ -231,7 +231,7 @@ class Permissions
         ],
     ];
 
-    /** Platform keys that even the legacy `admin` role does not get when resolving "ALL". */
+    /** Keys that the legacy `admin` role must not receive from its broad catalog grant. */
     public const ADMIN_EXCLUDED = [
         'admin.manage_platform_settings',
         'admin.manage_users',
