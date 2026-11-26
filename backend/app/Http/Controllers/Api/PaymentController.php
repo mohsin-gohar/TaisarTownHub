@@ -674,7 +674,7 @@ class PaymentController extends Controller
                     ->first();
             }
 
-            if ($localInvoice && !in_array($localInvoice->status, ['pending', 'paid'], true)) {
+            if ($localInvoice && !in_array($localInvoice->status, ['pending', 'failed', 'paid'], true)) {
                 Log::warning('Stripe paid invoice references a non-payable local invoice', [
                     'stripe_invoice_id' => $stripeInvoiceId,
                     'local_status' => $localInvoice->status,
@@ -703,7 +703,7 @@ class PaymentController extends Controller
                     'stripe_subscription_id' => $stripeSubId,
                     'stripe_invoice_id' => $stripeInvoiceId,
                 ]);
-            } elseif ($localInvoice->status === 'pending') {
+            } elseif (in_array($localInvoice->status, ['pending', 'failed'], true)) {
                 $localInvoice->update([
                     'status' => 'paid',
                     'paid_at' => now(),
@@ -735,11 +735,12 @@ class PaymentController extends Controller
     private function handleStripeInvoiceFailed($invoice): void
     {
         $stripeSubId = $invoice->subscription ?? ($invoice->parent->subscription_details->subscription ?? null);
-        if (!$stripeSubId) {
+        $stripeInvoiceId = $invoice->id ?? null;
+        if (!$stripeSubId || !$stripeInvoiceId) {
             return;
         }
 
-        DB::transaction(function () use ($invoice, $stripeSubId): void {
+        DB::transaction(function () use ($invoice, $stripeSubId, $stripeInvoiceId): void {
             $subscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
                 ->lockForUpdate()
                 ->first();
@@ -749,22 +750,83 @@ class PaymentController extends Controller
             }
 
             $line = $invoice->lines->data[0] ?? null;
+            $periodStart = $line->period->start ?? null;
             $periodEnd = $line->period->end ?? null;
+            $amountMinor = $invoice->amount_due ?? $invoice->total ?? null;
+            $currency = strtoupper((string) ($invoice->currency ?? ''));
+
+            if (!is_numeric($periodStart) || !is_numeric($periodEnd)
+                || (int) $periodEnd <= (int) $periodStart
+                || !is_numeric($amountMinor) || (float) $amountMinor < 0
+                || $currency !== 'PKR') {
+                Log::warning('Stripe failed invoice did not contain a valid PKR period and amount', [
+                    'stripe_invoice_id' => $stripeInvoiceId,
+                ]);
+
+                return;
+            }
+
+            $periodStartAt = now()->setTimestamp((int) $periodStart);
+            $periodEndAt = now()->setTimestamp((int) $periodEnd);
+            $localInvoice = SubscriptionInvoice::where('stripe_invoice_id', $stripeInvoiceId)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$localInvoice) {
+                $localInvoice = SubscriptionInvoice::where('stripe_subscription_id', $stripeSubId)
+                    ->whereDate('period_start', $periodStartAt->toDateString())
+                    ->whereDate('period_end', $periodEndAt->toDateString())
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            // A delayed failure must never overwrite an invoice already paid
+            // by a later retry, or revive an invoice explicitly voided by staff.
+            if ($localInvoice && in_array($localInvoice->status, ['paid', 'void'], true)) {
+                return;
+            }
+
+            $amountPkr = (int) round(((float) $amountMinor) / 100);
+            if (!$localInvoice) {
+                $subscription->loadMissing('plan');
+                $localInvoice = SubscriptionInvoice::create([
+                    'id' => (string) Str::uuid(),
+                    'invoice_number' => SubscriptionInvoice::nextNumber(),
+                    'agency_id' => $subscription->agency_id,
+                    'plan_id' => $subscription->plan_id,
+                    'amount_pkr' => $amountPkr,
+                    'tax_pkr' => 0,
+                    'total_pkr' => $amountPkr,
+                    'currency' => 'PKR',
+                    'period_start' => $periodStartAt->toDateString(),
+                    'period_end' => $periodEndAt->toDateString(),
+                    'status' => 'failed',
+                    'payment_method' => 'stripe',
+                    'payment_reference' => $stripeInvoiceId,
+                    'stripe_subscription_id' => $stripeSubId,
+                    'stripe_invoice_id' => $stripeInvoiceId,
+                ]);
+            } else {
+                $localInvoice->update([
+                    'amount_pkr' => $amountPkr,
+                    'tax_pkr' => 0,
+                    'total_pkr' => $amountPkr,
+                    'currency' => 'PKR',
+                    'period_start' => $periodStartAt->toDateString(),
+                    'period_end' => $periodEndAt->toDateString(),
+                    'status' => 'failed',
+                    'payment_method' => 'stripe',
+                    'payment_reference' => $stripeInvoiceId,
+                    'stripe_subscription_id' => $stripeSubId,
+                    'stripe_invoice_id' => $stripeInvoiceId,
+                ]);
+            }
+
             $currentEnd = $subscription->ends_at;
-
-            // A missing period cannot safely distinguish a current failure
-            // from a delayed event for an older, already-paid invoice.
-            if (!is_numeric($periodEnd)) {
-                return;
-            }
-
-            // Ignore a delayed failure from an older period after a later
-            // renewal has already extended access.
-            if ($currentEnd && (int) $periodEnd <= $currentEnd->getTimestamp()) {
-                return;
-            }
-
-            if ($subscription->status !== 'cancelled') {
+            // A failed renewal only affects access if it is for a period newer
+            // than the last paid term. Older delayed events remain in the ledger.
+            if ((!$currentEnd || $periodEndAt->greaterThan($currentEnd))
+                && $subscription->status !== 'cancelled') {
                 $subscription->update(['status' => 'past_due']);
             }
         }, 3);
