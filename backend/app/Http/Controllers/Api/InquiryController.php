@@ -341,8 +341,9 @@ class InquiryController extends Controller
         $inquiry->agency_id === null
             ? $legacyQuery->whereNull('agency_id')
             : $legacyQuery->where('agency_id', $inquiry->agency_id);
-        $legacyPayload = $legacyQuery->value('payload');
-        $cnic = is_array($legacyPayload) ? ($legacyPayload['cnic'] ?? null) : null;
+        $legacy = $legacyQuery->first();
+        $legacyPayload = is_array($legacy?->payload) ? $legacy->payload : [];
+        $cnic = $legacyPayload['cnic'] ?? null;
         $payload['cnic'] = filled($cnic)
             ? $this->maskCnic((string) $cnic)
             : null;
