@@ -91,8 +91,12 @@ export const AdminTransactions: React.FC = () => {
     list.push(p);
     paymentsByTxId.set(p.transactionId, list);
   }
-  const commissionByTxId = new Map<string, CommissionEntry>();
-  for (const c of visibleCommissions) commissionByTxId.set(c.transactionId, c);
+  const commissionByTxId = new Map<string, CommissionEntry[]>();
+  for (const commission of visibleCommissions) {
+    const entries = commissionByTxId.get(commission.transactionId) || [];
+    entries.push(commission);
+    commissionByTxId.set(commission.transactionId, entries);
+  }
 
   // P1-2/P1-1 UI gates: recording money and voiding records are privileged ops;
   // the context actions re-check these on every call (UI hiding is cosmetic).
@@ -420,7 +424,7 @@ export const AdminTransactions: React.FC = () => {
                 <th className="py-3.5 px-4">Seller & Buyer</th>
                 <th className="py-3.5 px-4">Deal Amount</th>
                 <th className="py-3.5 px-4">Paid / Balance</th>
-                <th className="py-3.5 px-4">Agent Commission</th>
+                <th className="py-3.5 px-4">Commission</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 text-right">Ledger & Receipt</th>
               </tr>
@@ -431,7 +435,23 @@ export const AdminTransactions: React.FC = () => {
                 // deal (Plot R-66), NOT any deal whose number merely contains "001".
                 const isHandwrittenDeal = txn.propertyId === 'prop-r66';
                 const payRows = paymentsByTxId.get(txn.id) || [];
-                const commEntry = commissionByTxId.get(txn.id);
+                const commRows = commissionByTxId.get(txn.id) || [];
+                const activeCommissions = commRows.filter((entry) => entry.status !== 'Cancelled');
+                const commissionAmount = activeCommissions.length > 0
+                  ? activeCommissions.reduce((sum, entry) => sum + entry.amountPKR, 0)
+                  : commRows.length > 0 ? 0 : (txn.commissionPKR ?? txn.commissionAmountPKR ?? 0);
+                const commissionPaid = activeCommissions.reduce((sum, entry) => sum + (entry.paidPKR ?? 0), 0);
+                const commissionStatus = commRows.length === 0
+                  ? txn.commissionStatus
+                  : activeCommissions.length === 0
+                  ? 'Cancelled'
+                  : commissionPaid >= commissionAmount && commissionAmount > 0
+                  ? 'Paid'
+                  : commissionPaid > 0
+                  ? 'Partially Paid'
+                  : activeCommissions.some((entry) => ['Accrued', 'Partially Paid', 'Paid'].includes(entry.status))
+                  ? 'Accrued'
+                  : 'Pending Accrual';
                 const money = dealMoney(txn, payRows);
 
                 return (
@@ -501,20 +521,20 @@ export const AdminTransactions: React.FC = () => {
 
                     <td className="py-4 px-4">
                       <div className="font-bold text-[#F6E3B4] font-mono">
-                        {formatPKRCurrency(commEntry?.amountPKR ?? txn.commissionPKR ?? txn.commissionAmountPKR ?? 0)}
+                        {formatPKRCurrency(commissionAmount)}
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                        (commEntry?.status ?? txn.commissionStatus) === 'Paid'
+                        commissionStatus === 'Paid'
                           ? 'bg-[#E7C878]/20 text-[#F6E3B4]'
-                          : (commEntry?.status ?? txn.commissionStatus) === 'Accrued'
+                          : commissionStatus === 'Accrued'
                           ? 'bg-[#E7C878]/10 text-[#E7C878]'
-                          : (commEntry?.status ?? txn.commissionStatus) === 'Partially Paid'
+                          : commissionStatus === 'Partially Paid'
                           ? 'bg-slate-800 text-slate-300'
-                          : (commEntry?.status ?? txn.commissionStatus) === 'Cancelled'
+                          : commissionStatus === 'Cancelled'
                           ? 'bg-slate-800 text-slate-400'
                           : 'bg-slate-800 text-slate-400'
                       }`}>
-                        {commEntry?.status ?? txn.commissionStatus}
+                        {commissionStatus}
                       </span>
                     </td>
 
@@ -744,7 +764,14 @@ export const AdminTransactions: React.FC = () => {
                       Agent Commission ({selectedTxnForReceipt.dealerName || 'Direct'})
                     </td>
                     <td className="py-2.5 px-4 text-right text-slate-300">
-                      {formatPKRCurrency(selectedTxnForReceipt.commissionPKR ?? selectedTxnForReceipt.commissionAmountPKR ?? 0)}
+                      {formatPKRCurrency(
+                        commissionEntries
+                          .filter((entry) => entry.transactionId === selectedTxnForReceipt.id && entry.status !== 'Cancelled')
+                          .reduce((sum, entry) => sum + entry.amountPKR, 0)
+                        || selectedTxnForReceipt.commissionPKR
+                        || selectedTxnForReceipt.commissionAmountPKR
+                        || 0
+                      )}
                     </td>
                   </tr>
                 </tbody>
