@@ -605,6 +605,9 @@ class MediaController extends Controller
         string $reason,
         array $threats
     ): void {
+        $qPath = null;
+        $recordCreated = false;
+
         try {
             $qId = 'qtn_' . bin2hex(random_bytes(8));
             $qPath = $agencyId . '/' . now()->format('Y/m') . '/' . $qId . '.' . $ext;
@@ -626,6 +629,7 @@ class MediaController extends Controller
                 'uploaded_by' => $request->user()?->id,
                 'created_at' => now(),
             ]);
+            $recordCreated = true;
 
             $this->writeAudit($request, 'media.quarantined', $qId,
                 'Media upload quarantined (' . $reason . ')', [
@@ -635,6 +639,21 @@ class MediaController extends Controller
                     'metadata' => ['reason' => $reason, 'threats' => $threats],
                 ]);
         } catch (\Throwable $e) {
+            if (! $recordCreated && is_string($qPath) && $qPath !== '') {
+                try {
+                    if (\Illuminate\Support\Facades\Storage::disk('quarantine')->exists($qPath)
+                        && ! \Illuminate\Support\Facades\Storage::disk('quarantine')->delete($qPath)) {
+                        Log::critical('Rejected media quarantine bytes could not be cleaned after metadata failure', [
+                            'path_len' => strlen($qPath),
+                        ]);
+                    }
+                } catch (\Throwable $cleanupException) {
+                    Log::critical('Rejected media quarantine cleanup raised an exception', [
+                        'path_len' => strlen($qPath),
+                        'error' => $cleanupException->getMessage(),
+                    ]);
+                }
+            }
             Log::warning('Media quarantine write failed', ['error' => $e->getMessage()]);
         }
     }
