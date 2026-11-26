@@ -276,12 +276,12 @@ export function validateDealPayload(
     return { ok: false, error: 'Seller and buyer cannot be the same record.' };
   }
   const amount = Number(payload.dealAmountPKR);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, error: 'Agreed deal amount must be a positive number.' };
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return { ok: false, error: 'Agreed deal amount must be a positive whole-rupee PKR amount.' };
   }
   const advance = Number(payload.advancePKR ?? 0);
-  if (!Number.isFinite(advance) || advance < 0) {
-    return { ok: false, error: 'Advance cannot be negative.' };
+  if (!Number.isSafeInteger(advance) || advance < 0) {
+    return { ok: false, error: 'Advance must be a non-negative whole-rupee PKR amount.' };
   }
   if (advance > amount) {
     return { ok: false, error: 'Advance deposit cannot exceed the agreed deal amount.' };
@@ -306,8 +306,8 @@ export function validatePayment(
   if (txn.voided) return { ok: false, error: 'This deal is voided — payments are frozen.' };
   if (txn.status === 'Cancelled') return { ok: false, error: 'This deal is cancelled — payments are frozen.' };
   const money = dealMoney(txn, payments);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, error: 'Payment amount must be a positive number.' };
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return { ok: false, error: 'Payment amount must be a positive whole-rupee PKR amount.' };
   }
   if (!opts?.allowOverpay && money.collected + amount > money.dealAmount) {
     return {
