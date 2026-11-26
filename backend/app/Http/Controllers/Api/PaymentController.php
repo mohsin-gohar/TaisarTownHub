@@ -263,10 +263,10 @@ class PaymentController extends Controller
 
         Log::info('Flutterwave webhook received', ['status' => $status, 'tx_ref' => $txRef]);
 
-        if ($status === 'successful' && (!is_numeric($amount) || $currency === '')) {
+        if ($status === 'successful' && (!is_numeric($amount) || $currency !== 'PKR')) {
             return response()->json([
                 'success' => false,
-                'message' => 'Payment amount and currency are required.',
+                'message' => 'A valid PKR payment amount and currency are required.',
             ], 422);
         }
 
@@ -408,7 +408,8 @@ class PaymentController extends Controller
             $remoteAmount = (int) round((float) ($remote['amount'] ?? 0));
             $remoteCurrency = strtoupper((string) ($remote['currency'] ?? ''));
 
-            if ($remoteCurrency !== strtoupper((string) $invoice->currency)
+            if ($remoteCurrency !== 'PKR'
+                || strtoupper((string) $invoice->currency) !== 'PKR'
                 || $remoteAmount !== (int) $invoice->total_pkr) {
                 Log::warning('Flutterwave verification amount/currency mismatch', [
                     'agency_id' => $agencyId,
@@ -652,7 +653,7 @@ class PaymentController extends Controller
 
             if (!is_numeric($periodStart) || !is_numeric($periodEnd) || (int) $periodEnd <= (int) $periodStart
                 || !is_numeric($amountMinor) || (float) $amountMinor < 0
-                || $currency === '' || $currency !== strtoupper((string) $plan->currency)) {
+                || $currency !== 'PKR' || strtoupper((string) $plan->currency) !== 'PKR') {
                 throw new \RuntimeException('Stripe renewal invoice is missing a valid period, amount or plan currency.');
             }
 
