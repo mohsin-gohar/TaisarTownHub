@@ -12,7 +12,7 @@ Date: 2026-11-26
 - [x] Firefox + WebKit cross-browser suite: 14 combined passed on `d4ba0e4`.
 - [x] Responsive public-route tests cover 11 viewport widths from 320px to 1920px.
 - [x] OpenAPI YAML validation passed.
-- [ ] Follow-up dealer commission update validation fix and regression test (commits `2ab933c` / `668c83e`) — awaiting CI.
+- [ ] Follow-up dealer commission update validation fix and regression test (commits `2ab933c`, `50cf80e`, `668c83e` and `8b66034`) — awaiting CI.
 - [ ] Authenticated Super Admin, agency owner and staff end-to-end browser journeys — seeded test identities unavailable.
 - [ ] Docker image/Compose validation for this PR branch — Docker CI is not triggered for PR #22's audit-branch base.
 - [ ] Lighthouse/performance scoring and systematic N+1 measurement.
