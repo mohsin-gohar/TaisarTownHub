@@ -389,6 +389,50 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertSame('PLAINTEXT-LEGACY-BYTES', SecureFileStore::get('documents', $path));
     }
 
+    public function test_vault_encrypt_rewraps_files_encrypted_with_a_previous_app_key(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $id = 'doc_rotation_' . bin2hex(random_bytes(6));
+        $path = $agency->id . '/2026/11/' . $id . '.pdf';
+        $plain = 'KEY-ROTATION-SECRET-' . Str::random(40);
+        $currentKey = (string) config('app.key');
+        $previousKeys = (array) config('app.previous_keys', []);
+        $oldKey = 'old-app-key-' . Str::random(48);
+        $newKey = 'new-app-key-' . Str::random(48);
+
+        try {
+            config(['app.key' => $oldKey, 'app.previous_keys' => []]);
+            Storage::disk('documents')->put($path, FileVaultCrypto::encrypt($plain));
+
+            Document::create([
+                'id' => $id,
+                'agency_id' => $agency->id,
+                'category' => 'other',
+                'title' => 'Rotated Key Document',
+                'original_name' => $id . '.pdf',
+                'stored_name' => $id . '.pdf',
+                'disk_path' => $path,
+                'mime_type' => 'application/pdf',
+                'size_bytes' => strlen($plain),
+                'status' => 'active',
+                'uploaded_by' => $user->id,
+            ]);
+
+            config(['app.key' => $newKey, 'app.previous_keys' => [$oldKey]]);
+            $oldBlob = (string) Storage::disk('documents')->get($path);
+            $this->assertFalse(FileVaultCrypto::usesCurrentKey($oldBlob));
+            $this->assertSame($plain, SecureFileStore::get('documents', $path));
+
+            $this->assertSame(0, Artisan::call('vault:encrypt'));
+
+            $rotatedBlob = (string) Storage::disk('documents')->get($path);
+            $this->assertTrue(FileVaultCrypto::usesCurrentKey($rotatedBlob));
+            $this->assertSame($plain, SecureFileStore::get('documents', $path));
+        } finally {
+            config(['app.key' => $currentKey, 'app.previous_keys' => $previousKeys]);
+        }
+    }
+
     public function test_public_media_bytes_are_encrypted_too(): void
     {
         [$user] = $this->uploader();
