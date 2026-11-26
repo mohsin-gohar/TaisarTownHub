@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../services/api';
  * G-14 — cold-load auth-flow pages for the backend's token-based mail links:
  *
  *   /reset-password?token=…&email=…   ← POST /api/auth/reset-password
- *   /verify-email?email=…&token=…     ← GET  /api/auth/email/verify
+ *   /verify-email?email=…&token=…     ← POST /api/auth/email/verify
  *
  * They are rendered by the App.tsx bridge INSTEAD of the whole SPA shell
  * (these URLs are never part of the app's navigation state), keep the same
@@ -82,6 +82,10 @@ export const ResetPasswordPage: React.FC = () => {
   const [confirmation, setConfirmation] = useState('');
   const [state, setState] = useState<'form' | 'saving' | 'done' | 'error'>('form');
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    window.history.replaceState(window.history.state, '', window.location.pathname);
+  }, []);
 
   if (!token || !email) {
     return (
@@ -168,6 +172,7 @@ export const VerifyEmailPage: React.FC = () => {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
+    window.history.replaceState(window.history.state, '', window.location.pathname);
     let cancelled = false;
     (async () => {
       if (!email || !token) {
@@ -177,8 +182,10 @@ export const VerifyEmailPage: React.FC = () => {
         return;
       }
       try {
-        const res = await fetch(`${API_BASE_URL}/auth/email/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`, {
-          headers: { Accept: 'application/json' },
+        const res = await fetch(`${API_BASE_URL}/auth/email/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ email, token }),
         });
         const body = await res.json().catch(() => null);
         if (cancelled) return;
