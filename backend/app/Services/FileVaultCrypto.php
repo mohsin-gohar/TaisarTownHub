@@ -7,46 +7,37 @@ use RuntimeException;
 /**
  * At-rest encryption for the Secure Document & Media Vault.
  *
- * Algorithm: AES-256-GCM (authenticated encryption) via the standard
- * OpenSSL integration PHP ships with — no custom cryptography.
+ * AES-256-GCM with a vault-specific key derived from APP_KEY. Laravel's
+ * APP_PREVIOUS_KEYS are also accepted for decryption during key rotation.
+ * New writes always use the current APP_KEY.
  *
- * Key management: the data key is a SHA-256 subkey derived from APP_KEY with
- * a vault-specific domain separator. APP_KEY itself comes from the
- * environment (.env / secret store) and is never stored near the files.
- * Rotating APP_KEY therefore rotates the vault key; use
- * `php artisan vault:encrypt` / re-running it after a key change to
- * re-encrypt stored bytes (legacy plaintext keeps reading transparently).
+ * Rotation procedure:
+ *  1. Set the new APP_KEY and put the old APP_KEY in APP_PREVIOUS_KEYS.
+ *  2. Deploy the same key pair to every app/worker/scheduler replica.
+ *  3. Run php artisan vault:encrypt and require zero errors.
+ *  4. Verify the vault and encrypted model fields, then remove the old key
+ *     from APP_PREVIOUS_KEYS in a later controlled deployment.
  *
- * Envelope format (single write, streaming-friendly):
- *   "TTHENC1\n" . base64(iv) . "\n" . base64(tag) . "\n" . ciphertext
- *
- * Anything that does not start with the envelope marker is treated as legacy
- * plaintext and returned as-is, so files written before encryption was
- * enabled keep working without a migration downtime.
+ * Envelope: "TTHENC1\n" . base64(iv) . "\n" . base64(tag) . "\n" . ciphertext
+ * Legacy plaintext remains readable and is migrated by vault:encrypt.
  */
 class FileVaultCrypto
 {
-    /** Envelope marker for encrypted vault payloads. */
     public const ENVELOPE = "TTHENC1\n";
-
-    /** Domain separator so the vault key is distinct from other APP_KEY uses. */
     private const KEY_CONTEXT = 'taisartownhub-file-vault-v1';
-
-    /** AES-GCM standard nonce length (96 bits). */
     private const IV_LENGTH = 12;
+    private const TAG_LENGTH = 16;
 
     public static function enabled(): bool
     {
         return (bool) config('vault.encryption.enabled', true);
     }
 
-    /** True when the payload carries the encrypted envelope. */
     public static function isEncrypted(string $blob): bool
     {
         return str_starts_with($blob, self::ENVELOPE);
     }
 
-    /** Encrypt plaintext bytes into the vault envelope. */
     public static function encrypt(string $plain): string
     {
         $iv = random_bytes(self::IV_LENGTH);
@@ -55,13 +46,13 @@ class FileVaultCrypto
         $cipher = openssl_encrypt(
             $plain,
             'aes-256-gcm',
-            self::key(),
+            self::keyFor((string) config('app.key')),
             OPENSSL_RAW_DATA,
             $iv,
             $tag
         );
 
-        if ($cipher === false) {
+        if ($cipher === false || strlen($tag) !== self::TAG_LENGTH) {
             throw new RuntimeException('Vault encryption failed.');
         }
 
@@ -69,8 +60,9 @@ class FileVaultCrypto
     }
 
     /**
-     * Decrypt a vault payload. Legacy plaintext (no envelope) is returned
-     * unchanged so pre-encryption files keep streaming transparently.
+     * Decrypt with the current key first, then Laravel APP_PREVIOUS_KEYS.
+     * This allows a controlled APP_KEY rotation without losing access to
+     * encrypted files. Re-encryption is performed by vault:encrypt.
      */
     public static function decrypt(string $blob): string
     {
@@ -78,35 +70,79 @@ class FileVaultCrypto
             return $blob;
         }
 
+        [$iv, $tag, $cipher] = self::parts($blob);
+        $keys = array_values(array_unique(array_filter(array_merge(
+            [(string) config('app.key')],
+            (array) config('app.previous_keys', [])
+        ), fn ($key) => is_string($key) && $key !== '')));
+
+        foreach ($keys as $appKey) {
+            $plain = self::decryptWithAppKey($cipher, $iv, $tag, $appKey);
+            if ($plain !== false) {
+                return $plain;
+            }
+        }
+
+        throw new RuntimeException(
+            'Vault decryption failed — the file was written with a key that is not in APP_KEY or APP_PREVIOUS_KEYS.'
+        );
+    }
+
+    /** Whether an encrypted payload can be authenticated with the current APP_KEY. */
+    public static function usesCurrentKey(string $blob): bool
+    {
+        if (!self::isEncrypted($blob)) {
+            return false;
+        }
+
+        $appKey = (string) config('app.key');
+        if ($appKey === '') {
+            return false;
+        }
+
+        try {
+            [$iv, $tag, $cipher] = self::parts($blob);
+
+            return self::decryptWithAppKey($cipher, $iv, $tag, $appKey) !== false;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /** @return array{string,string,string} */
+    private static function parts(string $blob): array
+    {
         $parts = explode("\n", substr($blob, strlen(self::ENVELOPE)), 3);
         if (count($parts) !== 3) {
             throw new RuntimeException('Vault payload is malformed.');
         }
 
-        [$iv, $tag, $cipher] = $parts;
-        $plain = openssl_decrypt(
-            $cipher,
-            'aes-256-gcm',
-            self::key(),
-            OPENSSL_RAW_DATA,
-            base64_decode($iv),
-            base64_decode($tag)
-        );
+        [$encodedIv, $encodedTag, $cipher] = $parts;
+        $iv = base64_decode($encodedIv, true);
+        $tag = base64_decode($encodedTag, true);
 
-        if ($plain === false) {
-            throw new RuntimeException(
-                'Vault decryption failed — the file may have been written with a different APP_KEY.'
-            );
+        if (!is_string($iv) || strlen($iv) !== self::IV_LENGTH
+            || !is_string($tag) || strlen($tag) !== self::TAG_LENGTH) {
+            throw new RuntimeException('Vault payload has an invalid IV or authentication tag.');
         }
 
-        return $plain;
+        return [$iv, $tag, $cipher];
     }
 
-    /** Vault data key derived from APP_KEY (never persisted beside files). */
-    private static function key(): string
+    private static function decryptWithAppKey(string $cipher, string $iv, string $tag, string $appKey): string|false
     {
-        $appKey = (string) config('app.key');
+        return openssl_decrypt(
+            $cipher,
+            'aes-256-gcm',
+            self::keyFor($appKey),
+            OPENSSL_RAW_DATA,
+            $iv,
+            $tag
+        );
+    }
 
+    private static function keyFor(string $appKey): string
+    {
         if ($appKey === '') {
             throw new RuntimeException('APP_KEY is required for vault encryption.');
         }
