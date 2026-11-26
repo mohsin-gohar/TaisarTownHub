@@ -216,7 +216,7 @@ class WorkspaceController extends Controller
             if ($allowed) {
                 $anyReadable = true;
             }
-            $all[$name] = $allowed ? $this->allRows($name, $agencyId) : [];
+            $all[$name] = $allowed ? $this->allRows($name, $agencyId, $request, $user) : [];
         }
 
         $cmsAllowed = $this->canRead($request, $user, 'cms', $agencyId);
@@ -914,94 +914,63 @@ class WorkspaceController extends Controller
      * ownership decision is applied. Rows tagged with ANOTHER agency are never
      * returned. Platform users (no agency membership scope) see everything.
      */
-    private function allRows(string $collection, ?string $agencyId): array
+    private function allRows(string $collection, ?string $agencyId, Request $request, $user): array
     {
-        // Soft-deleted rows must never reappear in a workspace dump.
         $query = BusinessRecord::where('collection', $collection)->whereNull('deleted_at');
 
         if (in_array($collection, self::AGENCY_SCOPED, true) && $agencyId !== null) {
             $query->where('agency_id', $agencyId);
         }
 
-        return $query
-            ->orderByDesc('updated_at')
-            ->limit(2000)
-            ->get()
-            ->map(fn (BusinessRecord $record) => $record->payload ?? [])
-            ->filter(fn ($row) => ! empty($row['id']))
-            ->values()
-            ->all();
-    }
+        $rows = $query->orderBy('record_id')->limit(self::MAX_ROWS_PER_COLLECTION)
+            ->get()->map(fn ($record) => $record->payload ?? [])->all();
 
-    private function cmsPayload(): array
-    {
-        $record = BusinessRecord::where('collection', 'cms')->where('record_id', 'default')->first();
+        $hasBroadFinanceRead = $this->perm($request, $user, 'finance.view', $agencyId)
+            || $this->perm($request, $user, 'view_transactions', $agencyId);
 
-        return $record?->payload ?? [];
-    }
+        if ($collection === 'transactions'
+            && $this->perm($request, $user, 'view_my_deals', $agencyId)
+            && ! $hasBroadFinanceRead) {
+            $dealerId = (string) ($user->dealer_id ?? '');
 
-    private function publicCms(): array
-    {
-        return $this->onlyKeys($this->cmsPayload(), self::PUBLIC_CMS_KEYS);
-    }
+            return $dealerId === '' ? [] : array_values(array_filter($rows, function ($row) use ($dealerId) {
+                $rowDealerId = (string) ($row['dealerId'] ?? $row['assignedDealerId'] ?? $row['dealer_id'] ?? '');
 
-    private function onlyKeys(array $row, array $keys): array
-    {
-        $out = [];
-        foreach ($keys as $key) {
-            if (array_key_exists($key, $row)) {
-                $out[$key] = $row[$key];
-            }
+                return $rowDealerId === $dealerId;
+            }));
         }
 
-        return $out;
-    }
+        if ($collection === 'payments'
+            && $this->perm($request, $user, 'view_my_deals', $agencyId)
+            && ! $hasBroadFinanceRead) {
+            $ownedTransactions = $this->allRows('transactions', $agencyId, $request, $user);
+            $ownedIds = array_fill_keys(array_filter(array_map(
+                fn ($row) => (string) ($row['id'] ?? ''),
+                $ownedTransactions
+            )), true);
 
-    private function publicDealer(array $row): array
-    {
-        // Public catalog: allowlist only. CNIC, contact details and commission
-        // figures are internal workspace data and must never be published.
-        return $this->onlyKeys($row, self::PUBLIC_DEALER_KEYS);
-    }
+            return array_values(array_filter($rows, function ($row) use ($ownedIds) {
+                $transactionId = (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '');
 
-    private function publicVideo(array $row): array
-    {
-        $row = $this->onlyKeys($row, self::PUBLIC_VIDEO_KEYS);
-
-        if (isset($row['comments']) && is_array($row['comments'])) {
-            $comments = [];
-            foreach ($row['comments'] as $comment) {
-                if (! is_array($comment)) {
-                    continue;
-                }
-                $clean = $this->onlyKeys($comment, self::PUBLIC_VIDEO_COMMENT_KEYS);
-                if ($clean !== []) {
-                    $comments[] = $clean;
-                }
-            }
-            $row['comments'] = $comments;
-        } else {
-            unset($row['comments']);
+                return $transactionId !== '' && isset($ownedIds[$transactionId]);
+            }));
         }
 
-        return $row;
+        if ($collection === 'commissions'
+            && $this->perm($request, $user, 'view_my_commission', $agencyId)
+            && ! $hasBroadFinanceRead) {
+            $dealerId = (string) ($user->dealer_id ?? '');
+
+            return $dealerId === '' ? [] : array_values(array_filter($rows, function ($row) use ($dealerId) {
+                $rowDealerId = (string) ($row['dealerId'] ?? $row['dealer_id'] ?? '');
+
+                return $rowDealerId === $dealerId;
+            }));
+        }
+
+        return $rows;
     }
 
-    private function publicPlot(array $row): array
-    {
-        // Public catalog: allowlist only. Owner identity, marker labels and
-        // internal notes are workspace data, never public plot data.
-        return $this->onlyKeys($row, self::PUBLIC_PLOT_KEYS);
-    }
-
-    private function publicMedia(array $row): array
-    {
-        return $this->onlyKeys($row, self::PUBLIC_MEDIA_KEYS);
-    }
-
-    /* ================================================================ */
-    /* Permission gates */
-    /* ================================================================ */
 
     /**
      * Permission check mirroring AuthorizesApi: agency-scoped grants when the
