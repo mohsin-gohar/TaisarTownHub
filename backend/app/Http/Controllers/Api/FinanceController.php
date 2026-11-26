@@ -819,16 +819,37 @@ public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments']);
-
-        $payment = TransactionPayment::where('id', $id);
-        if ($agencyId !== null) {
-            $payment->where('agency_id', $agencyId);
-        }
-        $payment = $payment->firstOrFail();
-
-        $transaction = Transaction::where('id', $payment->transaction_id)->first();
-
         $request->validate(['reason' => 'required|string|min:3|max:500']);
+
+        $paymentPreview = TransactionPayment::where('id', $id)
+            ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+            ->firstOrFail();
+
+        [$payment, $transaction, $error] = DB::transaction(function () use ($id, $agencyId, $paymentPreview): array {
+            $transaction = Transaction::where('id', $paymentPreview->transaction_id)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($transaction->isVoided()) {
+                return [null, $transaction, 'Payments on a voided deal cannot be modified.'];
+            }
+
+            $payment = TransactionPayment::where('id', $id)
+                ->where('transaction_id', $transaction->id)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $payment->delete();
+            $transaction->recalculateStatus();
+
+            return [$payment, $transaction->fresh(), null];
+        }, 3);
+
+        if ($error !== null) {
+            return response()->json(['success' => false, 'message' => $error], 409);
+        }
 
         $this->writeAudit($request, 'payment.delete', $payment->id, "Payment {$payment->amount} removed ({$request->reason})", [
             'agency_id' => $payment->agency_id,
@@ -836,14 +857,6 @@ public function update(Request $request, string $id)
             'entity_id' => (string) $payment->id,
             'metadata' => ['amount' => $payment->amount, 'reason' => $request->reason],
         ]);
-
-        // Soft delete via the model's SoftDeletes trait so the audit trail is
-        // preserved and aggregate totals automatically exclude voided rows.
-        $payment->delete();
-
-        if ($transaction) {
-            $transaction->recalculateStatus();
-        }
 
         return response()->json(['success' => true, 'message' => 'Payment voided.']);
     }
