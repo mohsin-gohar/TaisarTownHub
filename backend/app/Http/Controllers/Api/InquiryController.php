@@ -141,7 +141,7 @@ class InquiryController extends Controller
                     return ['error' => 'listing_unavailable'];
                 }
 
-                if ($block = PlanLimits::block($agency, 'leads', fn () => PlanLimits::leadUsed($agencyId))) {
+                if ($block = PlanLimits::block($agency, 'leads', fn () => PlanLimits::leadUsed($agency))) {
                     return ['blocked' => $block];
                 }
 
