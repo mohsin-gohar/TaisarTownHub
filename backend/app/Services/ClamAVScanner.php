@@ -147,24 +147,29 @@ class ClamAVScanner implements MalwareScanner
                 return null;
             }
 
-            while (!feof($handle)) {
-                $chunk = fread($handle, self::CHUNK_SIZE);
-                if ($chunk === false) {
-                    break;
-                }
-                if ($chunk === '') {
-                    if (feof($handle)) {
-                        break;
+            try {
+                while (!feof($handle)) {
+                    $chunk = fread($handle, self::CHUNK_SIZE);
+                    if ($chunk === false) {
+                        return null;
                     }
-                    continue;
+                    if ($chunk === '') {
+                        if (feof($handle)) {
+                            break;
+                        }
+                        $meta = stream_get_meta_data($handle);
+                        if (($meta['timed_out'] ?? false) === true) {
+                            return null;
+                        }
+                        continue;
+                    }
+                    if ($this->writeAll($socket, pack('N', strlen($chunk)) . $chunk) === false) {
+                        return null;
+                    }
                 }
-                if ($this->writeAll($socket, pack('N', strlen($chunk)) . $chunk) === false) {
-                    fclose($handle);
-
-                    return null;
-                }
+            } finally {
+                fclose($handle);
             }
-            fclose($handle);
 
             // 3) end of stream
             if ($this->writeAll($socket, pack('N', 0)) === false) {
