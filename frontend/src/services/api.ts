@@ -543,7 +543,7 @@ export const api = {
     error?: string;
   }> {
     try {
-      const res = await apiFetch('/auth/mfa/setup', { method: 'POST', body: { password } });
+      const res = await apiFetch('/auth/mfa/setup', { method: 'POST', body: JSON.stringify({ password }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         return { success: false, error: body?.message || 'Two-factor enrolment could not be started.' };
