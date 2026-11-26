@@ -1012,12 +1012,20 @@ class AuthController extends Controller
     /** @param array<int, string> $permissions */
     private function legacyAgencyPermissions(array $permissions): array
     {
-        foreach (\App\Support\Permissions::LEGACY_ALIASES as $legacy => $canonical) {
-            if (str_starts_with($canonical, 'admin.')) {
+        // LEGACY_ALIASES is canonical permission => list of legacy UI keys.
+        // Finance permissions intentionally map to multiple legacy aliases.
+        foreach (\App\Support\Permissions::LEGACY_ALIASES as $canonical => $legacyKeys) {
+            if (! is_string($canonical) || str_starts_with($canonical, 'admin.')) {
                 continue;
             }
-            if (in_array($canonical, $permissions, true)) {
-                $permissions[] = $legacy;
+            if (! in_array($canonical, $permissions, true)) {
+                continue;
+            }
+
+            foreach ((array) $legacyKeys as $legacyKey) {
+                if (is_string($legacyKey) && $legacyKey !== '') {
+                    $permissions[] = $legacyKey;
+                }
             }
         }
 
