@@ -535,7 +535,7 @@ export const api = {
   },
 
   /** Starts enrolment: returns the secret, the otpauth URI and recovery codes. */
-  async mfaSetup(): Promise<{
+  async mfaSetup(password: string): Promise<{
     success: boolean;
     secret?: string;
     otpauthUri?: string;
@@ -543,7 +543,7 @@ export const api = {
     error?: string;
   }> {
     try {
-      const res = await apiFetch('/auth/mfa/setup', { method: 'POST' });
+      const res = await apiFetch('/auth/mfa/setup', { method: 'POST', body: { password } });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         return { success: false, error: body?.message || 'Two-factor enrolment could not be started.' };
