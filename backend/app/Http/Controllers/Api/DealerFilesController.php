@@ -187,7 +187,7 @@ class DealerFilesController extends Controller
                 'sold_by_dealer_id' => $dealerId,
             ]);
 
-            $this->updateDealerCommission($dealerId, (int) round($profit));
+            $this->updateDealerCommission($dealerId, $profit);
 
             return $file;
         });
@@ -352,15 +352,27 @@ class DealerFilesController extends Controller
         return $data;
     }
 
-    protected function updateDealerCommission(string $dealerId, int $profit): void
+    protected function updateDealerCommission(string $dealerId, float $profit): void
     {
         $dealer = Dealer::where('id', $dealerId)->lockForUpdate()->first();
-        if ($dealer) {
-            $dealer->totalEarnedPKR = ($dealer->totalEarnedPKR ?? 0) + $profit;
-            $dealer->pendingCommissionPKR = ($dealer->pendingCommissionPKR ?? 0) + $profit;
-            $dealer->dealsClosed = ($dealer->dealsClosed ?? 0) + 1;
-            $dealer->save();
+        if (!$dealer) {
+            return;
         }
+
+        // Commission is a configured share of profit (or a fixed amount), not
+        // the dealer's entire gross profit. Loss-making sales never create a
+        // negative commission or reduce already-earned balances.
+        $rate = max(0, (float) ($dealer->commissionRate ?? 0));
+        $commission = match (strtolower((string) ($dealer->commissionType ?? 'fixed'))) {
+            'percentage' => $profit > 0 ? (int) round($profit * $rate / 100) : 0,
+            'fixed', 'custom' => (int) round($rate),
+            default => 0,
+        };
+
+        $dealer->totalEarnedPKR = ($dealer->totalEarnedPKR ?? 0) + $commission;
+        $dealer->pendingCommissionPKR = ($dealer->pendingCommissionPKR ?? 0) + $commission;
+        $dealer->dealsClosed = ($dealer->dealsClosed ?? 0) + 1;
+        $dealer->save();
     }
 
     private function maskCnic(string $cnic): string

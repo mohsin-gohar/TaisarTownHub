@@ -95,6 +95,7 @@ class AgencyPromotionService
         $now = now();
         $liveCount = AgencyPromotion::query()->live()->count();
         $occupiedCount = AgencyPromotion::query()->current()->count();
+        $pending = AgencyPromotion::query()->current()->where('status', 'pending')->count();
         $scheduled = AgencyPromotion::query()
             ->where('status', 'active')
             ->whereNotNull('starts_at')
@@ -109,8 +110,10 @@ class AgencyPromotionService
         return [
             'live' => $liveCount,
             'scheduled' => $scheduled,
+            'pending' => $pending,
             'expiring_7d' => $expiring,
             'max_slots' => $this->maxSlots(),
+            'reserved' => $occupiedCount,
             'available_slots' => max(0, $this->maxSlots() - $occupiedCount),
             'free_launch' => true,
             'total_placements' => AgencyPromotion::query()->count(),
@@ -145,9 +148,7 @@ class AgencyPromotionService
             if (!in_array($status, ['pending', 'active'], true)) {
                 throw new \DomainException('A new featured placement must be pending or active.');
             }
-            if ($status === 'active') {
-                $this->assertSlotAvailable();
-            }
+            $this->assertSlotAvailable();
 
             $startsAt = !empty($data['starts_at'])
                 ? Carbon::parse($data['starts_at'])
@@ -212,8 +213,6 @@ class AgencyPromotionService
 
             if (in_array($status, ['active', 'pending'], true)) {
                 $this->assertEligible($lockedAgency);
-            }
-            if ($status === 'active') {
                 $duplicate = AgencyPromotion::query()
                     ->current()
                     ->where('agency_id', $lockedAgency->id)

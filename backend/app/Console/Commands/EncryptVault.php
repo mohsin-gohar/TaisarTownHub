@@ -34,6 +34,11 @@ class EncryptVault extends Command
     public function handle(): int
     {
         $only = $this->option('disk');
+        if ($only !== null && ! in_array($only, ['documents', 'quarantine'], true)) {
+            $this->error('Invalid --disk value. Allowed values: documents, quarantine.');
+
+            return self::FAILURE;
+        }
         $dry = (bool) $this->option('dry-run');
         $counts = ['encrypted' => 0, 'already' => 0, 'errors' => 0];
 

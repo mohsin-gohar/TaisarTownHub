@@ -73,6 +73,7 @@ class AgencyStaffController extends Controller
                 'message' => 'Only an agency owner may invite another owner.',
             ], 403);
         }
+        $this->assertCanGrantPermissions($request, $agencyId, $role->permissions ?? []);
 
         $token = Str::random(48);
         $result = DB::transaction(function () use ($agencyId, $email, $role, $request, $token): array {
@@ -408,6 +409,7 @@ class AgencyStaffController extends Controller
                         'message' => 'Only an agency owner may change owner membership.',
                     ], 403);
                 }
+                $this->assertCanGrantPermissions($request, $agencyId, $role->permissions ?? []);
                 if ($member->role_id === 'role_agency_owner' && $role->id !== 'role_agency_owner'
                     && $member->status === 'active' && $this->activeOwnerCount($agencyId) <= 1) {
                     return response()->json([
@@ -445,6 +447,7 @@ class AgencyStaffController extends Controller
                         'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
                     ], 422);
                 }
+                $this->assertCanGrantPermissions($request, $agencyId, $request->permissions);
                 $payload['permissions'] = array_values($request->permissions);
             }
 
@@ -550,6 +553,7 @@ class AgencyStaffController extends Controller
                 'message' => 'Platform-level permissions cannot be granted to agency roles: ' . implode(', ', $invalid),
             ], 422);
         }
+        $this->assertCanGrantPermissions($request, $agencyId, $request->permissions);
 
         if (Role::where('scope', 'agency')->where('key', $request->key)
             ->where(function ($q) use ($agencyId) {
@@ -611,6 +615,7 @@ class AgencyStaffController extends Controller
                     'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
                 ], 422);
             }
+            $this->assertCanGrantPermissions($request, $agencyId, $request->permissions);
             $role->permissions = array_values($request->permissions);
         }
         if ($request->has('name')) {
@@ -677,6 +682,25 @@ class AgencyStaffController extends Controller
         }
 
         return $role;
+    }
+
+    /**
+     * A staff manager may delegate only permissions they already hold.
+     * Otherwise a manager could create/assign a custom role to self and
+     * acquire owner-only billing or settings access. Active agency owners
+     * remain the authority for granting any agency-scoped capability.
+     */
+    private function assertCanGrantPermissions(Request $request, string $agencyId, array $permissions): void
+    {
+        if ($this->requesterIsOwner($agencyId, (int) $request->user()->id)) {
+            return;
+        }
+
+        $held = $request->user()->permissionsFor($agencyId);
+        $excess = array_values(array_diff(array_unique($permissions), $held));
+        if ($excess !== []) {
+            abort(403, 'You cannot grant agency permissions you do not hold: ' . implode(', ', $excess));
+        }
     }
 
     private function activeOwnerCount(string $agencyId): int

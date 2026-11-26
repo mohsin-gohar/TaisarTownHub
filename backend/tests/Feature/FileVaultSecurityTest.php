@@ -381,6 +381,10 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertTrue(FileVaultCrypto::isEncrypted($raw), 'vault:encrypt must encrypt plaintext rows.');
         $this->assertStringNotContainsString('PLAINTEXT-LEGACY-BYTES', $raw);
         $this->assertSame('PLAINTEXT-LEGACY-BYTES', SecureFileStore::get('documents', $path));
+        $this->assertSame([], array_values(array_filter(
+            Storage::disk('documents')->allFiles(),
+            fn (string $file): bool => str_contains($file, '.vault-rotation-')
+        )), 'Staged vault objects must be cleaned after replacement.');
 
         $this->get("/api/agency/documents/{$id}/download", $headers)->assertStatus(200);
 
@@ -388,6 +392,81 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $exit = Artisan::call('vault:encrypt');
         $this->assertSame(0, $exit);
         $this->assertSame('PLAINTEXT-LEGACY-BYTES', SecureFileStore::get('documents', $path));
+    }
+
+    public function test_vault_encrypt_dry_run_leaves_plaintext_untouched_and_invalid_disk_is_rejected(): void
+    {
+        [$user, $agency] = $this->agencyUser([
+            'documents.view', 'documents.upload', 'documents.download',
+        ], 'document_manager');
+        $id = 'doc_dry_run_' . bin2hex(random_bytes(6));
+        $path = $agency->id . '/2026/11/' . $id . '.pdf';
+        $plain = 'DRY-RUN-PLAINTEXT';
+        Storage::disk('documents')->put($path, $plain);
+
+        Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Dry Run Document',
+            'original_name' => $id . '.pdf',
+            'stored_name' => $id . '.pdf',
+            'disk_path' => $path,
+            'mime_type' => 'application/pdf',
+            'size_bytes' => strlen($plain),
+            'status' => 'active',
+            'uploaded_by' => $user->id,
+        ]);
+
+        $this->assertSame(0, Artisan::call('vault:encrypt', ['--disk' => 'documents', '--dry-run' => true]));
+        $this->assertSame($plain, Storage::disk('documents')->get($path));
+
+        $this->assertSame(1, Artisan::call('vault:encrypt', ['--disk' => 'unknown']));
+        $this->assertSame($plain, Storage::disk('documents')->get($path));
+    }
+
+    public function test_vault_encrypt_rewraps_files_encrypted_with_a_previous_app_key(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $id = 'doc_rotation_' . bin2hex(random_bytes(6));
+        $path = $agency->id . '/2026/11/' . $id . '.pdf';
+        $plain = 'KEY-ROTATION-SECRET-' . Str::random(40);
+        $currentKey = (string) config('app.key');
+        $previousKeys = (array) config('app.previous_keys', []);
+        $oldKey = 'old-app-key-' . Str::random(48);
+        $newKey = 'new-app-key-' . Str::random(48);
+
+        try {
+            config(['app.key' => $oldKey, 'app.previous_keys' => []]);
+            Storage::disk('documents')->put($path, FileVaultCrypto::encrypt($plain));
+
+            Document::create([
+                'id' => $id,
+                'agency_id' => $agency->id,
+                'category' => 'other',
+                'title' => 'Rotated Key Document',
+                'original_name' => $id . '.pdf',
+                'stored_name' => $id . '.pdf',
+                'disk_path' => $path,
+                'mime_type' => 'application/pdf',
+                'size_bytes' => strlen($plain),
+                'status' => 'active',
+                'uploaded_by' => $user->id,
+            ]);
+
+            config(['app.key' => $newKey, 'app.previous_keys' => ['  ' . $oldKey . '  ']]);
+            $oldBlob = (string) Storage::disk('documents')->get($path);
+            $this->assertFalse(FileVaultCrypto::isEncryptedWithCurrentKey($oldBlob));
+            $this->assertSame($plain, SecureFileStore::get('documents', $path));
+
+            $this->assertSame(0, Artisan::call('vault:encrypt'));
+
+            $rotatedBlob = (string) Storage::disk('documents')->get($path);
+            $this->assertTrue(FileVaultCrypto::isEncryptedWithCurrentKey($rotatedBlob));
+            $this->assertSame($plain, SecureFileStore::get('documents', $path));
+        } finally {
+            config(['app.key' => $currentKey, 'app.previous_keys' => $previousKeys]);
+        }
     }
 
     public function test_public_media_bytes_are_encrypted_too(): void
@@ -457,6 +536,42 @@ class FileVaultSecurityTest extends EnterpriseTestCase
     }
 
     /* ============ Audit of denied attempts ============ */
+
+    public function test_sensitive_document_versions_and_activity_metadata_require_sensitive_clearance(): void
+    {
+        [$owner, $agency] = $this->uploader();
+        $documentId = $this->upload($owner, ['category' => 'cnic'], 'sensitive-cnic.pdf')
+            ->assertStatus(201)
+            ->json('document.id');
+
+        $ownerHeaders = $this->authHeaders($this->tokenFor($owner));
+        $this->getJson("/api/agency/documents/{$documentId}/download", $ownerHeaders)->assertOk();
+
+        [$limited] = $this->agencyUser([
+            'documents.view',
+            'documents.update',
+            'documents.manage_permissions',
+        ], 'limited_document_manager', $agency);
+        $limitedHeaders = $this->authHeaders($this->tokenFor($limited));
+
+        $this->post("/api/agency/documents/{$documentId}/versions", [
+            'file' => UploadedFile::fake()->createWithContent('replacement.pdf', $this->pdfBytes(20)),
+        ], $limitedHeaders)->assertForbidden();
+
+        $this->getJson("/api/agency/documents/{$documentId}/versions", $limitedHeaders)
+            ->assertForbidden();
+        $this->getJson("/api/agency/documents/{$documentId}/shares", $limitedHeaders)
+            ->assertForbidden();
+        $this->getJson("/api/agency/documents/{$documentId}/access-logs", $limitedHeaders)
+            ->assertForbidden();
+
+        $activity = $this->getJson('/api/agency/documents-activity', $limitedHeaders)
+            ->assertOk()
+            ->json('activity');
+        $this->assertNotContains($documentId, array_column($activity, 'document_id'));
+        $this->assertSame(1, Document::findOrFail($documentId)->version);
+        $this->assertSame([], DocumentVersion::where('document_id', $documentId)->get()->all());
+    }
 
     public function test_unauthorized_and_sensitive_download_attempts_are_audited(): void
     {
@@ -763,6 +878,32 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertDatabaseCount('document_quarantines', 0);
         $this->assertSame([], Storage::disk('documents')->allFiles());
         $this->assertSame([], Storage::disk('quarantine')->allFiles());
+    }
+
+    public function test_quarantine_index_hides_sensitive_rejected_uploads_without_sensitive_clearance(): void
+    {
+        [$owner, $agency] = $this->uploader();
+        $this->bindVerdict(MalwareScanResult::infected('clamav', ['Eicar-Test-Signature FOUND']));
+
+        $this->upload($owner, ['category' => 'cnic'], 'cnic-front.pdf')
+            ->assertStatus(422);
+        $this->upload($owner, ['category' => 'other'], 'general-file.pdf')
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('document_quarantines', [
+            'agency_id' => $agency->id,
+            'original_name' => 'cnic-front.pdf',
+            'is_sensitive' => true,
+        ]);
+
+        [$viewer] = $this->agencyUser(['documents.manage_permissions'], 'quarantine_viewer', $agency);
+        $payload = $this->getJson('/api/agency/documents-quarantine', $this->authHeaders($this->tokenFor($viewer)))
+            ->assertOk()
+            ->json();
+
+        $names = array_column($payload['rejected'], 'title');
+        $this->assertContains('general-file.pdf', $names);
+        $this->assertNotContains('cnic-front.pdf', $names);
     }
 
     public function test_infected_rescan_moves_bytes_and_current_version_metadata_together(): void

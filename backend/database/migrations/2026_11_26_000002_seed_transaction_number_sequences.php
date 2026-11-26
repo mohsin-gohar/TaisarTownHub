@@ -26,7 +26,9 @@ return new class extends Migration
 
             DB::table('transaction_number_sequences')->insertOrIgnore([
                 'year' => $year,
-                'next_number' => $lastIssued,
+                // The allocator consumes next_number as the next value to issue,
+                // not the last value already present in transactions.
+                'next_number' => $lastIssued + 1,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);

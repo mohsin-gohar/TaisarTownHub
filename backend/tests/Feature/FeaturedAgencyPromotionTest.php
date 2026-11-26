@@ -285,18 +285,35 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
         $service = app(AgencyPromotionService::class);
 
         $first = $service->promote($agency, ['status' => 'pending'], $admin);
-        $second = $service->promote($agency, ['status' => 'pending'], $admin);
-
-        $service->update($first, ['status' => 'active'], $admin);
 
         try {
-            $service->update($second, ['status' => 'active'], $admin);
-            $this->fail('A second active placement for the same agency must be rejected.');
+            $service->promote($agency, ['status' => 'pending'], $admin);
+            $this->fail('An agency must not hold multiple pending or active placements.');
         } catch (\DomainException $exception) {
             $this->assertStringContainsString('already has a current featured placement', $exception->getMessage());
         }
 
+        $service->update($first, ['status' => 'active'], $admin);
         $this->assertSame(1, AgencyPromotion::query()->current()->where('agency_id', $agency->id)->count());
+    }
+
+    public function test_pending_placement_reserves_the_last_global_slot_and_is_reported_in_stats(): void
+    {
+        SystemSetting::set('promotions.max_slots', 1);
+        [$admin] = $this->platformAdmin();
+        $first = $this->makeAgency('Pending Reservation Agency');
+        $second = $this->makeAgency('Blocked Behind Pending Agency');
+        $service = app(AgencyPromotionService::class);
+
+        $service->promote($first, ['status' => 'pending'], $admin);
+        $stats = $service->stats();
+
+        $this->assertSame(1, $stats['pending']);
+        $this->assertSame(1, $stats['reserved']);
+        $this->assertSame(0, $stats['available_slots']);
+
+        $this->expectException(\DomainException::class);
+        $service->promote($second, [], $admin);
     }
 
     public function test_reorder_requires_the_complete_current_placement_set(): void

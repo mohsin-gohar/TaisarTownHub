@@ -73,6 +73,8 @@ class WorkspaceController extends Controller
     private const RESERVED_KEYS = [
         'agency_id', 'created_by', 'updated_by', 'deleted_by',
         'uploaded_by', 'recorded_by', 'verified_by',
+        'voidedAt', 'voidedBy', 'voided_at', 'voided_by',
+        'commissionStatus', 'commission_status', 'cancelledAt', 'cancelled_at',
     ];
 
     private const MAX_ROWS_PER_COLLECTION = 2000;
@@ -769,6 +771,19 @@ class WorkspaceController extends Controller
             $newPayload = $row;
             $oldPayload = $existing?->payload ?? null;
 
+            if ($collection === 'transactions') {
+                if ($oldPayload !== null) {
+                    foreach (['voidedAt', 'voidedBy', 'commissionStatus', 'cancelledAt'] as $serverField) {
+                        if (! array_key_exists($serverField, $newPayload) && array_key_exists($serverField, $oldPayload)) {
+                            $newPayload[$serverField] = $oldPayload[$serverField];
+                        }
+                    }
+                } elseif (! array_key_exists('commissionStatus', $newPayload)) {
+                    $newPayload['commissionStatus'] = 'Pending Accrual';
+                }
+                $row = $newPayload;
+            }
+
             if ($collection === 'properties' && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
                 $newPayload = $this->preserveSensitivePropertyFields($oldPayload ?? [], $newPayload);
                 $row = $newPayload;
@@ -817,6 +832,20 @@ class WorkspaceController extends Controller
                 continue;
             }
 
+            if ($collection === 'transactions' && $existing === null) {
+                $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? 'draft')));
+                if (! empty($newPayload['voided']) || in_array($newStatus, ['completed', 'cancelled', 'voided'], true)) {
+                    $blocked++;
+                    continue;
+                }
+            }
+
+            if ($collection === 'commissions'
+                && $this->transactionIsClosedForCommission((string) ($newPayload['transactionId'] ?? $newPayload['transaction_id'] ?? $newPayload['dealId'] ?? ''), $agencyId)) {
+                $blocked++;
+                continue;
+            }
+
             if ($existing === null && ! $this->canCreateRow($request, $user, $collection, $agencyId)) {
                 $blocked++;
 
@@ -830,36 +859,67 @@ class WorkspaceController extends Controller
                 continue;
             }
 
-            // Count a row only after ownership, reference, delete and row-level
-            // create/update checks have all passed. Replace mode uses this count
-            // as a safety interlock before its destructive NOT IN update.
-            $accepted++;
+            if ($collection === 'payments') {
+                $this->enforcePaymentMovement($request, $newPayload, $agencyId);
+            }
+            if ($collection === 'commissions') {
+                $newPayload = $this->enforceCommissionLedger($request, $newPayload, $oldPayload, $agencyId);
+                $row = $newPayload;
+            }
+
+            $isTransactionCloseout = $collection === 'transactions'
+                && $this->isTransactionCloseout($oldPayload ?? [], $newPayload);
+            $isTransactionVoid = $isTransactionCloseout
+                && $this->isTransactionVoidTransition($oldPayload ?? [], $newPayload);
+
+            if ($isTransactionCloseout) {
+                $row = $this->stampTransactionCloseout($row, $user, $isTransactionVoid);
+                $newPayload = $row;
+            }
 
             if ($scoped && $agencyId !== null) {
-                // Persist ownership in the same insert/update statement. A
-                // concurrent agency cannot win a missing-row race and then
-                // have its payload or agency_id overwritten by this writer.
                 if ($existing !== null) {
+                    // The locked row's owner is checked again immediately
+                    // before write; agency_id is never changed by an update.
                     if ($existing->agency_id !== $agencyId) {
                         $blocked++;
-
                         continue;
                     }
+
                     $existing->payload = $row;
                     $existing->deleted_at = $deletedAt;
                     $existing->save();
                 } else {
-                    $newRecord = new BusinessRecord();
-                    $newRecord->collection = $collection;
-                    $newRecord->record_id = $recordId;
-                    $newRecord->payload = $row;
-                    $newRecord->deleted_at = $deletedAt;
-                    $newRecord->agency_id = $agencyId;
-                    $newRecord->save();
+                    // Atomically claim a previously-missing collection/id pair.
+                    // If another agency inserts first, insertOrIgnore returns 0
+                    // and this request is blocked rather than overwriting it.
+                    $now = now();
+                    $inserted = DB::table('business_records')->insertOrIgnore([
+                        'collection' => $collection,
+                        'record_id' => $recordId,
+                        'payload' => json_encode($row, JSON_THROW_ON_ERROR),
+                        'agency_id' => $agencyId,
+                        'deleted_at' => $deletedAt,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+
+                    if ($inserted !== 1) {
+                        $blocked++;
+                        continue;
+                    }
                 }
             } else {
                 // Platform-wide writes retain the current owner column.
                 BusinessRecord::put($collection, $recordId, $row);
+            }
+
+            // Count only after persistence succeeds. Replace mode uses this
+            // accepted count as a safety interlock before destructive deletion.
+            $accepted++;
+
+            if ($isTransactionCloseout) {
+                $this->applyTransactionCloseout($recordId, $agencyId, $user, $row, $isTransactionVoid);
             }
 
             $changed[] = $recordId;
@@ -1250,7 +1310,7 @@ class WorkspaceController extends Controller
             'dealers' => ['manage_dealers'],
             'sellers' => ['manage_sellers'],
             'buyers' => ['manage_buyers', 'submit_buyer'],
-            'transactions' => ['create_transactions', 'update_transactions', 'void_transactions', 'finance.create_transaction'],
+            'transactions' => ['create_transactions', 'update_transactions', 'void_transactions', 'cancel_transactions', 'legacy.cancel_transactions', 'finance.create_transaction'],
             'payments' => ['manage_payments', 'finance.manage_payments'],
             'commissions' => ['pay_commissions', 'manage_payments', 'finance.manage_payments'],
             'files' => ['upload_documents', 'verify_documents', 'documents.upload'],
@@ -1270,6 +1330,339 @@ class WorkspaceController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Enforce the append-only commission payout ledger at the server boundary.
+     * Client state is not trusted for paidPKR, payout history or accrual status.
+     */
+    private function enforceCommissionLedger(Request $request, array $payload, ?array $previous, ?string $agencyId): array
+    {
+        $amount = $this->normalizeWholePkr(
+            $payload['amountPKR'] ?? $payload['commissionAmountPKR'] ?? $payload['commissionAmount'] ?? null
+        );
+
+        // Metadata-only updates (no amount) skip the commission ledger guards.
+        if ($amount === null) {
+            return $payload;
+        }
+
+        if ($amount <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.amountPKR' => ['Commission amount must be a positive whole-PKR value.'],
+            ]);
+        }
+
+        $paid = $this->normalizeWholePkr($payload['paidPKR'] ?? 0);
+        if ($paid === null) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.paidPKR' => ['Paid commission must be a non-negative whole-PKR value.'],
+            ]);
+        }
+
+        $statusMap = [
+            'pending' => 'Pending Accrual',
+            'pending accrual' => 'Pending Accrual',
+            'accrued' => 'Accrued',
+            'partially paid' => 'Partially Paid',
+            'paid' => 'Paid',
+            'cancelled' => 'Cancelled',
+        ];
+        $statusKey = strtolower(trim((string) ($payload['status'] ?? 'pending accrual')));
+        if (! isset($statusMap[$statusKey])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['Commission status is not supported.'],
+            ]);
+        }
+        $status = $statusMap[$statusKey];
+        $payload['status'] = $status;
+
+        $payouts = $payload['payouts'] ?? [];
+        if (! is_array($payouts)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.payouts' => ['Payout history must be an array.'],
+            ]);
+        }
+        $payouts = array_values($payouts);
+
+        $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+        $declaredCommission = $this->declaredCommissionForTransaction($transactionId, $agencyId);
+        if ($declaredCommission > 0) {
+            $otherActiveCommission = $this->otherActiveCommissionTotal($transactionId, $agencyId, (string) ($payload['id'] ?? ''));
+            if ($otherActiveCommission + $amount > $declaredCommission) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.amountPKR' => ['Total active commissions cannot exceed the deal\'s agreed commission amount.'],
+                ]);
+            }
+        }
+
+        $oldPayouts = is_array($previous['payouts'] ?? null) ? array_values($previous['payouts']) : [];
+        $oldPaid = $this->normalizeWholePkr($previous['paidPKR'] ?? 0) ?? 0;
+        $oldStatus = strtolower(trim((string) ($previous['status'] ?? 'pending accrual')));
+        $oldAmount = $previous === null
+            ? null
+            : $this->normalizeWholePkr($previous['amountPKR'] ?? $previous['commissionAmountPKR'] ?? $previous['commissionAmount'] ?? null);
+
+        if ($previous === null) {
+            if ($status !== 'Pending Accrual' || $paid !== 0 || $payouts !== [] || ! empty($payload['accruedOn'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions' => ['New commissions must start as Pending Accrual with no payout history.'],
+                ]);
+            }
+        } else {
+            $oldCanonical = $statusMap[$oldStatus] ?? 'Pending Accrual';
+            $allowed = [
+                'pending accrual' => ['Pending Accrual', 'Accrued'],
+                'pending' => ['Pending Accrual', 'Accrued'],
+                'accrued' => ['Accrued', 'Partially Paid', 'Paid'],
+                'partially paid' => ['Partially Paid', 'Paid'],
+                'paid' => ['Paid'],
+                'cancelled' => ['Cancelled'],
+            ];
+            if (! in_array($status, $allowed[$oldStatus] ?? [$oldCanonical], true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.status' => ['Commission status transition is not permitted.'],
+                ]);
+            }
+
+            if ($oldAmount !== null && $amount !== $oldAmount
+                && ($oldCanonical !== 'Pending Accrual' || $oldPaid > 0 || $oldPayouts !== [])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.amountPKR' => ['Commission amount is immutable after accrual or payout.'],
+                ]);
+            }
+
+            foreach (['transactionId', 'transaction_id', 'dealerId', 'dealer_id', 'beneficiary_type'] as $field) {
+                if (array_key_exists($field, $previous)
+                    && ($payload[$field] ?? null) !== $previous[$field]) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collections.commissions.'.$field => ['Commission ownership and deal linkage cannot be changed.'],
+                    ]);
+                }
+            }
+
+            $oldAccruedOn = $previous['accruedOn'] ?? null;
+            $newAccruedOn = $payload['accruedOn'] ?? null;
+            if ($oldAccruedOn !== null && $newAccruedOn !== $oldAccruedOn) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.accruedOn' => ['The original accrual date is immutable.'],
+                ]);
+            }
+
+            if ($oldCanonical === 'Pending Accrual' && $status === 'Accrued') {
+                $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+                if (! $this->commissionMilestoneReached($transactionId, $agencyId)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collections.commissions.status' => ['Commission cannot accrue until the deal is fully paid or completed.'],
+                    ]);
+                }
+                $payload['accruedOn'] = now()->toDateString();
+            }
+        }
+
+        if (count($payouts) < count($oldPayouts)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.payouts' => ['Payout history is append-only and cannot be removed.'],
+            ]);
+        }
+
+        foreach ($oldPayouts as $index => $oldPayout) {
+            $newPayout = $payouts[$index] ?? null;
+            if (! is_array($oldPayout) || ! is_array($newPayout)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts' => ['Existing payout records cannot be changed.'],
+                ]);
+            }
+            foreach (['id', 'amountPKR', 'paidAt', 'recordedBy', 'note'] as $field) {
+                if (($oldPayout[$field] ?? null) !== ($newPayout[$field] ?? null)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collections.commissions.payouts' => ['Existing payout records cannot be edited.'],
+                    ]);
+                }
+            }
+        }
+
+        $payoutTotal = 0;
+        $payoutIds = [];
+        foreach ($payouts as $index => $payout) {
+            if (! is_array($payout)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts.'.$index => ['Payout entry must be an object.'],
+                ]);
+            }
+            $payoutAmount = $this->normalizeWholePkr($payout['amountPKR'] ?? null);
+            $payoutId = trim((string) ($payout['id'] ?? ''));
+            if ($payoutAmount === null || $payoutAmount <= 0 || $payoutId === '' || strlen($payoutId) > 64) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts.'.$index => ['Each payout needs a unique id and a positive whole-PKR amount.'],
+                ]);
+            }
+            if (isset($payoutIds[$payoutId])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts.'.$index.'.id' => ['Payout ids must be unique.'],
+                ]);
+            }
+            $payoutIds[$payoutId] = true;
+            $payoutTotal += $payoutAmount;
+
+            if ($index >= count($oldPayouts)) {
+                $payouts[$index]['amountPKR'] = $payoutAmount;
+                $payouts[$index]['paidAt'] = now()->toDateString();
+                $payouts[$index]['recordedBy'] = (string) ($request->user()->name ?? $request->user()->id);
+            }
+        }
+
+        // Old imported paid balances may pre-date payout-level history. Preserve
+        // that baseline, but every new movement must be represented by a new row.
+        $legacyPaidBaseline = $oldPayouts === [] && $oldPaid > 0 ? $oldPaid : 0;
+        $ledgerPaid = $legacyPaidBaseline + $payoutTotal;
+        if ($paid !== $ledgerPaid || $paid > $amount) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.paidPKR' => ['Paid total must equal the immutable payout ledger and cannot exceed the commission amount.'],
+            ]);
+        }
+
+        if (in_array($status, ['Pending Accrual', 'Accrued'], true) && $paid !== 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.paidPKR' => ['An unpaid commission cannot have a paid balance.'],
+            ]);
+        }
+        if ($status === 'Partially Paid' && ($paid <= 0 || $paid >= $amount)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['Partially Paid requires a payout total between zero and the full commission amount.'],
+            ]);
+        }
+        if ($status === 'Paid' && $paid !== $amount) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['A commission can be marked Paid only after its full amount is recorded in payouts.'],
+            ]);
+        }
+        if ($status === 'Cancelled' && $paid > 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['A commission with recorded payouts cannot be cancelled.'],
+            ]);
+        }
+
+        if (count($payouts) > count($oldPayouts)) {
+            if (! $this->perm($request, $request->user(), 'pay_commissions', $agencyId)) {
+                abort(403, 'Only users with commission payout authority may record a payout.');
+            }
+            if (! in_array($status, ['Partially Paid', 'Paid'], true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.status' => ['A new payout must move the commission to Partially Paid or Paid.'],
+                ]);
+            }
+        }
+
+        if ($previous !== null && $status !== $oldCanonical
+            && $status === 'Paid' && count($payouts) === count($oldPayouts)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['A commission cannot be marked Paid without recording its final payout.'],
+            ]);
+        }
+
+        if (in_array($status, ['Accrued', 'Partially Paid', 'Paid'], true) && empty($payload['accruedOn'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.accruedOn' => ['An accrual date is required before a commission can be paid.'],
+            ]);
+        }
+
+        $payload['amountPKR'] = $amount;
+        $payload['paidPKR'] = $paid;
+        $payload['payouts'] = $payouts;
+
+        return $payload;
+    }
+
+    private function declaredCommissionForTransaction(string $transactionId, ?string $agencyId): int
+    {
+        if ($transactionId === '') {
+            return 0;
+        }
+
+        $query = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
+        $payload = $query->first()?->payload ?? [];
+        $declared = $this->normalizeWholePkr(
+            $payload['commissionPKR'] ?? $payload['commissionAmountPKR'] ?? $payload['commissionAmount'] ?? null
+        );
+        if ($declared !== null && $declared > 0) {
+            return $declared;
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+
+        return (int) ($transactionQuery->value('commissionAmountPKR') ?? 0);
+    }
+
+    private function otherActiveCommissionTotal(string $transactionId, ?string $agencyId, string $excludeId): int
+    {
+        $query = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        }
+        if ($excludeId !== '') {
+            $query->where('record_id', '<>', $excludeId);
+        }
+        $query->where(function ($builder) use ($transactionId): void {
+            $builder->where('payload->transactionId', $transactionId)
+                ->orWhere('payload->transaction_id', $transactionId)
+                ->orWhere('payload->dealId', $transactionId);
+        });
+
+        return (int) $query->get()->sum(function (BusinessRecord $record): int {
+            $row = $record->payload ?? [];
+            if (strtolower((string) ($row['status'] ?? '')) === 'cancelled') {
+                return 0;
+            }
+
+            return $this->normalizeWholePkr(
+                $row['amountPKR'] ?? $row['commissionAmountPKR'] ?? $row['commissionAmount'] ?? 0
+            ) ?? 0;
+        });
+    }
+
+    private function commissionMilestoneReached(string $transactionId, ?string $agencyId): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+
+        $legacyQuery = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) { $legacyQuery->where('agency_id', $agencyId); }
+        $legacy = $legacyQuery->first()?->payload ?? [];
+        $legacyStatus = strtolower(trim((string) ($legacy['status'] ?? $legacy['dealStatus'] ?? '')));
+        if (in_array($legacyStatus, ['fully paid', 'completed'], true)
+            || strtolower((string) ($legacy['paymentStatus'] ?? '')) === 'fully paid') {
+            return true;
+        }
+
+        $agreement = $this->normalizeWholePkr($legacy['agreementAmountPKR'] ?? $legacy['dealAmountPKR'] ?? null) ?? 0;
+        if ($agreement > 0 && $this->netCollectedForTransaction($transactionId, $agencyId) >= $agreement) {
+            return true;
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+        $transaction = $transactionQuery->first();
+        if ($transaction === null) {
+            return false;
+        }
+        if (in_array(strtolower((string) $transaction->dealStatus), ['fully paid', 'completed'], true)) {
+            return true;
+        }
+        $relationalAgreement = (int) $transaction->agreementAmountPKR;
+        $relationalPaid = (int) $transaction->totalPaid();
+        if ($relationalPaid === 0 && (int) $transaction->advancePaymentPKR > 0) {
+            $relationalPaid = (int) $transaction->advancePaymentPKR;
+        }
+
+        return $relationalAgreement > 0 && $relationalPaid >= $relationalAgreement;
     }
 
     private function canCreateRow(Request $request, $user, string $collection, ?string $agencyId): bool
@@ -1340,24 +1733,54 @@ class WorkspaceController extends Controller
                 'agreementAmountPKR', 'advancePaymentPKR', 'remainingBalancePKR',
                 'totalPaidPKR', 'commissionAmountPKR', 'paymentStatus',
             ];
-            $moneyChanged = false;
             foreach ($moneyKeys as $key) {
-                if (($oldPayload[$key] ?? null) !== ($newPayload[$key] ?? null)) {
-                    $moneyChanged = true;
-                    break;
+                if (($oldPayload[$key] ?? null) !== ($newPayload[$key] ?? null)
+                    && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+                    return false;
                 }
             }
-            if ($moneyChanged && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+
+            $oldStatus = strtolower(trim((string) ($oldPayload['status'] ?? $oldPayload['dealStatus'] ?? 'draft')));
+            $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? $oldStatus)));
+            $oldVoided = ! empty($oldPayload['voided']) || $oldStatus === 'voided';
+
+            if ($oldVoided) {
                 return false;
             }
 
-            $oldStatus = strtolower((string) ($oldPayload['status'] ?? ''));
-            $newStatus = strtolower((string) ($newPayload['status'] ?? ''));
-            if ($newStatus === 'voided' && $oldStatus !== 'voided') {
+            if ($this->isTransactionVoidTransition($oldPayload, $newPayload)) {
+                if (in_array($oldStatus, ['completed', 'cancelled', 'voided'], true)) {
+                    return false;
+                }
+
                 return $this->perm($request, $user, 'void_transactions', $agencyId)
-                    && filled($newPayload['voidReason'] ?? $newPayload['notes'] ?? null)
-                    && (int) ($oldPayload['advancePaymentPKR'] ?? 0) === 0
-                    && $this->netCollectedForTransaction((string) ($newPayload['id'] ?? ''), $agencyId) === 0;
+                    && $this->transactionCloseoutReason($newPayload) !== null
+                    && max((int) ($oldPayload['advancePaymentPKR'] ?? 0), (int) ($oldPayload['advancePKR'] ?? 0)) === 0
+                    && ! $this->hasCollectedPaymentsForTransaction((string) ($newPayload['id'] ?? ''), $agencyId, $request)
+                    && ! $this->hasPaidCommissionForTransaction((string) ($newPayload['id'] ?? ''), $agencyId, $request);
+            }
+
+            if ($newStatus === 'cancelled' && $newStatus !== $oldStatus) {
+                $reason = $this->transactionCloseoutReason($newPayload) ?? $this->transactionCloseoutReason($oldPayload);
+                $canCancel = $this->perm($request, $user, 'cancel_transactions', $agencyId)
+                    || $this->perm($request, $user, 'legacy.cancel_transactions', $agencyId);
+
+                return $canCancel
+                    && $reason !== null
+                    && (! in_array($oldStatus, ['completed', 'cancelled'], true)
+                        || $this->perm($request, $user, 'approve_transactions', $agencyId));
+            }
+
+            if (in_array($oldStatus, ['completed', 'cancelled'], true)
+                && $oldPayload !== $newPayload
+                && ! $this->perm($request, $user, 'approve_transactions', $agencyId)) {
+                return false;
+            }
+
+            if ($newStatus !== $oldStatus
+                && ! $this->validDealStatusTransition($oldStatus, $newStatus)
+                && ! $this->perm($request, $user, 'approve_transactions', $agencyId)) {
+                return false;
             }
         }
 
@@ -1371,7 +1794,7 @@ class WorkspaceController extends Controller
                     return false;
                 }
             }
-            if ($oldStatus === 'paid' && $oldPayload !== $newPayload) {
+            if (in_array($oldStatus, ['paid', 'cancelled'], true) && $oldPayload !== $newPayload) {
                 return false;
             }
             if ($newStatus === 'paid' && $oldStatus !== 'paid'
@@ -1390,29 +1813,433 @@ class WorkspaceController extends Controller
         return false;
     }
 
+    private function validDealStatusTransition(string $from, string $to): bool
+    {
+        if ($from === $to) {
+            return true;
+        }
+
+        if (in_array($from, ['completed', 'cancelled', 'voided'], true)) {
+            return false;
+        }
+
+        if ($to === 'cancelled') {
+            return true; // separately gated by cancel_transactions + a reason
+        }
+
+        if ($to === 'completed') {
+            return $from === 'under transfer';
+        }
+
+        $stages = [
+            'draft', 'negotiation', 'agreement signed', 'token paid',
+            'advance received', 'payment pending', 'partially paid',
+            'fully paid', 'under transfer', 'completed',
+        ];
+        $fromIndex = array_search($from, $stages, true);
+        $toIndex = array_search($to, $stages, true);
+
+        // Older workspace rows used labels such as "Active". Permit a move
+        // into a known non-terminal stage, but never let an unknown legacy
+        // state jump directly to Completed.
+        if ($fromIndex === false) {
+            return $toIndex !== false && $to !== 'completed';
+        }
+
+        return $fromIndex !== false && $toIndex !== false && $toIndex >= $fromIndex - 1;
+    }
+
+    private function isTransactionVoidTransition(array $oldPayload, array $newPayload): bool
+    {
+        $oldStatus = strtolower(trim((string) ($oldPayload['status'] ?? $oldPayload['dealStatus'] ?? '')));
+        $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? '')));
+
+        return (empty($oldPayload['voided']) && ! empty($newPayload['voided']))
+            || ($newStatus === 'voided' && $oldStatus !== 'voided');
+    }
+
+    private function isTransactionCloseout(array $oldPayload, array $newPayload): bool
+    {
+        if ($this->isTransactionVoidTransition($oldPayload, $newPayload)) {
+            return true;
+        }
+
+        $oldStatus = strtolower(trim((string) ($oldPayload['status'] ?? $oldPayload['dealStatus'] ?? '')));
+        $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? '')));
+
+        return $newStatus === 'cancelled' && $oldStatus !== 'cancelled';
+    }
+
+    private function transactionCloseoutReason(array $payload): ?string
+    {
+        $reason = trim((string) ($payload['voidReason'] ?? $payload['notes'] ?? $payload['internalRemarks'] ?? ''));
+        return strlen($reason) >= 3 && strlen($reason) <= 2000 ? $reason : null;
+    }
+
+    private function stampTransactionCloseout(array $row, $user, bool $isVoid): array
+    {
+        $now = now()->toIso8601String();
+        $row['status'] = 'Cancelled';
+        if (array_key_exists('dealStatus', $row)) {
+            $row['dealStatus'] = 'Cancelled';
+        }
+        $row['commissionStatus'] = 'Cancelled';
+        $row['cancelledAt'] = $now;
+
+        if ($isVoid) {
+            $row['voided'] = true;
+            $row['voidReason'] = $this->transactionCloseoutReason($row);
+            $row['voidedAt'] = $now;
+            $row['voidedBy'] = (string) ($user->name ?? $user->id);
+        }
+
+        return $row;
+    }
+
+    private function hasCollectedPaymentsForTransaction(string $transactionId, ?string $agencyId, Request $request): bool
+    {
+        if ($transactionId === '' || $this->netCollectedForTransaction($transactionId, $agencyId) !== 0) {
+            return true;
+        }
+
+        // Workspace saves collections in a deterministic order (transactions
+        // before payments). Include incoming payment rows so a caller cannot
+        // void a deal and add its payment in the same multi-collection request.
+        $incomingNet = 0;
+        foreach ((array) $request->input('collections.payments', []) as $payment) {
+            if (! is_array($payment)) {
+                continue;
+            }
+            $linkedId = (string) ($payment['transactionId'] ?? $payment['transaction_id'] ?? $payment['dealId'] ?? '');
+            if ($linkedId !== $transactionId) {
+                continue;
+            }
+            $amount = abs((int) ($payment['amountPKR'] ?? $payment['paymentAmountPKR'] ?? $payment['amount'] ?? 0));
+            $type = strtolower((string) ($payment['type'] ?? $payment['paymentType'] ?? 'payment'));
+            $incomingNet += str_contains($type, 'refund') ? -$amount : $amount;
+        }
+        if ($incomingNet !== 0) {
+            return true;
+        }
+
+        $query = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
+        $transaction = $query->first();
+
+        return $transaction !== null && abs((float) $transaction->totalPaid()) > 0.00001;
+    }
+
+    private function hasPaidCommissionForTransaction(string $transactionId, ?string $agencyId, Request $request): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+
+        foreach ((array) $request->input('collections.commissions', []) as $commission) {
+            if (! is_array($commission)) {
+                continue;
+            }
+            $linkedId = (string) ($commission['transactionId'] ?? $commission['transaction_id'] ?? $commission['dealId'] ?? '');
+            $hasPaidPayout = collect((array) ($commission['payouts'] ?? []))->contains(
+                fn ($payout) => is_array($payout) && (int) ($payout['amountPKR'] ?? $payout['amount'] ?? 0) > 0
+            );
+            if ($linkedId === $transactionId
+                && (
+                    strtolower((string) ($commission['status'] ?? '')) === 'paid'
+                    || (int) ($commission['paidPKR'] ?? 0) > 0
+                    || ! empty($commission['paidAt'])
+                    || ! empty($commission['paid_at'])
+                    || $hasPaidPayout
+                )) {
+                return true;
+            }
+        }
+
+        $query = \App\Models\Commission::where('transaction_id', $transactionId)
+            ->where(function ($q) {
+                $q->where('status', 'paid')->orWhereNotNull('paid_at');
+            });
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
+        if ($query->exists()) {
+            return true;
+        }
+
+        $legacy = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
+        if ($agencyId !== null) { $legacy->where('agency_id', $agencyId); }
+
+        return $legacy->get()->contains(function (BusinessRecord $record) use ($transactionId): bool {
+            $row = $record->payload ?? [];
+            $linkedId = (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '');
+            $hasPaidPayout = collect((array) ($row['payouts'] ?? []))->contains(
+                fn ($payout) => is_array($payout) && (int) ($payout['amountPKR'] ?? $payout['amount'] ?? 0) > 0
+            );
+            return $linkedId === $transactionId
+                && (
+                    strtolower((string) ($row['status'] ?? '')) === 'paid'
+                    || (int) ($row['paidPKR'] ?? 0) > 0
+                    || ! empty($row['paidAt'])
+                    || ! empty($row['paid_at'])
+                    || $hasPaidPayout
+                );
+        });
+    }
+
+    private function transactionIsClosedForCommission(string $transactionId, ?string $agencyId): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+
+        $legacy = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) { $legacy->where('agency_id', $agencyId); }
+        $payload = $legacy->first()?->payload ?? [];
+        $status = strtolower((string) ($payload['status'] ?? $payload['dealStatus'] ?? ''));
+
+        if (! empty($payload['voided']) || in_array($status, ['cancelled', 'voided'], true)) {
+            return true;
+        }
+
+        $transaction = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transaction->where('agency_id', $agencyId); }
+        $model = $transaction->first();
+
+        return $model !== null && ($model->voided_at !== null || strtolower((string) $model->dealStatus) === 'cancelled');
+    }
+
+    private function applyTransactionCloseout(
+        string $transactionId,
+        ?string $agencyId,
+        $user,
+        array $row,
+        bool $isVoid
+    ): void {
+        $now = now();
+        $reason = $this->transactionCloseoutReason($row) ?? 'Deal cancelled';
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+        $transaction = $transactionQuery->lockForUpdate()->first();
+        if ($transaction) {
+            $transaction->dealStatus = 'Cancelled';
+            $transaction->commissionStatus = 'Cancelled';
+            if ($isVoid) {
+                $transaction->voided_at = $now;
+                $transaction->void_reason = $reason;
+                $transaction->voided_by = $user->id;
+            }
+            $transaction->save();
+        }
+
+        $commissionQuery = \App\Models\Commission::where('transaction_id', $transactionId)
+            ->whereIn('status', ['pending', 'accrued']);
+        if ($agencyId !== null) { $commissionQuery->where('agency_id', $agencyId); }
+        $commissionQuery->update(['status' => 'cancelled']);
+
+        $scheduleQuery = \App\Models\PaymentSchedule::where('transaction_id', $transactionId)
+            ->whereIn('status', ['pending', 'overdue']);
+        if ($agencyId !== null) { $scheduleQuery->where('agency_id', $agencyId); }
+        $scheduleQuery->update(['status' => 'cancelled']);
+
+        $legacy = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
+        if ($agencyId !== null) { $legacy->where('agency_id', $agencyId); }
+        foreach ($legacy->get() as $record) {
+            $payload = $record->payload ?? [];
+            $linkedId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+            if ($linkedId !== $transactionId
+                || strtolower((string) ($payload['status'] ?? '')) === 'paid'
+                || (int) ($payload['paidPKR'] ?? 0) > 0) {
+                continue;
+            }
+
+            $payload['status'] = 'Cancelled';
+            $payload['cancelledAt'] = $now->toIso8601String();
+            $record->payload = $payload;
+            $record->save();
+        }
+    }
+
     private function netCollectedForTransaction(string $transactionId, ?string $agencyId): int
     {
         if ($transactionId === '') {
             return 0;
         }
 
+        $records = $this->businessPaymentRowsForTransaction($transactionId, $agencyId);
+        $grossPayments = 0;
+        $refunds = 0;
+        $hasAdvanceMovement = false;
+
+        foreach ($records as $record) {
+            $row = $record->payload ?? [];
+            $amount = abs((int) ($row['amountPKR'] ?? $row['paymentAmountPKR'] ?? $row['amount'] ?? 0));
+            $type = strtolower((string) ($row['type'] ?? $row['paymentType'] ?? 'payment'));
+            if (str_contains($type, 'refund')) {
+                $refunds += $amount;
+                continue;
+            }
+            $grossPayments += $amount;
+            if ($type === 'advance' || str_contains(strtolower((string) ($row['note'] ?? '')), 'advance recorded at deal creation')) {
+                $hasAdvanceMovement = true;
+            }
+        }
+
+        if ($records !== []) {
+            $legacyAdvance = $this->legacyAdvanceForTransaction($transactionId, $agencyId);
+            // Old deals stored the advance only on the transaction row. When a
+            // later payment/refund is first recorded, preserve that legacy base
+            // unless an explicit advance movement already exists in the ledger.
+            $base = $grossPayments + ($legacyAdvance > 0 && ! $hasAdvanceMovement ? $legacyAdvance : 0);
+
+            return max(0, $base - $refunds);
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+        $transaction = $transactionQuery->first();
+        if ($transaction !== null) {
+            $relationalPaid = (int) $transaction->totalPaid();
+            if ($relationalPaid !== 0) {
+                return max(0, $relationalPaid);
+            }
+            if ((int) $transaction->advancePaymentPKR > 0) {
+                return (int) $transaction->advancePaymentPKR;
+            }
+        }
+
+        return $this->legacyAdvanceForTransaction($transactionId, $agencyId);
+    }
+
+    private function businessPaymentRowsForTransaction(string $transactionId, ?string $agencyId): array
+    {
         $query = BusinessRecord::where('collection', 'payments')->whereNull('deleted_at');
         if ($agencyId !== null) {
             $query->where('agency_id', $agencyId);
         }
+        $query->where(function ($builder) use ($transactionId): void {
+            $builder->where('payload->transactionId', $transactionId)
+                ->orWhere('payload->transaction_id', $transactionId)
+                ->orWhere('payload->dealId', $transactionId);
+        });
 
-        return (int) $query->get()->sum(function (BusinessRecord $record) use ($transactionId): int {
-            $row = $record->payload ?? [];
-            $rowTransactionId = (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '');
-            if ($rowTransactionId !== $transactionId) {
-                return 0;
+        return $query->get()->all();
+    }
+
+    private function legacyAdvanceForTransaction(string $transactionId, ?string $agencyId): int
+    {
+        $query = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
+        $payload = $query->first()?->payload ?? [];
+        $advance = $this->normalizeWholePkr($payload['advancePaymentPKR'] ?? $payload['advancePKR'] ?? 0) ?? 0;
+        if ($advance > 0) {
+            return $advance;
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+        return (int) ($transactionQuery->value('advancePaymentPKR') ?? 0);
+    }
+
+    private function enforcePaymentMovement(Request $request, array $payload, ?string $agencyId): void
+    {
+        $amount = $this->normalizeWholePkr($payload['amountPKR'] ?? $payload['paymentAmountPKR'] ?? $payload['amount'] ?? null);
+
+        // Metadata-only updates (no amount) are not payment movements and do
+        // not require a linked deal; skip the movement guards entirely.
+        if ($amount === null) {
+            return;
+        }
+
+        $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+        $type = strtolower((string) ($payload['type'] ?? $payload['paymentType'] ?? 'payment'));
+        $isRefund = str_contains($type, 'refund');
+
+        if ($transactionId === '' || $amount <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments' => ['A payment movement requires a deal id and positive whole-PKR amount.'],
+            ]);
+        }
+
+        $legacyQuery = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) {
+            $legacyQuery->where('agency_id', $agencyId);
+        }
+        $legacy = $legacyQuery->first()?->payload ?? [];
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) {
+            $transactionQuery->where('agency_id', $agencyId);
+        }
+        $transaction = $transactionQuery->first();
+
+        if ($legacy === [] && $transaction === null) {
+            abort(404, 'Transaction not found for this agency.');
+        }
+
+        $voided = ! empty($legacy['voided']) || ($transaction !== null && $transaction->isVoided());
+        $status = strtolower((string) ($legacy['status'] ?? $legacy['dealStatus'] ?? $transaction?->dealStatus ?? ''));
+        if ($voided || $status === 'voided') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments' => ['No payment or refund can be recorded against a voided deal.'],
+            ]);
+        }
+        if (! $isRefund && $status === 'cancelled') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments' => ['New payments are frozen after a deal is cancelled; record a refund instead.'],
+            ]);
+        }
+
+        $collected = $this->netCollectedForTransaction($transactionId, $agencyId);
+        if ($isRefund) {
+            if (trim((string) ($payload['note'] ?? '')) === '') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.payments.note' => ['A reason/reference note is required for every refund.'],
+                ]);
+            }
+            if ($amount > $collected) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.payments.amountPKR' => ['Refund cannot exceed the deal\'s net collected balance.'],
+                ]);
             }
 
-            $amount = (int) ($row['amountPKR'] ?? $row['paymentAmountPKR'] ?? $row['amount'] ?? 0);
-            $type = strtolower((string) ($row['type'] ?? $row['paymentType'] ?? 'payment'));
+            return;
+        }
 
-            return str_contains($type, 'refund') ? -abs($amount) : abs($amount);
-        });
+        // The initial advance is already represented in the transaction row.
+        // Its first ledger row is a one-time migration of that existing money,
+        // not a second collection.
+        $isLegacyAdvanceEntry = $type === 'advance'
+            || str_contains(strtolower((string) ($payload['note'] ?? '')), 'advance recorded at deal creation');
+        if ($isLegacyAdvanceEntry && ! $this->hasBusinessPaymentLedger($transactionId, $agencyId)) {
+            $advance = $this->legacyAdvanceForTransaction($transactionId, $agencyId);
+            if ($advance > 0 && $amount === $advance) {
+                return;
+            }
+        }
+
+        $agreement = $this->normalizeWholePkr($legacy['agreementAmountPKR'] ?? $legacy['dealAmountPKR'] ?? $transaction?->agreementAmountPKR ?? null) ?? 0;
+        if ($agreement <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments' => ['A valid agreed deal amount is required before recording payments.'],
+            ]);
+        }
+
+        $remaining = max(0, $agreement - $collected);
+        if ($amount > $remaining && ! $this->perm($request, $request->user(), 'approve_transactions', $agencyId)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments.amountPKR' => ['Payment exceeds the remaining deal balance; supervisor approval is required.'],
+            ]);
+        }
+    }
+
+    private function hasBusinessPaymentLedger(string $transactionId, ?string $agencyId): bool
+    {
+        return $this->businessPaymentRowsForTransaction($transactionId, $agencyId) !== [];
     }
 
     /** Replace (destructive) mode requires delete-level rights; financial ledgers cannot be bulk-replaced. */
