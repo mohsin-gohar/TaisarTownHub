@@ -21,7 +21,7 @@ class SubscriptionInvoice extends Model
         'id', 'invoice_number', 'agency_id', 'plan_id', 'amount_pkr', 'tax_pkr',
         'total_pkr', 'currency', 'period_start', 'period_end', 'status',
         'paid_at', 'payment_method', 'payment_reference', 'verified_by', 'notes',
-        'stripe_session_id', 'stripe_payment_intent_id', 'stripe_subscription_id',
+        'stripe_session_id', 'stripe_payment_intent_id', 'stripe_subscription_id', 'stripe_invoice_id',
         'flutterwave_tx_ref', 'flutterwave_tx_id', 'due_at',
     ];
 
