@@ -381,7 +381,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] font-bold text-[#E7C878]">#{placement.position}</span>
                             <span className="text-sm font-bold text-white truncate">{placement.agency?.name || placement.agency_id}</span>
-                            <EnterpriseBadge tone={statusTone(isScheduled ? 'pending' : placement.status)}>{isScheduled ? 'Scheduled' : titleCase(placement.status)}</EnterpriseBadge>
+                            <EnterpriseBadge tone={statusTone(isScheduled ? 'pending' : placement.status)}>{isScheduled ? 'Scheduled' : isLive ? 'Live now' : titleCase(placement.status)}</EnterpriseBadge>
                             <EnterpriseBadge tone="gold">Featured</EnterpriseBadge>
                             {placement.package && <EnterpriseBadge tone="slate">{placement.package.name}</EnterpriseBadge>}
                           </div>
