@@ -268,7 +268,7 @@ domain can embed them; all private API routes stay `same-origin`.
 1. Upload `backend/` outside the web root and point the (sub)domain document root
    to `backend/public`.
 2. Upload `frontend/dist/` to the main domain document root.
-3. Set PHP 8.2+, create MySQL, edit `.env`, run migrations via terminal.
+3. Set PHP 8.3+, create MySQL, edit `.env`, run migrations via terminal.
 4. Add the scheduler cron using the absolute `artisan` path; Supervisor is often
    unavailable — use the host's process manager or `queue:work` under `nohup`
    with monitoring.
@@ -277,28 +277,26 @@ domain can embed them; all private API routes stay `same-origin`.
 
 ## 8. Backup & restore
 
-**Before every deploy / migration:**
+**Before every deploy / migration**, use the repository helper rather than placing database passwords in shell arguments:
 
 ```bash
-mysqldump --single-transaction --routines --triggers \
-  -u taisartownhub -p taisartownhub | gzip > backups/db-$(date +%F-%H%M).sql.gz
-
-tar -czf backups/documents-$(date +%F-%H%M).tar.gz \
-  -C /var/www/taisartownhub/backend/storage/app private/documents
-
-# Keep .env and APP_KEY in a separate secrets vault — never in git.
+cd /var/www/taisartownhub
+export TTH_BACKUP_DIR=/secure/backups/taisartownhub
+bash scripts/backup.sh "$TTH_BACKUP_DIR"
 ```
 
-Restore:
+The helper creates a consistent MySQL dump, archives `backend/storage/app/private/documents`, `private/quarantine` (when present), and `public` (when present), verifies the archive and SHA-256 manifest, then applies the daily 7 / weekly 4 / monthly 6 retention policy. The database dump and storage archive are one backup set and must be restored together. Keep `.env` and `APP_KEY` in a separate secrets vault — never in Git or beside the backup data.
+
+Restore only into the intended recovery environment:
 
 ```bash
-gunzip -c backups/db-YYYY-MM-DD-HHMM.sql.gz | mysql -u ... taisartownhub
-tar -xzf backups/documents-YYYY-MM-DD-HHMM.tar.gz -C .../backend/storage/app
-php artisan optimize:clear && php artisan optimize
+gunzip -c /secure/backups/taisartownhub/tth_db_<STAMP>.sql.gz | mysql -u "$DB_USERNAME" -p "$DB_DATABASE"
+tar -xzf /secure/backups/taisartownhub/tth_vault_<STAMP>.tar.gz -C backend/storage/app
+php artisan migrate:status
+php artisan app:production-check --strict
 ```
 
-Test a restore into a staging database at least once per quarter. Document the
-retention policy (recommended: 7 daily, 4 weekly, 12 monthly off-site).
+Run the isolated restore drill with `scripts/restore-drill.ps1` at least quarterly and before major schema migrations. The drill must verify checksums, table/index/foreign-key/row counts, storage archive extraction and scratch cleanup.
 
 ---
 
