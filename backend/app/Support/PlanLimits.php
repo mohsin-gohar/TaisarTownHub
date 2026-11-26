@@ -160,6 +160,12 @@ class PlanLimits
         ], 403);
     }
 
+    /** Current lead usage, kept in sync with the subscription usage panel. */
+    public static function leadUsed(Agency $agency): int
+    {
+        return $agency->inquiries()->count();
+    }
+
     /** Staff counter for the invite flow: active members + pending invitations. */
     public static function staffUsed(string $agencyId): int
     {
