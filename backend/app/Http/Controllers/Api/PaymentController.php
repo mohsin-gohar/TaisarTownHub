@@ -38,8 +38,24 @@ class PaymentController extends Controller
 
         $request->validate([
             'plan_id' => 'required|exists:subscription_plans,id',
-            'success_url' => 'required|url',
-            'cancel_url' => 'required|url',
+            'success_url' => [
+                'required',
+                'url',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if (!$this->isTrustedCheckoutReturnUrl((string) $value)) {
+                        $fail('The checkout return URL must use a configured application origin.');
+                    }
+                },
+            ],
+            'cancel_url' => [
+                'required',
+                'url',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if (!$this->isTrustedCheckoutReturnUrl((string) $value)) {
+                        $fail('The checkout return URL must use a configured application origin.');
+                    }
+                },
+            ],
         ]);
 
         $plan = SubscriptionPlan::findOrFail($request->plan_id);
@@ -430,6 +446,45 @@ class PaymentController extends Controller
                 'message' => 'Verification failed.',
             ], 500);
         }
+    }
+
+    /**
+     * Checkout return URLs must point to a first-party origin. Accept the
+     * configured SPA origins (CORS allow-list) and APP_URL, never arbitrary
+     * user-supplied hosts that could turn Stripe Checkout into a phishing
+     * redirect. Compare origins, not URL prefixes.
+     */
+    private function isTrustedCheckoutReturnUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts) || !in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)
+            || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])) {
+            return false;
+        }
+
+        $origin = strtolower($parts['scheme'] . '://' . $parts['host']
+            . (isset($parts['port']) ? ':' . $parts['port'] : ''));
+
+        $configuredOrigins = array_merge(
+            (array) config('cors.allowed_origins', []),
+            [(string) config('app.url', '')]
+        );
+
+        foreach ($configuredOrigins as $configured) {
+            $allowed = parse_url((string) $configured);
+            if (!is_array($allowed) || empty($allowed['scheme']) || empty($allowed['host'])) {
+                continue;
+            }
+
+            $allowedOrigin = strtolower($allowed['scheme'] . '://' . $allowed['host']
+                . (isset($allowed['port']) ? ':' . $allowed['port'] : ''));
+
+            if (hash_equals($allowedOrigin, $origin)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /* ==================== Helpers ==================== */
