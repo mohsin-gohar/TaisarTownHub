@@ -146,6 +146,21 @@ describe('ledger: payments', () => {
     assert.equal(collectedForTx(t, [refund]), 600000);
   });
 
+  test('legacy advance remains included when later payments are first added', () => {
+    const t = txn({ advancePKR: 1000000 });
+    const laterPayment = pay('p1', 'tx-1', 300000);
+    assert.equal(collectedForTx(t, [laterPayment]), 1300000);
+    const refund = { ...pay('r1', 'tx-1', -200000), type: 'refund' as const };
+    assert.equal(collectedForTx(t, [laterPayment, refund]), 1100000);
+  });
+
+  test('explicit advance ledger row prevents double-counting legacy advance summary', () => {
+    const t = txn({ advancePKR: 1000000 });
+    const advance = { ...pay('a1', 'tx-1', 1000000), note: 'Advance recorded at deal creation.' };
+    const laterPayment = pay('p1', 'tx-1', 300000);
+    assert.equal(collectedForTx(t, [advance, laterPayment]), 1300000);
+  });
+
   test('dealMoney clamps balance at zero and flags Fully Paid', () => {
     const t = txn({ dealAmountPKR: 4000000 });
     const m1 = dealMoney(t, [pay('p1', 'tx-1', 4000000)]);
