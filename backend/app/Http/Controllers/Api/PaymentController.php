@@ -777,20 +777,48 @@ class PaymentController extends Controller
             return;
         }
 
-        $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)->first();
-        if (!$agencySubscription) {
-            return;
-        }
+        DB::transaction(function () use ($subscription, $stripeSubId): void {
+            $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
+                ->lockForUpdate()
+                ->first();
 
-        $status = match ($subscription->status ?? '') {
-            'active' => 'active',
-            'past_due' => 'past_due',
-            'canceled' => 'cancelled',
-            'unpaid' => 'past_due',
-            default => $agencySubscription->status,
-        };
+            if (!$agencySubscription) {
+                return;
+            }
 
-        $agencySubscription->update(['status' => $status]);
+            $status = match ($subscription->status ?? '') {
+                'active' => 'active',
+                'past_due' => 'past_due',
+                'canceled' => 'cancelled',
+                'unpaid' => 'past_due',
+                default => $agencySubscription->status,
+            };
+
+            $periodEnd = $subscription->current_period_end
+                ?? ($subscription->items->data[0]->current_period_end ?? null);
+            $currentEnd = $agencySubscription->ends_at;
+
+            // Subscription events can be delivered after invoice events. Do
+            // not let an old past-due event undo a later paid renewal, and do
+            // not let a stale active update resurrect a cancelled subscription.
+            if ($agencySubscription->status === 'cancelled' && $status === 'active') {
+                return;
+            }
+            if ($status === 'past_due' && $currentEnd) {
+                if (!is_numeric($periodEnd) || (int) $periodEnd <= $currentEnd->getTimestamp()) {
+                    return;
+                }
+            }
+
+            $agencySubscription->status = $status;
+            if ($status === 'active' && is_numeric($periodEnd)) {
+                $eventEnd = now()->setTimestamp((int) $periodEnd);
+                if (!$currentEnd || $eventEnd->greaterThan($currentEnd)) {
+                    $agencySubscription->ends_at = $eventEnd;
+                }
+            }
+            $agencySubscription->save();
+        }, 3);
     }
 
     private function activateSubscriptionFromInvoice(SubscriptionInvoice $invoice): void
