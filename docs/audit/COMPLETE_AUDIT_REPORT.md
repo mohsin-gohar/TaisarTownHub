@@ -1,36 +1,39 @@
 # Complete Audit Report
 
-Branch: `fix/workspace-transaction-lifecycle-20261126` (HEAD `5fbf3e0`)
+Repository: `mohsin-gohar/TaisarTownHub`
+Repair branch: `fix/workspace-transaction-lifecycle-20261126`
 Date: 2026-11-26
-Scope: repository-wide audit, repair, and verification of TaisarTownHub (Laravel 12 backend + React 19 frontend).
 
-## Summary
-- Backend: 540/540 tests pass, 4527 assertions, exit 0.
-- Frontend: 173/173 tests pass, tsc clean, build + 29 prerendered pages, exit 0.
-- Browser: 21/21 Playwright chromium smoke tests pass (public pages, maps, interactive elements).
-- CI on `main`: backend MySQL suite + frontend verify + OpenAPI parse green (run #437); Docker CI green (run #375).
+## Verified repository state
+- PR #22 is open and Draft; base is `audit/full-repository-hardening-20261126`, not `main`.
+- Main baseline observed: `f26b070e2f3ccae60ac9e033dc41065a65eddfa8`; main was not changed or merged.
+- Latest fully verified GitHub Actions run before the follow-up dealer validation fix: run #641, commit `d4ba0e4a2e82620a8cf95dc7c4b0b192f11b8e05`, all five jobs successful.
+- Follow-up code fix: `2ab933cd8fe228c3c44b5f36ef365fc02c862b5b`; regression test commit: `668c83edf7c141d332daa908e751e5f39734dfaf`. These later commits have not yet been covered by a CI run.
 
-## Findings fixed this pass (P1)
+## Findings fixed
+1. Dealer creation referenced an undefined effective commission type; defined the type before validation.
+2. Dealer commission validation was inconsistent: create allowed fixed/custom PKR amounts above 100, but update capped every type at 100. Update now applies the same type-aware upper bound as create: Percentage is capped at 100; Fixed/Custom can use the configured whole amount bound. A regression test covers both cases. **This follow-up is awaiting CI verification.**
+3. Platform super-admin commission updates were blocked by mandatory agency context; nullable platform scope is used with permission checks.
+4. Workspace platform lookups incorrectly applied `agency_id IS NULL`; platform scope now resolves agency-owned rows while tenant users remain scoped.
+5. Workspace metadata-only payment/commission edits were incorrectly rejected by movement guards.
+6. Workspace cancellation gates omitted `cancel_transactions` and `legacy.cancel_transactions`.
+7. Frontend collected-funds calculation double-counted recorded advances when a ledger already represented them; legacy fallback/refund handling was corrected.
 
-| # | Area | File | Root cause | Fix |
-|---|---|---|---|---|
-| 1 | Dealer creation | `backend/app/Http/Controllers/Api/DealerController.php:59` | Undefined `$effectiveCommissionType` in validation closure | Define before validation |
-| 2 | Commission update (platform) | `backend/app/Http/Controllers/Api/FinanceController.php` (updateCommission) | `requireAgency()` blocked platform super-admins | Use nullable `agencyId()` |
-| 3 | Workspace sync (platform) | `backend/app/Http/Controllers/Api/WorkspaceController.php` | `agency_id IS NULL` filter hid agency rows from platform users | Skip agency filter when null |
-| 4 | Workspace metadata edits | `WorkspaceController::enforcePaymentMovement`/`enforceCommissionLedger` | Movement guards rejected amount-less updates | Skip when no amount present |
-| 5 | Cancel via workspace | `WorkspaceController` `$gates['transactions']` | Missing cancel permissions | Add `cancel_transactions`, `legacy.cancel_transactions` |
-| 6 | Frontend money | `frontend/src/domain/transactions.ts` `collectedForTx` | Recorded advance double-counted when ledger present | Add legacy advance only when ledger gross < advance |
+## Latest verified CI evidence — run #641
+Commit: `d4ba0e4a2e82620a8cf95dc7c4b0b192f11b8e05`
+- Backend PHP 8.3 + MySQL 8: 540 passed, 0 failed, 4,527 assertions.
+- Frontend verify: 173 tests passed, 0 failed; TypeScript, build, 29 prerendered pages, 9-URL sitemap and public bundle guard passed.
+- Chromium Playwright: 46 passed.
+- Firefox + WebKit: 14 combined passed.
+- OpenAPI YAML validation passed.
+Run: https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45854444158
 
-## Test updates (aligning tests to hardened contracts)
-- `FinanceLifecycleTest`: financePermissions + `pay_commissions`; refund calls require `notes`; void message wording; paid-commission void scenario refunds payments first; installment amount corrected to fully pay; commission patch on non-existent id expects 404.
-- `FinanceIsolationTest`: fully-paid deal for commission accrual; platform commission update uses accrued→paid flow; payment deletion expects 409 (immutable) with unchanged totals.
-- `BookingConcurrencyTest`: dealer configured with 100% percentage commission.
-- `WorkspaceHardeningTest`: normalization test links payment to a transaction.
+## Scope and limitations
+- Source inspection was risk-ranked and targeted; this was not a literal line-by-line review of every tracked file.
+- Public browser routes were exercised, including responsive checks across 11 widths (320–1920px). Authenticated admin/agency role journeys remain unverified because seeded role accounts were unavailable.
+- Docker image/compose tests did not run for PR #22 because its base is the audit branch; the Docker workflow only triggers for main/QA targets. The older main run is not evidence for this branch's current Docker changes.
+- Lighthouse, deeper structured-data/OG validation, systematic N+1 measurement, real ClamAV, TLS, SMTP, DNS, payment-provider credentials and live deployment remain unverified or externally dependent.
+- The new dealer update validation fix and its added regression test are after run #641 and must pass CI before being marked verified.
 
-## Verification commands
-- `php artisan test` → 540 passed, 0 failed, 4527 assertions, exit 0.
-- `npm run verify` → 173 tests, 0 failures, exit 0.
-- Playwright chromium: 21 passed, 0 failed.
-
-## Not verified (external)
-- Docker builds/compose smoke (no daemon), live ClamAV, TLS/SMTP/DNS, Lighthouse, mobile viewport matrix, admin role-journey specs. See REMAINING_BLOCKERS.md.
+## Integration safety
+The repair branch is not a direct fast-forward of main: GitHub compare reports 550 commits ahead, 2 behind, and 139 changed files relative to main. PR #22 targets the audit branch, not main. Do not merge this branch directly into main; perform a deliberate integration/rebase review first.
