@@ -19,12 +19,12 @@ class ProductionReadinessTest extends EnterpriseTestCase
         $output = Artisan::output();
         $report = json_decode($output, true);
 
-        $this->assertSame(0, $exitCode, 'Healthy environments must pass the preflight gate.');
+        $this->assertSame(0, $exitCode, 'Healthy environments must pass the preflight gate. Output: ' . $output);
         $this->assertIsArray($report, 'The --json flag must emit a JSON report: ' . $output);
         $this->assertSame(0, $report['summary']['fail']);
 
         $keys = array_column($report['checks'], 'key');
-        foreach (['app_debug', 'app_key', 'database', 'migrations', 'storage', 'cors', 'queue', 'cache', 'session', 'redis', 'mail', 'malware_scan', 'vault_encryption'] as $key) {
+        foreach (['app_env', 'app_debug', 'app_key', 'app_url', 'app_name', 'log_level', 'cors', 'session_secure', 'sanctum_stateful', 'sanctum_expiration', 'token_prefix', 'database', 'migrations', 'storage', 'vault_encryption', 'malware_scan', 'queue', 'cache', 'session', 'redis', 'mail', 'google_oauth', 'config_cache', 'route_cache', 'bcrypt', 'scheduler'] as $key) {
             $this->assertContains($key, $keys, "Missing production check: {$key}");
         }
     }
