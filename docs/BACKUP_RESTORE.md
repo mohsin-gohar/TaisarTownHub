@@ -17,7 +17,7 @@ Backup = **database** + **application storage** (private documents, quarantine a
 
 ## 2. Creating a backup
 
-Run the repository backup helper from the repository root while the production Docker Compose `backend` and `mysql` services are healthy. It reads the root Compose `.env` first (falling back to `backend/.env` for host-only runs), dumps MySQL from the live MySQL container, and archives the actual named volumes through the running backend container. It never treats the host's shadowed `backend/storage` directory as the Docker volume. DB credentials are written to a mode-`0600` temporary option file; the database and storage artefacts are verified, checksummed and retained under the daily/weekly/monthly policy.
+Run the repository backup helper from the repository root while the production Docker Compose `backend` and `mysql` services are healthy. It reads the root Compose `.env` first (falling back to `backend/.env` for host-only runs), dumps MySQL from the live MySQL container, and archives the actual named volumes through the running backend container. It never treats the host's shadowed `backend/storage` directory as the Docker volume. DB credentials stay out of process arguments (a mode-`0600` temporary option file is used for the dump); the database and storage artefacts are verified, checksummed and retained under the daily/weekly/monthly policy.
 
 ```bash
 cd /var/www/taisartownhub
