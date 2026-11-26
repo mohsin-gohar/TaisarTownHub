@@ -493,6 +493,26 @@ jobs:
           DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
         run: npx playwright test e2e/role-based.spec.ts --workers=1
 
+      - name: Run real API business workflows (property, buyer, finance, document sharing)
+        working-directory: frontend
+        env:
+          PROBE_API: http://127.0.0.1/api
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+        run: npx tsx scripts/workflows-e2e.mts
+
+      - name: Run public link, button, form and responsive interaction audit
+        working-directory: frontend
+        env:
+          AUDIT_BASE: http://127.0.0.1
+        run: npx tsx scripts/browser-interactions.mts
+
+      - name: Run admin tab and button interaction audit across five personas
+        working-directory: frontend
+        env:
+          AUDIT_BASE: http://127.0.0.1
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+        run: npx tsx scripts/browser-admin-interactions.mts
+
       - name: Run disposable 10-worker API load and transaction integrity probe
         working-directory: frontend
         env:
@@ -508,6 +528,14 @@ jobs:
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -a || true
           docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=200 || true
+
+      - name: Upload full-stack audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: taisartownhub-full-stack-audit
+          path: frontend/audit/*.json
+          if-no-files-found: warn
 
       - name: Cleanup
         if: always()
