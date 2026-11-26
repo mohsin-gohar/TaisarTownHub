@@ -94,6 +94,73 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
         );
     }
 
+    public function test_replace_mode_with_invalid_foreign_reference_does_not_delete_owned_rows(): void
+    {
+        [$user, $agency] = $this->memberWithPropertiesWrite();
+        $role = $user->memberships->first()->role;
+        $role->update([
+            'permissions' => array_merge($role->permissions ?? [], ['delete_properties', 'properties.delete']),
+        ]);
+
+        $otherAgency = $this->makeAgency('Foreign Dealer Agency');
+        BusinessRecord::put('properties', 'keep-invalid-ref', ['id' => 'keep-invalid-ref', 'title' => 'Keep this listing']);
+        BusinessRecord::where('collection', 'properties')->where('record_id', 'keep-invalid-ref')
+            ->update(['agency_id' => $agency->id]);
+        BusinessRecord::put('dealers', 'foreign-dealer-ref', ['id' => 'foreign-dealer-ref', 'status' => 'Active']);
+        BusinessRecord::where('collection', 'dealers')->where('record_id', 'foreign-dealer-ref')
+            ->update(['agency_id' => $otherAgency->id]);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['properties' => [[
+                'id' => 'invalid-reference-row',
+                'title' => 'Invalid foreign dealer reference',
+                'assignedDealerId' => 'foreign-dealer-ref',
+            ]]],
+            'mode' => 'replace',
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(200);
+
+        $this->assertDatabaseHas('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'keep-invalid-ref',
+            'deleted_at' => null,
+        ]);
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'invalid-reference-row',
+        ]);
+    }
+
+    public function test_replace_mode_with_row_level_create_denial_does_not_delete_owned_rows(): void
+    {
+        [$user, $agency] = $this->memberWithPropertiesWrite();
+        $role = $user->memberships->first()->role;
+        // Collection-level update + delete permits reaching replace, but this
+        // role deliberately has no create permission for a new property row.
+        $role->update(['permissions' => ['properties.update', 'properties.delete']]);
+
+        BusinessRecord::put('properties', 'keep-create-denied', ['id' => 'keep-create-denied', 'title' => 'Keep existing']);
+        BusinessRecord::where('collection', 'properties')->where('record_id', 'keep-create-denied')
+            ->update(['agency_id' => $agency->id]);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['properties' => [[
+                'id' => 'denied-new-property',
+                'title' => 'Create permission missing',
+            ]]],
+            'mode' => 'replace',
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(200);
+
+        $this->assertDatabaseHas('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'keep-create-denied',
+            'deleted_at' => null,
+        ]);
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'denied-new-property',
+        ]);
+    }
+
     public function test_member_cannot_overwrite_another_agencys_row(): void
     {
         [$userA, $agencyA] = $this->memberWithPropertiesWrite();
