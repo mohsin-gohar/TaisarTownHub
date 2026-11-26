@@ -596,7 +596,7 @@ class PaymentController extends Controller
             $amountTotal = $session->amount_total ?? null;
             $expectedAmount = (int) $invoice->total_pkr * 100;
 
-            if ($sessionCurrency === '' || $sessionCurrency !== $invoiceCurrency
+            if ($sessionCurrency !== 'pkr' || $invoiceCurrency !== 'pkr'
                 || !is_numeric($amountTotal) || (int) $amountTotal !== $expectedAmount) {
                 return 'amount_or_currency_mismatch';
             }
@@ -893,6 +893,10 @@ class PaymentController extends Controller
         $planId = $invoice->plan_id;
 
         $plan = SubscriptionPlan::findOrFail($planId);
+        if (strtoupper((string) $invoice->currency) !== 'PKR'
+            || strtoupper((string) $plan->currency) !== 'PKR') {
+            throw new \\RuntimeException('Only PKR subscription invoices can activate an agency plan.');
+        }
 
         // Determine interval ends_at
         $endsAt = match ($plan->interval) {
