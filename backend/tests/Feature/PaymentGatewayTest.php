@@ -109,6 +109,9 @@ class PaymentGatewayTest extends EnterpriseTestCase
                 ],
                 'payment_intent' => 'pi_test_123',
                 'subscription' => 'sub_test_123',
+                'payment_status' => 'paid',
+                'amount_total' => 500000,
+                'currency' => 'pkr',
             ]],
         ]);
 
@@ -305,6 +308,50 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'agency_id' => $agency->id,
             'plan_id' => $plan->id,
         ]);
+    }
+
+
+
+    public function test_stripe_checkout_webhook_rejects_currency_or_amount_mismatch(): void
+    {
+        $secret = 'whsec_test_secret';
+        config(['services.stripe.webhook' => $secret]);
+
+        $plan = $this->makePlan();
+        [$owner, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['stripe_session_id' => 'cs_bad_amount']);
+
+        $payload = json_encode([
+            'id' => 'evt_bad_amount',
+            'type' => 'checkout.session.completed',
+            'data' => ['object' => [
+                'id' => 'cs_bad_amount',
+                'client_reference_id' => $agency->id,
+                'metadata' => ['agency_id' => $agency->id, 'plan_id' => (string) $plan->id],
+                'payment_intent' => 'pi_bad_amount',
+                'subscription' => 'sub_bad_amount',
+                'payment_status' => 'paid',
+                'amount_total' => 100,
+                'currency' => 'pkr',
+            ]],
+        ]);
+
+        $this->asGuest();
+        $this->call(
+            'POST',
+            '/api/payments/webhook/stripe',
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+            ],
+            $payload
+        )->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame('pending', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', ['agency_id' => $agency->id]);
     }
 
 
