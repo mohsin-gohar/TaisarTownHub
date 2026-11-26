@@ -447,6 +447,9 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         // An expired featured listing is no longer publicly active and must
         // release its slot for the next eligible listing.
         Property::whereKey($second)->update(['expires_at' => now()->subDay()]);
+        $this->postJson("/api/properties/{$second}/feature", [], $headers)
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Expired listings cannot request featured placement.');
         $third = $this->postJson('/api/properties', $this->basePayload(['title' => 'Featured Slot Three', 'submit' => true]), $headers)
             ->assertStatus(201)->json('id');
         $this->postJson("/api/properties/{$third}/approve", [], $moderatorHeaders)->assertStatus(200);
