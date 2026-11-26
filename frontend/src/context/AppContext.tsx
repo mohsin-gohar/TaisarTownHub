@@ -33,7 +33,7 @@ import {
   initialPlotMarkers
 } from '../data/publicSeed';
 import { initialAgencyVideos } from '../data/agencyVideosSeed';
-import { APP_MODE, DEMO_PIN, IS_DEMO } from '../config/appMode';
+import { APP_MODE, DEMO_PIN, IS_DEMO, allowsPublicSeedFallback } from '../config/appMode';
 import { checkDuplicateProperty, hasPermission, userHasPermission, maskCNIC, calculateMediaSaleProfit } from '../utils/logic';
 import { logAudit } from '../domain/auditLog';
 import { normalizeRole, authorize, ROLE_LABELS, toLegacyRoleLabel, type Permission } from '../domain/permissions';
@@ -54,7 +54,7 @@ import { anonymousUser, defaultAgencyId, userFromServer } from '../domain/authSe
 
 /** Read a collection from localStorage, returning fallback on failure. */
 function readStored<T>(key: string, fallback: T[]): T[] {
-  if (!IS_DEMO) return fallback;
+  if (!IS_DEMO) return allowsPublicSeedFallback(APP_MODE) ? fallback : [];
   const saved = localStorage.getItem(`taisartownhub_v2_${key}`);
   if (saved) {
     try {
