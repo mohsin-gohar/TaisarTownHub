@@ -976,6 +976,20 @@ class DocumentController extends Controller
             ], 410);
         }
 
+        try {
+            $checksumBeforeScan = SecureFileStore::checksum($sourceDisk, $sourcePath);
+        } catch (\\Throwable $exception) {
+            Log::warning('Rescan could not verify the quarantined file before scanning', [
+                'document_id' => $document->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Private file integrity could not be verified; the document stays in quarantine.',
+            ], 422);
+        }
+
         $scan = SecureFileStore::scanStored($sourceDisk, $sourcePath, $scanner);
         $scannerUnavailable = $scan->skipped || in_array('scan_unavailable', $scan->threats, true);
         if ($scannerUnavailable) {
@@ -992,6 +1006,12 @@ class DocumentController extends Controller
 
         $scanClean = $scan->isClean;
         $sourceChecksum = SecureFileStore::checksum($sourceDisk, $sourcePath);
+        if (!hash_equals($checksumBeforeScan, $sourceChecksum)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The document bytes changed during scanning; retry the rescan.',
+            ], 409);
+        }
         $targetDisk = $sourceDisk;
         $targetPath = $sourcePath;
         $quarantineId = null;
