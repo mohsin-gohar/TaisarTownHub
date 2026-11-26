@@ -1238,6 +1238,9 @@ public function destroyPayment(Request $request, int $id)
             'status' => 'required|in:pending,accrued,paid,cancelled',
             'notes' => 'nullable|string|max:1000',
         ]);
+        if (strtolower((string) $request->status) === 'paid') {
+            $this->requirePermission($request, 'pay_commissions');
+        }
 
         // Resolve the parent before entering the transaction, then lock the
         // deal before the commission. Cancellation/void uses this same order.
