@@ -159,7 +159,7 @@ class MfaEnforcementTest extends EnterpriseTestCase
 
     public function test_platform_user_can_enrol_mfa_when_global_policy_requires_it(): void
     {
-        \\Illuminate\\Support\\Facades\\DB::table('system_settings')->updateOrInsert(
+        \Illuminate\Support\Facades\DB::table('system_settings')->updateOrInsert(
             ['key' => 'security.mfa_required_for_admins'],
             [
                 'value' => json_encode(true),
