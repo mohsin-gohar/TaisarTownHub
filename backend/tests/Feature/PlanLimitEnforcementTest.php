@@ -3,9 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\AgencySubscription;
+use App\Models\Document;
+use App\Models\DocumentVersion;
+use App\Models\DocumentQuarantine;
 use App\Models\Role;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Support\PlanLimits;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Feature\EnterpriseTestCase;
@@ -33,6 +37,41 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
         ]);
 
         return [$agency, $plan];
+    }
+
+    public function test_null_featured_credit_limit_means_unlimited_but_zero_means_no_slots(): void
+    {
+        [$unlimited] = $this->agencyWithLimits(['featured_credits' => null]);
+        $this->assertNull(PlanLimits::featuredSlotBlock($unlimited));
+
+        [$none] = $this->agencyWithLimits(['featured_credits' => 0]);
+        $this->assertSame(['limit' => 0, 'used' => 0], PlanLimits::featuredSlotBlock($none));
+    }
+
+    public function test_scheduled_subscription_does_not_unlock_commerce_before_its_start_date(): void
+    {
+        [$agency] = $this->agencyWithLimits(['dealer_files' => 10]);
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+        $subscription->update([
+            'status' => 'active',
+            'starts_at' => now()->addDay(),
+            'ends_at' => now()->addDays(31),
+        ]);
+        $agency->unsetRelation('subscription');
+
+        $this->assertFalse(PlanLimits::subscriptionActive($agency));
+
+        $subscription->update(['starts_at' => now()->subSecond()]);
+        $agency->unsetRelation('subscription');
+        $this->assertTrue(PlanLimits::subscriptionActive($agency));
+    }
+
+    public function test_explicit_null_plan_limit_is_not_replaced_by_a_default(): void
+    {
+        [$agency] = $this->agencyWithLimits(['listings' => null]);
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+
+        $this->assertNull($subscription->limit('listings', 10));
     }
 
     public function test_listing_limit_blocks_creation_until_raised_by_override(): void
@@ -85,6 +124,80 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
         }
     }
 
+    public function test_storage_usage_counts_current_document_bytes_and_only_archived_versions(): void
+    {
+        [$agency] = $this->agencyWithLimits(['storage_mb' => 1]);
+
+        $documentId = 'doc_' . bin2hex(random_bytes(8));
+        Document::create([
+            'id' => $documentId,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Versioned file',
+            'original_name' => 'versioned.pdf',
+            'stored_name' => 'versioned-v2.pdf',
+            'disk_path' => $agency->id . '/versioned-v2.pdf',
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 100,
+            'version' => 2,
+            'status' => 'active',
+            'scan_status' => 'scanned_clean',
+        ]);
+
+        DocumentVersion::create([
+            'document_id' => $documentId,
+            'version' => 1,
+            'stored_name' => 'versioned-v1.pdf',
+            'disk_path' => $agency->id . '/versioned-v1.pdf',
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 80,
+            'note' => 'Superseded',
+            'created_at' => now()->subMinute(),
+        ]);
+        DocumentVersion::create([
+            'document_id' => $documentId,
+            'version' => 2,
+            'stored_name' => 'versioned-v2.pdf',
+            'disk_path' => $agency->id . '/versioned-v2.pdf',
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 100,
+            'note' => 'Current',
+            'created_at' => now(),
+        ]);
+
+                DocumentQuarantine::create([
+            'id' => 'qtn_' . bin2hex(random_bytes(8)),
+            'agency_id' => $agency->id,
+            'original_name' => 'held.pdf',
+            'stored_name' => 'held.pdf',
+            'disk_path' => $agency->id . '/held.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 10,
+            'reason' => 'scan_unavailable',
+            'created_at' => now(),
+        ]);
+
+        // An infected document is represented by both the document row and
+        // its quarantine metadata; the same physical path must be counted once.
+        DocumentQuarantine::create([
+            'id' => 'qtn_' . bin2hex(random_bytes(8)),
+            'agency_id' => $agency->id,
+            'document_id' => $documentId,
+            'original_name' => 'versioned-v2.pdf',
+            'stored_name' => 'versioned-v2.pdf',
+            'disk_path' => $agency->id . '/versioned-v2.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 100,
+            'reason' => 'infected',
+            'created_at' => now(),
+        ]);
+
+        $this->assertSame(190, PlanLimits::usage($agency)['storage_bytes']);
+    }
+
     public function test_storage_quota_does_not_block_document_uploads(): void
     {
         Storage::fake('documents');
@@ -106,6 +219,34 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
             2,
             \App\Models\Document::where('agency_id', $agency->id)->count()
         );
+    }
+
+    public function test_trialing_subscription_is_active_only_until_trial_expiry(): void
+    {
+        [$agency] = $this->agencyWithLimits(['dealer_files' => 10]);
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+
+        $subscription->update([
+            'status' => 'trialing',
+            'trial_ends_at' => now()->addDay(),
+            'ends_at' => null,
+        ]);
+        $agency->unsetRelation('subscription');
+        $this->assertTrue(PlanLimits::subscriptionActive($agency));
+        $this->assertFalse($subscription->fresh()->isExpired());
+
+        $subscription->update(['trial_ends_at' => now()->subSecond()]);
+        $agency->unsetRelation('subscription');
+        $this->assertFalse(PlanLimits::subscriptionActive($agency));
+        $this->assertTrue($subscription->fresh()->isExpired());
+
+        $subscription->update([
+            'status' => 'active',
+            'trial_ends_at' => null,
+            'ends_at' => now()->subSecond(),
+        ]);
+        $agency->unsetRelation('subscription');
+        $this->assertFalse(PlanLimits::subscriptionActive($agency));
     }
 
     public function test_staff_invite_counts_pending_invitations_against_the_quota(): void

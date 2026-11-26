@@ -21,9 +21,9 @@ concurrency:
 
 on:
   push:
-    branches: [main]
+    branches: [main, qa/cross-browser-multireplica]
   pull_request:
-    branches: [main]
+    branches: [main, qa/cross-browser-multireplica]
 
 env:
   REGISTRY: ghcr.io
@@ -35,6 +35,8 @@ env:
   APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
   DB_ROOT_PASSWORD: test-root-password
   DB_PASSWORD: test-password
+  DB_DATABASE: taisartownhub_test
+  DB_USERNAME: taisar
   REDIS_PASSWORD: test-redis-password
 
 jobs:
@@ -79,6 +81,9 @@ jobs:
 
       - name: Run backend healthcheck
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php scripts/healthcheck.php
+
+      - name: Run strict production configuration preflight
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm production-preflight
 
       - name: Verify real antivirus clean and threat verdicts
         # The disposable CI stack has a healthy ClamAV daemon with signatures.
@@ -263,6 +268,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up PHP CLI for Docker-volume backup helper
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
       # Images built in the other jobs live on different runners, so they are
       # not available here. Rebuild the same two images with the shared GHA
       # cache and force Compose to reuse them (`--no-build`), instead of letting
@@ -373,6 +384,27 @@ jobs:
           done
           echo "two-replica gateway health requests passed"
 
+      - name: Verify shared private quarantine volume across replicas and worker
+        run: |
+          set -euo pipefail
+          mapfile -t replicas < <(docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -q backend)
+          test "${#replicas[@]}" -eq 2
+          smoke_file=/var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt
+          docker exec "${replicas[0]}" sh -c 'mkdir -p /var/www/html/storage/app/private/quarantine && printf "shared-volume-ok" > /var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt'
+          docker exec "${replicas[1]}" test -f "$smoke_file"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T worker test -f "$smoke_file"
+
+      - name: Run Docker-volume-aware backup smoke
+        run: |
+          set -euo pipefail
+          backup_dir="$RUNNER_TEMP/tth compose backup"
+          bash scripts/backup.sh "$backup_dir"
+          vault_archive="$(find "$backup_dir" -maxdepth 1 -name 'tth_vault_*.tar.gz' -print -quit)"
+          test -n "$vault_archive"
+          tar -tzf "$vault_archive" | grep -q '^private/quarantine/replica-volume-smoke.txt$'
+          tar -tzf "$vault_archive" | grep -q '^public/'
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend rm -f /var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt
+
       - name: Generate ephemeral demo password for disposable CI data
         run: echo "CI_DEMO_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
 
@@ -480,3 +512,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+

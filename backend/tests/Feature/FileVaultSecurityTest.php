@@ -7,6 +7,7 @@ use App\Models\Document;
 use App\Models\DocumentQuarantine;
 use App\Models\DocumentVersion;
 use App\Models\MediaFile;
+use App\Models\SystemSetting;
 use App\Models\SubscriptionPlan;
 use App\Services\FileVaultCrypto;
 use App\Services\MalwareScanner;
@@ -16,6 +17,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Mockery;
 
 /**
  * Secure Document & Media Vault — hardening regressions.
@@ -71,7 +73,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
     {
         return $this->agencyUser([
             'documents.view', 'documents.upload', 'documents.download',
-            'documents.update', 'documents.delete', 'documents.manage_permissions',
+            'documents.update', 'documents.delete', 'documents.restore', 'documents.manage_permissions',
             'documents.view_sensitive', 'manage_media', 'upload_media',
         ], 'document_manager');
     }
@@ -379,6 +381,10 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertTrue(FileVaultCrypto::isEncrypted($raw), 'vault:encrypt must encrypt plaintext rows.');
         $this->assertStringNotContainsString('PLAINTEXT-LEGACY-BYTES', $raw);
         $this->assertSame('PLAINTEXT-LEGACY-BYTES', SecureFileStore::get('documents', $path));
+        $this->assertSame([], array_values(array_filter(
+            Storage::disk('documents')->allFiles(),
+            fn (string $file): bool => str_contains($file, '.vault-rotation-')
+        )), 'Staged vault objects must be cleaned after replacement.');
 
         $this->get("/api/agency/documents/{$id}/download", $headers)->assertStatus(200);
 
@@ -386,6 +392,81 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $exit = Artisan::call('vault:encrypt');
         $this->assertSame(0, $exit);
         $this->assertSame('PLAINTEXT-LEGACY-BYTES', SecureFileStore::get('documents', $path));
+    }
+
+    public function test_vault_encrypt_dry_run_leaves_plaintext_untouched_and_invalid_disk_is_rejected(): void
+    {
+        [$user, $agency] = $this->agencyUser([
+            'documents.view', 'documents.upload', 'documents.download',
+        ], 'document_manager');
+        $id = 'doc_dry_run_' . bin2hex(random_bytes(6));
+        $path = $agency->id . '/2026/11/' . $id . '.pdf';
+        $plain = 'DRY-RUN-PLAINTEXT';
+        Storage::disk('documents')->put($path, $plain);
+
+        Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Dry Run Document',
+            'original_name' => $id . '.pdf',
+            'stored_name' => $id . '.pdf',
+            'disk_path' => $path,
+            'mime_type' => 'application/pdf',
+            'size_bytes' => strlen($plain),
+            'status' => 'active',
+            'uploaded_by' => $user->id,
+        ]);
+
+        $this->assertSame(0, Artisan::call('vault:encrypt', ['--disk' => 'documents', '--dry-run' => true]));
+        $this->assertSame($plain, Storage::disk('documents')->get($path));
+
+        $this->assertSame(1, Artisan::call('vault:encrypt', ['--disk' => 'unknown']));
+        $this->assertSame($plain, Storage::disk('documents')->get($path));
+    }
+
+    public function test_vault_encrypt_rewraps_files_encrypted_with_a_previous_app_key(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $id = 'doc_rotation_' . bin2hex(random_bytes(6));
+        $path = $agency->id . '/2026/11/' . $id . '.pdf';
+        $plain = 'KEY-ROTATION-SECRET-' . Str::random(40);
+        $currentKey = (string) config('app.key');
+        $previousKeys = (array) config('app.previous_keys', []);
+        $oldKey = 'old-app-key-' . Str::random(48);
+        $newKey = 'new-app-key-' . Str::random(48);
+
+        try {
+            config(['app.key' => $oldKey, 'app.previous_keys' => []]);
+            Storage::disk('documents')->put($path, FileVaultCrypto::encrypt($plain));
+
+            Document::create([
+                'id' => $id,
+                'agency_id' => $agency->id,
+                'category' => 'other',
+                'title' => 'Rotated Key Document',
+                'original_name' => $id . '.pdf',
+                'stored_name' => $id . '.pdf',
+                'disk_path' => $path,
+                'mime_type' => 'application/pdf',
+                'size_bytes' => strlen($plain),
+                'status' => 'active',
+                'uploaded_by' => $user->id,
+            ]);
+
+            config(['app.key' => $newKey, 'app.previous_keys' => ['  ' . $oldKey . '  ']]);
+            $oldBlob = (string) Storage::disk('documents')->get($path);
+            $this->assertFalse(FileVaultCrypto::isEncryptedWithCurrentKey($oldBlob));
+            $this->assertSame($plain, SecureFileStore::get('documents', $path));
+
+            $this->assertSame(0, Artisan::call('vault:encrypt'));
+
+            $rotatedBlob = (string) Storage::disk('documents')->get($path);
+            $this->assertTrue(FileVaultCrypto::isEncryptedWithCurrentKey($rotatedBlob));
+            $this->assertSame($plain, SecureFileStore::get('documents', $path));
+        } finally {
+            config(['app.key' => $currentKey, 'app.previous_keys' => $previousKeys]);
+        }
     }
 
     public function test_public_media_bytes_are_encrypted_too(): void
@@ -455,6 +536,42 @@ class FileVaultSecurityTest extends EnterpriseTestCase
     }
 
     /* ============ Audit of denied attempts ============ */
+
+    public function test_sensitive_document_versions_and_activity_metadata_require_sensitive_clearance(): void
+    {
+        [$owner, $agency] = $this->uploader();
+        $documentId = $this->upload($owner, ['category' => 'cnic'], 'sensitive-cnic.pdf')
+            ->assertStatus(201)
+            ->json('document.id');
+
+        $ownerHeaders = $this->authHeaders($this->tokenFor($owner));
+        $this->getJson("/api/agency/documents/{$documentId}/download", $ownerHeaders)->assertOk();
+
+        [$limited] = $this->agencyUser([
+            'documents.view',
+            'documents.update',
+            'documents.manage_permissions',
+        ], 'limited_document_manager', $agency);
+        $limitedHeaders = $this->authHeaders($this->tokenFor($limited));
+
+        $this->post("/api/agency/documents/{$documentId}/versions", [
+            'file' => UploadedFile::fake()->createWithContent('replacement.pdf', $this->pdfBytes(20)),
+        ], $limitedHeaders)->assertForbidden();
+
+        $this->getJson("/api/agency/documents/{$documentId}/versions", $limitedHeaders)
+            ->assertForbidden();
+        $this->getJson("/api/agency/documents/{$documentId}/shares", $limitedHeaders)
+            ->assertForbidden();
+        $this->getJson("/api/agency/documents/{$documentId}/access-logs", $limitedHeaders)
+            ->assertForbidden();
+
+        $activity = $this->getJson('/api/agency/documents-activity', $limitedHeaders)
+            ->assertOk()
+            ->json('activity');
+        $this->assertNotContains($documentId, array_column($activity, 'document_id'));
+        $this->assertSame(1, Document::findOrFail($documentId)->version);
+        $this->assertSame([], DocumentVersion::where('document_id', $documentId)->get()->all());
+    }
 
     public function test_unauthorized_and_sensitive_download_attempts_are_audited(): void
     {
@@ -570,6 +687,75 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->get("/api/agency/documents/{$liveId}/download", $headers)->assertStatus(200);
     }
 
+    public function test_restoring_a_document_that_did_not_clear_malware_scan_keeps_it_quarantined(): void
+    {
+        [$user] = $this->uploader();
+        $this->bindVerdict(MalwareScanResult::skipped('clamav', 'clamav_not_available'));
+        config(['malware.fail_closed' => false]);
+
+        $documentId = $this->upload($user)
+            ->assertStatus(201)
+            ->assertJsonPath('document.status', 'quarantined')
+            ->json('document.id');
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->deleteJson("/api/agency/documents/{$documentId}", [], $headers)->assertOk();
+
+        $this->postJson("/api/agency/documents/{$documentId}/restore", [], $headers)
+            ->assertOk()
+            ->assertJsonPath('status', 'quarantined')
+            ->assertJsonPath('scan_status', 'skipped');
+
+        $this->assertDatabaseHas('documents', [
+            'id' => $documentId,
+            'status' => 'quarantined',
+            'scan_status' => 'skipped',
+            'deleted_at' => null,
+        ]);
+
+        $this->get("/api/agency/documents/{$documentId}/download", $headers)->assertStatus(423);
+    }
+
+    public function test_permanent_delete_retains_document_metadata_when_private_storage_delete_fails(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $documentId = 'doc_' . bin2hex(random_bytes(8));
+        $path = $agency->id . '/2026/11/' . $documentId . '.pdf';
+
+        $document = Document::create([
+            'id' => $documentId,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Delete failure fixture',
+            'original_name' => 'fixture.pdf',
+            'stored_name' => $documentId . '.pdf',
+            'disk_path' => $path,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 16,
+            'version' => 1,
+            'status' => 'trashed',
+            'scan_status' => 'scanned_clean',
+            'uploaded_by' => $user->id,
+        ]);
+        $document->delete();
+
+        $disk = Mockery::mock();
+        $disk->shouldReceive('exists')->once()->with($path)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($path)->andReturn(false);
+        Storage::shouldReceive('disk')->once()->with('documents')->andReturn($disk);
+
+        $this->deleteJson("/api/agency/documents/{$documentId}/permanent", [], $headers)
+            ->assertStatus(503);
+
+        $this->assertNotNull(Document::withTrashed()->find($documentId));
+        $this->assertDatabaseHas('documents', [
+            'id' => $documentId,
+            'status' => 'trashed',
+        ]);
+    }
+
     /* ============ Configuration guardrails ============ */
 
     public function test_vault_disks_stay_configured_outside_the_web_root(): void
@@ -659,4 +845,117 @@ class FileVaultSecurityTest extends EnterpriseTestCase
 
         Storage::disk('documents')->assertExists($row->disk_path);
     }
+    public function test_sensitive_categories_remain_protected_when_admin_setting_is_empty(): void
+    {
+        [$owner, $agency] = $this->agencyUser(['documents.upload', 'documents.update'], 'document_editor');
+        $headers = $this->authHeaders($this->tokenFor($owner));
+        SystemSetting::set('document.sensitive_categories', []);
+
+        $documentId = $this->upload($owner, ['category' => 'other'])
+            ->assertStatus(201)
+            ->json('document.id');
+
+        $this->patchJson("/api/agency/documents/{$documentId}", [
+            'category' => 'cnic',
+        ], $headers)->assertStatus(403);
+
+        $this->assertDatabaseHas('documents', [
+            'id' => $documentId,
+            'agency_id' => $agency->id,
+            'is_sensitive' => false,
+            'category' => 'other',
+        ]);
+    }
+
+    public function test_sensitive_upload_is_authorized_before_malware_scan_or_quarantine_storage(): void
+    {
+        [$clerk] = $this->agencyUser(['documents.upload'], 'document_clerk');
+        $this->bindVerdict(MalwareScanResult::skipped('clamav', 'clamav_not_available'));
+
+        $this->upload($clerk, ['category' => 'cnic'])->assertStatus(403);
+
+        $this->assertDatabaseCount('documents', 0);
+        $this->assertDatabaseCount('document_quarantines', 0);
+        $this->assertSame([], Storage::disk('documents')->allFiles());
+        $this->assertSame([], Storage::disk('quarantine')->allFiles());
+    }
+
+    public function test_quarantine_index_hides_sensitive_rejected_uploads_without_sensitive_clearance(): void
+    {
+        [$owner, $agency] = $this->uploader();
+        $this->bindVerdict(MalwareScanResult::infected('clamav', ['Eicar-Test-Signature FOUND']));
+
+        $this->upload($owner, ['category' => 'cnic'], 'cnic-front.pdf')
+            ->assertStatus(422);
+        $this->upload($owner, ['category' => 'other'], 'general-file.pdf')
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('document_quarantines', [
+            'agency_id' => $agency->id,
+            'original_name' => 'cnic-front.pdf',
+            'is_sensitive' => true,
+        ]);
+
+        [$viewer] = $this->agencyUser(['documents.manage_permissions'], 'quarantine_viewer', $agency);
+        $payload = $this->getJson('/api/agency/documents-quarantine', $this->authHeaders($this->tokenFor($viewer)))
+            ->assertOk()
+            ->json();
+
+        $names = array_column($payload['rejected'], 'title');
+        $this->assertContains('general-file.pdf', $names);
+        $this->assertNotContains('cnic-front.pdf', $names);
+    }
+
+    public function test_infected_rescan_moves_bytes_and_current_version_metadata_together(): void
+    {
+        [$user] = $this->uploader();
+        $headers = $this->authHeaders($this->tokenFor($user));
+        config(['malware.fail_closed' => false]);
+
+        $this->bindVerdict(MalwareScanResult::skipped('clamav', 'clamav_not_available'));
+        $documentId = $this->upload($user)
+            ->assertStatus(201)
+            ->assertJsonPath('document.status', 'quarantined')
+            ->json('document.id');
+
+        $document = Document::findOrFail($documentId);
+        $sourcePath = $document->disk_path;
+        Storage::disk('documents')->assertExists($sourcePath);
+
+        DocumentVersion::create([
+            'document_id' => $document->id,
+            'version' => 1,
+            'stored_name' => $document->stored_name,
+            'disk_path' => $sourcePath,
+            'storage_disk' => 'documents',
+            'mime_type' => $document->mime_type,
+            'size_bytes' => $document->size_bytes,
+            'checksum' => $document->checksum,
+            'uploaded_by' => $user->id,
+            'note' => 'Initial version',
+        ]);
+
+        $this->bindVerdict(MalwareScanResult::infected('clamav', ['Eicar-Test-Signature FOUND']));
+        $this->post("/api/agency/documents/{$documentId}/rescan", [], $headers)
+            ->assertStatus(200)
+            ->assertJsonPath('document.status', 'quarantined')
+            ->assertJsonPath('document.scan_status', 'infected');
+
+        $updated = Document::findOrFail($documentId);
+        $this->assertSame('quarantine', $updated->storage_disk);
+        $this->assertNotSame($sourcePath, $updated->disk_path);
+        Storage::disk('documents')->assertMissing($sourcePath);
+        Storage::disk('quarantine')->assertExists($updated->disk_path);
+
+        $version = DocumentVersion::where('document_id', $documentId)->where('version', 1)->firstOrFail();
+        $this->assertSame($updated->disk_path, $version->disk_path);
+        $this->assertSame('quarantine', $version->storage_disk);
+
+        $this->assertDatabaseHas('document_quarantines', [
+            'document_id' => $documentId,
+            'disk_path' => $updated->disk_path,
+            'reason' => 'infected',
+        ]);
+    }
+
 }

@@ -36,6 +36,11 @@ class Dealer extends Model
         return $this->hasOne(User::class, 'dealer_id', 'id');
     }
 
+    public function agency()
+    {
+        return $this->belongsTo(Agency::class, 'agency_id');
+    }
+
     public function properties()
     {
         return $this->hasMany(Property::class, 'assignedDealerId', 'id');

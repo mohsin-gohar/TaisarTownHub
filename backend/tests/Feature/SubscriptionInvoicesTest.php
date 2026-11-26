@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use Tests\Feature\EnterpriseTestCase;
 
@@ -20,6 +21,23 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
     private function admin()
     {
         return $this->makeUser('super_admin');
+    }
+
+    private function makePlan(): \App\Models\SubscriptionPlan
+    {
+        return \App\Models\SubscriptionPlan::create([
+            'key' => 'invoice-test-' . \Illuminate\Support\Str::random(8),
+            'name' => 'Invoice Test Plan',
+            'description' => 'Subscription invoice feature test',
+            'price' => 10000,
+            'currency' => 'PKR',
+            'interval' => 'month',
+            'limits' => ['listings' => 10, 'staff' => 3, 'storage_mb' => 1024, 'leads' => 50],
+            'features' => [],
+            'is_active' => true,
+            'is_default' => false,
+            'sort_order' => 1,
+        ]);
     }
 
     public function test_invoice_number_sequence_is_monotonic_even_if_a_reservation_is_not_saved(): void
@@ -62,11 +80,13 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
     public function test_admin_can_raise_and_verify_an_invoice_exactly_once(): void
     {
         $admin = $this->admin();
-        [$member, $agency] = $this->agencyUser(['agency.view'], 'agent');
+        [, $agency] = $this->agencyUser(['agency.view'], 'agent');
+        $plan = $this->makePlan();
         $h = fn () => $this->authHeaders($this->tokenFor($admin));
 
         $created = $this->postJson('/api/admin/subscription-invoices', [
             'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
             'amount_pkr' => 10000,
             'tax_pkr' => 500,
             'period_start' => '2026-11-01',
@@ -98,12 +118,59 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
         $this->assertNotNull($row->paid_at);
         $this->assertSame($admin->id, $row->verified_by);
 
+        // A paid plan invoice must activate the agency subscription atomically.
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+        $this->assertSame($plan->id, $subscription->plan_id);
+        $this->assertSame('active', $subscription->status);
+        $this->assertSame('manual', $subscription->provider);
+        $this->assertFalse((bool) $subscription->auto_renew);
+        $this->assertSame('2026-11-01', $subscription->starts_at->toDateString());
+        $this->assertSame('2026-11-30', $subscription->ends_at->toDateString());
+
         // Paid invoices are financial history — never modifiable again.
         $this->postJson('/api/admin/subscription-invoices/' . $invoiceId . '/verify', [
             'payment_method' => 'cash',
         ], $h())
             ->assertStatus(422)
             ->assertJsonPath('success', false);
+    }
+
+    public function test_manual_invoice_cannot_replace_an_active_stripe_subscription(): void
+    {
+        $admin = $this->admin();
+        [, $agency] = $this->agencyUser(['agency.view'], 'agent');
+        $plan = $this->makePlan();
+        $stripe = AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addMonth(),
+            'auto_renew' => true,
+            'stripe_subscription_id' => 'sub-existing-recurring',
+            'provider' => 'stripe',
+        ]);
+
+        $headers = $this->authHeaders($this->tokenFor($admin));
+        $created = $this->postJson('/api/admin/subscription-invoices', [
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'amount_pkr' => 10000,
+            'period_start' => now()->toDateString(),
+            'period_end' => now()->addMonth()->toDateString(),
+        ], $headers)->assertStatus(201);
+
+        $invoiceId = $created->json('invoice.id');
+        $this->postJson('/api/admin/subscription-invoices/' . $invoiceId . '/verify', [
+            'payment_method' => 'bank_transfer',
+        ], $headers)
+            ->assertStatus(409)
+            ->assertJsonPath('success', false);
+
+        $this->assertSame('pending', SubscriptionInvoice::findOrFail($invoiceId)->status);
+        $this->assertSame('stripe', $stripe->fresh()->provider);
+        $this->assertSame('sub-existing-recurring', $stripe->fresh()->stripe_subscription_id);
+        $this->assertTrue((bool) $stripe->fresh()->auto_renew);
     }
 
     public function test_void_invoices_cannot_be_paid_and_numbers_stay_unique(): void

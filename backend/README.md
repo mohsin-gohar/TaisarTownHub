@@ -1,59 +1,81 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# TaisarTownHub API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+This directory contains the Laravel 12 REST API for the TaisarTownHub property marketplace and multi-tenant agency ERP.
 
-## About Laravel
+## Runtime stack
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.3+
+- MySQL 8 (production Compose currently targets MySQL 8.4)
+- Laravel 12 + Sanctum bearer-token authentication
+- Redis for production cache, sessions and queues
+- ClamAV for fail-closed upload scanning
+- Nginx + PHP-FPM in production
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+The root-level `docker-compose.yml` and `docs/DEPLOYMENT.md` are the canonical production deployment definition. Do not deploy this API with `php artisan serve` or the deprecated root `Dockerfile.prod`.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Local development
 
-## Learning Laravel
+1. Install PHP dependencies and create the local environment file:
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+   ```bash
+   composer install
+   cp .env.example .env
+   php artisan key:generate
+   ```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+2. Create a MySQL database and configure `DB_HOST`, `DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD` in `.env`. Set the exact frontend origin in `CORS_ALLOWED_ORIGINS`.
 
-## Laravel Sponsors
+3. Run migrations and the local seeders:
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+   ```bash
+   php artisan migrate --seed
+   php artisan serve --host=127.0.0.1 --port=8080
+   ```
 
-### Premium Partners
+4. Point the frontend `VITE_API_URL` at `http://127.0.0.1:8080/api`.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Never use production credentials or a production database for local development or automated tests.
 
-## Contributing
+## Backend tests
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+The PHPUnit configuration intentionally uses **MySQL only**; SQLite is not a supported substitute for this suite. Create a dedicated, disposable database named `taisartownhub_test` on MySQL 8 and provide its credentials through `.env.testing` (this file is ignored by Git).
 
-## Code of Conduct
+Minimum `.env.testing` database settings:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```dotenv
+APP_ENV=testing
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=taisartownhub_test
+DB_USERNAME=root
+DB_PASSWORD=your-local-test-database-password
+```
 
-## Security Vulnerabilities
+Then run:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan test
+```
 
-## License
+The test suite resets its schema. **Never point `.env.testing` at a database containing real or needed data.**
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Production readiness
+
+Run the strict preflight inside the same production container/configuration that will be deployed:
+
+```bash
+php artisan app:production-check --strict --json
+```
+
+The command checks runtime configuration, secrets, MySQL/migrations, storage and vault encryption, malware scanning, Redis/cache/session/queue, mail configuration, OAuth configuration, cached config/routes, bcrypt strength and scheduler registration.
+
+The preflight is a configuration gate, not a substitute for live-provider verification, a real backup/restore rehearsal, DNS/TLS validation or a staged deployment.
+
+## Security rules
+
+- Keep `.env`, `.env.testing`, private keys, provider secrets and real customer data out of Git.
+- Never disable fail-closed malware scanning in production.
+- Do not expose `storage/app/private` or the quarantine disk through Nginx or a public symlink.
+- Run schema migrations once through the Compose `migrate` service; web replicas and workers must not race migrations.
+- Use the authenticated API for tenant-owned writes; never trust client-supplied `agency_id`, owner IDs or platform permissions.

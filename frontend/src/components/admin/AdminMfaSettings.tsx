@@ -28,6 +28,7 @@ export const AdminMfaSettings: React.FC = () => {
   const [recoveryRemaining, setRecoveryRemaining] = useState(0);
   const [enrolment, setEnrolment] = useState<{ secret: string; otpauthUri: string; recoveryCodes: string[] } | null>(null);
   const [confirmCode, setConfirmCode] = useState('');
+  const [setupPassword, setSetupPassword] = useState('');
   const [disablePassword, setDisablePassword] = useState('');
   const [disableCode, setDisableCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -51,15 +52,20 @@ export const AdminMfaSettings: React.FC = () => {
   }, [loadStatus, loadHistory]);
 
   const handleStart = async () => {
+    if (!setupPassword) {
+      setError('Enter your current password to start MFA enrolment.');
+      return;
+    }
     setBusy(true);
     setError('');
     setNotice('');
-    const result = await api.mfaSetup();
+    const result = await api.mfaSetup(setupPassword);
     setBusy(false);
     if (!result.success || !result.secret) {
       setError(result.error || 'Two-factor enrolment could not be started.');
       return;
     }
+    setSetupPassword('');
     setEnrolment({
       secret: result.secret,
       otpauthUri: result.otpauthUri || '',
@@ -149,15 +155,29 @@ export const AdminMfaSettings: React.FC = () => {
       )}
 
       {!enrolment && !enabled && (
-        <button
-          type="button"
-          onClick={handleStart}
-          disabled={busy}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold transition cursor-pointer disabled:opacity-60"
-        >
-          <ShieldCheck className="w-4 h-4" />
-          {busy ? 'Preparing…' : 'Enable two-factor sign-in'}
-        </button>
+        <div className="space-y-3 max-w-sm">
+          <label className="block text-[11px] font-semibold text-slate-300" htmlFor="mfa-setup-password">
+            Confirm your current password
+          </label>
+          <input
+            id="mfa-setup-password"
+            type="password"
+            autoComplete="current-password"
+            value={setupPassword}
+            onChange={(event) => setSetupPassword(event.target.value)}
+            className="w-full rounded-xl border border-slate-700 bg-[#07141E] px-3 py-2.5 text-xs text-white outline-none focus:border-[#E7C878]"
+            placeholder="Current password"
+          />
+          <button
+            type="button"
+            onClick={handleStart}
+            disabled={busy || !setupPassword}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold transition cursor-pointer disabled:opacity-60"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            {busy ? 'Preparing…' : 'Enable two-factor sign-in'}
+          </button>
+        </div>
       )}
 
       {enrolment && (

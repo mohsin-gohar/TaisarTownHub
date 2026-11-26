@@ -3,25 +3,18 @@
 namespace App\Support;
 
 use Illuminate\Support\Facades\Cache;
+use RuntimeException;
 
 /**
- * Stateless bot protection for the public inquiry form (finding G-11).
+ * Cache-backed bot protection for the public inquiry form (finding G-11).
  *
- * A challenge is a simple math question ("What is 7 + 5?"). The answer never
- * travels in plain form: the issued token carries only an HMAC signature over
- * the operands, a single-use nonce and an expiry timestamp. Verification
- * recomputes everything server-side, so no database table, no external captcha
- * provider and no privacy-invading third-party script are required.
+ * The browser receives a simple math question and an opaque signed token.
+ * The token contains only a random nonce and expiry; the expected answer is
+ * stored as an HMAC in the shared cache and is never disclosed to the client.
  *
- * Design notes:
- * - Keyed with APP_KEY. Rotating APP_KEY invalidates outstanding challenges;
- *   they live for 10 minutes, which is an acceptable trade.
- * - The nonce is cached for the challenge lifetime so a SOLVED token cannot
- *   be replayed for a second submission; wrong answers do not burn the
- *   challenge (a human may retry after a typo).
- * - Issuance and verification are O(1) and cache-backed; with the array store
- *   the challenge is still single-use per request lifecycle, and in production
- *   Redis/Cache::store provides the shared replay guard.
+ * The challenge is single-use across application replicas. Wrong answers do
+ * not consume it, while a successful answer is atomically claimed with
+ * Cache::add so concurrent replays cannot both succeed.
  */
 final class InquiryCaptcha
 {
@@ -42,21 +35,30 @@ final class InquiryCaptcha
         $b = random_int(2, 9);
         $nonce = bin2hex(random_bytes(16));
         $expiresAt = time() + self::LIFETIME_SECONDS;
+        $answerHash = self::answerHash((string) ($a + $b));
+
+        if (! Cache::put(
+            self::challengeKey($nonce),
+            $answerHash,
+            now()->addSeconds(self::LIFETIME_SECONDS)
+        )) {
+            throw new RuntimeException('Could not store the inquiry challenge.');
+        }
 
         return [
             'question' => "What is {$a} + {$b}?",
-            'token' => self::sign($a, $b, $nonce, $expiresAt),
+            'token' => self::sign($nonce, $expiresAt),
             'expiresAt' => gmdate('c', $expiresAt),
         ];
     }
 
     /**
-     * Verify a submitted answer against its token. Single-use: a token that
-     * already produced one successful submission is rejected afterwards.
+     * Verify a submitted answer against its opaque token. A solved token
+     * cannot be replayed; incorrect answers do not consume the challenge.
      */
     public static function verify(?string $token, ?string $answer): bool
     {
-        if (!is_string($token) || $token === '' || !is_string($answer) || $answer === '') {
+        if (! is_string($token) || $token === '' || ! is_string($answer) || $answer === '') {
             return false;
         }
 
@@ -66,47 +68,56 @@ final class InquiryCaptcha
         }
         [$payload, $signature] = $parts;
 
-        $data = json_decode((string) base64_decode($payload, true), true);
-        if (!is_array($data)
-            || !isset($data['a'], $data['b'], $data['n'], $data['e'])
-            || !is_int($data['a']) || !is_int($data['b'])
-            || !is_int($data['e']) || !is_string($data['n'])
+        $decoded = base64_decode($payload, true);
+        $data = $decoded === false ? null : json_decode($decoded, true);
+        if (! is_array($data)
+            || count($data) !== 2
+            || ! isset($data['n'], $data['e'])
+            || ! is_string($data['n'])
+            || ! preg_match('/^[a-f0-9]{32}$/D', $data['n'])
+            || ! is_int($data['e'])
         ) {
             return false;
         }
 
-        // Signature check first: never process untrusted payload semantics.
-        if (!hash_equals(self::signature($payload), $signature)) {
+        // Verify the signature before using the nonce or expiry.
+        if (! hash_equals(self::signature($payload), $signature)) {
             return false;
         }
 
-        if ((int) $data['e'] < time()) {
+        if ($data['e'] < time()) {
             return false;
         }
 
-        $expected = (int) $data['a'] + (int) $data['b'];
         $given = trim($answer);
-        if (!ctype_digit($given) || (int) $given !== $expected) {
+        if (! ctype_digit($given)) {
             return false;
         }
 
-        // Atomic replay protection: Cache::add succeeds only when the nonce
-        // does not already exist. Unlike a separate has()+put() pair, this
-        // prevents two concurrent requests from consuming the same token.
-        $nonceKey = 'inquiry-captcha:' . $data['n'];
+        $nonce = $data['n'];
+        $storedHash = Cache::get(self::challengeKey($nonce));
+        if (! is_string($storedHash)
+            || ! hash_equals($storedHash, self::answerHash($given))) {
+            return false;
+        }
 
-        return Cache::add(
-            $nonceKey,
+        // Only one concurrent request can claim a solved nonce.
+        if (! Cache::add(
+            self::usedKey($nonce),
             true,
             now()->addMinutes(self::NONCE_TTL_MINUTES)
-        );
+        )) {
+            return false;
+        }
+
+        Cache::forget(self::challengeKey($nonce));
+
+        return true;
     }
 
-    private static function sign(int $a, int $b, string $nonce, int $expiresAt): string
+    private static function sign(string $nonce, int $expiresAt): string
     {
         $payload = base64_encode((string) json_encode([
-            'a' => $a,
-            'b' => $b,
             'n' => $nonce,
             'e' => $expiresAt,
         ]));
@@ -117,5 +128,20 @@ final class InquiryCaptcha
     private static function signature(string $payload): string
     {
         return hash_hmac('sha256', $payload, (string) config('app.key'));
+    }
+
+    private static function answerHash(string $answer): string
+    {
+        return hash_hmac('sha256', $answer, (string) config('app.key'));
+    }
+
+    private static function challengeKey(string $nonce): string
+    {
+        return 'inquiry-captcha:challenge:' . $nonce;
+    }
+
+    private static function usedKey(string $nonce): string
+    {
+        return 'inquiry-captcha:used:' . $nonce;
     }
 }

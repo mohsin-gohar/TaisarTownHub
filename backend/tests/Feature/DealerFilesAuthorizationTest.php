@@ -238,6 +238,77 @@ class DealerFilesAuthorizationTest extends EnterpriseTestCase
         $this->assertSame('available', $file->fresh()->status);
     }
 
+    public function test_percentage_commission_credits_only_the_configured_share_of_profit(): void
+    {
+        $dealer = $this->makeDealer('Percentage Commission Dealer');
+        $dealer->update([
+            'commissionType' => 'Percentage',
+            'commissionRate' => 10,
+            'totalEarnedPKR' => 0,
+            'pendingCommissionPKR' => 0,
+        ]);
+        [$user] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $file = $this->makeSellableFile($dealer);
+        $file->update(['cost_price_kbr' => 7000]);
+
+        $this->postJson("/api/dealer-files/{$file->id}/sell", [
+            'selling_price_kbr' => 10000,
+            'buyer_name' => 'Commission Buyer',
+            'buyer_phone' => '0300-1234567',
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk()->assertJsonPath('profit', 3000);
+
+        $this->assertSame(300, (int) $dealer->fresh()->totalEarnedPKR);
+        $this->assertSame(300, (int) $dealer->fresh()->pendingCommissionPKR);
+        $this->assertSame(1, (int) $dealer->fresh()->dealsClosed);
+    }
+
+    public function test_fixed_commission_is_not_replaced_by_the_entire_profit(): void
+    {
+        $dealer = $this->makeDealer('Fixed Commission Dealer');
+        $dealer->update([
+            'commissionType' => 'Fixed',
+            'commissionRate' => 500,
+            'totalEarnedPKR' => 0,
+            'pendingCommissionPKR' => 0,
+        ]);
+        [$user] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $file = $this->makeSellableFile($dealer);
+        $file->update(['cost_price_kbr' => 7000]);
+
+        $this->postJson("/api/dealer-files/{$file->id}/sell", [
+            'selling_price_kbr' => 10000,
+            'buyer_name' => 'Fixed Buyer',
+            'buyer_phone' => '0300-1234567',
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertSame(500, (int) $dealer->fresh()->totalEarnedPKR);
+        $this->assertSame(500, (int) $dealer->fresh()->pendingCommissionPKR);
+    }
+
+    public function test_loss_making_dealer_file_sale_does_not_create_negative_commission(): void
+    {
+        $dealer = $this->makeDealer('Loss Sale Dealer');
+        $dealer->update([
+            'commissionType' => 'Percentage',
+            'commissionRate' => 10,
+            'totalEarnedPKR' => 0,
+            'pendingCommissionPKR' => 0,
+        ]);
+        [$user] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $file = $this->makeSellableFile($dealer);
+        $file->update(['cost_price_kbr' => 11000]);
+
+        $this->postJson("/api/dealer-files/{$file->id}/sell", [
+            'selling_price_kbr' => 10000,
+            'buyer_name' => 'Loss Buyer',
+            'buyer_phone' => '0300-1234567',
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk()->assertJsonPath('profit', -1000);
+
+        $this->assertSame(0, (int) $dealer->fresh()->totalEarnedPKR);
+        $this->assertSame(0, (int) $dealer->fresh()->pendingCommissionPKR);
+        $this->assertSame(1, (int) $dealer->fresh()->dealsClosed);
+    }
+
     public function test_active_subscription_allows_dealer_file_sales(): void
     {
         $dealer = $this->makeDealer('Active Dealer');
@@ -257,4 +328,53 @@ class DealerFilesAuthorizationTest extends EnterpriseTestCase
 
         $this->assertSame('sold', $file->fresh()->status);
     }
+
+    public function test_file_index_redacts_buyer_pii_for_users_without_sensitive_clearance(): void
+    {
+        $dealer = $this->makeDealer('Index PII Dealer');
+        [$user] = $this->dealerUser(['documents.view'], $dealer);
+        DealerFile::create([
+            'title' => 'Sold Registry File',
+            'type' => 'pdf',
+            'url' => 'https://example.test/registry.pdf',
+            'folder' => 'Documents',
+            'file_size_kb' => 100,
+            'dealer_id' => $dealer->id,
+            'uploaded_by' => $dealer->id,
+            'status' => 'sold',
+            'buyer_name' => 'Private Buyer',
+            'buyer_phone' => '03009990000',
+            'buyer_cnic' => '42101****5671',
+        ]);
+
+        $row = $this->getJson('/api/dealer-files', $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()
+            ->json('data.0');
+
+        $this->assertArrayNotHasKey('buyer_name', $row);
+        $this->assertArrayNotHasKey('buyer_phone', $row);
+        $this->assertSame('42101****5671', $row['buyer_cnic']);
+        $this->assertSame('https://example.test/registry.pdf', $row['url']);
+    }
+
+    public function test_sale_response_does_not_return_buyer_pii_without_sensitive_clearance(): void
+    {
+        $dealer = $this->makeDealer('Sale Response PII Dealer');
+        [$user] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $file = $this->makeSellableFile($dealer);
+
+        $payload = $this->postJson("/api/dealer-files/{$file->id}/sell", [
+            'selling_price_kbr' => 9000,
+            'buyer_name' => 'Private Buyer',
+            'buyer_phone' => '03009990000',
+            'buyer_cnic' => '42101-1234567-1',
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()
+            ->json('data');
+
+        $this->assertArrayNotHasKey('buyer_name', $payload);
+        $this->assertArrayNotHasKey('buyer_phone', $payload);
+        $this->assertSame('42101****5671', $payload['buyer_cnic']);
+    }
+
 }

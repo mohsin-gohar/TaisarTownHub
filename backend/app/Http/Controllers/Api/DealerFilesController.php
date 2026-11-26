@@ -37,10 +37,12 @@ class DealerFilesController extends Controller
         }
 
         $files = $query->orderByDesc('created_at')->orderBy('id')->get();
+        $withPii = $this->can($request, 'documents.view_sensitive')
+            || $this->can($request, 'admin.view_reports');
 
         return response()->json([
             'success' => true,
-            'data' => $files,
+            'data' => $files->map(fn (DealerFile $file) => $this->presentFile($file, $withPii)),
             'count' => $files->count(),
         ]);
     }
@@ -73,32 +75,41 @@ class DealerFilesController extends Controller
             'dimensions' => 'nullable|string|max:50',
         ]);
 
-        // Legacy dealer files are URL registrations. Enforce the plan's file
-        // count only; storage quotas are not part of this release.
+        // Serialize the count-and-create operation on the agency row so
+        // two replicas cannot both consume the last dealer-file slot.
         $agencyId = $this->agencyId($request);
-        if ($agencyId !== null) {
-            $agency = Agency::findOrFail($agencyId);
-            $used = fn () => DealerFile::whereIn(
-                'dealer_id',
-                User::whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
-                    ->whereNotNull('dealer_id')->pluck('dealer_id')
-            )->count();
-            if ($block = PlanLimits::block($agency, 'dealer_files', $used)) {
-                return PlanLimits::deny('Dealer file limit reached for your subscription plan.', $block);
+        $result = DB::transaction(function () use ($agencyId, $dealerId, $validated): array {
+            if ($agencyId !== null) {
+                $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+                $used = fn () => DealerFile::whereIn(
+                    'dealer_id',
+                    User::whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
+                        ->whereNotNull('dealer_id')->pluck('dealer_id')
+                )->count();
+
+                if ($block = PlanLimits::block($agency, 'dealer_files', $used)) {
+                    return ['blocked' => $block];
+                }
             }
+
+            return ['file' => DealerFile::create([
+                'title' => strip_tags($validated['title']),
+                'type' => $validated['type'],
+                'url' => $validated['url'],
+                'folder' => $validated['folder'],
+                'file_size_kb' => $validated['file_size_kb'],
+                'dimensions' => $validated['dimensions'] ?? null,
+                'dealer_id' => $dealerId,
+                'uploaded_by' => $dealerId,
+                'status' => 'available',
+            ])];
+        }, 3);
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Dealer file limit reached for your subscription plan.', $result['blocked']);
         }
 
-        $file = DealerFile::create([
-            'title' => strip_tags($validated['title']),
-            'type' => $validated['type'],
-            'url' => $validated['url'],
-            'folder' => $validated['folder'],
-            'file_size_kb' => $validated['file_size_kb'],
-            'dimensions' => $validated['dimensions'] ?? null,
-            'dealer_id' => $dealerId,
-            'uploaded_by' => $dealerId,
-            'status' => 'available',
-        ]);
+        $file = $result['file'];
 
         $this->writeAudit($request, 'dealer_file.upload', (string) $file->id,
             "File {$file->title} uploaded to dealer {$dealer->fullName}", [
@@ -176,7 +187,7 @@ class DealerFilesController extends Controller
                 'sold_by_dealer_id' => $dealerId,
             ]);
 
-            $this->updateDealerCommission($dealerId, (int) round($profit));
+            $this->updateDealerCommission($dealerId, $profit);
 
             return $file;
         });
@@ -195,9 +206,12 @@ class DealerFilesController extends Controller
                 'entity_id' => (string) $soldFile->id,
             ]);
 
+        $withPii = $this->can($request, 'documents.view_sensitive')
+            || $this->can($request, 'admin.view_reports');
+
         return response()->json([
             'success' => true,
-            'data' => $soldFile,
+            'data' => $this->presentFile($soldFile, $withPii),
             'message' => 'File marked as sold. Commission calculated and updated.',
             'profit' => $profit,
         ]);
@@ -317,6 +331,9 @@ class DealerFilesController extends Controller
             'id' => $file->id,
             'title' => $file->title,
             'type' => $file->type,
+            'url' => $file->url,
+            'file_size_kb' => $file->file_size_kb,
+            'dimensions' => $file->dimensions,
             'status' => $file->status,
             'folder' => $file->folder,
             'dealer_id' => $file->dealer_id,
@@ -335,15 +352,27 @@ class DealerFilesController extends Controller
         return $data;
     }
 
-    protected function updateDealerCommission(string $dealerId, int $profit): void
+    protected function updateDealerCommission(string $dealerId, float $profit): void
     {
         $dealer = Dealer::where('id', $dealerId)->lockForUpdate()->first();
-        if ($dealer) {
-            $dealer->totalEarnedPKR = ($dealer->totalEarnedPKR ?? 0) + $profit;
-            $dealer->pendingCommissionPKR = ($dealer->pendingCommissionPKR ?? 0) + $profit;
-            $dealer->dealsClosed = ($dealer->dealsClosed ?? 0) + 1;
-            $dealer->save();
+        if (!$dealer) {
+            return;
         }
+
+        // Commission is a configured share of profit (or a fixed amount), not
+        // the dealer's entire gross profit. Loss-making sales never create a
+        // negative commission or reduce already-earned balances.
+        $rate = max(0, (float) ($dealer->commissionRate ?? 0));
+        $commission = match (strtolower((string) ($dealer->commissionType ?? 'fixed'))) {
+            'percentage' => $profit > 0 ? (int) round($profit * $rate / 100) : 0,
+            'fixed', 'custom' => (int) round($rate),
+            default => 0,
+        };
+
+        $dealer->totalEarnedPKR = ($dealer->totalEarnedPKR ?? 0) + $commission;
+        $dealer->pendingCommissionPKR = ($dealer->pendingCommissionPKR ?? 0) + $commission;
+        $dealer->dealsClosed = ($dealer->dealsClosed ?? 0) + 1;
+        $dealer->save();
     }
 
     private function maskCnic(string $cnic): string

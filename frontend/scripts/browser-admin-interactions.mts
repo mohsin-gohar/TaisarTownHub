@@ -1,5 +1,5 @@
 /**
- * Admin interactive audit (one-off, not part of CI gates).
+ * Admin interactive audit against disposable CI personas; destructive and non-observable file/clipboard actions are skipped.
  *
  * Logs into the admin via the /admin-login modal and walks every visible
  * sidebar tab, clicking every content button once (skipping destructive
@@ -14,6 +14,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const BASE = process.env.AUDIT_BASE || 'http://127.0.0.1:3000';
+const sharedDemoPassword = process.env.DEMO_STAFF_PASSWORD;
+const demoPassword = (fallback: string) => sharedDemoPassword || fallback;
 const OUT = path.resolve(import.meta.dirname, '..', 'audit');
 mkdirSync(OUT, { recursive: true });
 
@@ -23,7 +25,7 @@ const IGNORE_CONSOLE = [
   /preloaded using link preload but not used/i,
 ];
 
-const DESTRUCTIVE = /delete|remove|sign out|log out|logout|deactivate|reject|decline|approve|mark (as )?(paid|resolved|closed)|pay now|refund|suspend|terminate|revoke|purge|archive|publish|unpublish|reset password|clear all|wipe/i;
+const DESTRUCTIVE = /delete|remove|sign out|log out|logout|deactivate|reject|decline|approve|mark (as )?(paid|resolved|closed)|pay now|refund|suspend|terminate|revoke|purge|archive|publish|unpublish|reset password|clear all|wipe|copy|clipboard|download|upload|choose file|browse|select file|print|export/i;
 
 const TAB_LABELS = [
   'Dashboard Overview',
@@ -81,7 +83,7 @@ async function gotoAdmin(page: Page) {
   await page.waitForTimeout(1500);
 }
 
-async function login(page: Page, email: string, password: string) {
+async function login(page: Page, email: string, password: string): Promise<boolean> {
   const loginForm = page
     .locator('form')
     .filter({ has: page.locator('input[placeholder="Enter password"]') })
@@ -90,6 +92,8 @@ async function login(page: Page, email: string, password: string) {
   await loginForm.locator('input[type="password"]').fill(password);
   await loginForm.locator('button[type="submit"]').click();
   await page.waitForTimeout(4500);
+  return /\/admin(?:\/|$)/.test(new URL(page.url()).pathname)
+    && !(await page.locator('input[placeholder="Enter password"]').isVisible().catch(() => false));
 }
 
 async function logout(page: Page) {
@@ -258,9 +262,22 @@ async function runRole(
   const page = await context.newPage();
   await page.goto(BASE + '/admin-login', { waitUntil: 'domcontentloaded', timeout: 45_000 });
   await page.waitForTimeout(1500);
-  await login(page, email, password);
+  const loggedIn = await login(page, email, password);
 
   const findings: ProbeResult[] = [];
+  if (!loggedIn) {
+    findings.push({
+      page: 'admin login',
+      button: '__login__',
+      effect: 'LOGIN FAILED',
+      urlBefore: page.url(),
+      urlAfter: page.url(),
+      errors: ['The expected persona did not reach the authenticated admin route.'],
+    });
+    await context.close();
+    return { role: label, findings };
+  }
+
   for (const tabLabel of TAB_LABELS) {
     if (!page.url().includes('/admin')) {
       await page.goto(BASE + '/admin', { waitUntil: 'domcontentloaded', timeout: 45_000 });
@@ -279,17 +296,21 @@ async function runRole(
 (async () => {
   const browser = await chromium.launch();
   const started = Date.now();
-  const superadmin = await runRole(browser, 'superadmin', 'superadmin@taisartownhub.com', 'Super@Admin2026!');
-  await new Promise((r) => setTimeout(r, 4000));
-  const manager = await runRole(browser, 'manager', 'manager@taisartownhub.com', 'Manager@2026!');
-  await new Promise((r) => setTimeout(r, 4000));
-  const dealer = await runRole(browser, 'dealer', 'dealer@taisartownhub.com', 'Dealer@2026!');
+  const superadmin = await runRole(browser, 'superadmin', 'superadmin@taisartownhub.com', demoPassword('Super@Admin2026!'));
+  await new Promise((r) => setTimeout(r, 2000));
+  const agencyOwner = await runRole(browser, 'agency_owner', 'admin@taisartownhub.com', demoPassword('Admin@Taisar2026'));
+  await new Promise((r) => setTimeout(r, 2000));
+  const manager = await runRole(browser, 'manager', 'manager@taisartownhub.com', demoPassword('Manager@2026'));
+  await new Promise((r) => setTimeout(r, 2000));
+  const dealer = await runRole(browser, 'dealer', 'dealer@taisartownhub.com', demoPassword('Dealer@2026'));
+  await new Promise((r) => setTimeout(r, 2000));
+  const operator = await runRole(browser, 'operator', 'operator@taisartownhub.com', demoPassword('Operator@2026'));
 
   const report = {
     base: BASE,
     generatedAt: new Date().toISOString(),
     durationMs: Date.now() - started,
-    results: [superadmin, manager, dealer],
+    results: [superadmin, agencyOwner, manager, dealer, operator],
   };
   writeFileSync(path.join(OUT, 'admin-interactions.json'), JSON.stringify(report, null, 2));
 
@@ -304,4 +325,12 @@ async function runRole(
     clickFailed.forEach((f) => console.log(`  CLICK FAILED [${f.page}] "${f.button}" → ${f.effect}`));
     errorEntries.forEach((f) => console.log(`  ERR [${f.page}] "${f.button}" → ${f.errors.slice(0, 3).join(' | ')}`));
   }
+
+  const hasInteractionFailures = report.results.some((run) =>
+    run.findings.some((finding) =>
+      (finding.effect === 'LOGIN FAILED' || finding.effect === 'NO VISIBLE EFFECT' || finding.effect.startsWith('CLICK FAILED'))
+      || (finding.button !== '__tab__' && finding.errors.length > 0)
+    )
+  );
+  if (hasInteractionFailures) process.exitCode = 1;
 })();

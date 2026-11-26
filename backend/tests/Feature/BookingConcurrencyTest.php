@@ -25,6 +25,8 @@ class BookingConcurrencyTest extends EnterpriseTestCase
             'id' => 'dlr_' . Str::random(10),
             'fullName' => 'Concurrency Dealer',
             'phone' => '0300-0000000',
+            'commissionType' => 'Percentage',
+            'commissionRate' => 100,
         ]);
 
         $user = $this->makeUser('agent', ['dealer_id' => $dealer->id]);
@@ -158,7 +160,7 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $this->postJson('/api/agency/transactions/' . $transaction->id . '/payments', [
             'amount' => 50000,
         ], $headers)
-            ->assertStatus(422)
+            ->assertStatus(409)
             ->assertJsonPath('success', false);
     }
 

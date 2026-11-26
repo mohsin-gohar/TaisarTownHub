@@ -50,3 +50,12 @@ test('video modal closes on Escape key', () => {
   assert.equal(modal.includes('Escape'), true, 'video modal must listen for Escape');
   assert.equal(modal.includes('onClose'), true);
 });
+
+test('public video walkthrough cards open the playable video modal', () => {
+  const section = read('./VideoWalkthroughSection.tsx');
+  assert.equal(section.includes("import { VideoModal }"), true);
+  assert.equal(section.includes('onClick={() => setSelectedVideo(video)}'), true);
+  assert.equal(section.includes('<VideoModal'), true);
+  assert.equal(section.includes('videoUrl={selectedVideo?.videoUrl}'), true);
+  assert.equal(section.includes("aria-label={'Play video: ' + video.title}"), true);
+});

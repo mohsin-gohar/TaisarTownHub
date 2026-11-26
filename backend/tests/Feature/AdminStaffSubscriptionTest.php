@@ -22,7 +22,7 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
 {
     private function staffPermissions(): array
     {
-        return ['agency.view', 'agency.manage_staff', 'view_properties'];
+        return ['agency.view', 'agency.manage_staff', 'view_properties', 'properties.view'];
     }
 
     private function makePlan(array $attrs = []): SubscriptionPlan
@@ -165,9 +165,62 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'setting.update']);
     }
 
+    public function test_agency_manager_cannot_escalate_permissions_through_custom_roles_or_self_grants(): void
+    {
+        [$manager, $agency] = $this->agencyUser([
+            'agency.view',
+            'agency.manage_staff',
+        ], 'agency_manager');
+
+        $privilegedRole = $this->makeRole('agency', 'billing_admin', [
+            'agency.view',
+            'agency.manage_staff',
+            'agency.subscribe',
+            'agency.manage_settings',
+        ]);
+        $privilegedRole->forceFill(['agency_id' => $agency->id])->save();
+        $memberId = $manager->memberships()->where('agency_id', $agency->id)->value('id');
+
+        $this->postJson('/api/agency/roles', [
+            'name' => 'Self Billing Admin',
+            'key' => 'self_billing_admin',
+            'permissions' => ['agency.view', 'agency.subscribe'],
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+
+        $this->putJson('/api/agency/roles/' . $privilegedRole->id, [
+            'permissions' => ['agency.view', 'agency.subscribe'],
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+
+        $this->patchJson('/api/agency/members/' . $memberId, [
+            'role_id' => $privilegedRole->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+
+        $this->patchJson('/api/agency/members/' . $memberId, [
+            'permissions' => ['agency.subscribe'],
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'privileged-invitee@example.test',
+            'role_id' => $privilegedRole->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+        $this->assertDatabaseMissing('agency_invitations', ['email' => 'privileged-invitee@example.test']);
+
+        $this->assertFalse($manager->fresh()->hasPermission('agency.subscribe', $agency->id));
+        $this->assertFalse($manager->fresh()->hasPermission('agency.manage_settings', $agency->id));
+    }
+
     public function test_agency_roles_cannot_grant_platform_permissions(): void
     {
-        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        // A manager may delegate only capabilities they personally hold.
+        [$manager] = $this->agencyUser(array_merge($this->staffPermissions(), [
+            'properties.view',
+            'crm.view',
+        ]), 'manager');
 
         $this->postJson('/api/agency/roles', [
             'name' => 'Escalated Role',

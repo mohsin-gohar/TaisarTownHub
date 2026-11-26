@@ -13,6 +13,7 @@ import {
 import { initialAgencyVideos } from '../data/agencyVideosSeed';
 import type { Property } from '../types';
 import { mapApiProperty } from '../utils/apiProperty';
+import { APP_MODE, allowsPublicSeedFallback } from '../config/appMode';
 
 // Production builds should set VITE_API_URL. If it is missing, fall back to the
 // same-origin `/api` reverse-proxy layout (the default in Dockerfile.prod) and
@@ -20,7 +21,7 @@ import { mapApiProperty } from '../utils/apiProperty';
 // aborts the whole SPA before React mounts and leaves a blank page.
 const configuredApiUrl = import.meta.env.VITE_API_URL;
 if (!configuredApiUrl && import.meta.env.PROD) {
-  console.error('VITE_API_URL is not set for this production build; using the bundled public catalog.');
+  console.error('VITE_API_URL is not set for this production build; using same-origin /api. Sample catalog fallback is disabled.');
 }
 export const API_BASE_URL = configuredApiUrl || (import.meta.env.PROD ? '/api' : 'http://127.0.0.1:8080/api');
 
@@ -203,7 +204,7 @@ export const api = {
   async getPublicProperties(): Promise<Property[] | null> {
     // Static deployments have no API origin; the bundled seed is already
     // sale-only and is the documented offline fallback.
-    if (!configuredApiUrl) return initialProperties.map((property) => ({ ...property }));
+    if (!configuredApiUrl && allowsPublicSeedFallback(APP_MODE)) return initialProperties.map((property) => ({ ...property }));
 
     try {
       const query = new URLSearchParams({ purpose: 'sale', per_page: '500' });
@@ -339,7 +340,7 @@ export const api = {
   },
 
   async getCatalog(): Promise<Record<string, unknown> | null> {
-    if (!configuredApiUrl) return buildStaticPublicCatalog();
+    if (!configuredApiUrl && allowsPublicSeedFallback(APP_MODE)) return buildStaticPublicCatalog();
     try {
       const res = await apiFetch('/catalog');
       if (!res.ok) return null;
@@ -366,6 +367,22 @@ export const api = {
         body: JSON.stringify({ collections }),
       });
       return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async saveCmsConfig(config: Record<string, unknown>): Promise<boolean> {
+    try {
+      const res = await apiFetch('/workspace', {
+        method: 'PUT',
+        body: JSON.stringify({ collections: { cms: config } }),
+      });
+      const body = await res.json().catch(() => ({}));
+      return res.ok
+        && body?.success === true
+        && body?.written?.cms === 1
+        && !(Array.isArray(body?.denied) && body.denied.includes('cms'));
     } catch {
       return false;
     }
@@ -518,7 +535,7 @@ export const api = {
   },
 
   /** Starts enrolment: returns the secret, the otpauth URI and recovery codes. */
-  async mfaSetup(): Promise<{
+  async mfaSetup(password: string): Promise<{
     success: boolean;
     secret?: string;
     otpauthUri?: string;
@@ -526,7 +543,7 @@ export const api = {
     error?: string;
   }> {
     try {
-      const res = await apiFetch('/auth/mfa/setup', { method: 'POST' });
+      const res = await apiFetch('/auth/mfa/setup', { method: 'POST', body: JSON.stringify({ password }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         return { success: false, error: body?.message || 'Two-factor enrolment could not be started.' };

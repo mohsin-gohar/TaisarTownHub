@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -91,23 +92,35 @@ class MfaService
      */
     public function consumeRecoveryCode(User $user, string $code): bool
     {
-        $stored = is_array($user->mfa_recovery_codes) ? $user->mfa_recovery_codes : [];
         $code = strtoupper(trim((string) $code));
-
-        if ($code === '' || $stored === []) {
+        if ($code === '') {
             return false;
         }
 
-        foreach ($stored as $index => $hash) {
-            if (Hash::check($code, $hash)) {
-                unset($stored[$index]);
-                $user->forceFill(['mfa_recovery_codes' => array_values($stored)])->save();
-
-                return true;
+        $consumed = DB::transaction(function () use ($user, $code): bool {
+            $lockedUser = User::whereKey($user->getKey())->lockForUpdate()->first();
+            if (!$lockedUser) {
+                return false;
             }
+
+            $stored = is_array($lockedUser->mfa_recovery_codes) ? $lockedUser->mfa_recovery_codes : [];
+            foreach ($stored as $index => $hash) {
+                if (Hash::check($code, $hash)) {
+                    unset($stored[$index]);
+                    $lockedUser->forceFill(['mfa_recovery_codes' => array_values($stored)])->save();
+
+                    return true;
+                }
+            }
+
+            return false;
+        }, 3);
+
+        if ($consumed) {
+            $user->refresh();
         }
 
-        return false;
+        return $consumed;
     }
 
     /* ------------------------------------------------------------------ */

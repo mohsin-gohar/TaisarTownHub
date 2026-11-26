@@ -10,6 +10,7 @@ use App\Models\Property;
 use App\Support\InquiryCaptcha;
 use App\Support\PlanLimits;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class InquiryController extends Controller
@@ -80,209 +81,222 @@ class InquiryController extends Controller
      */
     public function store(Request $request)
     {
-        // Honeypot: humans never see (nor fill) this field. Bots that do get
-        // a convincing 201 so they do not hammer the endpoint with retries —
-        // nothing is stored and no internal detail leaks.
-        if (trim((string) $request->input('companyWebsite', '')) !== '') {
+        $data = $request->validate([
+            'fullName' => 'required|string|min:2|max:255',
+            'phone' => 'required|string|max:30',
+            'email' => 'nullable|email|max:255',
+            'message' => 'required|string|max:5000',
+            'propertyId' => 'nullable|string|max:256',
+            'preferredPropertyOrProject' => 'nullable|string|max:255',
+            'budgetRange' => 'nullable|string|max:100',
+            'captchaToken' => 'required|string|max:1024',
+            'captchaAnswer' => 'required|string|max:20',
+            'companyWebsite' => 'nullable|string|max:255',
+        ]);
+
+        // Quietly discard automated submissions that fill the hidden field.
+        if (!empty($data['companyWebsite'])) {
             return response()->json([
-                'id' => 'inq-' . Str::uuid(),
-                'subject' => $request->input('subject', 'Property Consultation'),
-                'status' => 'Pending',
-                'submittedAt' => now()->format('Y-m-d H:i'),
+                'success' => true,
+                'message' => 'Your enquiry has been sent. Our team will contact you soon.',
             ], 201);
         }
 
-        $data = $request->validate([
-            'fullName' => 'required|string|max:255',
-            'phone' => 'required|string|max:20',
-            'message' => 'required|string|max:2000',
-            'email' => 'nullable|email|max:255',
-            'subject' => 'nullable|string|max:255',
-            'preferredPropertyOrProject' => 'nullable|string|max:255',
-            'budgetRange' => 'nullable|string|max:50',
-            'source' => 'nullable|string|max:50',
-            'propertyId' => 'nullable|string|max:256',
-            'property_id' => 'nullable|string|max:256',
-            'captchaToken' => 'required|string|max:1024',
-            'captchaAnswer' => 'required|string|max:8',
-        ]);
-
-        // Bot gate: the answer must match the signed, single-use, unexpired
-        // challenge. Failures return a validation-style 422 with a distinct
-        // machine-readable code so the SPA can fetch a fresh question.
         if (!InquiryCaptcha::verify($data['captchaToken'], $data['captchaAnswer'])) {
             return response()->json([
                 'success' => false,
                 'code' => 'captcha_failed',
-                'message' => 'The security answer was missing, wrong, or expired. Please answer the new question and resubmit.',
-                'errors' => ['captchaAnswer' => ['The security answer is incorrect or has expired.']],
+                'message' => 'Verification failed. Please solve the security check again.',
             ], 422);
         }
-        unset($data['captchaToken'], $data['captchaAnswer']);
 
-        // Sanitize input
-        $data['fullName'] = strip_tags($data['fullName']);
-        $data['message'] = strip_tags($data['message']);
-
-        // Resolve the referenced listing → its agency owns this lead.
-        $propertyId = $data['property_id'] ?? $data['propertyId'] ?? null;
-        unset($data['property_id'], $data['propertyId']);
-
-        $property = null;
-        if ($propertyId) {
-            $property = Property::publiclyVisible()->where('id', $propertyId)->first();
-            if (!$property) {
-                // Never leak whether a foreign/nonexistent id exists
-                $property = null;
-            }
+        $property = !empty($data['propertyId'])
+            ? Property::publiclyVisible()->where('id', $data['propertyId'])->first()
+            : null;
+        if (!empty($data['propertyId']) && !$property) {
+            return response()->json(['success' => false, 'message' => 'This listing is no longer available.'], 404);
         }
-
-        // G-8: plan limit — an agency whose lead quota is exhausted stops
-        // receiving public leads. The public message stays generic (no
-        // internal quota details leak to visitors).
-        if ($property && $property->agency_id) {
-            $leadAgency = Agency::find($property->agency_id);
-            if ($leadAgency && ($block = PlanLimits::block($leadAgency, 'leads'))) {
-                return response()->json([
-                    'success' => false,
-                    'code' => 'plan_limit_reached',
-                    'message' => 'This agency is not accepting new inquiries right now. Please contact them directly.',
-                ], 402);
-            }
-        }
+        $agencyId = $property?->agency_id;
+        $preferred = trim((string) ($data['preferredPropertyOrProject'] ?? $property?->title ?? ''));
+        $id = 'inq_' . bin2hex(random_bytes(8));
 
         $record = [
-            'id' => 'inq-' . Str::uuid(),
-            'fullName' => $data['fullName'],
-            'email' => $data['email'] ?? null,
+            'id' => $id,
+            'fullName' => strip_tags($data['fullName']),
+            'email' => $data['email'] ?? '',
             'phone' => $data['phone'],
-            'subject' => $data['subject'] ?? 'Property Consultation',
-            'message' => $data['message'],
-            'preferredPropertyOrProject' => $data['preferredPropertyOrProject']
-                ?? ($property?->title),
-            'budgetRange' => $data['budgetRange'] ?? null,
+            'subject' => 'Property Consultation',
+            'message' => strip_tags($data['message']),
+            'preferredPropertyOrProject' => $preferred,
+            'budgetRange' => $data['budgetRange'] ?? '',
             'status' => 'Pending',
-            'adminNotes' => 'Received via the public website.',
-            'source' => $data['source'] ?? 'React Web Portal',
-            'submittedAt' => now()->format('Y-m-d H:i'),
+            'adminNotes' => '',
+            'source' => 'public_website',
+            'propertyId' => $property?->id,
+            'createdAt' => now()->toIso8601String(),
+            'ipAddress' => $request->ip(),
         ];
-        BusinessRecord::put('inquiries', $record['id'], $record);
 
-        Inquiry::updateOrCreate(['id' => $record['id']], [
-            'fullName' => $record['fullName'],
-            'email' => $record['email'],
-            'phone' => $record['phone'],
-            'subject' => $record['subject'],
-            'message' => $record['message'],
-            'preferredPropertyOrProject' => $record['preferredPropertyOrProject'],
-            'budgetRange' => $record['budgetRange'],
-            'status' => 'Pending',
-            'adminNotes' => $record['adminNotes'],
-            'source' => $record['source'],
-            'agency_id' => $property?->agency_id,
-            'property_id' => $property?->id,
-            'lead_status' => 'new',
-        ]);
+        $result = DB::transaction(function () use ($agencyId, $id, $record, $data, $property, $request, $preferred): array {
+            if ($agencyId !== null) {
+                $agency = Agency::whereKey($agencyId)->lockForUpdate()->first();
+                if (!$agency || $agency->status !== 'active') {
+                    return ['error' => 'listing_unavailable'];
+                }
 
-        // Keep the legacy mirror row agency-tagged too
-        if ($property?->agency_id) {
-            BusinessRecord::where('collection', 'inquiries')
-                ->where('record_id', $record['id'])
-                ->update(['agency_id' => $property->agency_id]);
+                if ($block = PlanLimits::block($agency, 'leads', fn () => PlanLimits::leadUsed($agencyId))) {
+                    return ['blocked' => $block];
+                }
+
+                $currentProperty = Property::where('agency_id', $agencyId)
+                    ->lockForUpdate()
+                    ->find($property?->id);
+                if (!$currentProperty || !$currentProperty->isPubliclyVisible()) {
+                    return ['error' => 'listing_unavailable'];
+                }
+            }
+
+            BusinessRecord::put('inquiries', $id, $record, $agencyId);
+
+            Inquiry::updateOrCreate(
+                ['id' => $id],
+                [
+                    'agency_id' => $agencyId,
+                    'property_id' => $property?->id,
+                    'fullName' => strip_tags($data['fullName']),
+                    'email' => $data['email'] ?? null,
+                    'phone' => $data['phone'],
+                    'subject' => 'Property Consultation',
+                    'message' => strip_tags($data['message']),
+                    'preferredPropertyOrProject' => $preferred,
+                    'budgetRange' => $data['budgetRange'] ?? null,
+                    'status' => 'Pending',
+                    'adminNotes' => null,
+                    'source' => 'public_website',
+                    'lead_status' => 'new',
+                ]
+            );
+
+            return ['saved' => true];
+        }, 3);
+
+        if (isset($result['blocked'])) {
+            // Public visitors must not learn an agency's internal plan or quota.
+            return response()->json([
+                'success' => false,
+                'code' => 'plan_limit_reached',
+                'message' => 'This agency is not accepting new inquiries right now. Please try again later.',
+            ], 402);
+        }
+        if (($result['error'] ?? null) === 'listing_unavailable') {
+            return response()->json(['success' => false, 'message' => 'This listing is no longer available.'], 404);
         }
 
-        return response()->json($record, 201);
+        return response()->json([
+            'success' => true,
+            'message' => 'Your enquiry has been sent. Our team will contact you soon.',
+            'id' => $id,
+        ], 201);
     }
 
-    /**
-     * Update inquiry status.
-     *
-     * Requires a write-level CRM permission — read-only `view_inquiries` /
-     * `crm.view` must never be able to mutate inquiry state.
-     */
     public function updateStatus(Request $request, $id)
     {
         $this->requireAny($request, ['crm.update_lead', 'crm.delete_lead']);
-
-        $request->validate([
+        $data = $request->validate([
             'status' => 'required|string|in:Pending,Contacted,In Progress,Resolved',
         ]);
 
         $inquiry = $this->findScopedForAgent($request, $id);
         $agencyId = $this->agencyId($request);
 
-        $from = $inquiry->status;
-        $inquiry->update(['status' => $request->status]);
+        [$updated, $from] = DB::transaction(function () use ($inquiry, $data): array {
+            $locked = Inquiry::whereKey($inquiry->id)->lockForUpdate()->firstOrFail();
+            $from = $locked->status;
+            $locked->update(['status' => $data['status']]);
 
-        // Keep the legacy BusinessRecord mirror in sync.
-        \App\Models\BusinessRecord::where('collection', 'inquiries')
-            ->where('record_id', $inquiry->id)
-            ->update(['status' => $request->status]);
+            $legacy = BusinessRecord::where('collection', 'inquiries')
+                ->where('record_id', $locked->id)
+                ->lockForUpdate()
+                ->first();
+            if ($legacy) {
+                $payload = is_array($legacy->payload) ? $legacy->payload : [];
+                $payload['status'] = $data['status'];
+                $legacy->payload = $payload;
+                $legacy->save();
+            }
 
-        $this->writeAudit($request, 'inquiry.status', (string) $inquiry->id,
-            "Inquiry {$from} → {$request->status}", [
+            return [$locked->fresh(), $from];
+        }, 3);
+
+        $this->writeAudit($request, 'inquiry.status', (string) $updated->id,
+            "Inquiry {$from} → {$data['status']}", [
                 'agency_id' => $agencyId,
                 'entity_type' => 'inquiry',
-                'entity_id' => (string) $inquiry->id,
-                'metadata' => ['from' => $from, 'to' => $request->status],
+                'entity_id' => (string) $updated->id,
+                'metadata' => ['from' => $from, 'to' => $data['status']],
             ]);
 
-        return response()->json($inquiry);
+        return response()->json($this->presentInquiry($updated));
     }
 
-    /**
-     * PATCH /api/inquiries/{id}/notes — update internal agent notes.
-     * Requires crm.update_lead.
-     */
     public function updateNotes(Request $request, $id)
     {
         $this->requireAny($request, ['crm.update_lead']);
-
-        $request->validate([
+        $data = $request->validate([
             'notes' => 'nullable|string|max:4000',
         ]);
 
         $inquiry = $this->findScopedForAgent($request, $id);
         $agencyId = $this->agencyId($request);
+        $notes = $data['notes'] ?? '';
 
-        $inquiry->update(['adminNotes' => $request->input('notes', '')]);
+        $updated = DB::transaction(function () use ($inquiry, $notes): Inquiry {
+            $locked = Inquiry::whereKey($inquiry->id)->lockForUpdate()->firstOrFail();
+            $locked->update(['adminNotes' => $notes]);
 
-        // Keep the legacy BusinessRecord mirror in sync.
-        \App\Models\BusinessRecord::where('collection', 'inquiries')
-            ->where('record_id', $inquiry->id)
-            ->update(['adminNotes' => $request->input('notes', '')]);
+            $legacy = BusinessRecord::where('collection', 'inquiries')
+                ->where('record_id', $locked->id)
+                ->lockForUpdate()
+                ->first();
+            if ($legacy) {
+                $payload = is_array($legacy->payload) ? $legacy->payload : [];
+                $payload['adminNotes'] = $notes;
+                $legacy->payload = $payload;
+                $legacy->save();
+            }
 
-        $this->writeAudit($request, 'inquiry.notes', (string) $inquiry->id,
-            "Inquiry notes updated", [
+            return $locked->fresh();
+        }, 3);
+
+        $this->writeAudit($request, 'inquiry.notes', (string) $updated->id,
+            'Inquiry notes updated', [
                 'agency_id' => $agencyId,
                 'entity_type' => 'inquiry',
-                'entity_id' => (string) $inquiry->id,
+                'entity_id' => (string) $updated->id,
             ]);
 
-        return response()->json($inquiry);
+        return response()->json($this->presentInquiry($updated));
     }
 
-    /**
-     * DELETE /api/inquiries/{id} — delete an inquiry.
-     * Requires crm.delete_lead.
-     */
     public function destroy(Request $request, $id)
     {
         $this->requireAny($request, ['crm.delete_lead']);
-
         $inquiry = $this->findScopedForAgent($request, $id);
         $agencyId = $this->agencyId($request);
+        $fullName = $inquiry->fullName;
 
-        // Keep the legacy BusinessRecord mirror in sync so no orphaned
-        // rows remain after deletion.
-        \App\Models\BusinessRecord::where('collection', 'inquiries')
-            ->where('record_id', $inquiry->id)
-            ->delete();
+        DB::transaction(function () use ($inquiry): void {
+            $locked = Inquiry::whereKey($inquiry->id)->lockForUpdate()->firstOrFail();
 
-        $inquiry->delete();
+            BusinessRecord::where('collection', 'inquiries')
+                ->where('record_id', $locked->id)
+                ->delete();
+
+            $locked->delete();
+        }, 3);
 
         $this->writeAudit($request, 'inquiry.delete', (string) $inquiry->id,
-            "Inquiry deleted: {$inquiry->fullName}", [
+            "Inquiry deleted: {$fullName}", [
                 'agency_id' => $agencyId,
                 'entity_type' => 'inquiry',
                 'entity_id' => (string) $inquiry->id,
@@ -314,6 +328,27 @@ class InquiryController extends Controller
         }
 
         return $inquiry;
+    }
+
+    private function presentInquiry(Inquiry $inquiry): array
+    {
+        // CNIC is retained only in the legacy inquiry payload, not on the
+        // normalized Inquiry model. CRM mutation responses may expose its
+        // masked form only; never serialize the raw value.
+        $payload = $inquiry->toArray();
+        $legacyQuery = BusinessRecord::where('collection', 'inquiries')
+            ->where('record_id', $inquiry->id);
+        $inquiry->agency_id === null
+            ? $legacyQuery->whereNull('agency_id')
+            : $legacyQuery->where('agency_id', $inquiry->agency_id);
+        $legacy = $legacyQuery->first();
+        $legacyPayload = is_array($legacy?->payload) ? $legacy->payload : [];
+        $cnic = $legacyPayload['cnic'] ?? null;
+        $payload['cnic'] = filled($cnic)
+            ? $this->maskCnic((string) $cnic)
+            : null;
+
+        return $payload;
     }
 
     private function maskCnic(string $cnic): string

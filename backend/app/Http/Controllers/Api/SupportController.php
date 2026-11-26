@@ -7,6 +7,7 @@ use App\Models\SupportMessage;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -71,23 +72,27 @@ class SupportController extends Controller
         // Agency link comes from the membership context, never from input.
         $agencyId = $this->agencyId($request);
 
-        $ticket = SupportTicket::create([
-            'id' => 'tkt_' . bin2hex(random_bytes(8)),
-            'agency_id' => $agencyId,
-            'user_id' => $user->id,
-            'subject' => strip_tags($data['subject']),
-            'category' => $data['category'] ?? 'general',
-            'priority' => $data['priority'] ?? 'normal',
-            'status' => 'open',
-        ]);
+        [$ticket, $message] = DB::transaction(function () use ($user, $data, $agencyId): array {
+            $ticket = SupportTicket::create([
+                'id' => 'tkt_' . bin2hex(random_bytes(8)),
+                'agency_id' => $agencyId,
+                'user_id' => $user->id,
+                'subject' => strip_tags($data['subject']),
+                'category' => $data['category'] ?? 'general',
+                'priority' => $data['priority'] ?? 'normal',
+                'status' => 'open',
+            ]);
 
-        SupportMessage::create([
-            'ticket_id' => $ticket->id,
-            'user_id' => $user->id,
-            'is_staff' => false,
-            'body' => strip_tags($data['body']),
-            'created_at' => now(),
-        ]);
+            $message = SupportMessage::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $user->id,
+                'is_staff' => false,
+                'body' => strip_tags($data['body']),
+                'created_at' => now(),
+            ]);
+
+            return [$ticket, $message];
+        }, 3);
 
         $this->writeAudit($request, 'support.ticket_created', $ticket->id,
             "Support ticket: {$ticket->subject}", [
@@ -101,17 +106,32 @@ class SupportController extends Controller
             'success' => true,
             'message' => 'Ticket created. Our support team will respond soon.',
             'ticket' => $this->present($ticket->fresh()),
+            'message_entry' => [
+                'id' => $message->id,
+                'body' => $message->body,
+                'is_staff' => false,
+                'author_name' => $user->name,
+                'created_at' => $message->created_at?->toIso8601String(),
+            ],
         ], 201);
     }
 
-    /** GET /api/support/tickets/{id} — ticket with its full message thread. */
     public function show(Request $request, string $id)
     {
         $ticket = $this->findVisible($request, $id);
 
         $ticket->load(['creator:id,name', 'assignee:id,name']);
 
-        $messages = $ticket->messages()->with('author:id,name')->get()->map(fn (SupportMessage $m) => [
+        $messageQuery = $ticket->messages()->with('author:id,name');
+        $messagesTotal = (clone $messageQuery)->count();
+        $messages = $messageQuery
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(100)
+            ->get()
+            ->reverse()
+            ->values()
+            ->map(fn (SupportMessage $m) => [
             'id' => $m->id,
             'body' => $m->body,
             'is_staff' => $m->is_staff,
@@ -123,6 +143,8 @@ class SupportController extends Controller
             'success' => true,
             'ticket' => $this->present($ticket),
             'messages' => $messages,
+            'messages_total' => $messagesTotal,
+            'messages_truncated' => $messagesTotal > 100,
         ]);
     }
 
@@ -130,43 +152,53 @@ class SupportController extends Controller
     public function storeMessage(Request $request, string $id)
     {
         $user = $request->user();
-        $ticket = $this->findVisible($request, $id);
-
+        $this->findVisible($request, $id);
         $isStaff = $this->can($request, 'admin.support_tickets');
 
         $data = $request->validate([
             'body' => 'required|string|min:2|max:5000',
         ]);
 
-        if ($ticket->status === 'closed' && !$isStaff) {
+        $result = DB::transaction(function () use ($request, $id, $user, $isStaff, $data): array {
+            $ticket = SupportTicket::whereKey($id)->lockForUpdate()->firstOrFail();
+
+            if ($ticket->status === 'closed' && !$isStaff) {
+                return ['error' => 'closed'];
+            }
+
+            $message = SupportMessage::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $user->id,
+                'is_staff' => $isStaff,
+                'body' => strip_tags($data['body']),
+                'created_at' => now(),
+            ]);
+
+            if ($isStaff) {
+                $ticket->first_response_at = $ticket->first_response_at ?? now();
+                if ($ticket->status === 'resolved') {
+                    $ticket->status = 'open';
+                    $ticket->resolved_at = null;
+                }
+                $ticket->save();
+            } elseif ($ticket->status === 'resolved') {
+                $ticket->status = 'open';
+                $ticket->resolved_at = null;
+                $ticket->save();
+            }
+
+            return ['ticket' => $ticket->fresh(), 'message' => $message];
+        }, 3);
+
+        if (($result['error'] ?? null) === 'closed') {
             return response()->json([
                 'success' => false,
                 'message' => 'This ticket is closed. Raise a new ticket if the issue persists.',
             ], 422);
         }
 
-        $message = SupportMessage::create([
-            'ticket_id' => $ticket->id,
-            'user_id' => $user->id,
-            'is_staff' => $isStaff,
-            'body' => strip_tags($data['body']),
-            'created_at' => now(),
-        ]);
-
-        // First staff reply stamps the response-time metric; a user reply on a
-        // resolved ticket re-opens it for staff attention.
-        if ($isStaff) {
-            $ticket->first_response_at = $ticket->first_response_at ?? now();
-            if ($ticket->status === 'resolved') {
-                $ticket->status = 'open';
-                $ticket->resolved_at = null;
-            }
-            $ticket->save();
-        } elseif (in_array($ticket->status, ['resolved'], true)) {
-            $ticket->status = 'open';
-            $ticket->resolved_at = null;
-            $ticket->save();
-        }
+        /** @var SupportMessage $message */
+        $message = $result['message'];
 
         return response()->json([
             'success' => true,
@@ -178,38 +210,46 @@ class SupportController extends Controller
                 'author_name' => $user->name,
                 'created_at' => $message->created_at?->toIso8601String(),
             ],
+            'ticket' => $this->present($result['ticket']),
         ], 201);
     }
 
-    /**
-     * POST /api/support/tickets/{id}/status — transition the ticket state.
-     * Creators may close/reopen their own tickets; staff may set any state.
-     */
     public function updateStatus(Request $request, string $id)
     {
         $user = $request->user();
-        $ticket = $this->findVisible($request, $id);
-
+        $this->findVisible($request, $id);
         $isStaff = $this->can($request, 'admin.support_tickets');
-        $isCreator = $ticket->user_id === $user->id;
-
-        if (!$isStaff && !$isCreator) {
-            abort(403, 'Only the ticket creator or support staff can change its status.');
-        }
 
         $data = $request->validate([
             'status' => 'required|string|in:' . implode(',', SupportTicket::STATUSES),
         ]);
 
-        $status = $data['status'];
-        $ticket->status = $status;
-        $ticket->closed_at = $status === 'closed' ? now() : null;
-        $ticket->resolved_at = $status === 'resolved' ? now() : null;
-        if ($status === 'resolved' && $ticket->first_response_at === null && $isStaff) {
-            $ticket->first_response_at = now();
-        }
-        $ticket->save();
+        $result = DB::transaction(function () use ($request, $id, $user, $isStaff, $data): array {
+            $ticket = SupportTicket::whereKey($id)->lockForUpdate()->firstOrFail();
+            $isCreator = $ticket->user_id === $user->id;
 
+            if (!$isStaff && !$isCreator) {
+                return ['error' => 'forbidden'];
+            }
+
+            $status = $data['status'];
+            $ticket->status = $status;
+            $ticket->closed_at = $status === 'closed' ? now() : null;
+            $ticket->resolved_at = $status === 'resolved' ? now() : null;
+            if ($status === 'resolved' && $ticket->first_response_at === null && $isStaff) {
+                $ticket->first_response_at = now();
+            }
+            $ticket->save();
+
+            return ['ticket' => $ticket->fresh()];
+        }, 3);
+
+        if (($result['error'] ?? null) === 'forbidden') {
+            abort(403, 'Only the ticket creator or support staff can change its status.');
+        }
+
+        $ticket = $result['ticket'];
+        $status = $ticket->status;
         $this->writeAudit($request, 'support.ticket_status', $ticket->id,
             "Ticket status → {$status}: {$ticket->subject}", [
                 'agency_id' => $ticket->agency_id,
@@ -224,9 +264,6 @@ class SupportController extends Controller
         ]);
     }
 
-    /* ==================== Platform staff side ==================== */
-
-    /** GET /api/admin/support-tickets — every ticket, filterable (staff). */
     public function adminIndex(Request $request)
     {
         $this->requirePermission($request, 'admin.support_tickets');
@@ -283,8 +320,6 @@ class SupportController extends Controller
     {
         $this->requirePermission($request, 'admin.support_tickets');
 
-        $ticket = SupportTicket::findOrFail($id);
-
         $data = $request->validate([
             'assigned_to' => [
                 'required',
@@ -295,7 +330,12 @@ class SupportController extends Controller
             ],
         ]);
 
-        $ticket->forceFill(['assigned_to' => $data['assigned_to']])->save();
+        $ticket = DB::transaction(function () use ($id, $data): SupportTicket {
+            $ticket = SupportTicket::whereKey($id)->lockForUpdate()->firstOrFail();
+            $ticket->forceFill(['assigned_to' => $data['assigned_to']])->save();
+
+            return $ticket->fresh(['assignee:id,name']);
+        }, 3);
 
         $this->writeAudit($request, 'support.ticket_assigned', $ticket->id,
             "Ticket assigned to user #{$data['assigned_to']}", [
@@ -308,7 +348,7 @@ class SupportController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Ticket assigned.',
-            'ticket' => $this->present($ticket->fresh(['assignee:id,name'])),
+            'ticket' => $this->present($ticket),
         ]);
     }
 

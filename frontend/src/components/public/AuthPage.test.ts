@@ -51,3 +51,15 @@ test('AuthPage registration collects the same fields the backend accepts and nev
     'CNIC must not be collected by public self-registration'
   );
 });
+test('Google sign-in UI is hidden unless the OAuth build flag is enabled', () => {
+  const source = read('./AuthPage.tsx');
+  assert.ok(source.includes("import.meta.env.VITE_GOOGLE_OAUTH_ENABLED === 'true'"));
+  assert.ok(source.includes('{GOOGLE_OAUTH_ENABLED && ('));
+});
+
+test('Google sign-in uses cryptographic nonce generation and reloads the authenticated workspace', () => {
+  const source = read('./AuthPage.tsx');
+  assert.equal(source.includes('crypto.getRandomValues(bytes)'), true);
+  assert.equal(source.includes('Math.random()'), false);
+  assert.equal(source.includes("window.location.assign('/admin')"), true);
+});

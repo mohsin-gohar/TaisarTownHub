@@ -2,70 +2,82 @@
 
 (Consolidated from the former root `BACKUP_GUIDE.md`; content preserved. Helper scripts: `scripts/backup.sh`, `scripts/restore-drill.ps1`.)
 
-Backup = **database** + **private document vault** + **queue/session state**. Restoring only the database leaves the vault empty; restoring only the vault leaves the DB referencing missing files. Always take and restore both.
+Backup = **database** + **application storage** (private documents, quarantine and public media). Restoring only the database leaves file rows pointing at missing bytes; restoring only storage leaves files without their database ownership and audit records. Redis queues/sessions are ephemeral and are not included: after a restore, restart workers and require users to sign in again.
 
 ## 1. What must be backed up
 
 | Asset | Path | Why |
 |---|---|---|
 | Database | MySQL data dir (or logical dump) | All tenants, RBAC, finance, audit |
-| Document vault | `backend/storage/app/private/documents` | Agency documents, versions, shares |
-| Media assets | `backend/storage/app/public/media` (if used) | Public media served by the API |
-| Environment | `backend/.env` (stored separately, encrypted) | Keys/credentials — never in the same bucket as the data |
+| Private storage | `backend/storage/app/private` | Documents, versions, encrypted uploads, quarantine and any future private disks |
+| Public storage | `backend/storage/app/public` | Public map images and media assets |
+| Quarantine volume | Docker named volume `quarantine_storage`, mounted at `private/quarantine` | Rejected uploads retained for rescan and audit |
+| Environment | repository-root `.env` for Docker Compose (or `backend/.env` for host-only Laravel) | Keys/credentials — never in the same bucket as the data |
 | Laravel secrets | `APP_KEY` | Without it the encrypted columns (CNIC, MFA secrets) are unreadable |
 
 ## 2. Creating a backup
 
-```bash
-cd /var/www/taisartownhub/backend
-mkdir -p storage/app/backups
-STAMP=$(date +%Y%m%d_%H%M%S)
-mysqldump --single-transaction --routines --triggers \
-  -u "$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE" \
-  | gzip > "storage/app/backups/tth_db_${STAMP}.sql.gz"
-sha256sum "storage/app/backups/tth_db_${STAMP}.sql.gz" > "storage/app/backups/tth_db_${STAMP}.sql.gz.sha256"
+Run the repository backup helper from the repository root while the production Docker Compose `backend` and `mysql` services are healthy. It reads the root Compose `.env` first (falling back to `backend/.env` for host-only runs), dumps MySQL from the live MySQL container, and archives the actual named volumes through the running backend container. It never treats the host's shadowed `backend/storage` directory as the Docker volume. DB credentials stay out of process arguments (a mode-`0600` temporary option file is used for the dump); the database and storage artefacts are verified, checksummed and retained under the daily/weekly/monthly policy.
 
-tar -czf "storage/app/backups/tth_vault_${STAMP}.tar.gz" -C storage/app/private documents
-sha256sum "storage/app/backups/tth_vault_${STAMP}.tar.gz" > "storage/app/backups/tth_vault_${STAMP}.tar.gz.sha256"
+```bash
+cd /var/www/taisartownhub
+export TTH_BACKUP_DIR=/secure/backups/taisartownhub
+bash scripts/backup.sh "$TTH_BACKUP_DIR"
 ```
 
-`--single-transaction` keeps the dump consistent without locking InnoDB tables.
+The storage archive preserves paths relative to `backend/storage/app`: the complete `private` directory (including the shared documents and quarantine volumes) and `public` when present. The file payloads are encrypted at rest by the application; the backup destination must still be an encrypted volume or encrypted bucket because the database dump contains other sensitive operational data. Do not stop the backend or MySQL services during the backup.
+
 
 ## 3. Verification (mandatory — a backup that was never restored is not a backup)
 
 ```bash
-zcat storage/app/backups/tth_db_${STAMP}.sql.gz | head -n 5              # header readable
-zcat storage/app/backups/tth_db_${STAMP}.sql.gz | grep -c "CREATE TABLE" # table count > 0
-tar -tzf storage/app/backups/tth_vault_${STAMP}.tar.gz | head            # vault listing readable
+zcat "$TTH_BACKUP_DIR/tth_db_${STAMP}.sql.gz" | head -n 5
+zcat "$TTH_BACKUP_DIR/tth_db_${STAMP}.sql.gz" | grep -c "CREATE TABLE"
+tar -tzf "$TTH_BACKUP_DIR/tth_vault_${STAMP}.tar.gz" | head
+sha256sum -c "$TTH_BACKUP_DIR/manifest-${STAMP}.sha256"
 ```
 
 Record dump size and table count in the change log. A 0-byte dump or 0 table count means the backup failed — do **not** proceed to a migration.
 
 ## 4. Restoring
 
+Restore into an isolated recovery environment first. Keep the same `APP_KEY` that encrypted the source data. The database dump and application-storage archive must use the same timestamp. These commands restore into the Docker named volumes, not the host's shadowed `backend/storage` directory.
+
 ```bash
-# 0. stop writers so nothing lands mid-restore
-sudo supervisorctl stop tth-worker
-sudo systemctl stop nginx || true
+cd /var/www/taisartownhub
+set -euo pipefail
+export TTH_BACKUP_DIR=/secure/backups/taisartownhub
 
-# 1. restore the database
-gunzip -c storage/app/backups/tth_db_<STAMP>.sql.gz | \
-  mysql -u "$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE"
+# 0. Stop application writers; leave MySQL running.
+docker compose stop nginx frontend backend worker scheduler
 
-# 2. restore the vault
-tar -xzf storage/app/backups/tth_vault_<STAMP>.tar.gz -C storage/app/private
+# 1. Read the database name from the root Compose .env (no password printed).
+TMP_MYSQL_CNF="$(mktemp)"
+TMP_DB_META="$(mktemp)"
+php scripts/write-mysql-defaults.php "$PWD" "$PWD/backend" "$TMP_MYSQL_CNF" "$TMP_DB_META"
+DB_NAME="$(sed -n '2p' "$TMP_DB_META")"
+rm -f "$TMP_MYSQL_CNF" "$TMP_DB_META"
 
-# 3. permissions
-chown -R www-data:www-data storage/app/private/documents
-chmod -R 750 storage/app/private/documents
+# 2. Restore inside MySQL. The password is inherited from the container's
+#    environment and is never placed in process arguments.
+gunzip -c "$TTH_BACKUP_DIR/tth_db_<STAMP>.sql.gz" | docker compose exec -T mysql sh -c '
+  MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u root "$1"
+' tth-restore "$DB_NAME"
 
-# 4. verify + restart
-php artisan migrate:status           # expect: nothing pending
-php artisan app:production-check --strict
-php artisan queue:retry all
-sudo supervisorctl start tth-worker
-sudo systemctl start nginx
+# 3. Restore the storage archive into the named volumes via a one-off backend
+#    container. This preserves private/documents, private/quarantine and public.
+docker compose run --rm --no-deps -T --entrypoint sh backend -c 'tar -xzf - -C /var/www/html/storage/app' < "$TTH_BACKUP_DIR/tth_vault_<STAMP>.tar.gz"
+
+# 4. Restore ownership/permissions in the same mounted volumes.
+docker compose run --rm --no-deps --user root --entrypoint sh backend -c 'chown -R www-data:www-data /var/www/html/storage/app/private /var/www/html/storage/app/public && chmod -R 750 /var/www/html/storage/app/private'
+
+# 5. Start services and verify.
+docker compose up -d frontend nginx backend worker scheduler
+docker compose exec backend php artisan migrate:status
+docker compose exec --user www-data backend php artisan app:production-check --strict --json
 ```
+
+Review `failed_jobs` before retrying anything. Do not blindly run `queue:retry all`: jobs that are not idempotent can repeat external side effects. Confirm the `APP_KEY` matches the source environment; changing it makes encrypted columns unreadable.
 
 ### Restore drill checklist
 
@@ -92,8 +104,8 @@ sudo systemctl start nginx
 
 | Asset | Retention | Automation |
 |---|---|---|
-| DB dumps | daily 7 / weekly 4 / monthly 6 | cron + `sha256sum` manifest |
-| Vault archives | daily 7 / weekly 4 | cron |
+| DB dumps | daily 7 / weekly 4 / monthly 6 | `scripts/prune-backups.php` + `sha256sum` manifest |
+| Application storage archives | daily 7 / weekly 4 / monthly 6 | `scripts/prune-backups.php` (invoked by `backup.sh`) |
 | `failed_jobs` | 7 days (auto-pruned by the scheduler) | `queue:prune-failed --hours=168` |
 | Sanctum tokens | 24 h expiry (auto-pruned) | `sanctum:prune-expired --hours=48` |
 

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Commission;
 use App\Models\Dealer;
+use App\Models\BusinessRecord;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
 use App\Models\PaymentSchedule;
@@ -21,7 +22,8 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'finance.view', 'view_transactions', 'finance.create_transaction',
             'create_transactions', 'finance.update_transaction', 'update_transactions',
             'finance.manage_payments', 'manage_payments', 'finance.view_commissions',
-            'view_commissions', 'void_transactions', 'manage_deals',
+            'view_commissions', 'void_transactions', 'legacy.cancel_transactions', 'manage_deals',
+            'pay_commissions',
         ];
     }
 
@@ -44,9 +46,14 @@ class FinanceLifecycleTest extends EnterpriseTestCase
 
     private function patchStatus($user, string $id, string $status)
     {
+        $payload = ['dealStatus' => $status];
+        if ($status === 'Cancelled') {
+            $payload['reason'] = 'Test cancellation reason';
+        }
+
         return $this->patchJson(
             "/api/agency/transactions/{$id}",
-            ['dealStatus' => $status],
+            $payload,
             $this->authHeaders($this->tokenFor($user))
         );
     }
@@ -142,6 +149,196 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->patchStatus($user, $deal['id'], 'Negotiation')
             ->assertStatus(422)
             ->assertJsonFragment(['message' => 'Deal is cancelled — the record is read-only for bookkeeping.']);
+    }
+
+    public function test_completed_deal_is_read_only_even_for_non_status_updates(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+
+        foreach (['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Completed'] as $stage) {
+            $this->patchStatus($user, $deal['id'], $stage)->assertStatus(200);
+        }
+
+        $this->patchJson(
+            "/api/agency/transactions/{$deal['id']}",
+            ['propertyTitle' => 'Attempted post-completion edit'],
+            $this->authHeaders($this->tokenFor($user))
+        )->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Completed deals are read-only.']);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $deal['id'],
+            'propertyTitle' => 'Finance Test Plot',
+            'dealStatus' => 'Completed',
+        ]);
+    }
+
+    public function test_received_payment_cannot_be_deleted_to_bypass_the_void_guard(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+        $paymentId = $deal['payments'][0]['id'];
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->deleteJson("/api/agency/payments/{$paymentId}", [
+            'reason' => 'Attempted payment deletion',
+        ], $headers)->assertStatus(409)
+            ->assertJsonFragment(['message' => 'Recorded payments cannot be deleted. Create a refund entry to reverse collected funds.']);
+
+        $this->assertDatabaseHas('transaction_payments', [
+            'id' => $paymentId,
+            'transaction_id' => $deal['id'],
+        ]);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Attempted void after payment deletion',
+        ], $headers)->assertStatus(409);
+    }
+
+    public function test_payment_endpoint_rechecks_void_state_before_writing(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Duplicate deal record',
+        ], $headers)->assertOk();
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 1000,
+            'type' => 'advance',
+        ], $headers)->assertStatus(409);
+
+        $this->assertDatabaseMissing('transaction_payments', [
+            'transaction_id' => $deal['id'],
+            'amount' => 1000,
+        ]);
+    }
+
+    public function test_cancellation_requires_the_dedicated_permission_and_a_reason(): void
+    {
+        [$updater] = $this->agencyUser([
+            'finance.create_transaction', 'finance.update_transaction',
+        ]);
+        $deal = $this->createDeal($updater, ['advancePaymentPKR' => 0]);
+        $headers = $this->authHeaders($this->tokenFor($updater));
+
+        $this->patchJson("/api/agency/transactions/{$deal['id']}", [
+            'dealStatus' => 'Cancelled',
+            'reason' => 'Duplicate record',
+        ], $headers)->assertStatus(403);
+
+        [$canceller] = $this->agencyUser([
+            'finance.create_transaction', 'legacy.cancel_transactions',
+        ]);
+        $cancelDeal = $this->createDeal($canceller, ['advancePaymentPKR' => 0]);
+        $cancelHeaders = $this->authHeaders($this->tokenFor($canceller));
+
+        $this->patchJson("/api/agency/transactions/{$cancelDeal['id']}", [
+            'dealStatus' => 'Cancelled',
+        ], $cancelHeaders)->assertStatus(422);
+
+        $this->patchJson("/api/agency/transactions/{$cancelDeal['id']}", [
+            'dealStatus' => 'Cancelled',
+            'reason' => 'Duplicate record',
+        ], $cancelHeaders)->assertStatus(200)
+            ->assertJsonPath('transaction.dealStatus', 'Cancelled');
+    }
+
+    public function test_void_rejects_a_nonzero_advance_summary_without_payment_rows(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        Transaction::whereKey($deal['id'])->update(['advancePaymentPKR' => 5000]);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Legacy advance requires reconciliation',
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(409);
+    }
+
+    public function test_void_rejects_completed_deals_even_when_the_payment_ledger_is_empty(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        foreach (['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Completed'] as $stage) {
+            $this->patchStatus($user, $deal['id'], $stage)->assertStatus(200);
+        }
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Attempted completed deal void',
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(409);
+    }
+
+    public function test_void_rejects_paid_at_commissions_even_if_status_is_not_paid(): void
+    {
+        [$user, $agency] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        Commission::create([
+            'agency_id' => $agency->id,
+            'transaction_id' => $deal['id'],
+            'amount' => 1000,
+            'rate' => 1,
+            'status' => 'accrued',
+            'paid_at' => now(),
+        ]);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Paid commission requires reversal',
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(409);
+    }
+
+    public function test_void_checks_legacy_workspace_payment_rows_and_mirrors_successful_closeout(): void
+    {
+        [$user, $agency] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        BusinessRecord::put('payments', 'legacy-payment-' . $deal['id'], [
+            'transactionId' => $deal['id'],
+            'amountPKR' => 2500,
+            'type' => 'payment',
+        ], $agency->id);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Legacy payment exists',
+        ], $headers)->assertStatus(409);
+
+        BusinessRecord::put('payments', 'legacy-payment-' . $deal['id'], [
+            'transactionId' => $deal['id'],
+            'amountPKR' => 0,
+            'type' => 'refund',
+        ], $agency->id);
+
+        BusinessRecord::put('transactions', $deal['id'], [
+            'id' => $deal['id'],
+            'status' => 'Draft',
+            'dealStatus' => 'Draft',
+            'commissionStatus' => 'Pending',
+        ], $agency->id);
+        BusinessRecord::put('commissions', 'legacy-commission-' . $deal['id'], [
+            'transactionId' => $deal['id'],
+            'status' => 'accrued',
+            'paidPKR' => 0,
+        ], $agency->id);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Duplicate deal record',
+        ], $headers)->assertOk();
+
+        $this->assertDatabaseHas('business_records', [
+            'collection' => 'transactions',
+            'record_id' => $deal['id'],
+        ]);
+        $legacyTransaction = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $deal['id'])->firstOrFail();
+        $this->assertSame('Cancelled', $legacyTransaction->payload['dealStatus']);
+        $this->assertTrue($legacyTransaction->payload['voided']);
+
+        $legacyCommission = BusinessRecord::where('collection', 'commissions')
+            ->where('record_id', 'legacy-commission-' . $deal['id'])->firstOrFail();
+        $this->assertSame('Cancelled', $legacyCommission->payload['status']);
     }
 
     public function test_seeded_agency_manager_can_create_and_update_a_deal(): void
@@ -274,11 +471,12 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
             'reason' => 'Buyer withdrew',
         ], $headers)->assertStatus(409)
-            ->assertJsonPath('message', 'Refund or reconcile all collected payments before voiding this deal.');
+            ->assertJsonPath('message', 'Refund or reconcile all advance and collected payments before voiding this deal.');
 
         $refund = $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 2500000,
             'type' => 'refund',
+            'notes' => 'test refund',
         ], $headers)->assertStatus(201)->json('payment');
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
@@ -301,7 +499,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
     public function test_void_is_blocked_when_a_commission_has_already_been_paid(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
-        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 10000000]);
         $headers = $this->authHeaders($this->tokenFor($user));
 
         $commission = $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
@@ -310,8 +508,19 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         ], $headers)->assertStatus(201)->json('commission');
 
         $this->patchJson("/api/agency/commissions/{$commission['id']}", [
+            'status' => 'accrued',
+        ], $headers)->assertOk();
+
+        $this->patchJson("/api/agency/commissions/{$commission['id']}", [
             'status' => 'paid',
         ], $headers)->assertOk();
+
+        // Refund all collected payments so the void reaches the paid-commission guard.
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 10000000,
+            'type' => 'refund',
+            'notes' => 'test refund',
+        ], $headers)->assertStatus(201);
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
             'reason' => 'Attempt to void after payout',
@@ -395,6 +604,37 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->assertSame(0, Commission::where('transaction_id', $deal['id'])->count());
     }
 
+    public function test_finance_subledger_writes_require_an_explicit_agency_context(): void
+    {
+        $user = $this->makeUser('super_admin');
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $transactionId = 'legacy-global-finance-row';
+
+        $this->postJson("/api/agency/transactions/{$transactionId}/payments", [
+            'amount' => 1000,
+            'type' => 'advance',
+        ], $headers)->assertForbidden();
+
+        $this->postJson("/api/agency/transactions/{$transactionId}/schedules", [
+            'schedules' => [[
+                'installment_no' => 1,
+                'due_date' => now()->addDays(7)->toDateString(),
+                'amount' => 1000,
+            ]],
+        ], $headers)->assertForbidden();
+
+        $this->postJson("/api/agency/transactions/{$transactionId}/commissions", [
+            'amount' => 1000,
+            'beneficiary_type' => 'agency',
+        ], $headers)->assertForbidden();
+
+        // Platform users without an agency context can reach the endpoint, but
+        // a non-existent commission id is still a 404 (not a 403).
+        $this->patchJson('/api/agency/commissions/1', [
+            'status' => 'accrued',
+        ], $headers)->assertStatus(404);
+    }
+
     public function test_payments_ledger_updates_collected_and_balance(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
@@ -436,6 +676,21 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'notes' => 'Agency commission',
         ], $headers)->assertStatus(201)->json('commission');
 
+        $this->patchJson("/api/agency/commissions/{$created['id']}", [
+            'status' => 'accrued',
+        ], $headers)->assertStatus(409)
+            ->assertJsonPath('message', 'Commission can only accrue after the deal is fully paid or marked completed.');
+
+        $this->patchJson("/api/agency/commissions/{$created['id']}", [
+            'status' => 'paid',
+        ], $headers)->assertStatus(409);
+
+        // Pay the remaining balance before accruing or paying commission.
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 7500000,
+            'type' => 'installment',
+        ], $headers)->assertStatus(201)->assertJsonPath('totals.balance', 0);
+
         $accrued = $this->patchJson("/api/agency/commissions/{$created['id']}", [
             'status' => 'accrued',
         ], $headers)->assertOk()->json('commission');
@@ -463,6 +718,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 2500001,
             'type' => 'refund',
+            'notes' => 'test refund',
         ], $headers)->assertStatus(422)
             ->assertJsonPath('message', 'Refund cannot exceed the amount already collected.');
 
@@ -472,11 +728,13 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 1500000,
             'type' => 'refund',
+            'notes' => 'test refund',
         ], $headers)->assertStatus(201);
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 1000001,
             'type' => 'refund',
+            'notes' => 'test refund',
         ], $headers)->assertStatus(422);
 
         $this->assertSame(1000000.0, (float) Transaction::findOrFail($deal['id'])->totalPaid());

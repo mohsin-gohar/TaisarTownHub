@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SavedSearch;
 use App\Support\PropertySearchFilters;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -44,38 +45,46 @@ class SavedSearchController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
+        $data = $this->validatePayload($request);
+        $data['filters'] = $this->normaliseFilters($data['filters'] ?? []);
+        $this->assertPriceRange($data['filters']);
 
-        if (SavedSearch::where('user_id', $user->id)->count() >= self::MAX_PER_USER) {
+        // Lock the owner row while checking the per-user cap. This prevents
+        // concurrent requests from creating more than MAX_PER_USER searches.
+        $search = DB::transaction(function () use ($user, $data): ?SavedSearch {
+            \App\Models\User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+
+            if (SavedSearch::where('user_id', $user->id)->count() >= self::MAX_PER_USER) {
+                return null;
+            }
+
+            return SavedSearch::create([
+                'id' => 'ss_' . Str::random(24),
+                'user_id' => $user->id,
+                'name' => $data['name'],
+                'filters' => $data['filters'],
+                'frequency' => $data['frequency'] ?? 'daily',
+                'alerts_enabled' => (bool) ($data['alerts_enabled'] ?? true),
+                'last_run_at' => now(),
+            ]);
+        }, 3);
+
+        if (!$search) {
             return response()->json([
                 'success' => false,
-                'message' => 'You have reached the saved-search limit (' . self::MAX_PER_USER . '). Delete one before saving another.',
+                'message' => 'You can save up to ' . self::MAX_PER_USER . ' searches. Delete one to add another.',
             ], 422);
         }
 
-        $data = $this->validatePayload($request);
-        $filters = $this->normaliseFilters($data['filters']);
-        $this->assertPriceRange($filters);
-
-        $search = SavedSearch::create([
-            'id' => 'ss_' . Str::random(24),
-            'user_id' => $user->id,
-            'name' => strip_tags($data['name']),
-            'filters' => $filters,
-            'frequency' => $data['frequency'] ?? 'daily',
-            'alerts_enabled' => (bool) ($data['alerts_enabled'] ?? true),
-            // Alerts begin with the NEXT matching listing, not a backlog of
-            // everything already on the marketplace when the search is saved.
-            'last_run_at' => now(),
-        ]);
+        $presented = $this->present($search);
 
         return response()->json([
             'success' => true,
-            'message' => 'Search saved. We will email you when matching listings are published.',
-            'saved_search' => $this->present($search),
+            'saved_search' => $presented,
+            'search' => $presented,
         ], 201);
     }
 
-    /** PATCH/PUT /api/saved-searches/{id} — rename, toggle alerts, change cadence. */
     public function update(Request $request, string $id)
     {
         $search = $this->findOwned($request, $id);

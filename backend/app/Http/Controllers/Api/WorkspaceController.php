@@ -4,8 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\BusinessRecord;
+use App\Models\Agency;
+use App\Models\AgencyMember;
+use App\Models\Dealer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Legacy workspace sync (JSON store) — HARDENED.
@@ -30,7 +34,8 @@ class WorkspaceController extends Controller
     use AuthorizesApi;
 
     private const COLLECTIONS = [
-        'projects', 'properties', 'dealers', 'sellers', 'buyers',
+        // Parent records first so dependent rows can be created in one atomic sync.
+        'projects', 'dealers', 'sellers', 'buyers', 'properties',
         'transactions', 'payments', 'commissions', 'files', 'plots',
         'media', 'videos', 'inquiries', 'testimonials', 'subscribers',
     ];
@@ -52,18 +57,24 @@ class WorkspaceController extends Controller
     /** Collections holding money — every sync on them is audit-logged. */
     private const FINANCIAL = ['transactions', 'payments', 'commissions'];
 
-    /** Money-ish keys coerced/validated on financial rows. */
+    /** Whole-PKR fields accepted by the legacy workspace sync surface. */
     private const MONEY_KEYS = [
-        'agreementAmountPKR', 'advancePaymentPKR', 'commissionAmountPKR',
-        'remainingBalancePKR', 'amountPKR', 'amount', 'pricePKR', 'profitPKR',
-        'soldPricePKR', 'costPricePKR', 'totalEarnedPKR', 'pendingCommissionPKR',
-        'totalPaidPKR', 'balancePKR', 'commission', 'commissionAmount',
+        'agreementAmountPKR', 'purchaseAmountPKR', 'finalSellingAmountPKR',
+        'dealAmountPKR', 'advancePaymentPKR', 'advancePKR', 'remainingBalancePKR',
+        'balancePKR', 'commissionAmountPKR', 'commissionPKR', 'commissionPaidPKR',
+        'amountPKR', 'amount', 'paidPKR', 'pricePKR', 'profitPKR', 'soldPricePKR',
+        'costPricePKR', 'totalEarnedPKR', 'pendingCommissionPKR', 'totalPaidPKR',
+        'commission', 'commissionAmount',
     ];
+
+    private const MAX_WHOLE_PKR = 999999999999;
 
     /** Server-owned keys never accepted from the client payload. */
     private const RESERVED_KEYS = [
         'agency_id', 'created_by', 'updated_by', 'deleted_by',
         'uploaded_by', 'recorded_by', 'verified_by',
+        'voidedAt', 'voidedBy', 'voided_at', 'voided_by',
+        'commissionStatus', 'commission_status', 'cancelledAt', 'cancelled_at',
     ];
 
     private const MAX_ROWS_PER_COLLECTION = 2000;
@@ -212,7 +223,7 @@ class WorkspaceController extends Controller
             if ($allowed) {
                 $anyReadable = true;
             }
-            $all[$name] = $allowed ? $this->allRows($name, $agencyId) : [];
+            $all[$name] = $allowed ? $this->allRows($name, $agencyId, $request, $user) : [];
         }
 
         $cmsAllowed = $this->canRead($request, $user, 'cms', $agencyId);
@@ -255,140 +266,150 @@ class WorkspaceController extends Controller
         $collections = $validated['collections'];
         $mode = $validated['mode'] ?? 'merge';
         $agencyId = $this->agencyId($request);
-        $replaced = [];
-        $written = [];
-        $denied = [];
-        $skipped = [];
-
-        foreach (self::COLLECTIONS as $name) {
-            if (! array_key_exists($name, $collections) || ! is_array($collections[$name])) {
-                continue;
+        return DB::transaction(function () use ($request, $user, $collections, $mode, $agencyId) {
+            if ($agencyId !== null) {
+                Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
             }
 
-            // ---- permission gate (per collection, agency-scoped) ----
-            if (! $this->canWrite($request, $user, $name, $agencyId)) {
-                $denied[] = $name;
-
-                continue;
-            }
-
-            if ($mode === 'replace' && ! $this->canReplace($request, $user, $name, $agencyId)) {
-                $denied[] = $name; // replace needs delete-level rights
-
-                continue;
-            }
-
-            $rows = array_values(array_filter(
-                $collections[$name],
-                fn ($row) => is_array($row) && isset($row['id'])
-            ));
-
-            if (count($rows) > self::MAX_ROWS_PER_COLLECTION) {
-                abort(422, "Collection '{$name}' exceeds ".self::MAX_ROWS_PER_COLLECTION.' rows per request.');
-            }
-
-            // ---- per-row validation + server-owned field stamping ----
-            $clean = [];
-            foreach ($rows as $row) {
-                $sanitized = $this->sanitizeRow($name, $row, $agencyId, $user);
-                if ($sanitized !== null) {
-                    $clean[] = $sanitized;
-                }
-            }
-
-            // ---- destructive replace safety interlocks ----
-            // `$clean` is empty when the client sent [] OR when every row was
-            // rejected by validation. Treat both as an empty replace: deleting
-            // on an accidental/malformed payload is never acceptable, so an
-            // empty replace is always skipped (there is no bypass flag).
-            if ($mode === 'replace') {
-                if (count($clean) === 0) {
-                    $skipped[] = $name;
-                    Log::warning('Workspace empty replace skipped', [
-                        'collection' => $name,
-                        'agency_id' => $agencyId,
-                        'user_id' => $user->id,
-                        'platform_wide' => $agencyId === null,
-                    ]);
-
+            $replaced = [];
+            $written = [];
+            $denied = [];
+            $skipped = [];
+    
+            foreach (self::COLLECTIONS as $name) {
+                if (! array_key_exists($name, $collections) || ! is_array($collections[$name])) {
                     continue;
                 }
-
-                if ($agencyId === null && ! $request->boolean('confirm_platform_replace')) {
-                    $skipped[] = $name;
-                    Log::warning('Workspace platform-wide replace skipped (confirmation required)', [
-                        'collection' => $name,
-                        'user_id' => $user->id,
-                    ]);
-
+    
+                // ---- permission gate (per collection, agency-scoped) ----
+                if (! $this->canWrite($request, $user, $name, $agencyId)) {
+                    $denied[] = $name;
+    
                     continue;
                 }
-            }
-
-            // Financial integrity: audit newly-sold media assets (sale
-            // attribution) BEFORE the payload sync overwrites previous state.
-            if ($name === 'media') {
-                $this->auditNewMediaSales($request, $clean);
-            }
-
-            $result = $this->syncList($name, $clean, $agencyId, $mode);
-            $changedIds = $result['changed'];
-            $removed = $result['removed'];
-
-            if (in_array($name, self::FINANCIAL, true) && $changedIds) {
-                $this->auditFinancialSync($request, $name, $clean, $changedIds, $agencyId);
-            }
-
-            if ($changedIds || $removed) {
-                $written[$name] = count($changedIds) + $removed;
-            }
-            if ($mode === 'replace' && $removed) {
-                $replaced[] = $name;
-            }
-        }
-
-        if (isset($collections['cms']) && is_array($collections['cms'])) {
-            if ($this->canWrite($request, $user, 'cms', $agencyId)) {
-                if (strlen(json_encode($collections['cms'])) > self::MAX_ROW_BYTES) {
-                    abort(422, 'CMS payload too large.');
+    
+                if ($mode === 'replace' && ! $this->canReplace($request, $user, $name, $agencyId)) {
+                    $denied[] = $name; // replace needs delete-level rights
+    
+                    continue;
                 }
-                BusinessRecord::put('cms', 'default', $collections['cms']);
-                $written['cms'] = 1;
-            } else {
-                $denied[] = 'cms';
+    
+                $rows = array_values(array_filter(
+                    $collections[$name],
+                    fn ($row) => is_array($row) && isset($row['id'])
+                ));
+    
+                if (count($rows) > self::MAX_ROWS_PER_COLLECTION) {
+                    abort(422, "Collection '{$name}' exceeds ".self::MAX_ROWS_PER_COLLECTION.' rows per request.');
+                }
+    
+                // ---- per-row validation + server-owned field stamping ----
+                $clean = [];
+                foreach ($rows as $rowIndex => $row) {
+                    if (in_array($name, self::FINANCIAL, true)) {
+                        $this->validateWholePkrAmounts($name, $row, (int) $rowIndex);
+                    }
+    
+                    $sanitized = $this->sanitizeRow($name, $row, $agencyId, $user);
+                    if ($sanitized !== null) {
+                        $clean[] = $sanitized;
+                    }
+                }
+    
+                // ---- destructive replace safety interlocks ----
+                // `$clean` is empty when the client sent [] OR when every row was
+                // rejected by validation. Treat both as an empty replace: deleting
+                // on an accidental/malformed payload is never acceptable, so an
+                // empty replace is always skipped (there is no bypass flag).
+                if ($mode === 'replace') {
+                    if (count($clean) === 0) {
+                        $skipped[] = $name;
+                        Log::warning('Workspace empty replace skipped', [
+                            'collection' => $name,
+                            'agency_id' => $agencyId,
+                            'user_id' => $user->id,
+                            'platform_wide' => $agencyId === null,
+                        ]);
+    
+                        continue;
+                    }
+    
+                    if ($agencyId === null && ! $request->boolean('confirm_platform_replace')) {
+                        $skipped[] = $name;
+                        Log::warning('Workspace platform-wide replace skipped (confirmation required)', [
+                            'collection' => $name,
+                            'user_id' => $user->id,
+                        ]);
+    
+                        continue;
+                    }
+                }
+    
+                // Financial integrity: audit newly-sold media assets (sale
+                // attribution) BEFORE the payload sync overwrites previous state.
+                if ($name === 'media') {
+                    $this->auditNewMediaSales($request, $clean);
+                }
+    
+                $result = $this->syncList($request, $user, $name, $clean, $agencyId, $mode);
+                $changedIds = $result['changed'];
+                $removed = $result['removed'];
+    
+                if (in_array($name, self::FINANCIAL, true) && $changedIds) {
+                    $this->auditFinancialSync($request, $name, $clean, $changedIds, $agencyId);
+                }
+    
+                if ($changedIds || $removed) {
+                    $written[$name] = count($changedIds) + $removed;
+                }
+                if ($mode === 'replace' && $removed) {
+                    $replaced[] = $name;
+                }
             }
-        }
-
-        if ($written) {
-            $this->writeAudit($request, 'workspace.save', 'workspace:'.implode(',', array_keys($written)),
-                'Workspace sync ('.$mode.'): '.json_encode($written), [
-                    'metadata' => [
-                        'mode' => $mode,
-                        'written' => $written,
-                        'replaced' => $replaced,
-                        'denied' => $denied,
-                        'skipped' => $skipped,
-                        'platform_wide' => $agencyId === null,
-                    ],
+    
+            if (isset($collections['cms']) && is_array($collections['cms'])) {
+                if ($this->canWrite($request, $user, 'cms', $agencyId)) {
+                    if (strlen(json_encode($collections['cms'])) > self::MAX_ROW_BYTES) {
+                        abort(422, 'CMS payload too large.');
+                    }
+                    BusinessRecord::put('cms', 'default', $collections['cms']);
+                    $written['cms'] = 1;
+                } else {
+                    $denied[] = 'cms';
+                }
+            }
+    
+            if ($written) {
+                $this->writeAudit($request, 'workspace.save', 'workspace:'.implode(',', array_keys($written)),
+                    'Workspace sync ('.$mode.'): '.json_encode($written), [
+                        'metadata' => [
+                            'mode' => $mode,
+                            'written' => $written,
+                            'replaced' => $replaced,
+                            'denied' => $denied,
+                            'skipped' => $skipped,
+                            'platform_wide' => $agencyId === null,
+                        ],
+                    ]);
+            }
+    
+            if ($denied) {
+                Log::info('Workspace save: collections denied', [
+                    'user_id' => $user->id, 'denied' => $denied,
                 ]);
-        }
-
-        if ($denied) {
-            Log::info('Workspace save: collections denied', [
-                'user_id' => $user->id, 'denied' => $denied,
+            }
+    
+            // Writes are enforced per collection above; a user with no write
+            // rights simply persists nothing (matches legacy no-op behaviour and
+            // avoids error toasts for read-only viewers of the workspace).
+            return response()->json([
+                'success' => true,
+                'mode' => $mode,
+                'written' => $written,
+                'denied' => $denied,
+                'skipped' => $skipped,
             ]);
-        }
-
-        // Writes are enforced per collection above; a user with no write
-        // rights simply persists nothing (matches legacy no-op behaviour and
-        // avoids error toasts for read-only viewers of the workspace).
-        return response()->json([
-            'success' => true,
-            'mode' => $mode,
-            'written' => $written,
-            'denied' => $denied,
-            'skipped' => $skipped,
-        ]);
+        }, 3);
     }
 
     /* ================================================================ */
@@ -433,15 +454,18 @@ class WorkspaceController extends Controller
 
         $row['id'] = $id;
 
-        // Money fields: numeric, finite, capped
+        // Whole-PKR values are normalized to integers after validation.
         if (in_array($collection, self::FINANCIAL, true)) {
             foreach (self::MONEY_KEYS as $key) {
                 if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') {
-                    $value = (float) $row[$key];
-                    if (! is_finite($value) || $value < 0 || $value > 999999999999) {
-                        $row[$key] = 0;
-                    } else {
-                        $row[$key] = $value;
+                    $row[$key] = $this->normalizeWholePkr($row[$key]);
+                }
+            }
+            if ($collection === 'commissions' && isset($row['payouts']) && is_array($row['payouts'])) {
+                foreach ($row['payouts'] as $index => $payout) {
+                    if (is_array($payout) && array_key_exists('amountPKR', $payout)
+                        && $payout['amountPKR'] !== null && $payout['amountPKR'] !== '') {
+                        $row['payouts'][$index]['amountPKR'] = $this->normalizeWholePkr($payout['amountPKR']);
                     }
                 }
             }
@@ -450,6 +474,180 @@ class WorkspaceController extends Controller
         $row['updated_by'] = $user->id;
 
         return $row;
+    }
+
+    /**
+     * Agency-scoped workspace rows may only reference records owned by the
+     * same agency. Unchanged historical references are tolerated so that a
+     * dealer later made inactive does not freeze every unrelated edit.
+     */
+    private function agencyReferencesValid(string $collection, array $row, array $oldPayload, string $agencyId): bool
+    {
+        $references = [
+            'properties' => ['assignedDealerId' => 'dealer'],
+            'transactions' => [
+                'dealerId' => 'dealer',
+                'propertyId' => 'properties',
+                'buyerId' => 'buyers',
+                'sellerId' => 'sellers',
+            ],
+            'payments' => [
+                'transactionId' => 'transactions',
+                'transaction_id' => 'transactions',
+                'dealId' => 'transactions',
+            ],
+            'commissions' => [
+                'dealerId' => 'dealer',
+                'transactionId' => 'transactions',
+                'transaction_id' => 'transactions',
+            ],
+            'files' => [
+                'dealerId' => 'dealer',
+                'dealer_id' => 'dealer',
+                'propertyId' => 'properties',
+            ],
+            'media' => [
+                'dealerId' => 'dealer',
+                'propertyId' => 'properties',
+            ],
+            'videos' => [
+                'dealerId' => 'dealer',
+                'propertyId' => 'properties',
+            ],
+            'plots' => ['propertyId' => 'properties'],
+            'inquiries' => [
+                'propertyId' => 'properties',
+                'assignedAgentId' => 'agency_member',
+                'assigned_agent_id' => 'agency_member',
+            ],
+            'buyers' => ['dealerId' => 'dealer'],
+            'sellers' => ['dealerId' => 'dealer'],
+        ];
+
+        foreach ($references[$collection] ?? [] as $field => $target) {
+            $value = $row[$field] ?? null;
+            if (! filled($value) || (string) $value === (string) ($oldPayload[$field] ?? null)) {
+                continue;
+            }
+
+            $valid = match ($target) {
+                'dealer' => $this->dealerReferenceBelongsToAgency((string) $value, $agencyId),
+                'agency_member' => AgencyMember::where('agency_id', $agencyId)
+                    ->where('user_id', (string) $value)
+                    ->where('status', 'active')
+                    ->exists(),
+                default => BusinessRecord::where('collection', $target)
+                    ->where('record_id', (string) $value)
+                    ->where('agency_id', $agencyId)
+                    ->whereNull('deleted_at')
+                    ->exists(),
+            };
+
+            if (! $valid) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function dealerReferenceBelongsToAgency(string $dealerId, string $agencyId): bool
+    {
+        $eloquentDealer = Dealer::whereKey($dealerId)->first();
+        if ($eloquentDealer !== null) {
+            return $eloquentDealer->agency_id === $agencyId
+                && strtolower((string) $eloquentDealer->status) === 'active';
+        }
+
+        $workspaceDealer = BusinessRecord::where('collection', 'dealers')
+            ->where('record_id', $dealerId)
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        return $workspaceDealer !== null
+            && strtolower((string) ($workspaceDealer->payload['status'] ?? 'active')) === 'active';
+    }
+
+    /**
+     * Reject fractional, negative, non-finite and out-of-range PKR values on
+     * every legacy workspace write. FinanceController's strict validators
+     * are not enough because the SPA persists its ledger through this endpoint.
+     */
+    private function validateWholePkrAmounts(string $collection, array $row, int $rowIndex): void
+    {
+        foreach (self::MONEY_KEYS as $key) {
+            if (! array_key_exists($key, $row) || $row[$key] === null || $row[$key] === '') {
+                continue;
+            }
+
+            if ($this->normalizeWholePkr($row[$key]) === null) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "collections.{$collection}.{$rowIndex}.{$key}" => [
+                        'This amount must be a whole PKR value between 0 and ' . self::MAX_WHOLE_PKR . '.',
+                    ],
+                ]);
+            }
+        }
+
+        if ($collection === 'commissions' && isset($row['payouts'])) {
+            if (! is_array($row['payouts'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "collections.{$collection}.{$rowIndex}.payouts" => ['Payouts must be an array.'],
+                ]);
+            }
+
+            foreach ($row['payouts'] as $payoutIndex => $payout) {
+                if (! is_array($payout) || ! array_key_exists('amountPKR', $payout)
+                    || $payout['amountPKR'] === null || $payout['amountPKR'] === '') {
+                    continue;
+                }
+
+                if ($this->normalizeWholePkr($payout['amountPKR']) === null) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        "collections.{$collection}.{$rowIndex}.payouts.{$payoutIndex}.amountPKR" => [
+                            'This payout must be a whole PKR value between 0 and ' . self::MAX_WHOLE_PKR . '.',
+                        ],
+                    ]);
+                }
+            }
+        }
+    }
+
+    /** Return a canonical integer PKR value, or null when the input is invalid. */
+    private function normalizeWholePkr(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value >= 0 && $value <= self::MAX_WHOLE_PKR ? $value : null;
+        }
+
+        if (is_float($value)) {
+            if (! is_finite($value) || floor($value) !== $value
+                || $value < 0 || $value > self::MAX_WHOLE_PKR) {
+                return null;
+            }
+
+            return (int) $value;
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+        if (! preg_match('/^\\+?\\d+(?:\\.0+)?$/D', $value)) {
+            return null;
+        }
+
+        $whole = explode('.', ltrim($value, '+'), 2)[0];
+        $canonical = ltrim($whole, '0') ?: '0';
+        $maximum = (string) self::MAX_WHOLE_PKR;
+        if (strlen($canonical) > strlen($maximum)
+            || (strlen($canonical) === strlen($maximum) && strcmp($canonical, $maximum) > 0)) {
+            return null;
+        }
+
+        return (int) $canonical;
     }
 
     /** Recursively sanitize a value: depth cap, string length cap, UTF-8. */
@@ -517,7 +715,7 @@ class WorkspaceController extends Controller
      * Unchanged rows are skipped so the debounced frontend autosave does not
      * generate audit/write churn on every keystroke.
      */
-    private function syncList(string $collection, array $rows, ?string $agencyId, string $mode): array
+    private function syncList(Request $request, $user, string $collection, array $rows, ?string $agencyId, string $mode): array
     {
         $ids = [];
         $changed = [];
@@ -532,6 +730,7 @@ class WorkspaceController extends Controller
 
             $existing = BusinessRecord::where('collection', $collection)
                 ->where('record_id', $recordId)
+                ->lockForUpdate()
                 ->first();
 
             $owner = $existing ? ($existing->agency_id ?? null) : null;
@@ -554,8 +753,6 @@ class WorkspaceController extends Controller
                 continue;
             }
 
-            $accepted++;
-
             if ($existing) {
                 // Preserve the original creator stamped by an earlier sync
                 $previous = $existing->payload ?? [];
@@ -573,6 +770,44 @@ class WorkspaceController extends Controller
 
             $newPayload = $row;
             $oldPayload = $existing?->payload ?? null;
+
+            if ($collection === 'transactions') {
+                if ($oldPayload !== null) {
+                    foreach (['voidedAt', 'voidedBy', 'commissionStatus', 'cancelledAt'] as $serverField) {
+                        if (! array_key_exists($serverField, $newPayload) && array_key_exists($serverField, $oldPayload)) {
+                            $newPayload[$serverField] = $oldPayload[$serverField];
+                        }
+                    }
+                } elseif (! array_key_exists('commissionStatus', $newPayload)) {
+                    $newPayload['commissionStatus'] = 'Pending Accrual';
+                }
+                $row = $newPayload;
+            }
+
+            if ($collection === 'properties' && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
+                $newPayload = $this->preserveSensitivePropertyFields($oldPayload ?? [], $newPayload);
+                $row = $newPayload;
+            }
+
+            if ($collection === 'properties'
+                && $this->sensitivePropertyFieldsChanged($oldPayload ?? [], $newPayload)
+                && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
+                $blocked++;
+                continue;
+            }
+
+            if ($scoped && $agencyId !== null
+                && ! $this->agencyReferencesValid($collection, $newPayload, $oldPayload ?? [], $agencyId)) {
+                $blocked++;
+                Log::warning('Workspace row rejected (cross-agency reference)', [
+                    'collection' => $collection,
+                    'record_id' => $recordId,
+                    'agency_id' => $agencyId,
+                ]);
+
+                continue;
+            }
+
             $deletedAt = ! empty($row['deletedAt']) ? now() : null;
             $oldDeletedAt = $existing?->deleted_at;
 
@@ -581,20 +816,113 @@ class WorkspaceController extends Controller
             $deletedDiffers = ($oldDeletedAt === null) !== ($deletedAt === null);
 
             if (! $payloadDiffers && ! $deletedDiffers) {
+                // A valid, already-current row is part of the caller's intended
+                // replacement set. Invalid or unauthorized rows must never count
+                // as accepted, or they could trigger deletion of every other row.
+                $accepted++;
+
                 continue; // nothing changed — skip write
             }
 
-            BusinessRecord::put($collection, $recordId, $row);
-            $changed[] = $recordId;
+            // Client-supplied deletedAt cannot turn an update permission into
+            // a delete/restore permission.
+            if (($deletedAt !== null || $oldDeletedAt !== null) && ! $this->canReplace($request, $user, $collection, $agencyId)) {
+                $blocked++;
 
-            // Stamp tenancy COLUMN for new rows and rows already owned by the
-            // writer. Shared legacy rows (NULL) stay NULL — never hijacked.
-            if ($scoped && $agencyId !== null && ($existing === null || ($owner !== null && $owner === $agencyId))) {
-                BusinessRecord::where('collection', $collection)
-                    ->where('record_id', $recordId)
-                    ->update(['agency_id' => $agencyId]);
+                continue;
             }
-            // platform writer: leave the existing column untouched
+
+            if ($collection === 'transactions' && $existing === null) {
+                $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? 'draft')));
+                if (! empty($newPayload['voided']) || in_array($newStatus, ['completed', 'cancelled', 'voided'], true)) {
+                    $blocked++;
+                    continue;
+                }
+            }
+
+            if ($collection === 'commissions'
+                && $this->transactionIsClosedForCommission((string) ($newPayload['transactionId'] ?? $newPayload['transaction_id'] ?? $newPayload['dealId'] ?? ''), $agencyId)) {
+                $blocked++;
+                continue;
+            }
+
+            if ($existing === null && ! $this->canCreateRow($request, $user, $collection, $agencyId)) {
+                $blocked++;
+
+                continue;
+            }
+
+            if ($existing !== null && $deletedAt === null && $oldDeletedAt === null
+                && ! $this->canUpdateRow($request, $user, $collection, $agencyId, $oldPayload ?? [], $newPayload)) {
+                $blocked++;
+
+                continue;
+            }
+
+            if ($collection === 'payments') {
+                $this->enforcePaymentMovement($request, $newPayload, $agencyId);
+            }
+            if ($collection === 'commissions') {
+                $newPayload = $this->enforceCommissionLedger($request, $newPayload, $oldPayload, $agencyId);
+                $row = $newPayload;
+            }
+
+            $isTransactionCloseout = $collection === 'transactions'
+                && $this->isTransactionCloseout($oldPayload ?? [], $newPayload);
+            $isTransactionVoid = $isTransactionCloseout
+                && $this->isTransactionVoidTransition($oldPayload ?? [], $newPayload);
+
+            if ($isTransactionCloseout) {
+                $row = $this->stampTransactionCloseout($row, $user, $isTransactionVoid);
+                $newPayload = $row;
+            }
+
+            if ($scoped && $agencyId !== null) {
+                if ($existing !== null) {
+                    // The locked row's owner is checked again immediately
+                    // before write; agency_id is never changed by an update.
+                    if ($existing->agency_id !== $agencyId) {
+                        $blocked++;
+                        continue;
+                    }
+
+                    $existing->payload = $row;
+                    $existing->deleted_at = $deletedAt;
+                    $existing->save();
+                } else {
+                    // Atomically claim a previously-missing collection/id pair.
+                    // If another agency inserts first, insertOrIgnore returns 0
+                    // and this request is blocked rather than overwriting it.
+                    $now = now();
+                    $inserted = DB::table('business_records')->insertOrIgnore([
+                        'collection' => $collection,
+                        'record_id' => $recordId,
+                        'payload' => json_encode($row, JSON_THROW_ON_ERROR),
+                        'agency_id' => $agencyId,
+                        'deleted_at' => $deletedAt,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+
+                    if ($inserted !== 1) {
+                        $blocked++;
+                        continue;
+                    }
+                }
+            } else {
+                // Platform-wide writes retain the current owner column.
+                BusinessRecord::put($collection, $recordId, $row);
+            }
+
+            // Count only after persistence succeeds. Replace mode uses this
+            // accepted count as a safety interlock before destructive deletion.
+            $accepted++;
+
+            if ($isTransactionCloseout) {
+                $this->applyTransactionCloseout($recordId, $agencyId, $user, $row, $isTransactionVoid);
+            }
+
+            $changed[] = $recordId;
         }
 
         if ($blocked > 0) {
@@ -822,25 +1150,1131 @@ class WorkspaceController extends Controller
      * ownership decision is applied. Rows tagged with ANOTHER agency are never
      * returned. Platform users (no agency membership scope) see everything.
      */
-    private function allRows(string $collection, ?string $agencyId): array
+    private function allRows(string $collection, ?string $agencyId, Request $request, $user): array
     {
-        // Soft-deleted rows must never reappear in a workspace dump.
         $query = BusinessRecord::where('collection', $collection)->whereNull('deleted_at');
 
         if (in_array($collection, self::AGENCY_SCOPED, true) && $agencyId !== null) {
             $query->where('agency_id', $agencyId);
         }
 
-        return $query
-            ->orderByDesc('updated_at')
-            ->limit(2000)
-            ->get()
-            ->map(fn (BusinessRecord $record) => $record->payload ?? [])
-            ->filter(fn ($row) => ! empty($row['id']))
-            ->values()
-            ->all();
+        $rows = $query->orderBy('record_id')->limit(self::MAX_ROWS_PER_COLLECTION)
+            ->get()->map(fn ($record) => $record->payload ?? [])->all();
+
+        if ($collection === 'properties' && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
+            foreach ($rows as &$row) {
+                unset($row['purchasePricePKR'], $row['sellingPricePKR'], $row['internalNotes']);
+            }
+            unset($row);
+        }
+
+        $hasBroadFinanceRead = $this->perm($request, $user, 'finance.view', $agencyId)
+            || $this->perm($request, $user, 'view_transactions', $agencyId);
+        $hasBroadCommissionRead = $this->perm($request, $user, 'finance.view', $agencyId)
+            || $this->perm($request, $user, 'view_commissions', $agencyId);
+
+        if ($collection === 'transactions'
+            && $this->perm($request, $user, 'view_my_deals', $agencyId)
+            && ! $hasBroadFinanceRead) {
+            $dealerId = (string) ($user->dealer_id ?? '');
+
+            return $dealerId === '' ? [] : array_values(array_filter($rows, function ($row) use ($dealerId) {
+                $rowDealerId = (string) ($row['dealerId'] ?? $row['assignedDealerId'] ?? $row['dealer_id'] ?? '');
+
+                return $rowDealerId === $dealerId;
+            }));
+        }
+
+        if ($collection === 'payments'
+            && $this->perm($request, $user, 'view_my_deals', $agencyId)
+            && ! $hasBroadFinanceRead) {
+            $ownedTransactions = $this->allRows('transactions', $agencyId, $request, $user);
+            $ownedIds = array_fill_keys(array_filter(array_map(
+                fn ($row) => (string) ($row['id'] ?? ''),
+                $ownedTransactions
+            )), true);
+
+            return array_values(array_filter($rows, function ($row) use ($ownedIds) {
+                $transactionId = (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '');
+
+                return $transactionId !== '' && isset($ownedIds[$transactionId]);
+            }));
+        }
+
+        if ($collection === 'commissions'
+            && $this->perm($request, $user, 'view_my_commission', $agencyId)
+            && ! $hasBroadCommissionRead) {
+            $dealerId = (string) ($user->dealer_id ?? '');
+
+            return $dealerId === '' ? [] : array_values(array_filter($rows, function ($row) use ($dealerId) {
+                $rowDealerId = (string) ($row['dealerId'] ?? $row['dealer_id'] ?? '');
+
+                return $rowDealerId === $dealerId;
+            }));
+        }
+
+        return $rows;
     }
 
+
+    private function canViewSensitivePropertyData(Request $request, $user, ?string $agencyId): bool
+    {
+        return $this->perm($request, $user, 'documents.view_sensitive', $agencyId)
+            || $this->perm($request, $user, 'view_sensitive_cnic', $agencyId);
+    }
+
+    private function preserveSensitivePropertyFields(array $oldPayload, array $newPayload): array
+    {
+        // Workspace reads redact these values. When a normal editor saves the
+        // remaining property fields, preserve the stored confidential values
+        // rather than silently erasing them from the JSON payload.
+        foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes'] as $field) {
+            if (!array_key_exists($field, $newPayload) && array_key_exists($field, $oldPayload)) {
+                $newPayload[$field] = $oldPayload[$field];
+            }
+        }
+
+        return $newPayload;
+    }
+
+    private function sensitivePropertyFieldsChanged(array $oldPayload, array $newPayload): bool
+    {
+        foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes'] as $field) {
+            if (array_key_exists($field, $newPayload)
+                && ($oldPayload[$field] ?? null) !== $newPayload[$field]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Permission check mirroring AuthorizesApi: agency-scoped grants when the
+     * user acts within an agency, PLUS platform-wide grants for cross-agency
+     * platform admins (flagged by AgencyContext via X-Agency-Id).
+     */
+    private function perm(Request $request, $user, string $permission, ?string $agencyId): bool
+    {
+        if ($user->hasPermission($permission, $agencyId)) {
+            return true;
+        }
+        if ($agencyId !== null && $this->isCrossAgency($request) && $user->hasPermission($permission)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /** Read gate per collection. Sensitive collections require their own least-privilege permission. */
+    private function canRead(Request $request, $user, string $collection, ?string $agencyId): bool
+    {
+        $gates = [
+            'projects' => ['view_properties', 'properties.view', 'manage_projects'],
+            'properties' => ['view_properties', 'properties.view'],
+            'dealers' => ['view_dealers', 'manage_dealers'],
+            'sellers' => ['manage_sellers'],
+            'buyers' => ['manage_buyers'],
+            'transactions' => ['view_transactions', 'finance.view', 'view_my_deals'],
+            'payments' => ['view_transactions', 'finance.view', 'view_my_deals'],
+            'commissions' => ['view_commissions', 'finance.view', 'view_my_commission'],
+            'files' => ['upload_documents', 'verify_documents', 'view_private_documents', 'documents.view'],
+            'plots' => ['view_properties', 'properties.view'],
+            'media' => ['manage_media', 'upload_media'],
+            'videos' => ['manage_media', 'upload_media'],
+            'inquiries' => ['view_inquiries', 'crm.view'],
+            'subscribers' => ['view_inquiries', 'crm.view'],
+            'testimonials' => ['edit_cms', 'view_reports', 'view_properties', 'properties.view'],
+            'cms' => ['edit_cms', 'view_reports', 'view_properties', 'properties.view'],
+        ];
+
+        foreach ($gates[$collection] ?? [] as $permission) {
+            if ($this->perm($request, $user, $permission, $agencyId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Write gate per collection. Platform-global collections are never agency-writable. */
+    private function canWrite(Request $request, $user, string $collection, ?string $agencyId = null): bool
+    {
+        if (in_array($collection, ['projects', 'testimonials', 'cms'], true) && ! $user->isPlatformUser()) {
+            return false;
+        }
+
+        $gates = [
+            'projects' => ['manage_projects'],
+            'properties' => ['create_properties', 'edit_properties', 'properties.create', 'properties.update'],
+            'dealers' => ['manage_dealers'],
+            'sellers' => ['manage_sellers'],
+            'buyers' => ['manage_buyers', 'submit_buyer'],
+            'transactions' => ['create_transactions', 'update_transactions', 'void_transactions', 'cancel_transactions', 'legacy.cancel_transactions', 'finance.create_transaction'],
+            'payments' => ['manage_payments', 'finance.manage_payments'],
+            'commissions' => ['pay_commissions', 'manage_payments', 'finance.manage_payments'],
+            'files' => ['upload_documents', 'verify_documents', 'documents.upload'],
+            'plots' => ['edit_properties', 'properties.update'],
+            'media' => ['manage_media', 'upload_media'],
+            'videos' => ['manage_media', 'upload_media'],
+            'inquiries' => ['crm.update_lead'],
+            'subscribers' => ['crm.update_lead'],
+            'testimonials' => ['edit_cms'],
+            'cms' => ['edit_cms'],
+        ];
+
+        foreach ($gates[$collection] ?? [] as $permission) {
+            if ($this->perm($request, $user, $permission, $agencyId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Enforce the append-only commission payout ledger at the server boundary.
+     * Client state is not trusted for paidPKR, payout history or accrual status.
+     */
+    private function enforceCommissionLedger(Request $request, array $payload, ?array $previous, ?string $agencyId): array
+    {
+        $amount = $this->normalizeWholePkr(
+            $payload['amountPKR'] ?? $payload['commissionAmountPKR'] ?? $payload['commissionAmount'] ?? null
+        );
+
+        // Metadata-only updates (no amount) skip the commission ledger guards.
+        if ($amount === null) {
+            return $payload;
+        }
+
+        if ($amount <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.amountPKR' => ['Commission amount must be a positive whole-PKR value.'],
+            ]);
+        }
+
+        $paid = $this->normalizeWholePkr($payload['paidPKR'] ?? 0);
+        if ($paid === null) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.paidPKR' => ['Paid commission must be a non-negative whole-PKR value.'],
+            ]);
+        }
+
+        $statusMap = [
+            'pending' => 'Pending Accrual',
+            'pending accrual' => 'Pending Accrual',
+            'accrued' => 'Accrued',
+            'partially paid' => 'Partially Paid',
+            'paid' => 'Paid',
+            'cancelled' => 'Cancelled',
+        ];
+        $statusKey = strtolower(trim((string) ($payload['status'] ?? 'pending accrual')));
+        if (! isset($statusMap[$statusKey])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['Commission status is not supported.'],
+            ]);
+        }
+        $status = $statusMap[$statusKey];
+        $payload['status'] = $status;
+
+        $payouts = $payload['payouts'] ?? [];
+        if (! is_array($payouts)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.payouts' => ['Payout history must be an array.'],
+            ]);
+        }
+        $payouts = array_values($payouts);
+
+        $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+        $declaredCommission = $this->declaredCommissionForTransaction($transactionId, $agencyId);
+        if ($declaredCommission > 0) {
+            $otherActiveCommission = $this->otherActiveCommissionTotal($transactionId, $agencyId, (string) ($payload['id'] ?? ''));
+            if ($otherActiveCommission + $amount > $declaredCommission) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.amountPKR' => ['Total active commissions cannot exceed the deal\'s agreed commission amount.'],
+                ]);
+            }
+        }
+
+        $oldPayouts = is_array($previous['payouts'] ?? null) ? array_values($previous['payouts']) : [];
+        $oldPaid = $this->normalizeWholePkr($previous['paidPKR'] ?? 0) ?? 0;
+        $oldStatus = strtolower(trim((string) ($previous['status'] ?? 'pending accrual')));
+        $oldAmount = $previous === null
+            ? null
+            : $this->normalizeWholePkr($previous['amountPKR'] ?? $previous['commissionAmountPKR'] ?? $previous['commissionAmount'] ?? null);
+
+        if ($previous === null) {
+            if ($status !== 'Pending Accrual' || $paid !== 0 || $payouts !== [] || ! empty($payload['accruedOn'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions' => ['New commissions must start as Pending Accrual with no payout history.'],
+                ]);
+            }
+        } else {
+            $oldCanonical = $statusMap[$oldStatus] ?? 'Pending Accrual';
+            $allowed = [
+                'pending accrual' => ['Pending Accrual', 'Accrued'],
+                'pending' => ['Pending Accrual', 'Accrued'],
+                'accrued' => ['Accrued', 'Partially Paid', 'Paid'],
+                'partially paid' => ['Partially Paid', 'Paid'],
+                'paid' => ['Paid'],
+                'cancelled' => ['Cancelled'],
+            ];
+            if (! in_array($status, $allowed[$oldStatus] ?? [$oldCanonical], true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.status' => ['Commission status transition is not permitted.'],
+                ]);
+            }
+
+            if ($oldAmount !== null && $amount !== $oldAmount
+                && ($oldCanonical !== 'Pending Accrual' || $oldPaid > 0 || $oldPayouts !== [])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.amountPKR' => ['Commission amount is immutable after accrual or payout.'],
+                ]);
+            }
+
+            foreach (['transactionId', 'transaction_id', 'dealerId', 'dealer_id', 'beneficiary_type'] as $field) {
+                if (array_key_exists($field, $previous)
+                    && ($payload[$field] ?? null) !== $previous[$field]) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collections.commissions.'.$field => ['Commission ownership and deal linkage cannot be changed.'],
+                    ]);
+                }
+            }
+
+            $oldAccruedOn = $previous['accruedOn'] ?? null;
+            $newAccruedOn = $payload['accruedOn'] ?? null;
+            if ($oldAccruedOn !== null && $newAccruedOn !== $oldAccruedOn) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.accruedOn' => ['The original accrual date is immutable.'],
+                ]);
+            }
+
+            if ($oldCanonical === 'Pending Accrual' && $status === 'Accrued') {
+                $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+                if (! $this->commissionMilestoneReached($transactionId, $agencyId)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collections.commissions.status' => ['Commission cannot accrue until the deal is fully paid or completed.'],
+                    ]);
+                }
+                $payload['accruedOn'] = now()->toDateString();
+            }
+        }
+
+        if (count($payouts) < count($oldPayouts)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.payouts' => ['Payout history is append-only and cannot be removed.'],
+            ]);
+        }
+
+        foreach ($oldPayouts as $index => $oldPayout) {
+            $newPayout = $payouts[$index] ?? null;
+            if (! is_array($oldPayout) || ! is_array($newPayout)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts' => ['Existing payout records cannot be changed.'],
+                ]);
+            }
+            foreach (['id', 'amountPKR', 'paidAt', 'recordedBy', 'note'] as $field) {
+                if (($oldPayout[$field] ?? null) !== ($newPayout[$field] ?? null)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'collections.commissions.payouts' => ['Existing payout records cannot be edited.'],
+                    ]);
+                }
+            }
+        }
+
+        $payoutTotal = 0;
+        $payoutIds = [];
+        foreach ($payouts as $index => $payout) {
+            if (! is_array($payout)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts.'.$index => ['Payout entry must be an object.'],
+                ]);
+            }
+            $payoutAmount = $this->normalizeWholePkr($payout['amountPKR'] ?? null);
+            $payoutId = trim((string) ($payout['id'] ?? ''));
+            if ($payoutAmount === null || $payoutAmount <= 0 || $payoutId === '' || strlen($payoutId) > 64) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts.'.$index => ['Each payout needs a unique id and a positive whole-PKR amount.'],
+                ]);
+            }
+            if (isset($payoutIds[$payoutId])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.payouts.'.$index.'.id' => ['Payout ids must be unique.'],
+                ]);
+            }
+            $payoutIds[$payoutId] = true;
+            $payoutTotal += $payoutAmount;
+
+            if ($index >= count($oldPayouts)) {
+                $payouts[$index]['amountPKR'] = $payoutAmount;
+                $payouts[$index]['paidAt'] = now()->toDateString();
+                $payouts[$index]['recordedBy'] = (string) ($request->user()->name ?? $request->user()->id);
+            }
+        }
+
+        // Old imported paid balances may pre-date payout-level history. Preserve
+        // that baseline, but every new movement must be represented by a new row.
+        $legacyPaidBaseline = $oldPayouts === [] && $oldPaid > 0 ? $oldPaid : 0;
+        $ledgerPaid = $legacyPaidBaseline + $payoutTotal;
+        if ($paid !== $ledgerPaid || $paid > $amount) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.paidPKR' => ['Paid total must equal the immutable payout ledger and cannot exceed the commission amount.'],
+            ]);
+        }
+
+        if (in_array($status, ['Pending Accrual', 'Accrued'], true) && $paid !== 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.paidPKR' => ['An unpaid commission cannot have a paid balance.'],
+            ]);
+        }
+        if ($status === 'Partially Paid' && ($paid <= 0 || $paid >= $amount)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['Partially Paid requires a payout total between zero and the full commission amount.'],
+            ]);
+        }
+        if ($status === 'Paid' && $paid !== $amount) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['A commission can be marked Paid only after its full amount is recorded in payouts.'],
+            ]);
+        }
+        if ($status === 'Cancelled' && $paid > 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['A commission with recorded payouts cannot be cancelled.'],
+            ]);
+        }
+
+        if (count($payouts) > count($oldPayouts)) {
+            if (! $this->perm($request, $request->user(), 'pay_commissions', $agencyId)) {
+                abort(403, 'Only users with commission payout authority may record a payout.');
+            }
+            if (! in_array($status, ['Partially Paid', 'Paid'], true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.status' => ['A new payout must move the commission to Partially Paid or Paid.'],
+                ]);
+            }
+        }
+
+        if ($previous !== null && $status !== $oldCanonical
+            && $status === 'Paid' && count($payouts) === count($oldPayouts)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.status' => ['A commission cannot be marked Paid without recording its final payout.'],
+            ]);
+        }
+
+        if (in_array($status, ['Accrued', 'Partially Paid', 'Paid'], true) && empty($payload['accruedOn'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.commissions.accruedOn' => ['An accrual date is required before a commission can be paid.'],
+            ]);
+        }
+
+        $payload['amountPKR'] = $amount;
+        $payload['paidPKR'] = $paid;
+        $payload['payouts'] = $payouts;
+
+        return $payload;
+    }
+
+    private function declaredCommissionForTransaction(string $transactionId, ?string $agencyId): int
+    {
+        if ($transactionId === '') {
+            return 0;
+        }
+
+        $query = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
+        $payload = $query->first()?->payload ?? [];
+        $declared = $this->normalizeWholePkr(
+            $payload['commissionPKR'] ?? $payload['commissionAmountPKR'] ?? $payload['commissionAmount'] ?? null
+        );
+        if ($declared !== null && $declared > 0) {
+            return $declared;
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+
+        return (int) ($transactionQuery->value('commissionAmountPKR') ?? 0);
+    }
+
+    private function otherActiveCommissionTotal(string $transactionId, ?string $agencyId, string $excludeId): int
+    {
+        $query = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        }
+        if ($excludeId !== '') {
+            $query->where('record_id', '<>', $excludeId);
+        }
+        $query->where(function ($builder) use ($transactionId): void {
+            $builder->where('payload->transactionId', $transactionId)
+                ->orWhere('payload->transaction_id', $transactionId)
+                ->orWhere('payload->dealId', $transactionId);
+        });
+
+        return (int) $query->get()->sum(function (BusinessRecord $record): int {
+            $row = $record->payload ?? [];
+            if (strtolower((string) ($row['status'] ?? '')) === 'cancelled') {
+                return 0;
+            }
+
+            return $this->normalizeWholePkr(
+                $row['amountPKR'] ?? $row['commissionAmountPKR'] ?? $row['commissionAmount'] ?? 0
+            ) ?? 0;
+        });
+    }
+
+    private function commissionMilestoneReached(string $transactionId, ?string $agencyId): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+
+        $legacyQuery = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) { $legacyQuery->where('agency_id', $agencyId); }
+        $legacy = $legacyQuery->first()?->payload ?? [];
+        $legacyStatus = strtolower(trim((string) ($legacy['status'] ?? $legacy['dealStatus'] ?? '')));
+        if (in_array($legacyStatus, ['fully paid', 'completed'], true)
+            || strtolower((string) ($legacy['paymentStatus'] ?? '')) === 'fully paid') {
+            return true;
+        }
+
+        $agreement = $this->normalizeWholePkr($legacy['agreementAmountPKR'] ?? $legacy['dealAmountPKR'] ?? null) ?? 0;
+        if ($agreement > 0 && $this->netCollectedForTransaction($transactionId, $agencyId) >= $agreement) {
+            return true;
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+        $transaction = $transactionQuery->first();
+        if ($transaction === null) {
+            return false;
+        }
+        if (in_array(strtolower((string) $transaction->dealStatus), ['fully paid', 'completed'], true)) {
+            return true;
+        }
+        $relationalAgreement = (int) $transaction->agreementAmountPKR;
+        $relationalPaid = (int) $transaction->totalPaid();
+        if ($relationalPaid === 0 && (int) $transaction->advancePaymentPKR > 0) {
+            $relationalPaid = (int) $transaction->advancePaymentPKR;
+        }
+
+        return $relationalAgreement > 0 && $relationalPaid >= $relationalAgreement;
+    }
+
+    private function canCreateRow(Request $request, $user, string $collection, ?string $agencyId): bool
+    {
+        if (in_array($collection, ['projects', 'testimonials', 'cms'], true) && ! $user->isPlatformUser()) {
+            return false;
+        }
+
+        $gates = [
+            'projects' => ['manage_projects'],
+            'properties' => ['create_properties', 'properties.create'],
+            'dealers' => ['manage_dealers'],
+            'sellers' => ['manage_sellers'],
+            'buyers' => ['submit_buyer', 'manage_buyers'],
+            'transactions' => ['create_transactions', 'finance.create_transaction'],
+            'payments' => ['manage_payments', 'finance.manage_payments'],
+            'commissions' => ['pay_commissions', 'manage_payments', 'finance.manage_payments'],
+            'files' => ['upload_documents', 'documents.upload'],
+            'plots' => ['edit_properties', 'properties.update'],
+            'media' => ['upload_media', 'manage_media'],
+            'videos' => ['upload_media', 'manage_media'],
+            'inquiries' => ['crm.update_lead'],
+            'subscribers' => ['crm.update_lead'],
+            'testimonials' => ['edit_cms'],
+        ];
+
+        foreach ($gates[$collection] ?? [] as $permission) {
+            if ($this->perm($request, $user, $permission, $agencyId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function canUpdateRow(
+        Request $request,
+        $user,
+        string $collection,
+        ?string $agencyId,
+        array $oldPayload,
+        array $newPayload
+    ): bool {
+        if (in_array($collection, ['projects', 'testimonials', 'cms'], true) && ! $user->isPlatformUser()) {
+            return false;
+        }
+
+        $gates = [
+            'projects' => ['manage_projects'],
+            'properties' => ['edit_properties', 'properties.update'],
+            'dealers' => ['manage_dealers'],
+            'sellers' => ['manage_sellers'],
+            'buyers' => ['manage_buyers'],
+            'transactions' => ['update_transactions'],
+            'payments' => [], // payment records are append-only; create a refund entry instead
+            'commissions' => ['pay_commissions', 'manage_payments', 'finance.manage_payments'],
+            'files' => ['verify_documents', 'documents.update'],
+            'plots' => ['edit_properties', 'properties.update'],
+            'media' => ['manage_media'],
+            'videos' => ['manage_media'],
+            'inquiries' => ['crm.update_lead'],
+            'subscribers' => ['crm.update_lead'],
+            'testimonials' => ['edit_cms'],
+        ];
+
+        if ($collection === 'transactions') {
+            $moneyKeys = [
+                'agreementAmountPKR', 'advancePaymentPKR', 'remainingBalancePKR',
+                'totalPaidPKR', 'commissionAmountPKR', 'paymentStatus',
+            ];
+            foreach ($moneyKeys as $key) {
+                if (($oldPayload[$key] ?? null) !== ($newPayload[$key] ?? null)
+                    && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+                    return false;
+                }
+            }
+
+            $oldStatus = strtolower(trim((string) ($oldPayload['status'] ?? $oldPayload['dealStatus'] ?? 'draft')));
+            $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? $oldStatus)));
+            $oldVoided = ! empty($oldPayload['voided']) || $oldStatus === 'voided';
+
+            if ($oldVoided) {
+                return false;
+            }
+
+            if ($this->isTransactionVoidTransition($oldPayload, $newPayload)) {
+                if (in_array($oldStatus, ['completed', 'cancelled', 'voided'], true)) {
+                    return false;
+                }
+
+                return $this->perm($request, $user, 'void_transactions', $agencyId)
+                    && $this->transactionCloseoutReason($newPayload) !== null
+                    && max((int) ($oldPayload['advancePaymentPKR'] ?? 0), (int) ($oldPayload['advancePKR'] ?? 0)) === 0
+                    && ! $this->hasCollectedPaymentsForTransaction((string) ($newPayload['id'] ?? ''), $agencyId, $request)
+                    && ! $this->hasPaidCommissionForTransaction((string) ($newPayload['id'] ?? ''), $agencyId, $request);
+            }
+
+            if ($newStatus === 'cancelled' && $newStatus !== $oldStatus) {
+                $reason = $this->transactionCloseoutReason($newPayload) ?? $this->transactionCloseoutReason($oldPayload);
+                $canCancel = $this->perm($request, $user, 'cancel_transactions', $agencyId)
+                    || $this->perm($request, $user, 'legacy.cancel_transactions', $agencyId);
+
+                return $canCancel
+                    && $reason !== null
+                    && (! in_array($oldStatus, ['completed', 'cancelled'], true)
+                        || $this->perm($request, $user, 'approve_transactions', $agencyId));
+            }
+
+            if (in_array($oldStatus, ['completed', 'cancelled'], true)
+                && $oldPayload !== $newPayload
+                && ! $this->perm($request, $user, 'approve_transactions', $agencyId)) {
+                return false;
+            }
+
+            if ($newStatus !== $oldStatus
+                && ! $this->validDealStatusTransition($oldStatus, $newStatus)
+                && ! $this->perm($request, $user, 'approve_transactions', $agencyId)) {
+                return false;
+            }
+        }
+
+        if ($collection === 'commissions') {
+            $oldStatus = strtolower((string) ($oldPayload['status'] ?? ''));
+            $newStatus = strtolower((string) ($newPayload['status'] ?? ''));
+            $amountKeys = ['commissionAmountPKR', 'amountPKR', 'commissionAmount'];
+            foreach ($amountKeys as $key) {
+                if (($oldPayload[$key] ?? null) !== ($newPayload[$key] ?? null)
+                    && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+                    return false;
+                }
+            }
+            if (in_array($oldStatus, ['paid', 'cancelled'], true) && $oldPayload !== $newPayload) {
+                return false;
+            }
+            if ($newStatus === 'paid' && $oldStatus !== 'paid'
+                && ! $this->perm($request, $user, 'pay_commissions', $agencyId)
+                && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+                return false;
+            }
+        }
+
+        foreach ($gates[$collection] ?? [] as $permission) {
+            if ($this->perm($request, $user, $permission, $agencyId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function validDealStatusTransition(string $from, string $to): bool
+    {
+        if ($from === $to) {
+            return true;
+        }
+
+        if (in_array($from, ['completed', 'cancelled', 'voided'], true)) {
+            return false;
+        }
+
+        if ($to === 'cancelled') {
+            return true; // separately gated by cancel_transactions + a reason
+        }
+
+        if ($to === 'completed') {
+            return $from === 'under transfer';
+        }
+
+        $stages = [
+            'draft', 'negotiation', 'agreement signed', 'token paid',
+            'advance received', 'payment pending', 'partially paid',
+            'fully paid', 'under transfer', 'completed',
+        ];
+        $fromIndex = array_search($from, $stages, true);
+        $toIndex = array_search($to, $stages, true);
+
+        // Older workspace rows used labels such as "Active". Permit a move
+        // into a known non-terminal stage, but never let an unknown legacy
+        // state jump directly to Completed.
+        if ($fromIndex === false) {
+            return $toIndex !== false && $to !== 'completed';
+        }
+
+        return $fromIndex !== false && $toIndex !== false && $toIndex >= $fromIndex - 1;
+    }
+
+    private function isTransactionVoidTransition(array $oldPayload, array $newPayload): bool
+    {
+        $oldStatus = strtolower(trim((string) ($oldPayload['status'] ?? $oldPayload['dealStatus'] ?? '')));
+        $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? '')));
+
+        return (empty($oldPayload['voided']) && ! empty($newPayload['voided']))
+            || ($newStatus === 'voided' && $oldStatus !== 'voided');
+    }
+
+    private function isTransactionCloseout(array $oldPayload, array $newPayload): bool
+    {
+        if ($this->isTransactionVoidTransition($oldPayload, $newPayload)) {
+            return true;
+        }
+
+        $oldStatus = strtolower(trim((string) ($oldPayload['status'] ?? $oldPayload['dealStatus'] ?? '')));
+        $newStatus = strtolower(trim((string) ($newPayload['status'] ?? $newPayload['dealStatus'] ?? '')));
+
+        return $newStatus === 'cancelled' && $oldStatus !== 'cancelled';
+    }
+
+    private function transactionCloseoutReason(array $payload): ?string
+    {
+        $reason = trim((string) ($payload['voidReason'] ?? $payload['notes'] ?? $payload['internalRemarks'] ?? ''));
+        return strlen($reason) >= 3 && strlen($reason) <= 2000 ? $reason : null;
+    }
+
+    private function stampTransactionCloseout(array $row, $user, bool $isVoid): array
+    {
+        $now = now()->toIso8601String();
+        $row['status'] = 'Cancelled';
+        if (array_key_exists('dealStatus', $row)) {
+            $row['dealStatus'] = 'Cancelled';
+        }
+        $row['commissionStatus'] = 'Cancelled';
+        $row['cancelledAt'] = $now;
+
+        if ($isVoid) {
+            $row['voided'] = true;
+            $row['voidReason'] = $this->transactionCloseoutReason($row);
+            $row['voidedAt'] = $now;
+            $row['voidedBy'] = (string) ($user->name ?? $user->id);
+        }
+
+        return $row;
+    }
+
+    private function hasCollectedPaymentsForTransaction(string $transactionId, ?string $agencyId, Request $request): bool
+    {
+        if ($transactionId === '' || $this->netCollectedForTransaction($transactionId, $agencyId) !== 0) {
+            return true;
+        }
+
+        // Workspace saves collections in a deterministic order (transactions
+        // before payments). Include incoming payment rows so a caller cannot
+        // void a deal and add its payment in the same multi-collection request.
+        $incomingNet = 0;
+        foreach ((array) $request->input('collections.payments', []) as $payment) {
+            if (! is_array($payment)) {
+                continue;
+            }
+            $linkedId = (string) ($payment['transactionId'] ?? $payment['transaction_id'] ?? $payment['dealId'] ?? '');
+            if ($linkedId !== $transactionId) {
+                continue;
+            }
+            $amount = abs((int) ($payment['amountPKR'] ?? $payment['paymentAmountPKR'] ?? $payment['amount'] ?? 0));
+            $type = strtolower((string) ($payment['type'] ?? $payment['paymentType'] ?? 'payment'));
+            $incomingNet += str_contains($type, 'refund') ? -$amount : $amount;
+        }
+        if ($incomingNet !== 0) {
+            return true;
+        }
+
+        $query = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
+        $transaction = $query->first();
+
+        return $transaction !== null && abs((float) $transaction->totalPaid()) > 0.00001;
+    }
+
+    private function hasPaidCommissionForTransaction(string $transactionId, ?string $agencyId, Request $request): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+
+        foreach ((array) $request->input('collections.commissions', []) as $commission) {
+            if (! is_array($commission)) {
+                continue;
+            }
+            $linkedId = (string) ($commission['transactionId'] ?? $commission['transaction_id'] ?? $commission['dealId'] ?? '');
+            $hasPaidPayout = collect((array) ($commission['payouts'] ?? []))->contains(
+                fn ($payout) => is_array($payout) && (int) ($payout['amountPKR'] ?? $payout['amount'] ?? 0) > 0
+            );
+            if ($linkedId === $transactionId
+                && (
+                    strtolower((string) ($commission['status'] ?? '')) === 'paid'
+                    || (int) ($commission['paidPKR'] ?? 0) > 0
+                    || ! empty($commission['paidAt'])
+                    || ! empty($commission['paid_at'])
+                    || $hasPaidPayout
+                )) {
+                return true;
+            }
+        }
+
+        $query = \App\Models\Commission::where('transaction_id', $transactionId)
+            ->where(function ($q) {
+                $q->where('status', 'paid')->orWhereNotNull('paid_at');
+            });
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
+        if ($query->exists()) {
+            return true;
+        }
+
+        $legacy = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
+        if ($agencyId !== null) { $legacy->where('agency_id', $agencyId); }
+
+        return $legacy->get()->contains(function (BusinessRecord $record) use ($transactionId): bool {
+            $row = $record->payload ?? [];
+            $linkedId = (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '');
+            $hasPaidPayout = collect((array) ($row['payouts'] ?? []))->contains(
+                fn ($payout) => is_array($payout) && (int) ($payout['amountPKR'] ?? $payout['amount'] ?? 0) > 0
+            );
+            return $linkedId === $transactionId
+                && (
+                    strtolower((string) ($row['status'] ?? '')) === 'paid'
+                    || (int) ($row['paidPKR'] ?? 0) > 0
+                    || ! empty($row['paidAt'])
+                    || ! empty($row['paid_at'])
+                    || $hasPaidPayout
+                );
+        });
+    }
+
+    private function transactionIsClosedForCommission(string $transactionId, ?string $agencyId): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+
+        $legacy = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) { $legacy->where('agency_id', $agencyId); }
+        $payload = $legacy->first()?->payload ?? [];
+        $status = strtolower((string) ($payload['status'] ?? $payload['dealStatus'] ?? ''));
+
+        if (! empty($payload['voided']) || in_array($status, ['cancelled', 'voided'], true)) {
+            return true;
+        }
+
+        $transaction = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transaction->where('agency_id', $agencyId); }
+        $model = $transaction->first();
+
+        return $model !== null && ($model->voided_at !== null || strtolower((string) $model->dealStatus) === 'cancelled');
+    }
+
+    private function applyTransactionCloseout(
+        string $transactionId,
+        ?string $agencyId,
+        $user,
+        array $row,
+        bool $isVoid
+    ): void {
+        $now = now();
+        $reason = $this->transactionCloseoutReason($row) ?? 'Deal cancelled';
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+        $transaction = $transactionQuery->lockForUpdate()->first();
+        if ($transaction) {
+            $transaction->dealStatus = 'Cancelled';
+            $transaction->commissionStatus = 'Cancelled';
+            if ($isVoid) {
+                $transaction->voided_at = $now;
+                $transaction->void_reason = $reason;
+                $transaction->voided_by = $user->id;
+            }
+            $transaction->save();
+        }
+
+        $commissionQuery = \App\Models\Commission::where('transaction_id', $transactionId)
+            ->whereIn('status', ['pending', 'accrued']);
+        if ($agencyId !== null) { $commissionQuery->where('agency_id', $agencyId); }
+        $commissionQuery->update(['status' => 'cancelled']);
+
+        $scheduleQuery = \App\Models\PaymentSchedule::where('transaction_id', $transactionId)
+            ->whereIn('status', ['pending', 'overdue']);
+        if ($agencyId !== null) { $scheduleQuery->where('agency_id', $agencyId); }
+        $scheduleQuery->update(['status' => 'cancelled']);
+
+        $legacy = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
+        if ($agencyId !== null) { $legacy->where('agency_id', $agencyId); }
+        foreach ($legacy->get() as $record) {
+            $payload = $record->payload ?? [];
+            $linkedId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+            if ($linkedId !== $transactionId
+                || strtolower((string) ($payload['status'] ?? '')) === 'paid'
+                || (int) ($payload['paidPKR'] ?? 0) > 0) {
+                continue;
+            }
+
+            $payload['status'] = 'Cancelled';
+            $payload['cancelledAt'] = $now->toIso8601String();
+            $record->payload = $payload;
+            $record->save();
+        }
+    }
+
+    private function netCollectedForTransaction(string $transactionId, ?string $agencyId): int
+    {
+        if ($transactionId === '') {
+            return 0;
+        }
+
+        $records = $this->businessPaymentRowsForTransaction($transactionId, $agencyId);
+        $grossPayments = 0;
+        $refunds = 0;
+        $hasAdvanceMovement = false;
+
+        foreach ($records as $record) {
+            $row = $record->payload ?? [];
+            $amount = abs((int) ($row['amountPKR'] ?? $row['paymentAmountPKR'] ?? $row['amount'] ?? 0));
+            $type = strtolower((string) ($row['type'] ?? $row['paymentType'] ?? 'payment'));
+            if (str_contains($type, 'refund')) {
+                $refunds += $amount;
+                continue;
+            }
+            $grossPayments += $amount;
+            if ($type === 'advance' || str_contains(strtolower((string) ($row['note'] ?? '')), 'advance recorded at deal creation')) {
+                $hasAdvanceMovement = true;
+            }
+        }
+
+        if ($records !== []) {
+            $legacyAdvance = $this->legacyAdvanceForTransaction($transactionId, $agencyId);
+            // Old deals stored the advance only on the transaction row. When a
+            // later payment/refund is first recorded, preserve that legacy base
+            // unless an explicit advance movement already exists in the ledger.
+            $base = $grossPayments + ($legacyAdvance > 0 && ! $hasAdvanceMovement ? $legacyAdvance : 0);
+
+            return max(0, $base - $refunds);
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+        $transaction = $transactionQuery->first();
+        if ($transaction !== null) {
+            $relationalPaid = (int) $transaction->totalPaid();
+            if ($relationalPaid !== 0) {
+                return max(0, $relationalPaid);
+            }
+            if ((int) $transaction->advancePaymentPKR > 0) {
+                return (int) $transaction->advancePaymentPKR;
+            }
+        }
+
+        return $this->legacyAdvanceForTransaction($transactionId, $agencyId);
+    }
+
+    private function businessPaymentRowsForTransaction(string $transactionId, ?string $agencyId): array
+    {
+        $query = BusinessRecord::where('collection', 'payments')->whereNull('deleted_at');
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        }
+        $query->where(function ($builder) use ($transactionId): void {
+            $builder->where('payload->transactionId', $transactionId)
+                ->orWhere('payload->transaction_id', $transactionId)
+                ->orWhere('payload->dealId', $transactionId);
+        });
+
+        return $query->get()->all();
+    }
+
+    private function legacyAdvanceForTransaction(string $transactionId, ?string $agencyId): int
+    {
+        $query = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
+        $payload = $query->first()?->payload ?? [];
+        $advance = $this->normalizeWholePkr($payload['advancePaymentPKR'] ?? $payload['advancePKR'] ?? 0) ?? 0;
+        if ($advance > 0) {
+            return $advance;
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
+        return (int) ($transactionQuery->value('advancePaymentPKR') ?? 0);
+    }
+
+    private function enforcePaymentMovement(Request $request, array $payload, ?string $agencyId): void
+    {
+        $amount = $this->normalizeWholePkr($payload['amountPKR'] ?? $payload['paymentAmountPKR'] ?? $payload['amount'] ?? null);
+
+        // Metadata-only updates (no amount) are not payment movements and do
+        // not require a linked deal; skip the movement guards entirely.
+        if ($amount === null) {
+            return;
+        }
+
+        $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+        $type = strtolower((string) ($payload['type'] ?? $payload['paymentType'] ?? 'payment'));
+        $isRefund = str_contains($type, 'refund');
+
+        if ($transactionId === '' || $amount <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments' => ['A payment movement requires a deal id and positive whole-PKR amount.'],
+            ]);
+        }
+
+        $legacyQuery = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        if ($agencyId !== null) {
+            $legacyQuery->where('agency_id', $agencyId);
+        }
+        $legacy = $legacyQuery->first()?->payload ?? [];
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        if ($agencyId !== null) {
+            $transactionQuery->where('agency_id', $agencyId);
+        }
+        $transaction = $transactionQuery->first();
+
+        if ($legacy === [] && $transaction === null) {
+            abort(404, 'Transaction not found for this agency.');
+        }
+
+        $voided = ! empty($legacy['voided']) || ($transaction !== null && $transaction->isVoided());
+        $status = strtolower((string) ($legacy['status'] ?? $legacy['dealStatus'] ?? $transaction?->dealStatus ?? ''));
+        if ($voided || $status === 'voided') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments' => ['No payment or refund can be recorded against a voided deal.'],
+            ]);
+        }
+        if (! $isRefund && $status === 'cancelled') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments' => ['New payments are frozen after a deal is cancelled; record a refund instead.'],
+            ]);
+        }
+
+        $collected = $this->netCollectedForTransaction($transactionId, $agencyId);
+        if ($isRefund) {
+            if (trim((string) ($payload['note'] ?? '')) === '') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.payments.note' => ['A reason/reference note is required for every refund.'],
+                ]);
+            }
+            if ($amount > $collected) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.payments.amountPKR' => ['Refund cannot exceed the deal\'s net collected balance.'],
+                ]);
+            }
+
+            return;
+        }
+
+        // The initial advance is already represented in the transaction row.
+        // Its first ledger row is a one-time migration of that existing money,
+        // not a second collection.
+        $isLegacyAdvanceEntry = $type === 'advance'
+            || str_contains(strtolower((string) ($payload['note'] ?? '')), 'advance recorded at deal creation');
+        if ($isLegacyAdvanceEntry && ! $this->hasBusinessPaymentLedger($transactionId, $agencyId)) {
+            $advance = $this->legacyAdvanceForTransaction($transactionId, $agencyId);
+            if ($advance > 0 && $amount === $advance) {
+                return;
+            }
+        }
+
+        $agreement = $this->normalizeWholePkr($legacy['agreementAmountPKR'] ?? $legacy['dealAmountPKR'] ?? $transaction?->agreementAmountPKR ?? null) ?? 0;
+        if ($agreement <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments' => ['A valid agreed deal amount is required before recording payments.'],
+            ]);
+        }
+
+        $remaining = max(0, $agreement - $collected);
+        if ($amount > $remaining && ! $this->perm($request, $request->user(), 'approve_transactions', $agencyId)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'collections.payments.amountPKR' => ['Payment exceeds the remaining deal balance; supervisor approval is required.'],
+            ]);
+        }
+    }
+
+    private function hasBusinessPaymentLedger(string $transactionId, ?string $agencyId): bool
+    {
+        return $this->businessPaymentRowsForTransaction($transactionId, $agencyId) !== [];
+    }
+
+    /** Replace (destructive) mode requires delete-level rights; financial ledgers cannot be bulk-replaced. */
+    private function canReplace(Request $request, $user, string $collection, ?string $agencyId): bool
+    {
+        if (in_array($collection, ['projects', 'testimonials', 'cms'], true) && ! $user->isPlatformUser()) {
+            return false;
+        }
+
+        $gates = [
+            'properties' => ['delete_properties', 'properties.delete'],
+            'dealers' => ['manage_dealers'],
+            'sellers' => ['manage_sellers'],
+            'buyers' => ['manage_buyers'],
+            'transactions' => [],
+            'payments' => [],
+            'commissions' => [],
+            'files' => ['documents.delete'],
+            'plots' => ['delete_properties', 'properties.delete'],
+            'media' => ['manage_media'],
+            'videos' => ['manage_media'],
+            'inquiries' => ['crm.delete_lead'],
+            'subscribers' => ['crm.delete_lead'],
+            'testimonials' => ['edit_cms'],
+            'projects' => ['manage_projects'],
+        ];
+
+        foreach ($gates[$collection] ?? [] as $permission) {
+            if ($this->perm($request, $user, $permission, $agencyId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     private function cmsPayload(): array
     {
         $record = BusinessRecord::where('collection', 'cms')->where('record_id', 'default')->first();
@@ -907,119 +2341,4 @@ class WorkspaceController extends Controller
         return $this->onlyKeys($row, self::PUBLIC_MEDIA_KEYS);
     }
 
-    /* ================================================================ */
-    /* Permission gates */
-    /* ================================================================ */
-
-    /**
-     * Permission check mirroring AuthorizesApi: agency-scoped grants when the
-     * user acts within an agency, PLUS platform-wide grants for cross-agency
-     * platform admins (flagged by AgencyContext via X-Agency-Id).
-     */
-    private function perm(Request $request, $user, string $permission, ?string $agencyId): bool
-    {
-        if ($user->hasPermission($permission, $agencyId)) {
-            return true;
-        }
-        if ($agencyId !== null && $this->isCrossAgency($request) && $user->hasPermission($permission)) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /** Read gate per collection (agency-scoped keys checked when scoped). */
-    private function canRead(Request $request, $user, string $collection, ?string $agencyId): bool
-    {
-        // `view_properties` is the legacy universal read gate — kept as the
-        // fallback so existing staff screens keep working; agency scoping
-        // (allRows) is what actually isolates tenants on reads.
-        $gates = [
-            'projects' => ['view_properties', 'properties.view', 'manage_projects'],
-            'properties' => ['view_properties', 'properties.view'],
-            'dealers' => ['view_dealers', 'manage_dealers', 'properties.view', 'view_properties'],
-            'sellers' => ['manage_sellers', 'view_properties'],
-            'buyers' => ['manage_buyers', 'submit_buyer', 'view_properties'],
-            'transactions' => ['view_transactions', 'finance.view', 'view_my_deals', 'view_properties'],
-            'payments' => ['view_transactions', 'finance.view', 'view_my_deals', 'view_properties'],
-            'commissions' => ['view_commissions', 'finance.view', 'view_my_commission', 'view_properties'],
-            'files' => ['upload_documents', 'verify_documents', 'view_private_documents', 'documents.view', 'view_properties'],
-            'plots' => ['view_properties', 'properties.view'],
-            'media' => ['view_properties', 'properties.view', 'manage_media', 'upload_media'],
-            'videos' => ['view_properties', 'properties.view', 'manage_media', 'upload_media'],
-            'inquiries' => ['view_inquiries', 'crm.view', 'view_properties'],
-            'subscribers' => ['view_inquiries', 'crm.view', 'view_properties'],
-            'testimonials' => ['edit_cms', 'view_reports', 'view_properties'],
-            'cms' => ['edit_cms', 'view_reports', 'view_properties'],
-        ];
-
-        foreach ($gates[$collection] ?? ['view_properties'] as $permission) {
-            if ($this->perm($request, $user, $permission, $agencyId)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /** Write gate per collection (agency-scoped). */
-    private function canWrite(Request $request, $user, string $collection, ?string $agencyId = null): bool
-    {
-        $gates = [
-            'projects' => ['manage_projects'],
-            'properties' => ['create_properties', 'edit_properties', 'properties.create', 'properties.update'],
-            'dealers' => ['manage_dealers', 'pay_commissions'],
-            'sellers' => ['manage_sellers'],
-            'buyers' => ['manage_buyers', 'submit_buyer'],
-            'transactions' => ['create_transactions', 'update_transactions', 'void_transactions', 'finance.create_transaction'],
-            'payments' => ['manage_payments', 'finance.manage_payments'],
-            'commissions' => ['pay_commissions', 'manage_payments', 'create_transactions', 'finance.manage_payments'],
-            'files' => ['upload_documents', 'verify_documents', 'documents.upload'],
-            'plots' => ['edit_properties', 'properties.update'],
-            'media' => ['manage_media', 'upload_media'],
-            'videos' => ['manage_media', 'upload_media'],
-            'inquiries' => ['crm.update_lead'],
-            'subscribers' => ['crm.update_lead'],
-            'testimonials' => ['edit_cms'],
-            'cms' => ['edit_cms'],
-        ];
-
-        foreach ($gates[$collection] ?? [] as $permission) {
-            if ($this->perm($request, $user, $permission, $agencyId)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /** Replace (destructive) mode requires delete-level rights. */
-    private function canReplace(Request $request, $user, string $collection, ?string $agencyId): bool
-    {
-        $gates = [
-            'properties' => ['delete_properties', 'properties.delete'],
-            'dealers' => ['manage_dealers'],
-            'sellers' => ['manage_sellers'],
-            'buyers' => ['manage_buyers'],
-            'transactions' => ['void_transactions'],
-            'payments' => ['manage_payments', 'finance.manage_payments'],
-            'commissions' => ['pay_commissions'],
-            'files' => ['verify_documents', 'documents.delete'],
-            'plots' => ['delete_properties', 'properties.delete'],
-            'media' => ['manage_media'],
-            'videos' => ['manage_media'],
-            'inquiries' => ['crm.delete_lead'],
-            'subscribers' => ['crm.delete_lead'],
-            'testimonials' => ['edit_cms'],
-            'projects' => ['manage_projects'],
-        ];
-
-        foreach ($gates[$collection] ?? [] as $permission) {
-            if ($this->perm($request, $user, $permission, $agencyId)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

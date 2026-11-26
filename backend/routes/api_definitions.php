@@ -287,10 +287,10 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureMfaVerified::class
 
     /* ---------- Support desk (self-service, auth required) ---------- */
     Route::get('/support/tickets', [SupportController::class, 'index'])->middleware('auth:sanctum');
-    Route::post('/support/tickets', [SupportController::class, 'store'])->middleware('auth:sanctum');
+    Route::post('/support/tickets', [SupportController::class, 'store'])->middleware('auth:sanctum', 'throttle:5,1');
     Route::get('/support/tickets/{id}', [SupportController::class, 'show'])->middleware('auth:sanctum');
-    Route::post('/support/tickets/{id}/messages', [SupportController::class, 'storeMessage'])->middleware('auth:sanctum');
-    Route::post('/support/tickets/{id}/status', [SupportController::class, 'updateStatus'])->middleware('auth:sanctum');
+    Route::post('/support/tickets/{id}/messages', [SupportController::class, 'storeMessage'])->middleware('auth:sanctum', 'throttle:20,1');
+    Route::post('/support/tickets/{id}/status', [SupportController::class, 'updateStatus'])->middleware('auth:sanctum', 'throttle:30,1');
 
     /* ---------- Payments (Stripe / Flutterwave) ---------- */
     // Webhooks are registered in the public section above (gateways have no token).

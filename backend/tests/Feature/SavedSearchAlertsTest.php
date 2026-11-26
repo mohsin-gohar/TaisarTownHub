@@ -75,6 +75,23 @@ class SavedSearchAlertsTest extends EnterpriseTestCase
         $this->assertDatabaseMissing('saved_searches', ['id' => $id]);
     }
 
+    public function test_saved_search_model_generates_a_prefixed_id_when_omitted(): void
+    {
+        [$user] = $this->agencyUser(['properties.view']);
+
+        $search = SavedSearch::create([
+            'user_id' => $user->id,
+            'name' => 'Generated ID search',
+            'filters' => ['sector' => 'Sector 63'],
+            'frequency' => 'daily',
+            'alerts_enabled' => true,
+        ]);
+
+        $this->assertStringStartsWith('ss_', $search->id);
+        $this->assertSame(29, strlen($search->id));
+        $this->assertDatabaseHas('saved_searches', ['id' => $search->id, 'user_id' => $user->id]);
+    }
+
     public function test_sale_only_marketplace_rejects_rental_saved_searches_and_alerts(): void
     {
         Carbon::setTestNow('2026-11-16 11:00:00');

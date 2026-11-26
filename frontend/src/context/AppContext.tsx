@@ -33,15 +33,17 @@ import {
   initialPlotMarkers
 } from '../data/publicSeed';
 import { initialAgencyVideos } from '../data/agencyVideosSeed';
-import { APP_MODE, DEMO_PIN, IS_DEMO } from '../config/appMode';
+import { APP_MODE, DEMO_PIN, IS_DEMO, allowsPublicSeedFallback } from '../config/appMode';
 import { checkDuplicateProperty, hasPermission, userHasPermission, maskCNIC, calculateMediaSaleProfit } from '../utils/logic';
 import { logAudit } from '../domain/auditLog';
 import { normalizeRole, authorize, ROLE_LABELS, toLegacyRoleLabel, type Permission } from '../domain/permissions';
 import {
   TRANSACTION_STAGES,
   validateTransition,
+  validateVoid,
   validateDealPayload,
   validatePayment,
+  validateRefund,
   dealMoney as dealMoneyOf,
   impliedStatusByPayment,
   nextDealNumber,
@@ -54,7 +56,7 @@ import { anonymousUser, defaultAgencyId, userFromServer } from '../domain/authSe
 
 /** Read a collection from localStorage, returning fallback on failure. */
 function readStored<T>(key: string, fallback: T[]): T[] {
-  if (!IS_DEMO) return fallback;
+  if (!IS_DEMO) return allowsPublicSeedFallback(APP_MODE) ? fallback : [];
   const saved = localStorage.getItem(`taisartownhub_v2_${key}`);
   if (saved) {
     try {
@@ -159,6 +161,8 @@ interface AppContextType {
   /** Record a payment on a deal (manage_payments gate); updates the ledger,
    *  derived payment status and the accrual milestone. */
   recordPayment: (transactionId: string, amount: number, method: PaymentEntry['method'], note?: string) => boolean;
+  /** Record a refund against previously collected funds; cancellations may be refunded, voided deals may not. */
+  recordRefund: (transactionId: string, amount: number, method: PaymentEntry['method'], note: string) => boolean;
   /** Void a deal with a mandatory reason (void_transactions gate); preserves
    *  the record with an audit trail instead of hard-deleting it. */
   voidTransaction: (id: string, reason: string) => void;
@@ -200,7 +204,7 @@ interface AppContextType {
   deleteInquiry: (id: string) => void;
   
   cmsConfig: CMSConfig;
-  updateCMSConfig: (updates: Partial<CMSConfig>) => void;
+  updateCMSConfig: (updates: Partial<CMSConfig>) => Promise<boolean>;
   
   // Toasts & Reset
   toasts: ToastMessage[];
@@ -749,6 +753,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('error', 'An approved agency session is required.');
       return false;
     }
+    if (!IS_DEMO && !backendConnected) {
+      showToast('error', 'The API is unavailable. This change was not saved; reconnect before trying again.');
+      return false;
+    }
     const gate = authorize(currentUser, permission, scope);
     if (!gate.ok) {
       showToast('error', gate.error);
@@ -1151,8 +1159,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Only Super Admin executes payouts (P0-4: Admin has visibility, not payment authority).
     if (!requirePermission('pay_commissions')) return;
     // Validation
-    if (!Number.isFinite(amount) || amount <= 0) {
-      showToast('error', 'Payout amount must be a positive number.');
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      showToast('error', 'Payout amount must be a positive whole-rupee PKR amount.');
       return;
     }
     const dealer = dealers.find((d) => d.id === dealerId);
@@ -1176,16 +1184,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     for (const entry of payableEntries) {
       if (remaining <= 0) break;
-      const due = entry.amountPKR - entry.paidPKR;
-      if (due <= 0) continue;
+      const commissionAmount = Number(entry.amountPKR);
+      const alreadyPaid = Number(entry.paidPKR ?? 0);
+      const due = commissionAmount - alreadyPaid;
+      if (!Number.isSafeInteger(commissionAmount) || !Number.isSafeInteger(alreadyPaid) || due <= 0) continue;
       const payNow = Math.min(due, remaining);
-      const newPaid = entry.paidPKR + payNow;
+      const newPaid = alreadyPaid + payNow;
       entryUpdates.push({
         ...entry,
         paidPKR: newPaid,
         status: newPaid >= entry.amountPKR ? 'Paid' : 'Partially Paid',
         payouts: [
-          ...entry.payouts,
+          ...(entry.payouts ?? []),
           { id: genId('payout'), amountPKR: payNow, paidAt: today, recordedBy: currentUser.name, note: transactionId ? 'Payout against specific deal.' : undefined },
         ],
       });
@@ -1283,7 +1293,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         t.status !== 'Cancelled' &&
         t.status !== 'Draft'
     );
-    if (hasActiveTransaction && !hasPermission(currentUser.role, 'approve_transactions')) {
+    if (hasActiveTransaction && !userHasPermission(currentUser, 'approve_transactions')) {
       showToast('error', `An active transaction already exists for property ID "${txData.propertyId}". Complete or cancel it first.`);
       return;
     }
@@ -1364,6 +1374,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('error', 'This deal is voided and read-only.');
       return;
     }
+    if (['Completed', 'Cancelled'].includes(existingTx.status) && !userHasPermission(currentUser, 'approve_transactions')) {
+      showToast('error', 'Completed and cancelled deals are read-only.');
+      return;
+    }
 
     // Prevent duplicate active sale deals per property unless supervisor-approved.
     const targetPropertyId = updates.propertyId || existingTx.propertyId;
@@ -1376,7 +1390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           t.status !== 'Cancelled' &&
           t.status !== 'Draft'
       );
-      if (hasActive && !hasPermission(currentUser.role, 'approve_transactions')) {
+      if (hasActive && !userHasPermission(currentUser, 'approve_transactions')) {
         showToast('error', `An active transaction already exists for property ID "${targetPropertyId}".`);
         return;
       }
@@ -1389,7 +1403,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // (supervisors holding approve_transactions may make corrective moves).
     if (updates.status && updates.status !== existingTx.status) {
       const gate = validateTransition(existingTx.status, updates.status);
-      const isPrivileged = hasPermission(currentUser.role, 'approve_transactions');
+      const isPrivileged = userHasPermission(currentUser, 'approve_transactions');
       if (!gate.ok) {
         if (!isPrivileged) {
           showToast('error', gate.error);
@@ -1402,16 +1416,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // On Cancel: confirm a reason (updates note), cancel unpaid accruals and
       // release the property back to inventory.
       if (updates.status === 'Cancelled') {
-        if (!(existingTx.internalRemarks || existingTx.notes || updates.internalRemarks || updates.notes)) {
-          showToast('error', 'A cancellation reason is required. Add it to the deal notes.');
+        const cancellationReason = (existingTx.internalRemarks || existingTx.notes || updates.internalRemarks || updates.notes || '').trim();
+        if (cancellationReason.length < 3 || cancellationReason.length > 2000) {
+          showToast('error', 'A cancellation reason must be between 3 and 2,000 characters.');
           return;
         }
         const cancelledTx = { ...updatedTx, commissionStatus: 'Cancelled' as const };
         setCommissionEntries((prev) =>
-          prev.map((e) => {
-            if (e.transactionId !== id) return e;
-            const r = accrueCommission(e, cancelledTx, paymentEntries);
-            return r.changed ? r.entry : e;
+          prev.map((entry) => {
+            if (entry.transactionId !== id || entry.status === 'Paid' || entry.paidPKR > 0) return entry;
+            return { ...entry, status: 'Cancelled' };
           })
         );
         updatedTx = cancelledTx;
@@ -1474,7 +1488,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
     const gate = validatePayment(txn, paymentEntries, amount, {
-      allowOverpay: hasPermission(currentUser.role, 'approve_transactions'),
+      allowOverpay: userHasPermission(currentUser, 'approve_transactions'),
     });
     if (!gate.ok) {
       showToast('error', gate.error);
@@ -1489,6 +1503,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method,
       paidAt: today,
       recordedBy: currentUser.name,
+      type: 'payment',
       note: (note || '').trim() || undefined,
     };
     const updatedPayments = [...paymentEntries, entry];
@@ -1536,6 +1551,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  /** Record an audited refund; cancelled deals can be refunded, voided deals stay frozen. */
+  const recordRefund = (transactionId: string, amount: number, method: PaymentEntry['method'], note: string): boolean => {
+    if (!requirePermission('manage_payments')) return false;
+    const txn = transactions.find((t) => t.id === transactionId);
+    if (!txn) {
+      showToast('error', 'Transaction not found.');
+      return false;
+    }
+    if (!note.trim()) {
+      showToast('error', 'A reason/reference note is required for every refund.');
+      return false;
+    }
+
+    const gate = validateRefund(txn, paymentEntries, amount);
+    if (!gate.ok) {
+      showToast('error', gate.error);
+      return false;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const entry: PaymentEntry = {
+      id: genId('refund'),
+      transactionId,
+      amountPKR: Number(amount),
+      method,
+      paidAt: today,
+      recordedBy: currentUser.name,
+      type: 'refund',
+      note: note.trim(),
+    };
+    const updatedPayments = [...paymentEntries, entry];
+    setPaymentEntries(updatedPayments);
+
+    const money = dealMoneyOf(txn, updatedPayments);
+    const updatedTx: Transaction = {
+      ...txn,
+      status: txn.status === 'Fully Paid' && !money.isFullyPaid ? 'Under Transfer' : txn.status,
+      paymentStatus: money.isFullyPaid ? 'Fully Paid' : money.collected > 0 ? 'Partially Paid' : 'Unpaid',
+      remainingBalancePKR: money.balance,
+      balancePKR: money.balance,
+    };
+    setTransactions((prev) => prev.map((item) => (item.id === transactionId ? updatedTx : item)));
+
+    logAudit({
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: 'record_refund',
+      target: transactionId,
+      detail: 'PKR ' + amount.toLocaleString() + ' refunded via ' + method + ' — ' + note.trim(),
+    });
+    showToast('success', `Refund of PKR ${amount.toLocaleString()} recorded.`);
+    return true;
+  };
+
   /** P1-1: voiding replaces hard delete - the record stays with an audit trail;
    *  totals exclude it, frozen payments surface in the void message. */
   const voidTransaction = (id: string, reason: string) => {
@@ -1550,8 +1619,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const cleanReason = (reason || '').trim();
-    if (!cleanReason) {
-      showToast('error', 'A reason is required to void a transaction (audit trail).');
+    if (cleanReason.length < 3 || cleanReason.length > 2000) {
+      showToast('error', 'Enter a void reason between 3 and 2,000 characters for the audit trail.');
+      return;
+    }
+
+    const gate = validateVoid(txn, paymentEntries, commissionEntries);
+    if (!gate.ok) {
+      showToast('error', gate.error);
       return;
     }
 
@@ -1566,10 +1641,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setCommissionEntries((prev) =>
-      prev.map((e) => {
-        if (e.transactionId !== id) return e;
-        const r = accrueCommission(e, voidedTx, paymentEntries);
-        return r.changed ? r.entry : e;
+      prev.map((entry) => {
+        if (entry.transactionId !== id || entry.status === 'Paid' || entry.paidPKR > 0) return entry;
+        return { ...entry, status: 'Cancelled' };
       })
     );
     setTransactions((prev) => prev.map((t) => (t.id === id ? voidedTx : t)));
@@ -1577,11 +1651,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       props.map((p) => (p.id === txn.propertyId ? { ...p, status: 'Available' } : p))
     );
 
-    const money = dealMoneyOf(txn, paymentEntries);
-    showToast(
-      'info',
-      `Deal voided (record kept for audit).${money.collected > 0 ? ` Payments of PKR ${money.collected.toLocaleString()} were recorded — refund handling is manual.` : ''}`
-    );
+    showToast('info', 'Deal voided (record kept for audit).');
     logAudit({ actor: currentUser.name, role: currentUser.role, action: 'void_transaction', target: id, detail: reason });
   };
 
@@ -1967,49 +2037,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateInquiryStatus = (id: string, status: InquiryStatus) => {
     if (!requirePermission(['crm.update_lead', 'crm.delete_lead'])) return;
-    setInquiries((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, status } : i))
-    );
-    if (backendConnected) {
-      api.updateInquiryStatus(id, status).then((result) => {
-        if (!result) {
-          // Rollback optimistic status on API failure.
-          setInquiries((prev) =>
-            prev.map((i) => (i.id === id ? { ...i, status: 'Pending' } : i))
-          );
-          showToast('error', 'Could not change inquiry status. Please try again.');
-        }
-      }).catch(() => {
-        setInquiries((prev) =>
-          prev.map((i) => (i.id === id ? { ...i, status: 'Pending' } : i))
-        );
-        showToast('error', 'Could not change inquiry status. Please try again.');
-      });
-    } else {
-      showToast('info', 'Status change saved locally — will sync when backend is available.');
+    const previous = inquiries.find((inquiry) => inquiry.id === id);
+    if (!previous) {
+      showToast('error', 'Inquiry not found.');
+      return;
     }
+    if (IS_DEMO) {
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, status } : inquiry)));
+      showToast('info', 'Demo-only inquiry status changed locally; it is not saved to the live workspace.');
+      return;
+    }
+
+    api.updateInquiryStatus(id, status).then((result) => {
+      if (!result) {
+        showToast('error', 'Could not change inquiry status. Please try again.');
+        return;
+      }
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, status } : inquiry)));
+      showToast('success', 'Inquiry status updated.');
+    }).catch(() => {
+      showToast('error', 'Could not change inquiry status. Please try again.');
+    });
   };
 
   const updateInquiryNotes = (id: string, notes: string) => {
     if (!requirePermission('crm.update_lead')) return;
-    setInquiries((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, adminNotes: notes } : i))
-    );
-    if (backendConnected) {
-      api.updateInquiryNotes(id, notes).then((result) => {
-        if (!result) {
-          // Rollback local notes on API failure.
-          setInquiries((prev) =>
-            prev.map((i) => (i.id === id ? { ...i, adminNotes: '' } : i))
-          );
-          showToast('error', 'Could not save inquiry notes. Please try again.');
-        }
-      }).catch(() => {
-        showToast('error', 'Could not save inquiry notes. Please try again.');
-      });
-    } else {
-      showToast('info', 'Notes saved locally — will sync when backend is available.');
+    const previous = inquiries.find((inquiry) => inquiry.id === id);
+    if (!previous) {
+      showToast('error', 'Inquiry not found.');
+      return;
     }
+    if (IS_DEMO) {
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, adminNotes: notes } : inquiry)));
+      showToast('info', 'Demo-only inquiry notes changed locally; they are not saved to the live workspace.');
+      return;
+    }
+
+    api.updateInquiryNotes(id, notes).then((result) => {
+      if (!result) {
+        showToast('error', 'Could not save inquiry notes. Please try again.');
+        return;
+      }
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, adminNotes: notes } : inquiry)));
+      showToast('success', 'Inquiry notes saved.');
+    }).catch(() => {
+      showToast('error', 'Could not save inquiry notes. Please try again.');
+    });
   };
 
   const deleteInquiry = (id: string) => {
@@ -2031,10 +2104,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // CMS Updates
-  const updateCMSConfig = (updates: Partial<CMSConfig>) => {
-    if (!requirePermission('edit_cms')) return;
-    setCmsConfig((prev) => ({ ...prev, ...updates }));
-    showToast('info', 'CMS settings updated locally — changes persist only in this session until a backend CMS endpoint is implemented.');
+  const updateCMSConfig = async (updates: Partial<CMSConfig>): Promise<boolean> => {
+    if (!requirePermission('edit_cms')) return false;
+
+    const nextConfig = { ...cmsConfig, ...updates };
+    const saved = await api.saveCmsConfig(nextConfig);
+    if (!saved) {
+      showToast('error', 'Website changes were not saved. Check platform CMS permission and API connection.');
+      return false;
+    }
+
+    setCmsConfig(nextConfig);
+    showToast('success', 'Website content saved and published.');
+    return true;
   };
 
   const resetToDefaultData = async () => {
@@ -2122,6 +2204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateTransaction,
         deleteTransaction,
         recordPayment,
+        recordRefund,
         voidTransaction,
         propertyFiles,
         addPropertyFile,
