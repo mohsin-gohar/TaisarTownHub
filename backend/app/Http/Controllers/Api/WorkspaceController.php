@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BusinessRecord;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Legacy workspace sync (JSON store) — HARDENED.
@@ -622,71 +623,78 @@ class WorkspaceController extends Controller
             $recordId = (string) $row['id'];
             $ids[] = $recordId;
 
-            $existing = BusinessRecord::where('collection', $collection)
-                ->where('record_id', $recordId)
-                ->first();
+            // Insert the ownership column atomically, then lock the canonical
+            // row before inspecting or changing its payload. This closes the
+            // check-then-write race where two agencies could concurrently
+            // create the same collection/record ID and the losing writer
+            // could overwrite the winner's row before noticing its owner.
+            $result = DB::transaction(function () use ($collection, $recordId, $row, $agencyId, $scoped): array {
+                $now = now();
+                $newRow = $row;
+                if ($scoped && $agencyId !== null && ! isset($newRow['created_by'])) {
+                    $newRow['created_by'] = auth()->id();
+                }
 
-            $owner = $existing ? ($existing->agency_id ?? null) : null;
+                $deletedAt = ! empty($newRow['deletedAt']) ? $now : null;
+                $inserted = DB::table('business_records')->insertOrIgnore([
+                    'collection' => $collection,
+                    'record_id' => $recordId,
+                    'payload' => json_encode($newRow, JSON_THROW_ON_ERROR),
+                    'agency_id' => $scoped ? $agencyId : null,
+                    'deleted_at' => $deletedAt,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
 
-            // ---- row-level ownership enforcement ----
-            if ($scoped && $agencyId !== null && $existing && $owner !== null && $owner !== $agencyId) {
-                $blocked++; // another agency's row — never touch
+                $existing = BusinessRecord::query()
+                    ->where('collection', $collection)
+                    ->where('record_id', $recordId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-                continue;
-            }
+                $owner = $existing->agency_id;
+                if ($scoped && $agencyId !== null && $owner !== $agencyId) {
+                    return ['accepted' => false, 'blocked' => true, 'changed' => false];
+                }
 
-            // BLK-06 (Option B): unresolved legacy rows are platform-owned.
-            // Agency writers must not co-claim them via the sync surface —
-            // rows with no owner stay read/write for platform users only
-            // until a human-approved mapping is applied with
-            // platform:legacy-backfill (resolver evidence or --mapping).
-            if ($scoped && $agencyId !== null && $existing && $owner === null) {
+                $previous = $existing->payload ?? [];
+                if (isset($previous['created_by']) && ! isset($newRow['created_by'])) {
+                    $newRow['created_by'] = $previous['created_by'];
+                }
+
+                if ($collection === 'videos') {
+                    $newRow = $this->mergeVideo($newRow, $existing);
+                }
+
+                $newDeletedAt = ! empty($newRow['deletedAt']) ? now() : null;
+                $payloadDiffers = json_encode($previous) !== json_encode($newRow);
+                $deletedDiffers = ($existing->deleted_at === null) !== ($newDeletedAt === null);
+
+                if ($payloadDiffers || $deletedDiffers) {
+                    $existing->payload = $newRow;
+                    $existing->deleted_at = $newDeletedAt;
+                    $existing->save();
+                }
+
+                return [
+                    'accepted' => true,
+                    'blocked' => false,
+                    'changed' => $inserted > 0 || $payloadDiffers || $deletedDiffers,
+                ];
+            }, 3);
+
+            if ($result['blocked']) {
                 $blocked++;
 
                 continue;
             }
 
-            $accepted++;
-
-            if ($existing) {
-                // Preserve the original creator stamped by an earlier sync
-                $previous = $existing->payload ?? [];
-                if (isset($previous['created_by']) && ! isset($row['created_by'])) {
-                    $row['created_by'] = $previous['created_by'];
-                }
-            } elseif ($scoped && $agencyId !== null) {
-                // New row created by a member is owned by their agency
-                $row['created_by'] = auth()->id();
+            if ($result['accepted']) {
+                $accepted++;
             }
-
-            if ($collection === 'videos') {
-                $row = $this->mergeVideo($row, $existing);
+            if ($result['changed']) {
+                $changed[] = $recordId;
             }
-
-            $newPayload = $row;
-            $oldPayload = $existing?->payload ?? null;
-            $deletedAt = ! empty($row['deletedAt']) ? now() : null;
-            $oldDeletedAt = $existing?->deleted_at;
-
-            $payloadDiffers = $oldPayload === null
-                || json_encode($oldPayload) !== json_encode($newPayload);
-            $deletedDiffers = ($oldDeletedAt === null) !== ($deletedAt === null);
-
-            if (! $payloadDiffers && ! $deletedDiffers) {
-                continue; // nothing changed — skip write
-            }
-
-            BusinessRecord::put($collection, $recordId, $row);
-            $changed[] = $recordId;
-
-            // Stamp tenancy COLUMN for new rows and rows already owned by the
-            // writer. Shared legacy rows (NULL) stay NULL — never hijacked.
-            if ($scoped && $agencyId !== null && ($existing === null || ($owner !== null && $owner === $agencyId))) {
-                BusinessRecord::where('collection', $collection)
-                    ->where('record_id', $recordId)
-                    ->update(['agency_id' => $agencyId]);
-            }
-            // platform writer: leave the existing column untouched
         }
 
         if ($blocked > 0) {
@@ -699,14 +707,10 @@ class WorkspaceController extends Controller
         }
 
         if ($mode !== 'replace') {
-            return ['changed' => $changed, 'removed' => 0]; // merge-only
+            return ['changed' => $changed, 'removed' => 0];
         }
 
-        // Defence in depth: an empty id set — or a payload where every row was
-        // rejected as foreign/platform-owned — must never reach the
-        // destructive delete query. save() intercepts an empty payload, but
-        // this also stops a replace that only contains rows the writer cannot
-        // touch from wiping their own collection.
+        // Never let an empty or fully-blocked replace wipe a collection.
         if (count($ids) === 0 || $accepted === 0) {
             Log::warning('Workspace replace skipped at sync layer (no writable rows)', [
                 'collection' => $collection,
@@ -719,14 +723,9 @@ class WorkspaceController extends Controller
         }
 
         $query = BusinessRecord::where('collection', $collection)
-            ->whereNull('deleted_at');
+            ->whereNull('deleted_at')
+            ->whereNotIn('record_id', $ids);
 
-        if (count($ids) > 0) {
-            $query->whereNotIn('record_id', $ids);
-        }
-
-        // Destructive replace: members only within their own agency;
-        // platform users replace platform-wide (elevated + audited).
         if ($scoped && $agencyId !== null) {
             $query->where('agency_id', $agencyId);
         }
@@ -735,7 +734,8 @@ class WorkspaceController extends Controller
 
         if ($removed > 0) {
             Log::info('Workspace replace-mode removals', [
-                'collection' => $collection, 'count' => $removed,
+                'collection' => $collection,
+                'count' => $removed,
             ]);
         }
 
