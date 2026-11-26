@@ -591,6 +591,35 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->assertSame(0, Commission::where('transaction_id', $deal['id'])->count());
     }
 
+    public function test_finance_subledger_writes_require_an_explicit_agency_context(): void
+    {
+        $user = $this->makeUser('super_admin');
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $transactionId = 'legacy-global-finance-row';
+
+        $this->postJson("/api/agency/transactions/{$transactionId}/payments", [
+            'amount' => 1000,
+            'type' => 'advance',
+        ], $headers)->assertForbidden();
+
+        $this->postJson("/api/agency/transactions/{$transactionId}/schedules", [
+            'schedules' => [[
+                'installment_no' => 1,
+                'due_date' => now()->addDays(7)->toDateString(),
+                'amount' => 1000,
+            ]],
+        ], $headers)->assertForbidden();
+
+        $this->postJson("/api/agency/transactions/{$transactionId}/commissions", [
+            'amount' => 1000,
+            'beneficiary_type' => 'agency',
+        ], $headers)->assertForbidden();
+
+        $this->patchJson('/api/agency/commissions/1', [
+            'status' => 'accrued',
+        ], $headers)->assertForbidden();
+    }
+
     public function test_payments_ledger_updates_collected_and_balance(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
