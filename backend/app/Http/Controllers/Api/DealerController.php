@@ -17,33 +17,14 @@ class DealerController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Dealer::query();
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        // Public directory: bounded page (plain-array shape kept for the
-        // existing frontend). Newest first; ?limit narrows further.
         $limit = $request->filled('limit') ? (int) $request->limit : 200;
-        $dealers = $query->orderByDesc('created_at')->orderBy('id')
-            ->limit(min(max($limit, 1), 500))->get();
+        $dealers = $this->publicDirectoryQuery()
+            ->orderByDesc('created_at')
+            ->orderBy('id')
+            ->limit(min(max($limit, 1), 500))
+            ->get();
 
-        // Public endpoint: strip financial/PII fields. Only expose safe display
-        // fields to unauthenticated visitors.
-        $safe = $dealers->map(fn (Dealer $d) => [
-            'id' => $d->id,
-            'fullName' => $d->fullName,
-            'agencyAffiliation' => $d->agencyAffiliation,
-            'agencyOrBranch' => $d->agencyOrBranch,
-            'role' => $d->role,
-            'status' => $d->status,
-            'avatar' => $d->avatar,
-            'assignedPropertiesCount' => $d->assignedPropertiesCount,
-            'completedDealsCount' => $d->completedDealsCount,
-        ]);
-
-        return response()->json($safe);
+        return response()->json($dealers->map(fn (Dealer $dealer) => $this->publicDealerPayload($dealer)));
     }
 
     /**
@@ -51,20 +32,9 @@ class DealerController extends Controller
      */
     public function show($id)
     {
-        $dealer = Dealer::findOrFail($id);
+        $dealer = $this->publicDirectoryQuery()->whereKey($id)->firstOrFail();
 
-        // Public endpoint: strip financial/PII fields.
-        return response()->json([
-            'id' => $dealer->id,
-            'fullName' => $dealer->fullName,
-            'agencyAffiliation' => $dealer->agencyAffiliation,
-            'agencyOrBranch' => $dealer->agencyOrBranch,
-            'role' => $dealer->role,
-            'status' => $dealer->status,
-            'avatar' => $dealer->avatar,
-            'assignedPropertiesCount' => $dealer->assignedPropertiesCount,
-            'completedDealsCount' => $dealer->completedDealsCount,
-        ]);
+        return response()->json($this->publicDealerPayload($dealer));
     }
 
     /**
@@ -100,6 +70,10 @@ class DealerController extends Controller
             $data['agency_id'] = $actingAgencyId;
         } elseif (!empty($data['agencyId'])) {
             $data['agency_id'] = $data['agencyId'];
+        } else {
+            return response()->json([
+                'message' => 'A platform publisher must select the agency this dealer belongs to.',
+            ], 422);
         }
         unset($data['agencyId']);
 
@@ -152,7 +126,13 @@ class DealerController extends Controller
             unset($data['agencyId']);
             $data['agency_id'] = $actingAgencyId;
         } elseif (array_key_exists('agencyId', $data)) {
-            $data['agency_id'] = $data['agencyId'];
+            $targetAgencyId = $data['agencyId'] ?: null;
+            if ($targetAgencyId !== $dealer->agency_id && $this->hasLinkedRecords($dealer)) {
+                return response()->json([
+                    'message' => 'This dealer has linked properties, transactions, or files. Reassign those records before moving the dealer.',
+                ], 409);
+            }
+            $data['agency_id'] = $targetAgencyId;
             unset($data['agencyId']);
         }
 
@@ -175,11 +155,58 @@ class DealerController extends Controller
     {
         $this->requireAny($request, ['manage_dealers']);
 
-        $dealer = Dealer::findOrFail($id);
+        $actingAgencyId = $this->agencyId($request);
+        $query = Dealer::query()->whereKey($id);
+        if ($actingAgencyId !== null) {
+            $query->where('agency_id', $actingAgencyId);
+        }
+        $dealer = $query->firstOrFail();
+
+        if ($this->hasLinkedRecords($dealer)) {
+            return response()->json([
+                'message' => 'This dealer is linked to properties, transactions, or files. Reassign those records before deleting the dealer.',
+            ], 409);
+        }
+
         $dealer->delete();
         $this->writeAudit($request, 'dealer_deleted', $dealer->id, "Dealer {$dealer->fullName} soft-deleted");
 
         return response()->json(['message' => 'Dealer deleted successfully']);
+    }
+
+    private function publicDirectoryQuery()
+    {
+        return Dealer::query()
+            ->whereRaw('LOWER(status) = ?', ['active'])
+            ->where(function ($query) {
+                $query->whereNull('agency_id')
+                    ->orWhereHas('agency', function ($agencyQuery) {
+                        $agencyQuery->where('status', 'active')
+                            ->where('verification_status', 'verified');
+                    });
+            });
+    }
+
+    private function publicDealerPayload(Dealer $dealer): array
+    {
+        return [
+            'id' => $dealer->id,
+            'fullName' => $dealer->fullName,
+            'agencyAffiliation' => $dealer->agencyAffiliation,
+            'agencyOrBranch' => $dealer->agencyOrBranch,
+            'role' => $dealer->role,
+            'status' => $dealer->status,
+            'avatar' => $dealer->avatar,
+            'assignedPropertiesCount' => $dealer->assignedPropertiesCount,
+            'completedDealsCount' => $dealer->completedDealsCount,
+        ];
+    }
+
+    private function hasLinkedRecords(Dealer $dealer): bool
+    {
+        return $dealer->properties()->exists()
+            || $dealer->transactions()->exists()
+            || $dealer->dealerFiles()->exists();
     }
 
     private function maskCnic(string $cnic): string
