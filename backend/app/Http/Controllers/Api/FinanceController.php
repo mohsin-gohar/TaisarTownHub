@@ -248,6 +248,7 @@ public function update(Request $request, string $id)
             'finance.update_transaction', 'update_transactions',
             'manage_deals', 'finance.manage_deals',
         ]);
+        $this->findScoped($agencyId, $id, $request->user());
 
         $data = $request->validate([
             'propertyTitle' => 'sometimes|string|max:255',
@@ -689,12 +690,7 @@ public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments']);
-
         $transaction = $this->findScoped($agencyId, $transactionId, $request->user());
-
-        if ($transaction->isVoided()) {
-            return response()->json(['success' => false, 'message' => 'Cannot record payments on a voided deal.'], 422);
-        }
 
         $request->validate([
             'amount' => [
@@ -718,40 +714,40 @@ public function update(Request $request, string $id)
             'notes' => 'nullable|string|max:1000',
         ]);
 
-        // Ledger integrity: the payment insert and the derived status update
-        // are one transaction on the locked deal row — concurrent payments
-        // cannot overshoot the agreement amount silently.
-        $result = DB::transaction(function () use ($transaction, $request): array {
-            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
+        $result = DB::transaction(function () use ($transaction, $agencyId, $request): array {
+            $locked = Transaction::where('id', $transaction->id)
+                ->when($agencyId !== null, fn ($query) => $query->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
 
             if ($locked->isVoided()) {
-                return [null, null];
+                return ['error' => 'voided'];
             }
 
-            // Refunds are stored as negative amounts so they reduce collected totals.
             $isRefund = $request->get('type', 'advance') === 'refund';
             $amount = (float) $request->amount;
             if ($isRefund) {
                 $amount = -abs($amount);
             }
 
-            // Overpayment guard: collected + amount must not exceed agreement
             $existingCollected = (float) $locked->totalPaid();
             $agreementAmount = (float) $locked->agreementAmountPKR;
+
             if ($isRefund && abs($amount) > $existingCollected) {
-                return [null, [
-                    'refund_exceeds_collected' => true,
+                return [
+                    'error' => 'refund_exceeds_collected',
                     'collected' => $existingCollected,
                     'refund' => abs($amount),
-                ]];
+                ];
             }
+
             if ($existingCollected + $amount > $agreementAmount) {
-                return [null, [
-                    'overpayment' => true,
+                return [
+                    'error' => 'overpayment',
                     'collected' => $existingCollected,
                     'agreement' => $agreementAmount,
                     'amount' => $amount,
-                ]];
+                ];
             }
 
             $payment = TransactionPayment::create([
@@ -766,35 +762,48 @@ public function update(Request $request, string $id)
                 'notes' => $request->notes,
             ]);
 
-            // Update deal status based on payment totals
-            $locked->refresh();
             $locked->recalculateStatus();
 
-            return [$payment, null];
-        });
+            return ['payment' => $payment->fresh(['transaction'])];
+        }, 3);
 
-        if (isset($result[1]['refund_exceeds_collected'])) {
+        if (($result['error'] ?? null) === 'voided') {
+            return response()->json(['success' => false, 'message' => 'Cannot record payments on a voided deal.'], 409);
+        }
+
+        if (($result['error'] ?? null) === 'refund_exceeds_collected') {
             return response()->json([
                 'success' => false,
                 'message' => 'Refund cannot exceed the amount already collected.',
-                'collected' => $result[1]['collected'],
-                'refund' => $result[1]['refund'],
+                'collected' => $result['collected'],
+                'refund' => $result['refund'],
             ], 422);
         }
 
-        if (isset($result[1]['overpayment'])) {
-            $over = $result[1];
+        if (($result['error'] ?? null) === 'overpayment') {
             return response()->json([
                 'success' => false,
-                'message' => 'Overpayment: collected (' . number_format($over['collected'], 2) . ') plus amount (' . number_format($over['amount'], 2) . ') exceeds agreement (' . number_format($over['agreement'], 2) . ').',
+                'message' => 'Overpayment: collected (' . number_format($result['collected'], 2) . ') plus amount (' . number_format($result['amount'], 2) . ') exceeds agreement (' . number_format($result['agreement'], 2) . ').',
             ], 422);
         }
 
-        $payment = $result[0];
+        /** @var TransactionPayment $payment */
+        $payment = $result['payment'];
         $locked = $payment->transaction;
-
         $collected = (float) $locked->totalPaid();
         $agreement = (float) $locked->agreementAmountPKR;
+
+        $this->writeAudit($request, 'payment.created', (string) $payment->id, "Payment recorded: {$payment->amount}", [
+            'agency_id' => $payment->agency_id,
+            'entity_type' => 'transaction_payment',
+            'entity_id' => (string) $payment->id,
+            'metadata' => [
+                'transaction_id' => $payment->transaction_id,
+                'amount' => $payment->amount,
+                'type' => $payment->type,
+                'method' => $payment->method,
+            ],
+        ]);
 
         return response()->json([
             'success' => true,
@@ -808,8 +817,7 @@ public function update(Request $request, string $id)
         ], 201);
     }
 
-    /** DELETE /api/agency/payments/{id} — correction, heavily audited. */
-    public function destroyPayment(Request $request, int $id)
+public function destroyPayment(Request $request, int $id)
     {
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments']);
