@@ -869,37 +869,46 @@ class WorkspaceController extends Controller
                 $newPayload = $row;
             }
 
-            // Count a row only after ownership, reference, delete and row-level
-            // create/update checks have all passed. Replace mode uses this count
-            // as a safety interlock before its destructive NOT IN update.
-            $accepted++;
-
             if ($scoped && $agencyId !== null) {
-                // Persist ownership in the same insert/update statement. A
-                // concurrent agency cannot win a missing-row race and then
-                // have its payload or agency_id overwritten by this writer.
                 if ($existing !== null) {
+                    // The locked row's owner is checked again immediately
+                    // before write; agency_id is never changed by an update.
                     if ($existing->agency_id !== $agencyId) {
                         $blocked++;
-
                         continue;
                     }
+
                     $existing->payload = $row;
                     $existing->deleted_at = $deletedAt;
                     $existing->save();
                 } else {
-                    $newRecord = new BusinessRecord();
-                    $newRecord->collection = $collection;
-                    $newRecord->record_id = $recordId;
-                    $newRecord->payload = $row;
-                    $newRecord->deleted_at = $deletedAt;
-                    $newRecord->agency_id = $agencyId;
-                    $newRecord->save();
+                    // Atomically claim a previously-missing collection/id pair.
+                    // If another agency inserts first, insertOrIgnore returns 0
+                    // and this request is blocked rather than overwriting it.
+                    $now = now();
+                    $inserted = DB::table('business_records')->insertOrIgnore([
+                        'collection' => $collection,
+                        'record_id' => $recordId,
+                        'payload' => json_encode($row, JSON_THROW_ON_ERROR),
+                        'agency_id' => $agencyId,
+                        'deleted_at' => $deletedAt,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+
+                    if ($inserted !== 1) {
+                        $blocked++;
+                        continue;
+                    }
                 }
             } else {
                 // Platform-wide writes retain the current owner column.
                 BusinessRecord::put($collection, $recordId, $row);
             }
+
+            // Count only after persistence succeeds. Replace mode uses this
+            // accepted count as a safety interlock before destructive deletion.
+            $accepted++;
 
             if ($isTransactionCloseout) {
                 $this->applyTransactionCloseout($recordId, $agencyId, $user, $row, $isTransactionVoid);
