@@ -23,6 +23,23 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
         return $this->makeUser('super_admin');
     }
 
+    private function makePlan(): \App\Models\SubscriptionPlan
+    {
+        return \App\Models\SubscriptionPlan::create([
+            'key' => 'invoice-test-' . \Illuminate\Support\Str::random(8),
+            'name' => 'Invoice Test Plan',
+            'description' => 'Subscription invoice feature test',
+            'price' => 10000,
+            'currency' => 'PKR',
+            'interval' => 'month',
+            'limits' => ['listings' => 10, 'staff' => 3, 'storage_mb' => 1024, 'leads' => 50],
+            'features' => [],
+            'is_active' => true,
+            'is_default' => false,
+            'sort_order' => 1,
+        ]);
+    }
+
     public function test_invoice_number_sequence_is_monotonic_even_if_a_reservation_is_not_saved(): void
     {
         $first = SubscriptionInvoice::nextNumber();
