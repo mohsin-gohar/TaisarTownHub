@@ -384,7 +384,7 @@ public function update(Request $request, string $id)
         $agencyId = $this->agencyId($request);
         // Voiding is irreversible for bookkeeping. It must require an explicit
         // permission; previously any workspace member could void any deal.
-        $this->requireAny($request, ['void_transactions', 'finance.update_transaction', 'update_transactions']);
+        $this->requireAny($request, ['void_transactions']);
 
         $transaction = $this->findScoped($agencyId, $id, $request->user());
 
