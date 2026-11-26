@@ -20,7 +20,7 @@ class DealerControllerSecurityTest extends EnterpriseTestCase
 
     public function test_agency_manager_cannot_delete_another_agencys_dealer(): void
     {
-        [$manager, $agencyA] = $this->agencyUser(['manage_dealers'], 'dealer_manager');
+        [$manager, $agencyA] = $this->agencyUser(['dealers.manage'], 'dealer_manager');
         $agencyB = $this->makeAgency('Other Dealer Agency');
         $dealerB = $this->makeDealer($agencyB, 'dealer_other_agency');
 
