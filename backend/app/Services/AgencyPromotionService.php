@@ -210,6 +210,14 @@ class AgencyPromotionService
                 $this->assertEligible($lockedAgency);
             }
             if ($status === 'active') {
+                $duplicate = AgencyPromotion::query()
+                    ->current()
+                    ->where('agency_id', $lockedAgency->id)
+                    ->where('id', '!=', $lockedPromotion->id)
+                    ->exists();
+                if ($duplicate) {
+                    throw new \\DomainException('This agency already has a current featured placement. Edit or cancel it first.');
+                }
                 $this->assertSlotAvailable($lockedPromotion->id);
             }
 
@@ -265,15 +273,26 @@ class AgencyPromotionService
         if (count($ids) !== count(array_unique($ids))) {
             throw new \DomainException('Duplicate placements in the requested order.');
         }
-        if (count($ids) > $this->maxSlots()) {
-            throw new \DomainException('The requested order exceeds the configured featured-slot limit.');
-        }
 
         DB::transaction(function () use ($ids) {
             $this->lockSlotMutex();
-            $rows = AgencyPromotion::query()->current()->whereIn('id', $ids)->lockForUpdate()->get()->keyBy('id');
-            if ($rows->count() !== count($ids)) {
-                throw new \DomainException('One or more placements are no longer active. Refresh and try again.');
+
+            if (count($ids) > $this->maxSlots()) {
+                throw new \DomainException('The requested order exceeds the configured featured-slot limit.');
+            }
+
+            $rows = AgencyPromotion::query()
+                ->current()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            $currentIds = $rows->keys()->map(fn ($id) => (int) $id)->all();
+
+            if (count($currentIds) !== count($ids)
+                || array_diff($currentIds, $ids) !== []
+                || array_diff($ids, $currentIds) !== []) {
+                throw new \DomainException('The order must include every current placement exactly once. Refresh and try again.');
             }
 
             foreach ($ids as $index => $id) {
@@ -299,6 +318,8 @@ class AgencyPromotionService
                 $promotion->status = 'expired';
                 $promotion->save();
             }
+
+            $this->reorderCurrent();
 
             return $due;
         }, 3);
