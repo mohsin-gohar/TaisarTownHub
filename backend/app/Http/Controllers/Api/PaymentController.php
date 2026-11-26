@@ -895,7 +895,7 @@ class PaymentController extends Controller
         $plan = SubscriptionPlan::findOrFail($planId);
         if (strtoupper((string) $invoice->currency) !== 'PKR'
             || strtoupper((string) $plan->currency) !== 'PKR') {
-            throw new \\RuntimeException('Only PKR subscription invoices can activate an agency plan.');
+            throw new \RuntimeException('Only PKR subscription invoices can activate an agency plan.');
         }
 
         // Determine interval ends_at
