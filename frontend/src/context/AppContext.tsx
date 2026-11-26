@@ -1584,7 +1584,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedTx: Transaction = {
       ...txn,
       status: txn.status === 'Fully Paid' && !money.isFullyPaid ? 'Under Transfer' : txn.status,
-      paymentStatus: money.isFullyPaid ? 'Fully Paid' : money.collected > 0 ? 'Partially Paid' : 'Pending',
+      paymentStatus: money.isFullyPaid ? 'Fully Paid' : money.collected > 0 ? 'Partially Paid' : 'Unpaid',
       remainingBalancePKR: money.balance,
       balancePKR: money.balance,
     };
