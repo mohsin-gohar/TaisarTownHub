@@ -568,6 +568,7 @@ class PaymentGatewayTest extends EnterpriseTestCase
                     'id' => $invoiceId,
                     'subscription' => 'sub_invoice_event_1',
                     'amount_paid' => 500000,
+                    'amount_due' => 500000,
                     'currency' => 'pkr',
                     'lines' => ['data' => [[
                         'period' => ['start' => $periodStart, 'end' => $periodEnd],
@@ -599,6 +600,12 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'agency_id' => $agency->id,
             'stripe_invoice_id' => 'in_invoice_paid_1',
             'status' => 'paid',
+            'total_pkr' => 5000,
+        ]);
+        $this->assertDatabaseHas('subscription_invoices', [
+            'agency_id' => $agency->id,
+            'stripe_invoice_id' => 'in_invoice_failed_2',
+            'status' => 'failed',
             'total_pkr' => 5000,
         ]);
         $this->assertSame(
