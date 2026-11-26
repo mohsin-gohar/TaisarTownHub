@@ -1,8 +1,8 @@
 <?php
 
-namespace Tests\\Feature;
+namespace Tests\Feature;
 
-use Illuminate\\Support\\Facades\\File;
+use Illuminate\Support\Facades\File;
 
 class BackupRetentionScriptTest extends EnterpriseTestCase
 {
@@ -53,8 +53,8 @@ class BackupRetentionScriptTest extends EnterpriseTestCase
                 . escapeshellarg($directory) . ' 2026-11-26 2>&1';
             exec($command, $output, $exitCode);
 
-            $this->assertSame(0, $exitCode, implode("\\n", $output));
-            $this->assertStringContainsString('kept 17 backup set(s)', implode("\\n", $output));
+            $this->assertSame(0, $exitCode, implode("\n", $output));
+            $this->assertStringContainsString('kept 17 backup set(s)', implode("\n", $output));
 
             foreach ($stamps as $stamp => $keep) {
                 foreach ([
