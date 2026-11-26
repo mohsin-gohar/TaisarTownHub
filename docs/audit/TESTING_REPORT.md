@@ -1,43 +1,27 @@
 # Testing Report
 
-Branch: `fix/workspace-transaction-lifecycle-20261126` (HEAD `5fbf3e0`)
+Branch: `fix/workspace-transaction-lifecycle-20261126`
 Date: 2026-11-26
 
-## Backend (Laravel / PHPUnit)
+## Latest successful GitHub Actions run
+Run #641 — commit `d4ba0e4a2e82620a8cf95dc7c4b0b192f11b8e05`
+https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45854444158
 
-Command: `php artisan test` (working dir `backend/`, MySQL 8-compatible XAMPP MariaDB locally)
-Result: **540 passed, 0 failed, 4527 assertions, exit code 0**, duration ~180s.
+All five jobs completed successfully:
+- Backend suite (PHP 8.3, MySQL 8): **540 passed, 0 failed, 4,527 assertions**.
+- Frontend verify (Node 24): **173 tests, 0 failures**; TypeScript check, production build, 29 prerendered pages, 9-URL sitemap and public bundle guard passed.
+- Browser UI regression (Playwright Chromium): **46 passed**.
+- Browser cross-engine regression (Firefox + WebKit): **14 combined passed**.
+- OpenAPI spec parse: passed.
 
-Suites included: Unit + Feature (authentication, MFA, RBAC, tenant isolation, finance lifecycle/isolation, workspace hardening/tenant matrix, dealer files, encryption at rest, malware upload enforcement, maps, MFA enforcement, concurrency).
+## Browser coverage
+The Chromium workflow runs cross-browser smoke, responsive, maps, interactive-elements, WhatsApp and public-page suites. Responsive tests exercise 11 widths: 320, 360, 375, 390, 414, 430, 768, 1024, 1280, 1440 and 1920px across public routes.
+Firefox and WebKit use the cross-browser smoke suite. These tests do not constitute authenticated Super Admin/agency/staff role-journey coverage.
 
-Notable regression suites:
-- `FinanceLifecycleTest`: 31 passed
-- `FinanceIsolationTest`: 19 passed
-- `MalwareUploadEnforcementTest`: 11 passed
-- `BookingConcurrencyTest`: 4 passed
-- `WorkspaceTenantMatrixTest`: all data-provider cases passed
+## Follow-up change after run #641
+- Commit `2ab933cd8fe228c3c44b5f36ef365fc02c862b5b`: aligns dealer commission update validation with create validation, allowing Fixed/Custom PKR amounts above 100 while retaining a 100% cap.
+- Commit `668c83edf7c141d332daa908e751e5f39734dfaf`: adds regression coverage for valid fixed amount and rejected percentage above 100.
+- These commits have not yet been run by GitHub Actions. Do not mark them verified until a new run passes.
 
-Earlier baseline (first run of this audit) was contaminated by a concurrently-running second `php artisan test` process (migrate:fresh racing) and a stale test DB schema; after isolating runs and running `migrate:fresh` on the test DB, the clean baseline is 540/0.
-
-## Frontend (React / TypeScript)
-
-Command: `npm run verify` (working dir `frontend/`)
-Result: **exit 0** — tsc clean, 173/173 tests passed, production build succeeded, 29 prerendered pages, bundle check OK.
-
-## Browser (Playwright)
-
-Command: `npx playwright test ... --project=chromium` against local backend (`php artisan serve :8080`) + Playwright webServer (Vite dev on :4173).
-Result:
-- `cross-browser-smoke.spec.ts`: 7 passed (home, properties, agencies, guide, about, contact, login render with real headings)
-- `maps.spec.ts`: 5 passed (title/filters/empty state, category filter, search, lightbox zoom)
-- `interactive-elements.spec.ts`: 9 passed (navbar, auth forms, property listings, contact form, 404 recovery)
-Total: 21 passed, 0 failed.
-
-Viewport: default Desktop Chrome (1280px). Mobile/tablet viewports (360/390/768/1024/1440/1920) were NOT explicitly exercised — the Playwright project defines a single Desktop Chrome device; responsive behaviour relies on Tailwind responsive classes and is not covered by an automated matrix. This is recorded as a partial/limitation.
-
-Admin/role-journey specs (`admin-pages.spec.ts`, `agency-marketplace.smoke.spec.ts`) require seeded demo accounts and were not run in this pass (see REMAINING_BLOCKERS.md).
-
-## External / not run
-- Docker image builds and compose smoke (no Docker daemon locally).
-- Live ClamAV scanning (no daemon; covered by fake-clamd tests).
-- Lighthouse performance scores (not run).
+## Environment limitations
+Docker image/Compose tests were not triggered for PR #22's audit-branch base. Real ClamAV, TLS, SMTP, DNS, payment-provider credentials, Lighthouse and production deployment were not tested. No production data or service was modified.
