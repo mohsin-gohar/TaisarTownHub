@@ -183,7 +183,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
 
         $ownerGrants = \App\Support\Permissions::agencyRoleGrants('agency_owner');
         [$owner] = $this->agencyUser($ownerGrants, 'agency_owner');
-        $ownerDeal = $this->createDeal($owner);
+        $ownerDeal = $this->createDeal($owner, ['advancePaymentPKR' => 0]);
 
         $this->postJson(
             "/api/agency/transactions/{$ownerDeal['id']}/approve",
@@ -236,7 +236,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
     public function test_voided_deal_is_read_only_and_audited(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
-        $deal = $this->createDeal($user);
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/void", ['reason' => 'Buyer withdrew'], $this->authHeaders($this->tokenFor($user)))
             ->assertStatus(200)
@@ -250,6 +250,64 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'action' => 'transaction.void',
             'entity_id' => $deal['id'],
         ]);
+    }
+
+    public function test_void_requires_refunds_and_cancels_unpaid_finance_items(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $commission = $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
+            'amount' => 5000,
+            'beneficiary_type' => 'agency',
+        ], $headers)->assertStatus(201)->json('commission');
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/schedules", [
+            'schedules' => [[
+                'installment_no' => 1,
+                'due_date' => now()->addWeek()->toDateString(),
+                'amount' => 1000,
+            ]],
+        ], $headers)->assertStatus(201);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Buyer withdrew',
+        ], $headers)->assertStatus(409)
+            ->assertJsonPath('message', 'Refund or reconcile all collected payments before voiding this deal.');
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 2500000,
+            'type' => 'refund',
+        ], $headers)->assertStatus(201);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Buyer withdrew after full refund',
+        ], $headers)->assertStatus(200);
+
+        $this->assertSame('cancelled', Commission::findOrFail($commission['id'])->status);
+        $this->assertSame('cancelled', PaymentSchedule::where('transaction_id', $deal['id'])->value('status'));
+    }
+
+    public function test_void_is_blocked_when_a_commission_has_already_been_paid(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $commission = $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
+            'amount' => 5000,
+            'beneficiary_type' => 'agency',
+        ], $headers)->assertStatus(201)->json('commission');
+
+        $this->patchJson("/api/agency/commissions/{$commission['id']}", [
+            'status' => 'paid',
+        ], $headers)->assertOk();
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Attempt to void after payout',
+        ], $headers)->assertStatus(409)
+            ->assertJsonPath('message', 'A deal with paid commissions cannot be voided until the payout is reversed through an audited adjustment.');
     }
 
     public function test_void_requires_a_reason(): void
