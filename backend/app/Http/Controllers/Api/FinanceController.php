@@ -1042,40 +1042,65 @@ public function update(Request $request, string $id)
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments', 'pay_commissions']);
 
-        // Agency users are confined to their own ledger. A platform user (no
-        // agency context) may act on any commission: `commissions()` already
-        // lists platform-wide rows for them, and filtering by `agency_id IS
-        // NULL` here made every platform payout a 404.
-        $commission = Commission::where('id', $id)
-            ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
-            ->firstOrFail();
-
         $request->validate([
             'status' => 'required|in:pending,accrued,paid,cancelled',
             'notes' => 'nullable|string|max:1000',
         ]);
 
-        $allowed = ['pending', 'accrued', 'paid', 'cancelled'];
-        if (!in_array($request->status, $allowed, true)) {
-            return response()->json(['success' => false, 'message' => 'Invalid commission status.'], 422);
+        // Agency users are confined to their own ledger. Platform users with
+        // the payout permission can act across agencies.
+        [$commission, $from, $error] = DB::transaction(function () use ($id, $agencyId, $request): array {
+            $commission = Commission::where('id', $id)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $from = strtolower((string) $commission->status);
+            $to = (string) $request->status;
+            $transitions = [
+                'pending' => ['pending', 'accrued', 'paid', 'cancelled'],
+                'accrued' => ['accrued', 'paid', 'cancelled'],
+                'paid' => ['paid'],
+                'cancelled' => ['cancelled'],
+            ];
+
+            if (!in_array($to, $transitions[$from] ?? [], true)) {
+                return [$commission, $from, 'Commission status cannot move from ' . $from . ' to ' . $to . '.'];
+            }
+
+            $changes = [
+                'status' => $to,
+                'notes' => $request->notes ?? $commission->notes,
+            ];
+            if ($to === 'accrued' && !$commission->accrued_at) {
+                $changes['accrued_at'] = now();
+            }
+            if ($to === 'paid' && !$commission->paid_at) {
+                $changes['paid_at'] = now();
+                $changes['paid_by'] = (string) $request->user()->id;
+            }
+
+            $commission->update($changes);
+
+            return [$commission->fresh(), $from, null];
+        }, 3);
+
+        if ($error !== null) {
+            return response()->json(['success' => false, 'message' => $error], 409);
         }
 
-        $from = $commission->status;
-        $commission->update([
-            'status' => $request->status,
-            'notes' => $request->notes ?? $commission->notes,
-        ]);
-
-        $this->writeAudit($request, 'commission.status_change', $commission->id, "Commission status changed from {$from} to {$request->status}", [
-            'agency_id' => $commission->agency_id,
-            'entity_type' => 'commission',
-            'entity_id' => $commission->id,
-            'metadata' => ['from' => $from, 'to' => $request->status],
-        ]);
+        if ($from !== $commission->status) {
+            $this->writeAudit($request, 'commission.status_change', $commission->id, "Commission status changed from {$from} to {$commission->status}", [
+                'agency_id' => $commission->agency_id,
+                'entity_type' => 'commission',
+                'entity_id' => $commission->id,
+                'metadata' => ['from' => $from, 'to' => $commission->status],
+            ]);
+        }
 
         return response()->json([
             'success' => true,
-            'commission' => $commission->fresh(),
+            'commission' => $commission,
         ]);
     }
 
