@@ -443,6 +443,7 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
 
     public function test_manual_subscription_assignment_is_non_recurring_and_cannot_orphan_stripe_billing(): void
     {
+        $this->seedPlatformRole('super_admin');
         $admin = $this->makeUser('super_admin');
         [, $agency] = $this->agencyUser($this->staffPermissions(), 'agency_owner');
         $plan = $this->makePlan();
