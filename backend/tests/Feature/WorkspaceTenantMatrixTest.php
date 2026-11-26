@@ -306,4 +306,28 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         $this->assertNull($this->record('properties', 'protected-property')->deleted_at);
     }
 
+
+    public function test_workspace_multi_collection_save_rolls_back_earlier_writes_when_later_validation_fails(): void
+    {
+        [$user] = $this->agencyUser(['properties.create', 'finance.create_transaction']);
+
+        $this->putJson('/api/workspace', [
+            'collections' => [
+                'properties' => [[
+                    'id' => 'atomic-property',
+                    'title' => 'Must roll back',
+                ]],
+                'transactions' => [[
+                    'id' => 'invalid-fractional-deal',
+                    'agreementAmountPKR' => 1000.50,
+                ]],
+            ],
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(422);
+
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'atomic-property',
+        ]);
+    }
+
 }
