@@ -7,6 +7,7 @@ use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use App\Services\SubscriptionActivationService;
+use DomainException;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -71,10 +72,22 @@ class PaymentController extends Controller
         // Serialize checkout creation per agency. The invoice is persisted
         // before calling Stripe, so retries can reuse one stable idempotency key
         // instead of creating duplicate sessions or orphaned remote checkouts.
-        $invoice = DB::transaction(function () use ($agencyId, $plan): SubscriptionInvoice {
-            DB::table('agencies')->where('id', $agencyId)->lockForUpdate()->first();
+        try {
+            $invoice = DB::transaction(function () use ($agencyId, $plan): SubscriptionInvoice {
+                DB::table('agencies')->where('id', $agencyId)->lockForUpdate()->first();
 
-            $pending = SubscriptionInvoice::where('agency_id', $agencyId)
+                $currentSubscription = AgencySubscription::where('agency_id', $agencyId)
+                    ->lockForUpdate()
+                    ->first();
+                if ($currentSubscription
+                    && in_array($currentSubscription->status, ['active', 'past_due'], true)
+                    && ($currentSubscription->stripe_subscription_id
+                        || !$currentSubscription->ends_at
+                        || $currentSubscription->ends_at->isFuture())) {
+                    throw new DomainException('An active subscription already exists. Contact support to change or renew your plan.');
+                }
+
+                $pending = SubscriptionInvoice::where('agency_id', $agencyId)
                 ->where('plan_id', $plan->id)
                 ->where('status', 'pending')
                 ->whereNull('flutterwave_tx_ref')
@@ -106,8 +119,14 @@ class PaymentController extends Controller
                 'period_end' => $periodEnd->toDateString(),
                 'status' => 'pending',
                 'due_at' => now()->addDays(7),
-            ]);
-        }, 3);
+                ]);
+            }, 3);
+        } catch (DomainException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 409);
+        }
 
         $amount = (int) $invoice->total_pkr;
 
