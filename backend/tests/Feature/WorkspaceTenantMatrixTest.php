@@ -21,17 +21,17 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
     public static function scopedCollections(): array
     {
         return [
-            'properties' => ['properties', ['properties.view'], ['properties.create'], ['properties.delete']],
-            'dealers' => ['dealers', ['properties.view'], ['manage_dealers'], ['manage_dealers']],
+            'properties' => ['properties', ['properties.view'], ['properties.create', 'properties.update'], ['properties.delete']],
+            'dealers' => ['dealers', ['manage_dealers'], ['manage_dealers'], ['manage_dealers']],
             'sellers' => ['sellers', ['manage_sellers'], ['manage_sellers'], ['manage_sellers']],
             'buyers' => ['buyers', ['manage_buyers'], ['manage_buyers'], ['manage_buyers']],
-            'transactions' => ['transactions', ['finance.view'], ['finance.create_transaction'], ['void_transactions']],
-            'payments' => ['payments', ['finance.view'], ['finance.manage_payments'], ['finance.manage_payments']],
-            'commissions' => ['commissions', ['finance.view'], ['finance.manage_payments'], ['pay_commissions']],
-            'files' => ['files', ['documents.view'], ['documents.upload'], ['documents.delete']],
+            'transactions' => ['transactions', ['finance.view'], ['finance.create_transaction', 'update_transactions'], []],
+            'payments' => ['payments', ['finance.view'], ['finance.manage_payments'], []],
+            'commissions' => ['commissions', ['finance.view'], ['finance.manage_payments'], []],
+            'files' => ['files', ['documents.view'], ['documents.upload', 'verify_documents'], ['documents.delete']],
             'plots' => ['plots', ['properties.view'], ['properties.update'], ['properties.delete']],
-            'media' => ['media', ['properties.view'], ['manage_media'], ['manage_media']],
-            'videos' => ['videos', ['properties.view'], ['manage_media'], ['manage_media']],
+            'media' => ['media', ['manage_media'], ['manage_media'], ['manage_media']],
+            'videos' => ['videos', ['manage_media'], ['manage_media'], ['manage_media']],
             'inquiries' => ['inquiries', ['crm.view'], ['crm.update_lead'], ['crm.delete_lead']],
             'subscribers' => ['subscribers', ['crm.view'], ['crm.update_lead'], ['crm.delete_lead']],
         ];
@@ -101,12 +101,21 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         $this->assertNull($this->record($collection, $legacyId)->agency_id);
 
         // ---- replace is scoped to the writer's agency ----
-        $this->putJson('/api/workspace', [
+        $replaceResponse = $this->putJson('/api/workspace', [
             'collections' => [$collection => [
                 ['id' => 'fresh-'.$collection, 'title' => 'Fresh'],
             ]],
             'mode' => 'replace',
         ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        if ($replacePermissions === []) {
+            $this->assertContains($collection, $replaceResponse->json('denied'));
+            $this->assertNull($this->record($collection, $ownId)->deleted_at);
+            $this->assertNull($this->record($collection, $foreignId)->deleted_at);
+            $this->assertNull($this->record($collection, $legacyId)->deleted_at);
+
+            return;
+        }
 
         $this->assertNotNull(
             $this->record($collection, $ownId)->deleted_at,
@@ -128,8 +137,8 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
             'properties.view', 'view_properties', 'crm.view',
         ]);
 
-        $this->seedRecord('projects', 'global-project', 'Platform project', $agency->id);
-        $this->seedRecord('testimonials', 'global-testimonial', 'Public testimonial', $agency->id);
+        $this->seedRecord('projects', 'global-project', 'Platform project', null);
+        $this->seedRecord('testimonials', 'global-testimonial', 'Public testimonial', null);
 
         $body = $this->getJson('/api/workspace', $this->authHeaders($this->tokenFor($user)))
             ->assertOk()
@@ -165,6 +174,50 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         $ids = array_column($body, 'id');
         $this->assertContains('visible-property', $ids);
         $this->assertNotContains('deleted-property', $ids);
+    }
+
+
+    public function test_property_viewer_cannot_read_finance_crm_documents_or_private_media_collections(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.view']);
+        $privateCollections = [
+            'dealers', 'sellers', 'buyers', 'transactions', 'payments',
+            'commissions', 'files', 'media', 'videos', 'inquiries', 'subscribers',
+        ];
+
+        foreach ($privateCollections as $collection) {
+            $this->seedRecord($collection, 'private-' . $collection, 'Private row', $agency->id);
+        }
+
+        $body = $this->getJson('/api/workspace', $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()
+            ->json();
+
+        foreach ($privateCollections as $collection) {
+            $this->assertSame([], $body[$collection], "{$collection} must not be readable with properties.view alone");
+        }
+    }
+
+    public function test_dealer_self_service_reads_are_scoped_to_the_authenticated_dealer(): void
+    {
+        [$user, $agency] = $this->agencyUser(['view_my_deals', 'view_my_commission'], 'dealer');
+        $user->dealer_id = 'dealer-self';
+        $user->save();
+
+        BusinessRecord::put('transactions', 'deal-self', ['id' => 'deal-self', 'dealerId' => 'dealer-self'], $agency->id);
+        BusinessRecord::put('transactions', 'deal-other', ['id' => 'deal-other', 'dealerId' => 'dealer-other'], $agency->id);
+        BusinessRecord::put('payments', 'payment-self', ['id' => 'payment-self', 'transactionId' => 'deal-self'], $agency->id);
+        BusinessRecord::put('payments', 'payment-other', ['id' => 'payment-other', 'transactionId' => 'deal-other'], $agency->id);
+        BusinessRecord::put('commissions', 'commission-self', ['id' => 'commission-self', 'dealerId' => 'dealer-self'], $agency->id);
+        BusinessRecord::put('commissions', 'commission-other', ['id' => 'commission-other', 'dealerId' => 'dealer-other'], $agency->id);
+
+        $body = $this->getJson('/api/workspace', $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['deal-self'], array_column($body['transactions'], 'id'));
+        $this->assertSame(['payment-self'], array_column($body['payments'], 'id'));
+        $this->assertSame(['commission-self'], array_column($body['commissions'], 'id'));
     }
 
 }
