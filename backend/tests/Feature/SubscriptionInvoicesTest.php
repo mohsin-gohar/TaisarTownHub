@@ -46,7 +46,7 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
         $year = now()->format('Y');
 
         SubscriptionInvoice::create([
-            'id' => (string) \\Illuminate\\Support\\Str::uuid(),
+            'id' => (string) \Illuminate\Support\Str::uuid(),
             'invoice_number' => "INV-{$year}-000009",
             'agency_id' => $agency->id,
             'amount_pkr' => 1000,
