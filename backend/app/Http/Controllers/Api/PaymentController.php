@@ -37,7 +37,7 @@ class PaymentController extends Controller
         $this->requirePermission($request, 'agency.subscribe');
 
         $request->validate([
-            'plan_id' => 'required|exists:subscription_plans,id',
+            'plan_id' => 'required|exists:subscription_plans,id,is_active,1',
             'success_url' => [
                 'required',
                 'url',
@@ -226,9 +226,14 @@ class PaymentController extends Controller
             return response()->json(['success' => false, 'message' => 'Invalid signature.'], 400);
         }
 
-        $status = (string) ($payload['status'] ?? '');
-        $txRef = (string) ($payload['tx_ref'] ?? '');
-        $transactionId = $payload['id'] ?? null;
+        // Flutterwave's production webhook wraps transaction fields in "data";
+        // accept the legacy flat shape only for compatibility with older senders.
+        $gatewayData = is_array($payload['data'] ?? null) ? $payload['data'] : $payload;
+        $status = (string) ($gatewayData['status'] ?? '');
+        $txRef = (string) ($gatewayData['tx_ref'] ?? '');
+        $transactionId = $gatewayData['id'] ?? null;
+        $amount = $gatewayData['amount'] ?? null;
+        $currency = strtoupper((string) ($gatewayData['currency'] ?? ''));
 
         if ($txRef === '') {
             return response()->json(['success' => false, 'message' => 'Missing transaction reference.'], 422);
@@ -236,7 +241,14 @@ class PaymentController extends Controller
 
         Log::info('Flutterwave webhook received', ['status' => $status, 'tx_ref' => $txRef]);
 
-        $outcome = DB::transaction(function () use ($payload, $txRef, $transactionId, $status): string {
+        if ($status === 'successful' && (!is_numeric($amount) || $currency === '')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment amount and currency are required.',
+            ], 422);
+        }
+
+        $outcome = DB::transaction(function () use ($txRef, $transactionId, $status, $amount, $currency): string {
             $invoice = SubscriptionInvoice::where('flutterwave_tx_ref', $txRef)
                 ->lockForUpdate()
                 ->first();
@@ -260,9 +272,7 @@ class PaymentController extends Controller
                     return 'not_pending';
                 }
 
-                $amount = $payload['amount'] ?? null;
-                $currency = strtoupper((string) ($payload['currency'] ?? ''));
-                if ($amount !== null && (int) round((float) $amount) !== (int) $invoice->total_pkr) {
+                if ((int) round((float) $amount) !== (int) $invoice->total_pkr) {
                     Log::error('Flutterwave webhook amount mismatch', [
                         'tx_ref' => $txRef,
                         'expected' => (int) $invoice->total_pkr,
@@ -271,7 +281,7 @@ class PaymentController extends Controller
 
                     return 'amount_mismatch';
                 }
-                if ($currency !== '' && strtoupper((string) $invoice->currency) !== $currency) {
+                if (strtoupper((string) $invoice->currency) !== $currency) {
                     Log::error('Flutterwave webhook currency mismatch', [
                         'tx_ref' => $txRef,
                         'expected' => (string) $invoice->currency,
@@ -309,6 +319,12 @@ class PaymentController extends Controller
 
         if (in_array($outcome, ['amount_mismatch', 'currency_mismatch'], true)) {
             return response()->json(['success' => false, 'message' => 'Payment does not match the invoice.'], 422);
+        }
+        if ($outcome === 'not_found') {
+            return response()->json(['success' => false, 'message' => 'Invoice not found.'], 404);
+        }
+        if ($outcome === 'not_pending') {
+            return response()->json(['success' => false, 'message' => 'Invoice is not payable.'], 409);
         }
 
         return response()->json(['success' => true, 'message' => 'Webhook processed.']);
@@ -390,13 +406,16 @@ class PaymentController extends Controller
             // The gateway call happens before the DB transaction. Re-check
             // the invoice under a row lock so concurrent verify requests can
             // activate a pending invoice only once.
-            $activated = DB::transaction(function () use ($invoice, $remote, $txRef): bool {
+            $outcome = DB::transaction(function () use ($invoice, $remote, $txRef): string {
                 $lockedInvoice = SubscriptionInvoice::where('id', $invoice->id)
                     ->lockForUpdate()
                     ->firstOrFail();
 
+                if ($lockedInvoice->status === 'paid') {
+                    return 'already_paid';
+                }
                 if ($lockedInvoice->status !== 'pending') {
-                    return false;
+                    return 'not_pending';
                 }
 
                 $lockedInvoice->update([
@@ -408,10 +427,17 @@ class PaymentController extends Controller
                 ]);
                 $this->activateSubscriptionFromInvoice($lockedInvoice);
 
-                return true;
+                return 'activated';
             }, 3);
 
-            if ($activated) {
+            if (!in_array($outcome, ['activated', 'already_paid'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment was verified by the gateway but the invoice is no longer payable.',
+                ], 409);
+            }
+
+            if ($outcome === 'activated') {
                 $this->writeAudit(
                     $request,
                     'billing.invoice.verify',
