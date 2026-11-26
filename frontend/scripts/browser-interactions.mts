@@ -762,7 +762,7 @@ async function runPublic(browser: Browser): Promise<{
     }
     const drawer = mobilePage.locator('#mobile-nav-drawer');
     const drawerVisible = await drawer.isVisible().catch(() => false);
-    const drawerLinks = drawerVisible ? await drawer.locator('a').count() : 0;
+    const drawerLinks = drawerVisible ? await drawer.locator('a, button').count() : 0;
     const close = mobilePage.getByRole('button', { name: /Close menu/i }).first();
     if (await close.isVisible().catch(() => false)) {
       await close.click();
