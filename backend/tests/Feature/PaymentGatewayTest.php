@@ -180,6 +180,60 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_failed_stripe_invoice_can_be_paid_on_a_later_retry(): void
+    {
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $subscription = AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+            'ends_at' => now()->addMonth(),
+            'auto_renew' => true,
+            'stripe_subscription_id' => 'sub-retry-event',
+            'provider' => 'stripe',
+        ]);
+
+        $periodStart = now()->addMonth()->timestamp;
+        $periodEnd = now()->addMonths(2)->timestamp;
+        $invoice = json_decode(json_encode([
+            'id' => 'in-retry-event',
+            'subscription' => 'sub-retry-event',
+            'amount_due' => 500000,
+            'amount_paid' => 500000,
+            'currency' => 'pkr',
+            'lines' => ['data' => [[
+                'period' => ['start' => $periodStart, 'end' => $periodEnd],
+            ]]],
+        ]));
+
+        $controller = app(\\App\\Http\\Controllers\\Api\\PaymentController::class);
+        $failedHandler = new \\ReflectionMethod($controller, 'handleStripeInvoiceFailed');
+        $failedHandler->setAccessible(true);
+        $failedHandler->invoke($controller, $invoice);
+
+        $this->assertSame('past_due', $subscription->fresh()->status);
+        $this->assertDatabaseHas('subscription_invoices', [
+            'agency_id' => $agency->id,
+            'stripe_invoice_id' => 'in-retry-event',
+            'status' => 'failed',
+        ]);
+
+        $paidHandler = new \\ReflectionMethod($controller, 'handleStripeInvoicePaid');
+        $paidHandler->setAccessible(true);
+        $paidHandler->invoke($controller, $invoice);
+
+        $this->assertSame('active', $subscription->fresh()->status);
+        $this->assertSame($periodEnd, $subscription->fresh()->ends_at->getTimestamp());
+        $this->assertDatabaseHas('subscription_invoices', [
+            'agency_id' => $agency->id,
+            'stripe_invoice_id' => 'in-retry-event',
+            'status' => 'paid',
+        ]);
+        $this->assertSame(1, SubscriptionInvoice::where('stripe_invoice_id', 'in-retry-event')->count());
+    }
+
     public function test_stale_stripe_subscription_events_cannot_regress_a_paid_term(): void
     {
         $plan = $this->makePlan();
