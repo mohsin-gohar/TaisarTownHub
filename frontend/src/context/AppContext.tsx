@@ -40,6 +40,7 @@ import { normalizeRole, authorize, ROLE_LABELS, toLegacyRoleLabel, type Permissi
 import {
   TRANSACTION_STAGES,
   validateTransition,
+  validateVoid,
   validateDealPayload,
   validatePayment,
   dealMoney as dealMoneyOf,
@@ -1550,8 +1551,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const cleanReason = (reason || '').trim();
-    if (!cleanReason) {
-      showToast('error', 'A reason is required to void a transaction (audit trail).');
+    if (cleanReason.length < 3) {
+      showToast('error', 'Enter a void reason of at least 3 characters for the audit trail.');
+      return;
+    }
+
+    const gate = validateVoid(txn, paymentEntries, commissionEntries);
+    if (!gate.ok) {
+      showToast('error', gate.error);
       return;
     }
 
@@ -1577,11 +1584,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       props.map((p) => (p.id === txn.propertyId ? { ...p, status: 'Available' } : p))
     );
 
-    const money = dealMoneyOf(txn, paymentEntries);
-    showToast(
-      'info',
-      `Deal voided (record kept for audit).${money.collected > 0 ? ` Payments of PKR ${money.collected.toLocaleString()} were recorded — refund handling is manual.` : ''}`
-    );
+    showToast('info', 'Deal voided (record kept for audit).');
     logAudit({ actor: currentUser.name, role: currentUser.role, action: 'void_transaction', target: id, detail: reason });
   };
 
