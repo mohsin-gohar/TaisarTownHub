@@ -178,7 +178,7 @@ class InquiryController extends Controller
         }, 3);
 
         if (isset($result['blocked'])) {
-            return PlanLimits::deny('Your plan has reached its monthly lead limit. Upgrade to receive more enquiries.', $result['blocked']);
+            return PlanLimits::denyPublicLead();
         }
         if (($result['error'] ?? null) === 'listing_unavailable') {
             return response()->json(['success' => false, 'message' => 'This listing is no longer available.'], 404);
