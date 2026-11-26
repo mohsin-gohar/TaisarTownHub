@@ -40,6 +40,25 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
         $this->assertSame((int) substr($second, -6) + 1, (int) substr($third, -6));
     }
 
+    public function test_invoice_sequence_reconciles_with_imported_legacy_numbers(): void
+    {
+        [, $agency] = $this->agencyUser(['agency.view'], 'agent');
+        $year = now()->format('Y');
+
+        SubscriptionInvoice::create([
+            'id' => (string) \\Illuminate\\Support\\Str::uuid(),
+            'invoice_number' => "INV-{$year}-000009",
+            'agency_id' => $agency->id,
+            'amount_pkr' => 1000,
+            'tax_pkr' => 0,
+            'total_pkr' => 1000,
+            'currency' => 'PKR',
+            'status' => 'pending',
+        ]);
+
+        $this->assertSame("INV-{$year}-000010", SubscriptionInvoice::nextNumber());
+    }
+
     public function test_admin_can_raise_and_verify_an_invoice_exactly_once(): void
     {
         $admin = $this->admin();
