@@ -493,116 +493,26 @@ jobs:
           DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
         run: npx playwright test e2e/role-based.spec.ts --workers=1
 
-      - name: Run disposable 10-worker API load and transaction integrity probe
+      - name: Run real API business workflows (property, buyer, finance, document sharing)
         working-directory: frontend
         env:
           PROBE_API: http://127.0.0.1/api
-          LOAD_TEST_EMAIL: admin@taisartownhub.com
-          LOAD_TEST_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
-          LOAD_TEST_ALLOW_MUTATIONS: "true"
-          LOAD_COOLDOWN: "65"
-        run: npx tsx scripts/load-test.mts 10 10
-
-      - name: Dump diagnostics on failure
-        if: failure()
-        run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -a || true
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=200 || true
-
-      - name: Cleanup
-        if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
-
-          tar -tzf "$vault_archive" | grep -q '^public/'
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend rm -f /var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt
-
-      - name: Generate ephemeral demo password for disposable CI data
-        run: echo "CI_DEMO_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
-
-      - name: Seed disposable enterprise data and demo personas
-        # The password exists only for this isolated job; the seeder never
-        # writes it into production or source control.
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e DEMO_STAFF_PASSWORD="$CI_DEMO_PASSWORD" backend php artisan db:seed --force --no-interaction
-
-      - name: Run integration smoke tests
-        run: |
-          set -euo pipefail
-          BASE=http://localhost
-          # Every request goes through the real nginx gateway.
-          # Capture the body first: piping curl straight into `grep -q` lets
-          # grep close the pipe on the first match, which makes curl exit 23
-          # (CURLE_WRITE_ERROR) under `set -o pipefail` — a flaky CI failure.
-          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/health")
-          grep -q "healthy" <<<"$BODY"
-          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/")
-          grep -q "TaisarTownHub" <<<"$BODY"
-          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/maps")
-          grep -q "TaisarTownHub" <<<"$BODY"
-          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/agencies")
-          grep -q "success" <<<"$BODY"
-          BODY=$(curl -fsS --retry 5 --retry-delay 3 --retry-connrefused "$BASE/api/maps")
-          grep -q "success" <<<"$BODY"
-
-          # Regression: OPTIONS used to hit add_header inside a server-level
-          # `if`, so nginx refused to start. It must now answer 204 with CORS
-          # headers from the named preflight location.
-          PREFLIGHT_HEADERS=$(curl -sS -D - -o /dev/null -X OPTIONS "$BASE/api/auth/login" \
-            -H "Origin: http://localhost" \
-            -H "Access-Control-Request-Method: POST" \
-            -H "Access-Control-Request-Headers: content-type")
-          grep -qi '^HTTP/1.1 204' <<<"$PREFLIGHT_HEADERS"
-          grep -qi '^Access-Control-Allow-Origin: http://localhost' <<<"$PREFLIGHT_HEADERS"
-
-          # Genuine auth flow through nginx -> PHP-FPM -> MySQL -> Redis.
-          EMAIL="ci-drill-$(date +%s)@example.test"
-          PASSWORD="Ci-Drill-Pass-123"
-          REGISTER=$(curl -fsS -X POST "$BASE/api/auth/register" \
-            -H "Content-Type: application/json" -H "Accept: application/json" \
-            -d "{\"fullName\":\"CI Drill User\",\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"phone\":\"03001234567\",\"cnic\":\"42101-1234567-1\"}")
-          grep -q '"success":true' <<<"$REGISTER"
-          TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$REGISTER")
-          test -n "$TOKEN"
-          BODY=$(curl -fsS "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/json")
-          grep -q "$EMAIL" <<<"$BODY"
-          BODY=$(curl -fsS -X POST "$BASE/api/auth/logout" -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/json")
-          grep -q '"success":true' <<<"$BODY"
-
-          LOGIN=$(curl -fsS -X POST "$BASE/api/auth/login" \
-            -H "Content-Type: application/json" -H "Accept: application/json" \
-            -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
-          grep -q '"success":true' <<<"$LOGIN"
-          TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$LOGIN")
-          test -n "$TOKEN"
-          BODY=$(curl -fsS "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/json")
-          grep -q "$EMAIL" <<<"$BODY"
-          echo "integration smoke tests: gateway, preflight, register, login, me, logout all passed"
-
-      - name: Set up Node 24 for API-backed browser role matrix
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install browser test dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Install Chromium for API-backed browser role matrix
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Run API-backed browser role matrix
-        working-directory: frontend
-        env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1
-          PLAYWRIGHT_API_URL: http://127.0.0.1/api
-          PLAYWRIGHT_SKIP_WEBSERVER: "true"
           DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
-        run: npx playwright test e2e/role-based.spec.ts --workers=1
+        run: npx tsx scripts/workflows-e2e.mts
+
+      - name: Run public link, button, form and responsive interaction audit
+        working-directory: frontend
+        env:
+          AUDIT_BASE: http://127.0.0.1
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+        run: npx tsx scripts/browser-interactions.mts
+
+      - name: Run admin tab and button interaction audit across five personas
+        working-directory: frontend
+        env:
+          AUDIT_BASE: http://127.0.0.1
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+        run: npx tsx scripts/browser-admin-interactions.mts
 
       - name: Run disposable 10-worker API load and transaction integrity probe
         working-directory: frontend
@@ -619,6 +529,14 @@ jobs:
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -a || true
           docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=200 || true
+
+      - name: Upload full-stack audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: taisartownhub-full-stack-audit
+          path: frontend/audit/*.json
+          if-no-files-found: warn
 
       - name: Cleanup
         if: always()
