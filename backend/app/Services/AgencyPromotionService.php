@@ -95,7 +95,7 @@ class AgencyPromotionService
         $now = now();
         $liveCount = AgencyPromotion::query()->live()->count();
         $reservedCount = AgencyPromotion::query()->current()->count();
-        $pending = AgencyPromotion::query()->where('status', 'pending')->count();
+        $pending = AgencyPromotion::query()->current()->where('status', 'pending')->count();
         $scheduled = AgencyPromotion::query()
             ->where('status', 'active')
             ->whereNotNull('starts_at')
