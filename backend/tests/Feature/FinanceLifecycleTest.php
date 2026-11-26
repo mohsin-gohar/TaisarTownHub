@@ -168,6 +168,12 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $managerDeal = $this->createDeal($manager);
 
         $this->postJson(
+            "/api/agency/transactions/{$managerDeal['id']}/approve",
+            [],
+            $this->authHeaders($this->tokenFor($manager))
+        )->assertStatus(403);
+
+        $this->postJson(
             "/api/agency/transactions/{$managerDeal['id']}/void",
             ['reason' => 'Manager attempted irreversible void'],
             $this->authHeaders($this->tokenFor($manager))
@@ -176,6 +182,12 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $ownerGrants = \App\Support\Permissions::agencyRoleGrants('agency_owner');
         [$owner] = $this->agencyUser($ownerGrants, 'agency_owner');
         $ownerDeal = $this->createDeal($owner);
+
+        $this->postJson(
+            "/api/agency/transactions/{$ownerDeal['id']}/approve",
+            [],
+            $this->authHeaders($this->tokenFor($owner))
+        )->assertStatus(200)->assertJsonPath('success', true);
 
         $this->postJson(
             "/api/agency/transactions/{$ownerDeal['id']}/void",
