@@ -36,6 +36,7 @@ class Permissions
         'properties.approve' => ['Approve / reject listings', 'properties', true],
         'properties.assign' => ['Assign properties to agents', 'properties', false],
         'properties.feature' => ['Request featured listings', 'properties', false],
+        'dealers.manage' => ['Manage agency dealers', 'dealers', false],
 
         // Documents
         'documents.view' => ['View documents', 'documents', false],
@@ -110,6 +111,7 @@ class Permissions
         'properties.create' => ['create_properties'],
         'properties.update' => ['edit_properties'],
         'properties.delete' => ['delete_properties'],
+        'dealers.manage' => ['manage_dealers'],
         'documents.view' => ['view_private_documents'],
         'documents.upload' => ['upload_documents'],
         'crm.view' => ['view_inquiries'],
@@ -126,6 +128,7 @@ class Permissions
     public const AGENCY_ROLE_GRANTS = [
         'agency_owner' => [
             'agency.view', 'agency.update', 'agency.manage_staff', 'agency.manage_settings', 'agency.subscribe',
+            'dealers.manage',
             'properties.view', 'properties.create', 'properties.update', 'properties.delete',
             'properties.publish', 'properties.assign', 'properties.feature',
             'documents.view', 'documents.upload', 'documents.update', 'documents.download',
@@ -139,6 +142,7 @@ class Permissions
         ],
         'agency_manager' => [
             'agency.view', 'agency.update', 'agency.manage_staff',
+            'dealers.manage',
             'properties.view', 'properties.create', 'properties.update', 'properties.delete',
             'properties.publish', 'properties.assign', 'properties.feature',
             'documents.view', 'documents.upload', 'documents.update', 'documents.download',
