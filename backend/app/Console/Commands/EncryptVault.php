@@ -9,6 +9,7 @@ use App\Models\MediaFile;
 use App\Services\FileVaultCrypto;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * One-shot (idempotent) migration command: re-writes every vault file that is
@@ -51,6 +52,37 @@ class EncryptVault extends Command
         return $counts['errors'] > 0 ? self::FAILURE : self::SUCCESS;
     }
 
+    /**
+     * Stage and authenticate the replacement before moving it over the
+     * original object. A failed write/verification leaves the original bytes
+     * untouched, including during APP_KEY rotation.
+     */
+    private function writeVerifiedEnvelope(string $disk, string $path, string $plain): void
+    {
+        $storage = Storage::disk($disk);
+        $temporaryPath = $path . '.vault-rotation-' . Str::random(16);
+
+        try {
+            if (! $storage->put($temporaryPath, FileVaultCrypto::encrypt($plain))) {
+                throw new \RuntimeException('Could not write the staged encrypted object.');
+            }
+
+            $staged = (string) $storage->get($temporaryPath);
+            if (! FileVaultCrypto::isEncryptedWithCurrentKey($staged)
+                || FileVaultCrypto::decrypt($staged) !== $plain) {
+                throw new \RuntimeException('Staged encrypted object failed current-key verification.');
+            }
+
+            if (! $storage->move($temporaryPath, $path)) {
+                throw new \RuntimeException('Could not replace the original vault object.');
+            }
+        } finally {
+            if ($storage->exists($temporaryPath)) {
+                $storage->delete($temporaryPath);
+            }
+        }
+    }
+
     private function processDisk(string $disk, $rows, \Closure $pathOf, array &$counts, bool $dry): void
     {
         foreach ($rows as $row) {
@@ -69,6 +101,11 @@ class EncryptVault extends Command
             }
 
             if (FileVaultCrypto::isEncrypted($blob)) {
+                if (FileVaultCrypto::isEncryptedWithCurrentKey($blob)) {
+                    $counts['already']++;
+                    continue;
+                }
+
                 try {
                     $plain = FileVaultCrypto::decrypt($blob);
                 } catch (\Throwable $e) {
@@ -76,30 +113,8 @@ class EncryptVault extends Command
                     $this->error("DECRYPT FAILED [{$disk}] id={$row->id}: {$e->getMessage()}");
                     continue;
                 }
-
-                if (FileVaultCrypto::isEncryptedWithCurrentKey($blob)) {
-                    $counts['already']++;
-                    continue;
-                }
-
-                // The previous APP_KEY authenticated this envelope. Re-encrypt
-                // it with the active key while the previous key remains configured.
-                if ($dry) {
-                    $counts['encrypted']++;
-                    continue;
-                }
-
-                try {
-                    if (!Storage::disk($disk)->put($path, FileVaultCrypto::encrypt($plain))) {
-                        throw new \RuntimeException('Storage adapter returned false.');
-                    }
-                    $counts['encrypted']++;
-                } catch (\Throwable $e) {
-                    $counts['errors']++;
-                    $this->error("WRITE FAILED [{$disk}] id={$row->id}: {$e->getMessage()}");
-                }
-
-                continue;
+            } else {
+                $plain = $blob;
             }
 
             if ($dry) {
@@ -108,9 +123,7 @@ class EncryptVault extends Command
             }
 
             try {
-                if (!Storage::disk($disk)->put($path, FileVaultCrypto::encrypt($blob))) {
-                    throw new \RuntimeException('Storage adapter returned false.');
-                }
+                $this->writeVerifiedEnvelope($disk, $path, $plain);
                 $counts['encrypted']++;
             } catch (\Throwable $e) {
                 $counts['errors']++;
