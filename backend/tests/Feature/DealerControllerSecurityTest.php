@@ -18,9 +18,10 @@ class DealerControllerSecurityTest extends EnterpriseTestCase
         ]);
     }
 
-    public function test_agency_manager_cannot_delete_another_agencys_dealer(): void
+    public function test_platform_dealer_manager_cannot_delete_a_dealer_outside_the_selected_agency(): void
     {
-        [$manager, $agencyA] = $this->agencyUser(['dealers.manage'], 'dealer_manager');
+        $manager = $this->makeUser('super_admin');
+        $agencyA = $this->makeAgency('Selected Dealer Agency');
         $agencyB = $this->makeAgency('Other Dealer Agency');
         $dealerB = $this->makeDealer($agencyB, 'dealer_other_agency');
 
