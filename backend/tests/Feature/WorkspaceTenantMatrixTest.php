@@ -467,6 +467,135 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_workspace_commission_accrual_and_payout_ledger_are_server_enforced(): void
+    {
+        [$manager, $agency] = $this->agencyUser(['finance.manage_payments']);
+        BusinessRecord::put('transactions', 'commission-ledger-deal', [
+            'id' => 'commission-ledger-deal',
+            'status' => 'Draft',
+            'agreementAmountPKR' => 100000,
+            'advancePaymentPKR' => 0,
+            'remainingBalancePKR' => 100000,
+        ], $agency->id);
+        $managerHeaders = $this->authHeaders($this->tokenFor($manager));
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['commissions' => [[
+                'id' => 'commission-ledger-entry',
+                'transactionId' => 'commission-ledger-deal',
+                'amountPKR' => 10000,
+                'paidPKR' => 10000,
+                'status' => 'Paid',
+                'accruedOn' => now()->toDateString(),
+                'payouts' => [[
+                    'id' => 'forged-payout',
+                    'amountPKR' => 10000,
+                    'paidAt' => now()->toDateString(),
+                    'recordedBy' => 'forged',
+                ]],
+            ]]],
+        ], $managerHeaders)->assertStatus(422);
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'commissions',
+            'record_id' => 'commission-ledger-entry',
+        ]);
+
+        $pending = [
+            'id' => 'commission-ledger-entry',
+            'transactionId' => 'commission-ledger-deal',
+            'amountPKR' => 10000,
+            'paidPKR' => 0,
+            'status' => 'Pending Accrual',
+            'payouts' => [],
+        ];
+        $this->putJson('/api/workspace', [
+            'collections' => ['commissions' => [$pending]],
+        ], $managerHeaders)->assertOk();
+
+        $earlyAccrual = $pending;
+        $earlyAccrual['status'] = 'Accrued';
+        $earlyAccrual['accruedOn'] = now()->toDateString();
+        $this->putJson('/api/workspace', [
+            'collections' => ['commissions' => [$earlyAccrual]],
+        ], $managerHeaders)->assertStatus(422);
+
+        $this->putJson('/api/workspace', [
+            'collections' => [
+                'payments' => [[
+                    'id' => 'commission-ledger-payment',
+                    'transactionId' => 'commission-ledger-deal',
+                    'amountPKR' => 100000,
+                    'type' => 'payment',
+                    'paidAt' => now()->toDateString(),
+                ]],
+                'commissions' => [$earlyAccrual],
+            ],
+        ], $managerHeaders)->assertOk();
+
+        $partialPayout = $earlyAccrual;
+        $partialPayout['status'] = 'Partially Paid';
+        $partialPayout['paidPKR'] = 4000;
+        $partialPayout['payouts'] = [[
+            'id' => 'commission-payout-1',
+            'amountPKR' => 4000,
+            'paidAt' => 'client-supplied-date',
+            'recordedBy' => 'client-supplied-actor',
+            'note' => 'First payout',
+        ]];
+        $this->putJson('/api/workspace', [
+            'collections' => ['commissions' => [$partialPayout]],
+        ], $managerHeaders)->assertForbidden();
+
+        $this->seedPlatformRole('super_admin');
+        $platformAdmin = $this->makeUser('super_admin');
+        $adminHeaders = $this->authHeaders($this->tokenFor($platformAdmin));
+        $adminHeaders['X-Agency-Id'] = (string) $agency->id;
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['commissions' => [$partialPayout]],
+        ], $adminHeaders)->assertOk();
+
+        $stored = $this->record('commissions', 'commission-ledger-entry')->payload;
+        $this->assertSame(4000, (int) $stored['paidPKR']);
+        $this->assertSame($platformAdmin->name, $stored['payouts'][0]['recordedBy']);
+        $this->assertSame(now()->toDateString(), $stored['payouts'][0]['paidAt']);
+
+        $editedPayout = $stored;
+        $editedPayout['payouts'][0]['amountPKR'] = 3000;
+        $editedPayout['paidPKR'] = 3000;
+        $this->putJson('/api/workspace', [
+            'collections' => ['commissions' => [$editedPayout]],
+        ], $adminHeaders)->assertStatus(422);
+
+        $overpaid = $stored;
+        $overpaid['payouts'][] = [
+            'id' => 'commission-payout-overpay',
+            'amountPKR' => 7000,
+            'note' => 'Would exceed commission.',
+        ];
+        $overpaid['paidPKR'] = 11000;
+        $this->putJson('/api/workspace', [
+            'collections' => ['commissions' => [$overpaid]],
+        ], $adminHeaders)->assertStatus(422);
+
+        $finalPayout = $stored;
+        $finalPayout['payouts'][] = [
+            'id' => 'commission-payout-2',
+            'amountPKR' => 6000,
+            'note' => 'Final payout',
+        ];
+        $finalPayout['paidPKR'] = 10000;
+        $finalPayout['status'] = 'Paid';
+        $this->putJson('/api/workspace', [
+            'collections' => ['commissions' => [$finalPayout]],
+        ], $adminHeaders)->assertOk();
+
+        $paid = $this->record('commissions', 'commission-ledger-entry')->payload;
+        $this->assertSame('Paid', $paid['status']);
+        $this->assertSame(10000, (int) $paid['paidPKR']);
+        $this->assertCount(2, $paid['payouts']);
+    }
+
     public function test_workspace_requires_cancel_permission_and_reason_for_non_void_cancellation(): void
     {
         [$updater, $agency] = $this->agencyUser(['update_transactions']);
