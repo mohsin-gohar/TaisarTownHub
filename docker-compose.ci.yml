@@ -59,12 +59,22 @@ services:
   backend:
     image: taisartownhub-backend:test
     environment:
+      # Disposable integration stack only: seed demo personas and trust the
+      # private Docker bridge so Playwright can use isolated TEST-NET IP buckets.
+      APP_ENV: testing
+      # High limits only for disposable browser-audit CI; production defaults remain strict.
+      API_PUBLIC_RATE_LIMIT: "10000"
+      API_AUTH_RATE_LIMIT: "120"
+      API_WRITE_RATE_LIMIT: "1200"
+      API_FALLBACK_RATE_LIMIT: "10000"
+      API_FALLBACK_AUTH_RATE_LIMIT: "1200"
+      TRUSTED_PROXIES: 172.16.0.0/12,127.0.0.1,::1
       APP_KEY: base64:FCkLXSSnmmfbGJwJic1ie3qcv8XYDzm78f9Ax91nIGM=
       APP_URL: http://localhost
       DB_DATABASE: taisartownhub_test
       DB_PASSWORD: test-password
       REDIS_PASSWORD: test-redis-password
-      CORS_ALLOWED_ORIGINS: http://localhost
+      CORS_ALLOWED_ORIGINS: http://localhost,http://127.0.0.1
       SANCTUM_STATEFUL_DOMAINS: localhost
       # Test keys (safe for CI)
       STRIPE_KEY: sk_test_ci
@@ -96,8 +106,9 @@ services:
     image: taisartownhub-frontend:test
     build:
       args:
-        VITE_API_URL: http://localhost/api
+        VITE_API_URL: http://127.0.0.1/api
         VITE_STRIPE_PUBLIC_KEY: pk_test_ci
+        VITE_GOOGLE_OAUTH_ENABLED: "false"
         VITE_SENTRY_DSN:
         VITE_GA_MEASUREMENT_ID:
         VITE_LOGROCKET_APP_ID:
@@ -108,6 +119,66 @@ services:
     command: ["nginx", "-g", "daemon off;", "-c", "/etc/nginx/nginx.ci.conf"]
     volumes:
       - ./docker/nginx.ci.conf:/etc/nginx/nginx.ci.conf:ro
+
+  # Exercises the exact production readiness command with disposable CI
+  # infrastructure, while keeping the full-stack browser stack in APP_ENV=testing.
+  production-preflight:
+    image: taisartownhub-backend:test
+    user: www-data
+    environment:
+      APP_ENV: production
+      APP_NAME: "TaisarTownHub API"
+      APP_DEBUG: "false"
+      APP_KEY: base64:FCkLXSSnmmfbGJwJic1ie3qcv8XYDzm78f9Ax91nIGM=
+      APP_URL: https://api.taisartownhub.com
+      BCRYPT_ROUNDS: "12"
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: warning
+      SANCTUM_TOKEN_PREFIX: tth_
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: taisartownhub_test
+      DB_USERNAME: taisar
+      DB_PASSWORD: test-password
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      SESSION_SECURE_COOKIE: "true"
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: test-redis-password
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      MAIL_FROM_ADDRESS: noreply@taisartownhub.test
+      FILE_VAULT_ENCRYPTION: "true"
+      CORS_ALLOWED_ORIGINS: https://taisartownhub.com,https://www.taisartownhub.com
+      SANCTUM_STATEFUL_DOMAINS: taisartownhub.com,www.taisartownhub.com
+      RUN_MIGRATIONS: "false"
+      MALWARE_SCAN_ENABLED: "true"
+      MALWARE_SCANNER: clamav
+      CLAMD_SOCKET: clamav:3310
+      MALWARE_SCAN_FAIL_CLOSED: "true"
+      MALWARE_SCAN_LOG_SKIPPED: "true"
+    volumes:
+      - private_vault:/var/www/html/storage/app/private/documents
+      - quarantine_storage:/var/www/html/storage/app/private/quarantine
+      - public_storage:/var/www/html/storage/app/public
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - taisartownhub-network
+    command: ["php", "artisan", "app:production-check", "--strict", "--json"]
 
   worker:
     image: taisartownhub-backend:test

@@ -20,8 +20,8 @@ import {
   FileCheck
 } from 'lucide-react';
 import { Transaction, TransactionStatus, CommissionStatus, PaymentEntry, CommissionEntry } from '../../types';
-import { formatPKRCurrency, calculateERPFinancials, calculateCommission, maskCNIC, hasPermission } from '../../utils/logic';
-import { normalizeRole } from '../../domain/permissions';
+import { formatPKRCurrency, calculateERPFinancials, calculateCommission, maskCNIC } from '../../utils/logic';
+import { authorize, normalizeRole } from '../../domain/permissions';
 import { dealMoney } from '../../domain/transactions';
 import { EmptyState } from '../common/EmptyState';
 
@@ -37,6 +37,7 @@ export const AdminTransactions: React.FC = () => {
     paymentEntries,
     commissionEntries,
     recordPayment,
+    recordRefund,
     voidTransaction,
     showToast,
     currentTheme,
@@ -49,16 +50,18 @@ export const AdminTransactions: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTxnForReceipt, setSelectedTxnForReceipt] = useState<Transaction | null>(null);
 
-  // ---- Role scoping (P0-4): dealers see ONLY deals booked under their dealer profile ----
-  const isDealer = normalizeRole(currentUser.role) === 'dealer';
+  // Dealer base accounts are scoped unless their active agency membership grants
+  // agency-wide finance visibility (e.g. an agency_owner membership).
+  const isDealer = normalizeRole(currentUser.role) === 'dealer'
+    && !currentUser.permissions.includes('finance.view');
   const scopedDealerId = isDealer ? currentUser.dealerId : undefined;
   const visibleTransactions = (isDealer
     ? transactions.filter((t) => t.dealerId && t.dealerId === scopedDealerId)
     : transactions
   ).filter((t) => !t.deletedAt);
 
-  const canCreateDeals = hasPermission(currentUser.role, 'create_transactions');
-  const canUpdateDeals = hasPermission(currentUser.role, 'update_transactions');
+  const canCreateDeals = authorize(currentUser, 'create_transactions').ok;
+  const canUpdateDeals = authorize(currentUser, 'update_transactions').ok;
 
   const [formData, setFormData] = useState({
     propertyId: properties[0]?.id || '',
@@ -88,24 +91,40 @@ export const AdminTransactions: React.FC = () => {
     list.push(p);
     paymentsByTxId.set(p.transactionId, list);
   }
-  const commissionByTxId = new Map<string, CommissionEntry>();
-  for (const c of visibleCommissions) commissionByTxId.set(c.transactionId, c);
+  const commissionByTxId = new Map<string, CommissionEntry[]>();
+  for (const commission of visibleCommissions) {
+    const entries = commissionByTxId.get(commission.transactionId) || [];
+    entries.push(commission);
+    commissionByTxId.set(commission.transactionId, entries);
+  }
 
   // P1-2/P1-1 UI gates: recording money and voiding records are privileged ops;
   // the context actions re-check these on every call (UI hiding is cosmetic).
-  const canRecordPayments = hasPermission(currentUser.role, 'manage_payments');
-  const canVoid = hasPermission(currentUser.role, 'void_transactions');
+  const canRecordPayments = authorize(currentUser, 'manage_payments').ok;
+  const canVoid = authorize(currentUser, 'void_transactions').ok;
 
   // Record-payment modal state
   const [paymentModalTxn, setPaymentModalTxn] = useState<Transaction | null>(null);
+  const [paymentModalMode, setPaymentModalMode] = useState<'payment' | 'refund'>('payment');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentEntry['method']>('Bank Transfer');
   const [paymentNote, setPaymentNote] = useState('');
 
   const openPaymentModal = (txn: Transaction) => {
     const money = dealMoney(txn, paymentsByTxId.get(txn.id) || []);
+    const mode = txn.status === 'Cancelled' && money.collected > 0 ? 'refund' : 'payment';
     setPaymentModalTxn(txn);
-    setPaymentAmount(money.balance > 0 ? money.balance : 0);
+    setPaymentModalMode(mode);
+    setPaymentAmount(mode === 'refund' ? money.collected : money.balance > 0 ? money.balance : 0);
+    setPaymentMethod('Bank Transfer');
+    setPaymentNote('');
+  };
+
+  const openRefundModal = (txn: Transaction) => {
+    const money = dealMoney(txn, paymentsByTxId.get(txn.id) || []);
+    setPaymentModalTxn(txn);
+    setPaymentModalMode('refund');
+    setPaymentAmount(money.collected > 0 ? money.collected : 0);
     setPaymentMethod('Bank Transfer');
     setPaymentNote('');
   };
@@ -113,13 +132,14 @@ export const AdminTransactions: React.FC = () => {
   const handleConfirmPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentModalTxn) return;
-    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
-      showToast('error', 'Payment amount must be a positive number.');
+    if (!Number.isSafeInteger(paymentAmount) || paymentAmount <= 0) {
+      showToast('error', 'Amount must be a positive whole-rupee PKR value.');
       return;
     }
-    // Keep the modal open when the domain gate rejects (e.g. overpay without
-    // approve_transactions) so the user can correct the amount.
-    const accepted = recordPayment(paymentModalTxn.id, paymentAmount, paymentMethod, paymentNote.trim() || undefined);
+
+    const accepted = paymentModalMode === 'refund'
+      ? recordRefund(paymentModalTxn.id, paymentAmount, paymentMethod, paymentNote.trim())
+      : recordPayment(paymentModalTxn.id, paymentAmount, paymentMethod, paymentNote.trim() || undefined);
     if (accepted) setPaymentModalTxn(null);
   };
 
@@ -405,7 +425,7 @@ export const AdminTransactions: React.FC = () => {
                 <th className="py-3.5 px-4">Seller & Buyer</th>
                 <th className="py-3.5 px-4">Deal Amount</th>
                 <th className="py-3.5 px-4">Paid / Balance</th>
-                <th className="py-3.5 px-4">Agent Commission</th>
+                <th className="py-3.5 px-4">Commission</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 text-right">Ledger & Receipt</th>
               </tr>
@@ -416,7 +436,23 @@ export const AdminTransactions: React.FC = () => {
                 // deal (Plot R-66), NOT any deal whose number merely contains "001".
                 const isHandwrittenDeal = txn.propertyId === 'prop-r66';
                 const payRows = paymentsByTxId.get(txn.id) || [];
-                const commEntry = commissionByTxId.get(txn.id);
+                const commRows = commissionByTxId.get(txn.id) || [];
+                const activeCommissions = commRows.filter((entry) => entry.status !== 'Cancelled');
+                const commissionAmount = activeCommissions.length > 0
+                  ? activeCommissions.reduce((sum, entry) => sum + entry.amountPKR, 0)
+                  : commRows.length > 0 ? 0 : (txn.commissionPKR ?? txn.commissionAmountPKR ?? 0);
+                const commissionPaid = activeCommissions.reduce((sum, entry) => sum + (entry.paidPKR ?? 0), 0);
+                const commissionStatus = commRows.length === 0
+                  ? txn.commissionStatus
+                  : activeCommissions.length === 0
+                  ? 'Cancelled'
+                  : commissionPaid >= commissionAmount && commissionAmount > 0
+                  ? 'Paid'
+                  : commissionPaid > 0
+                  ? 'Partially Paid'
+                  : activeCommissions.some((entry) => ['Accrued', 'Partially Paid', 'Paid'].includes(entry.status))
+                  ? 'Accrued'
+                  : 'Pending Accrual';
                 const money = dealMoney(txn, payRows);
 
                 return (
@@ -486,20 +522,20 @@ export const AdminTransactions: React.FC = () => {
 
                     <td className="py-4 px-4">
                       <div className="font-bold text-[#F6E3B4] font-mono">
-                        {formatPKRCurrency(commEntry?.amountPKR ?? txn.commissionPKR ?? txn.commissionAmountPKR ?? 0)}
+                        {formatPKRCurrency(commissionAmount)}
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                        (commEntry?.status ?? txn.commissionStatus) === 'Paid'
+                        commissionStatus === 'Paid'
                           ? 'bg-[#E7C878]/20 text-[#F6E3B4]'
-                          : (commEntry?.status ?? txn.commissionStatus) === 'Accrued'
+                          : commissionStatus === 'Accrued'
                           ? 'bg-[#E7C878]/10 text-[#E7C878]'
-                          : (commEntry?.status ?? txn.commissionStatus) === 'Partially Paid'
+                          : commissionStatus === 'Partially Paid'
                           ? 'bg-slate-800 text-slate-300'
-                          : (commEntry?.status ?? txn.commissionStatus) === 'Cancelled'
+                          : commissionStatus === 'Cancelled'
                           ? 'bg-slate-800 text-slate-400'
                           : 'bg-slate-800 text-slate-400'
                       }`}>
-                        {commEntry?.status ?? txn.commissionStatus}
+                        {commissionStatus}
                       </span>
                     </td>
 
@@ -539,10 +575,20 @@ export const AdminTransactions: React.FC = () => {
                           <button
                             onClick={() => openPaymentModal(txn)}
                             className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#E7C878] hover:text-[#0B1220] text-[#E7C878] text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
-                            title={canRecordPayments ? 'View ledger & record payment' : 'View payment ledger'}
+                            title={canRecordPayments ? 'View ledger & record payment or refund' : 'View payment ledger'}
                           >
                             <Wallet className="w-3.5 h-3.5" />
                             <span>{payRows.length > 0 ? `Payments (${payRows.length})` : 'Payments'}</span>
+                          </button>
+                        )}
+                        {paymentModalTxn === null && canRecordPayments && !txn.voided
+                          && dealMoney(txn, payRows).collected > 0 && (
+                          <button
+                            onClick={() => openRefundModal(txn)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-rose-300 border border-rose-900/50 text-xs font-semibold transition cursor-pointer"
+                            title="Record an audited refund against collected funds"
+                          >
+                            Refund
                           </button>
                         )}
 
@@ -661,7 +707,7 @@ export const AdminTransactions: React.FC = () => {
                 holds view_sensitive_cnic (P0-5). Transactions reference parties
                 by id; values are joined and masked at render time. */}
             {(() => {
-              const canReveal = hasPermission(currentUser.role, 'view_sensitive_cnic');
+              const canReveal = authorize(currentUser, 'view_sensitive_cnic').ok;
               const seller = sellers.find((s) => s.id === selectedTxnForReceipt.sellerId);
               const buyer = buyers.find((b) => b.id === selectedTxnForReceipt.buyerId);
               const sellerLine = canReveal && seller?.cnic
@@ -719,7 +765,14 @@ export const AdminTransactions: React.FC = () => {
                       Agent Commission ({selectedTxnForReceipt.dealerName || 'Direct'})
                     </td>
                     <td className="py-2.5 px-4 text-right text-slate-300">
-                      {formatPKRCurrency(selectedTxnForReceipt.commissionPKR ?? selectedTxnForReceipt.commissionAmountPKR ?? 0)}
+                      {formatPKRCurrency(
+                        commissionEntries
+                          .filter((entry) => entry.transactionId === selectedTxnForReceipt.id && entry.status !== 'Cancelled')
+                          .reduce((sum, entry) => sum + entry.amountPKR, 0)
+                        || selectedTxnForReceipt.commissionPKR
+                        || selectedTxnForReceipt.commissionAmountPKR
+                        || 0
+                      )}
                     </td>
                   </tr>
                 </tbody>
@@ -778,7 +831,7 @@ export const AdminTransactions: React.FC = () => {
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">Payment Ledger</h3>
+            <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">Payment & Refund Ledger</h3>
             <p className="text-xs text-slate-400 mb-4">
               {paymentModalTxn.dealNumber || paymentModalTxn.id} · Plot {paymentModalTxn.plotNumber} {paymentModalTxn.sector}
             </p>
@@ -786,12 +839,13 @@ export const AdminTransactions: React.FC = () => {
             {(() => {
               const rows = paymentsByTxId.get(paymentModalTxn.id) || [];
               const money = dealMoney(paymentModalTxn, rows);
-              const frozen = paymentModalTxn.voided || paymentModalTxn.status === 'Cancelled';
+              const paymentFrozen = paymentModalTxn.voided || paymentModalTxn.status === 'Cancelled';
+              const refundFrozen = paymentModalTxn.voided || money.collected <= 0;
               return (
                 <>
                   <div className="grid grid-cols-3 gap-3 mb-5">
                     <div className="p-3 rounded-xl bg-[#07141E] border border-[#E7C878]/30">
-                      <span className="text-[10px] text-slate-400 block">Paid</span>
+                      <span className="text-[10px] text-slate-400 block">Net collected</span>
                       <strong className="text-sm font-mono text-[#E7C878]">{formatPKRCurrency(money.collected)}</strong>
                     </div>
                     <div className="p-3 rounded-xl bg-[#07141E] border border-slate-700">
@@ -804,22 +858,26 @@ export const AdminTransactions: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* History */}
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#E7C878] block mb-2">
                     Recorded movements ({rows.length})
                   </span>
                   <div className="space-y-2 mb-5 max-h-40 overflow-y-auto pr-1">
-                    {rows.map((row) => (
-                      <div key={row.id} className="p-2.5 rounded-lg bg-[#07141E] border border-slate-800 text-xs flex items-start justify-between gap-3">
-                        <div>
-                          <div className="font-mono font-bold text-[#E7C878]">+ {formatPKRCurrency(row.amountPKR)}</div>
-                          <div className="text-[10px] text-slate-400">
-                            {row.paidAt} · {row.method} · by {row.recordedBy}
+                    {rows.map((row) => {
+                      const isRefund = row.type === 'refund';
+                      return (
+                        <div key={row.id} className="p-2.5 rounded-lg bg-[#07141E] border border-slate-800 text-xs flex items-start justify-between gap-3">
+                          <div>
+                            <div className={`font-mono font-bold ${isRefund ? 'text-rose-300' : 'text-[#E7C878]'}`}>
+                              {isRefund ? '− ' : '+ '}{formatPKRCurrency(Math.abs(row.amountPKR))} {isRefund ? '· Refund' : ''}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              {row.paidAt} · {row.method} · by {row.recordedBy}
+                            </div>
+                            {row.note && <div className="text-[10px] text-slate-500 italic mt-0.5">{row.note}</div>}
                           </div>
-                          {row.note && <div className="text-[10px] text-slate-500 italic mt-0.5">{row.note}</div>}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {rows.length === 0 && (
                       <div className="text-[11px] text-slate-500 italic p-2">
                         No ledger movements yet — the recorded advance of this legacy deal appears in totals until the first entry is acknowledged.
@@ -827,11 +885,39 @@ export const AdminTransactions: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Record new payment — hidden without manage_payments or when frozen */}
-                  {canRecordPayments && !frozen && money.balance > 0 && (
-                    <form onSubmit={handleConfirmPayment} className="pt-4 border-t border-slate-800 space-y-3">
+                  {canRecordPayments && (
+                    <div className="flex gap-2 border-t border-slate-800 pt-4 mb-3">
+                      <button
+                        type="button"
+                        disabled={paymentFrozen || money.balance <= 0}
+                        onClick={() => {
+                          setPaymentModalMode('payment');
+                          setPaymentAmount(money.balance > 0 ? money.balance : 0);
+                          setPaymentNote('');
+                        }}
+                        className="px-3 py-2 rounded-lg bg-slate-800 text-xs font-semibold text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700"
+                      >
+                        Record Payment
+                      </button>
+                      <button
+                        type="button"
+                        disabled={refundFrozen}
+                        onClick={() => {
+                          setPaymentModalMode('refund');
+                          setPaymentAmount(money.collected > 0 ? money.collected : 0);
+                          setPaymentNote('');
+                        }}
+                        className="px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-900/50 text-xs font-semibold text-rose-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-rose-500/20"
+                      >
+                        Record Refund
+                      </button>
+                    </div>
+                  )}
+
+                  {canRecordPayments && paymentModalMode === 'payment' && !paymentFrozen && money.balance > 0 && (
+                    <form onSubmit={handleConfirmPayment} className="space-y-3">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-[#E7C878] block">
-                        Record payment
+                        New payment
                       </span>
                       <div className="grid grid-cols-2 gap-3">
                         <label className="block">
@@ -839,6 +925,7 @@ export const AdminTransactions: React.FC = () => {
                           <input
                             type="number"
                             min={1}
+                            step={1}
                             max={money.balance}
                             value={paymentAmount}
                             onChange={(e) => setPaymentAmount(Number(e.target.value))}
@@ -869,14 +956,7 @@ export const AdminTransactions: React.FC = () => {
                           className="w-full bg-[#07141E] text-white p-2 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none text-xs"
                         />
                       </label>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setPaymentModalTxn(null)}
-                          className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer hover:bg-slate-700"
-                        >
-                          Close
-                        </button>
+                      <div className="flex justify-end">
                         <button
                           type="submit"
                           className="px-4 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold cursor-pointer transition shadow"
@@ -886,14 +966,69 @@ export const AdminTransactions: React.FC = () => {
                       </div>
                     </form>
                   )}
-                  {canRecordPayments && frozen && (
+
+                  {canRecordPayments && paymentModalMode === 'refund' && !refundFrozen && (
+                    <form onSubmit={handleConfirmPayment} className="space-y-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-300 block">
+                        Refund collected funds
+                      </span>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block">
+                          <span className="text-[10px] text-slate-400 block mb-1">Refund amount (PKR)</span>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            max={money.collected}
+                            value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                            className="w-full bg-[#07141E] text-white p-2 rounded-lg border border-rose-900/50 focus:border-rose-400 focus:outline-none text-xs font-mono"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-[10px] text-slate-400 block mb-1">Method</span>
+                          <select
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value as PaymentEntry['method'])}
+                            className="w-full bg-[#07141E] text-white p-2 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none text-xs cursor-pointer"
+                          >
+                            <option>Bank Transfer</option>
+                            <option>Pay Order</option>
+                            <option>Cash / Cheque</option>
+                            <option>Online Transfer</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="block">
+                        <span className="text-[10px] text-slate-400 block mb-1">Refund reason/reference (required)</span>
+                        <input
+                          type="text"
+                          required
+                          value={paymentNote}
+                          onChange={(e) => setPaymentNote(e.target.value)}
+                          placeholder="e.g. Cancellation refund approved, bank reference..."
+                          className="w-full bg-[#07141E] text-white p-2 rounded-lg border border-rose-900/50 focus:border-rose-400 focus:outline-none text-xs"
+                        />
+                      </label>
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          className="px-4 py-2 rounded-lg bg-rose-500/20 border border-rose-900/50 text-rose-100 text-xs font-bold cursor-pointer transition hover:bg-rose-500/30"
+                        >
+                          Record Refund
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {canRecordPayments && paymentModalMode === 'payment' && paymentFrozen && (
                     <div className="p-2.5 rounded-lg bg-[#07141E] border border-slate-700 text-[11px] text-slate-300">
-                      This deal is {paymentModalTxn.voided ? 'voided' : 'cancelled'} — payments are frozen.
+                      This deal is {paymentModalTxn.voided ? 'voided' : 'cancelled'} — new payments are frozen. Previously collected funds can still be refunded.
                     </div>
                   )}
-                  {canRecordPayments && !frozen && money.balance <= 0 && (
-                    <div className="p-2.5 rounded-lg bg-[#07141E] border border-[#E7C878]/40 text-[11px] text-[#F6E3B4]">
-                      Deal money fully banked — no outstanding balance.
+                  {canRecordPayments && paymentModalMode === 'refund' && refundFrozen && (
+                    <div className="p-2.5 rounded-lg bg-[#07141E] border border-slate-700 text-[11px] text-slate-300">
+                      {paymentModalTxn.voided ? 'Voided deals cannot be refunded.' : 'No net collected funds are available to refund.'}
                     </div>
                   )}
                   {!canRecordPayments && (
@@ -1049,6 +1184,8 @@ export const AdminTransactions: React.FC = () => {
                   <label className="block text-slate-300 font-semibold mb-1">Agreed Deal Amount (PKR) *</label>
                   <input
                     type="number"
+                    min={1}
+                    step={1}
                     required
                     value={formData.dealAmountPKR}
                     onChange={(e) => setFormData({ ...formData, dealAmountPKR: Number(e.target.value) })}
@@ -1060,6 +1197,8 @@ export const AdminTransactions: React.FC = () => {
                   <label className="block text-slate-300 font-semibold mb-1">Advance / Bayana Deposit (PKR) *</label>
                   <input
                     type="number"
+                    min={0}
+                    step={1}
                     required
                     value={formData.advancePKR}
                     onChange={(e) => setFormData({ ...formData, advancePKR: Number(e.target.value) })}

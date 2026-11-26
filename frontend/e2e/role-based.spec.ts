@@ -1,24 +1,25 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { DEMO_ROLE_IPS, loginToAdminViaApi } from './helpers/adminLogin';
+import { DEMO_ROLE_IPS, loginToAdminViaApi, type DemoAuthUser } from './helpers/adminLogin';
 
 /**
  * PHASE 5 — Role-based testing for demo accounts.
  * Verifies each role can authenticate and sees role-appropriate admin shell content.
  */
 
+const ciDemoPassword = process.env.DEMO_STAFF_PASSWORD;
 const DEMO_ACCOUNTS = [
-  { role: 'super_admin', email: 'superadmin@taisartownhub.com', password: 'Super@Admin2026!' },
-  { role: 'admin', email: 'admin@taisartownhub.com', password: 'Admin@Taisar2026' },
-  { role: 'manager', email: 'manager@taisartownhub.com', password: 'Manager@2026' },
-  { role: 'dealer', email: 'dealer@taisartownhub.com', password: 'Dealer@2026' },
-  { role: 'operator', email: 'operator@taisartownhub.com', password: 'Operator@2026' },
+  { role: 'super_admin', email: 'superadmin@taisartownhub.com', password: ciDemoPassword || 'Super@Admin2026!' },
+  { role: 'agency_owner', email: 'admin@taisartownhub.com', password: ciDemoPassword || 'Admin@Taisar2026' },
+  { role: 'manager', email: 'manager@taisartownhub.com', password: ciDemoPassword || 'Manager@2026' },
+  { role: 'dealer', email: 'dealer@taisartownhub.com', password: ciDemoPassword || 'Dealer@2026' },
+  { role: 'operator', email: 'operator@taisartownhub.com', password: ciDemoPassword || 'Operator@2026' },
 ] as const;
 
-async function loginAs(page: Page, request: APIRequestContext, account: (typeof DEMO_ACCOUNTS)[number]) {
+async function loginAs(page: Page, request: APIRequestContext, account: (typeof DEMO_ACCOUNTS)[number]): Promise<DemoAuthUser> {
   // Node-side API login with a per-role TEST-NET-3 bucket keeps the 10/min
   // shared-IP limiter from throttling unrelated parallel role tests. The
   // browser sign-in form itself is covered in admin-pages.spec.ts.
-  await loginToAdminViaApi(page, request, account, DEMO_ROLE_IPS[account.role]);
+  return loginToAdminViaApi(page, request, account, DEMO_ROLE_IPS[account.role]);
 }
 
 test.describe('Role-Based Access - Every role gets correct permissions', () => {
@@ -27,7 +28,9 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
   test.slow();
   test.describe('Super Admin - Full platform access', () => {
     test('can access key admin sections', async ({ page, request }) => {
-      await loginAs(page, request, DEMO_ACCOUNTS[0]);
+      const user = await loginAs(page, request, DEMO_ACCOUNTS[0]);
+      expect(user.is_platform).toBe(true);
+      expect(user.enterprise_permissions).toContain('admin.manage_agencies');
 
       await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /security & roles/i }).first()).toBeVisible();
@@ -51,12 +54,19 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
     });
   });
 
-  test.describe('Agency Admin - Agency-scoped access', () => {
-    test('can access core admin dashboard', async ({ page, request }) => {
-      await loginAs(page, request, DEMO_ACCOUNTS[1]);
+  test.describe('Agency Owner - Agency-scoped access', () => {
+    test('can access the agency workspace without platform scope', async ({ page, request }) => {
+      const user = await loginAs(page, request, DEMO_ACCOUNTS[1]);
+      expect(user.is_platform).toBe(false);
+      expect(user.enterprise_permissions).not.toContain('admin.manage_agencies');
+      expect(user.agencies?.[0]?.role_key).toBe('agency_owner');
       await expect(page).toHaveURL(/\/admin/);
       await expect(page.locator('main')).toBeVisible();
-      await expect(page.getByRole('button', { name: /dashboard overview/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /agency dashboard/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /staff & roles/i }).first()).toBeVisible();
+      await page.getByRole('button', { name: /deals & transactions/i }).first().click();
+      await expect(page.getByRole('button', { name: /execute new deal/i })).toBeVisible();
+      await expect(page.getByText(/scoped view: your deals only/i)).toHaveCount(0);
     });
   });
 
@@ -131,8 +141,10 @@ test.describe('Role-Based Access - Every role gets correct permissions', () => {
       await expect(security(page)).toHaveCount(0);
       await expect(audit(page)).toHaveCount(0);
       await expect(approvals(page)).toHaveCount(0);
-      await expect(page.getByRole('button', { name: /website cms & builder/i }).first()).toBeVisible();
-      // manage_dealers is platform-only; admin may view commission but not the desk.
+      // The global website CMS and platform dealer desk are not agency-owner tools.
+      await expect(page.getByRole('button', { name: /website cms & builder/i }).first()).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /agency dashboard/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /staff & roles/i }).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /dealers & commission/i }).first()).toHaveCount(0);
     });
 

@@ -160,6 +160,16 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
     })
     .map(toPublicProperty);
 
+  const hasActiveFilters = searchTerm.trim() !== ''
+    || selectedPhase !== 'All'
+    || selectedType !== 'All'
+    || selectedSector !== 'All'
+    || selectedSize !== 'All'
+    || possessionOnly
+    || priceRange.min > 0
+    || priceRange.max > 0
+    || sortBy !== 'featured';
+
   const resetAllFilters = () => {
     setSearchTerm('');
     setSelectedPhase('All');
@@ -348,6 +358,7 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                     key={tab.id}
                     type="button"
                     onClick={() => setSelectedPhase(tab.id as any)}
+                    aria-pressed={isActive}
                     className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                       isActive
                         ? 'bg-[#E7C878] text-[#0B1220] border-[#F6E3B4] font-bold shadow-md shadow-[#E7C878]/20'
@@ -479,8 +490,10 @@ export const PropertiesListingPage: React.FC<PropertiesListingPageProps> = ({ in
                 Found <strong>{sortedProperties.length}</strong> matching properties
               </span>
               <button
+                type="button"
                 onClick={resetAllFilters}
-                className="text-[#8A6A1F] hover:underline flex items-center gap-1 cursor-pointer"
+                disabled={!hasActiveFilters}
+                className="text-[#8A6A1F] hover:underline flex items-center gap-1 enabled:cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset Filters</span>

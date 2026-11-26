@@ -17,7 +17,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Seller } from '../../types';
-import { maskCNIC, maskAccountNumber, formatPKRCurrency, hasPermission } from '../../utils/logic';
+import { authorize } from '../../domain/permissions';
+import { maskCNIC, maskAccountNumber, formatPKRCurrency } from '../../utils/logic';
 
 export const AdminSellers: React.FC = () => {
   const { sellers, addSeller, updateSeller, deleteSeller, properties, showToast, activeRole, currentUser, confirmAction } = useApp();
@@ -28,7 +29,7 @@ export const AdminSellers: React.FC = () => {
   const [unmaskedCnicIds, setUnmaskedCnicIds] = useState<Record<string, boolean>>({});
 
   // P0-5: full CNIC / account numbers are only for staff holding view_sensitive_cnic.
-  const canViewSensitive = hasPermission(currentUser.role, 'view_sensitive_cnic');
+  const canViewSensitive = authorize(currentUser, 'view_sensitive_cnic').ok;
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -242,11 +243,11 @@ export const AdminSellers: React.FC = () => {
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-white font-medium">
-                        {hasPermission(currentUser.role, 'view_sensitive_cnic')
+                        {canViewSensitive
                           ? (isUnmasked ? (seller.cnic ?? seller.cnicMasked ?? 'N/A') : (seller.cnicMasked || maskCNIC(seller.cnic ?? '')))
                           : (seller.cnicMasked || maskCNIC(seller.cnic ?? ''))}
                       </span>
-                      {hasPermission(currentUser.role, 'view_sensitive_cnic') && (
+                      {canViewSensitive && (
                         <button
                           type="button"
                           onClick={() => toggleCnicMask(seller.id)}

@@ -13,6 +13,8 @@ Taiser Town Scheme 45, Karachi: a **sale-only public property marketplace** plus
 ```bash
 # backend (API on :8080)
 cd backend && composer install && cp .env.example .env
+# Configure a local database user and local CORS origins in backend/.env.
+# Example: DB_USERNAME=root and CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 php artisan key:generate && php artisan migrate --seed
 php artisan serve --host=127.0.0.1 --port=8080
 
@@ -20,8 +22,16 @@ php artisan serve --host=127.0.0.1 --port=8080
 cd frontend && npm ci && cp .env.example .env && npm run dev
 # VITE_API_URL=http://127.0.0.1:8080/api
 
-# or the full stack
+# or the full stack (return to the repository root first)
+cd ..
+cp .env.example .env
+# Replace every CHANGE_ME value and install nginx/ssl/fullchain.pem + privkey.pem before production. Generate APP_KEY with:
+# openssl rand -base64 32, then prefix the output with "base64:"
+# Generate DB_PASSWORD, DB_ROOT_PASSWORD and REDIS_PASSWORD with:
+# openssl rand -hex 32
+docker compose config --quiet
 docker compose up -d --build
+docker compose exec --user www-data backend php artisan app:production-check --strict
 ```
 
 Demo accounts and walkthrough: `docs/DEMO_GUIDE.md`. Deployment/VPS/TLS/env checklist: `docs/DEPLOYMENT.md`.

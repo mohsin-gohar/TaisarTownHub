@@ -1,6 +1,9 @@
 # TaisarTownHub — System Architecture & Technical Specifications
 
 **Version:** 2.0.0 · **Last updated:** 2026-11-08
+
+> **Historical architecture snapshot:** this describes an earlier frontend/state architecture. Current runtime behavior is defined by the Laravel source, current migrations, `../docs/API.md` and `../docs/STATUS.md`.
+
 **Owner:** Gohar AI / TaisarTownHub Real Estate ERP SaaS
 
 ---

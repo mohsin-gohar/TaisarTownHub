@@ -22,7 +22,7 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
 {
     private function staffPermissions(): array
     {
-        return ['agency.view', 'agency.manage_staff', 'view_properties'];
+        return ['agency.view', 'agency.manage_staff', 'view_properties', 'properties.view'];
     }
 
     private function makePlan(array $attrs = []): SubscriptionPlan
@@ -83,6 +83,39 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             ->assertStatus(422);
     }
 
+    public function test_subscription_plan_prices_are_whole_pkr_only(): void
+    {
+        $this->seedPlatformRole('super_admin');
+        $admin = $this->makeUser('super_admin');
+        $headers = $this->authHeaders($this->tokenFor($admin));
+        $payload = [
+            'key' => 'precision-' . substr(md5(uniqid('', true)), 0, 8),
+            'name' => 'Precision Plan',
+            'price' => 4999.50,
+            'currency' => 'PKR',
+            'interval' => 'month',
+        ];
+
+        $this->postJson('/api/admin/plans', $payload, $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('price');
+
+        $payload['key'] = 'currency-' . substr(md5(uniqid('', true)), 0, 8);
+        $payload['price'] = 4999;
+        $payload['currency'] = 'USD';
+        $this->postJson('/api/admin/plans', $payload, $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('currency');
+
+        $plan = $this->makePlan();
+        $this->patchJson("/api/admin/plans/{$plan->id}", ['price' => 4999.50], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('price');
+        $this->patchJson("/api/admin/plans/{$plan->id}", ['currency' => 'USD'], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('currency');
+    }
+
     public function test_platform_surfaces_reject_agency_members(): void
     {
         [$agent] = $this->agencyUser($this->staffPermissions());
@@ -132,9 +165,62 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'setting.update']);
     }
 
+    public function test_agency_manager_cannot_escalate_permissions_through_custom_roles_or_self_grants(): void
+    {
+        [$manager, $agency] = $this->agencyUser([
+            'agency.view',
+            'agency.manage_staff',
+        ], 'agency_manager');
+
+        $privilegedRole = $this->makeRole('agency', 'billing_admin', [
+            'agency.view',
+            'agency.manage_staff',
+            'agency.subscribe',
+            'agency.manage_settings',
+        ]);
+        $privilegedRole->forceFill(['agency_id' => $agency->id])->save();
+        $memberId = $manager->memberships()->where('agency_id', $agency->id)->value('id');
+
+        $this->postJson('/api/agency/roles', [
+            'name' => 'Self Billing Admin',
+            'key' => 'self_billing_admin',
+            'permissions' => ['agency.view', 'agency.subscribe'],
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+
+        $this->putJson('/api/agency/roles/' . $privilegedRole->id, [
+            'permissions' => ['agency.view', 'agency.subscribe'],
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+
+        $this->patchJson('/api/agency/members/' . $memberId, [
+            'role_id' => $privilegedRole->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+
+        $this->patchJson('/api/agency/members/' . $memberId, [
+            'permissions' => ['agency.subscribe'],
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'privileged-invitee@example.test',
+            'role_id' => $privilegedRole->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertForbidden();
+        $this->assertDatabaseMissing('agency_invitations', ['email' => 'privileged-invitee@example.test']);
+
+        $this->assertFalse($manager->fresh()->hasPermission('agency.subscribe', $agency->id));
+        $this->assertFalse($manager->fresh()->hasPermission('agency.manage_settings', $agency->id));
+    }
+
     public function test_agency_roles_cannot_grant_platform_permissions(): void
     {
-        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        // A manager may delegate only capabilities they personally hold.
+        [$manager] = $this->agencyUser(array_merge($this->staffPermissions(), [
+            'properties.view',
+            'crm.view',
+        ]), 'manager');
 
         $this->postJson('/api/agency/roles', [
             'name' => 'Escalated Role',
@@ -273,6 +359,34 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->getJson('/api/admin/plans', $headers)->assertForbidden();
         $this->getJson('/api/admin/audit-logs', $headers)->assertForbidden();
         $this->getJson('/api/agency/members', $headers)->assertOk();
+    }
+
+    public function test_only_an_agency_owner_can_remove_an_owner_and_last_owner_is_protected(): void
+    {
+        $ownerRole = $this->makeRole('agency', 'agency_owner', $this->staffPermissions());
+        $ownerRole->forceFill(['id' => 'role_agency_owner'])->save();
+
+        [$owner, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $ownerMembership = $owner->memberships()->where('agency_id', $agency->id)->firstOrFail();
+        $ownerMembership->update(['role_id' => $ownerRole->id]);
+
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager', $agency);
+
+        $this->patchJson('/api/agency/members/' . $ownerMembership->id, [
+            'status' => 'deactivated',
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Only an agency owner may deactivate an owner membership.');
+
+        $this->deleteJson('/api/agency/members/' . $ownerMembership->id, [], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Only an agency owner may remove an owner membership.');
+
+        $this->patchJson('/api/agency/members/' . $ownerMembership->id, [
+            'status' => 'deactivated',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'An agency must keep at least one active owner.');
     }
 
     public function test_agency_manager_cannot_invite_another_owner(): void

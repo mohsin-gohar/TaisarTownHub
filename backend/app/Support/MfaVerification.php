@@ -4,63 +4,79 @@ namespace App\Support;
 
 use Illuminate\Support\Facades\Cache;
 
-/**
- * Token-scoped MFA verification state.
- *
- * A verification proved for one Sanctum token must never authorize a
- * different token of the same user. Keys therefore include the access-token
- * id; a per-user index allows bulk invalidation on logout, password reset,
- * suspension and MFA disablement.
- */
-final class MfaVerification
+class MfaVerification
 {
-    public const TTL_SECONDS = 24 * 60 * 60;
+    private const TTL_MINUTES = 1440;
 
-    public static function key(int $userId, int $tokenId): string
+    private static function indexKey(int|string $userId): string
     {
-        return 'mfa_verified:' . $userId . ':' . $tokenId;
+        return "mfa_verified_tokens:{$userId}";
     }
 
-    private static function indexKey(int $userId): string
+    private static function lockKey(int|string $userId): string
     {
-        return 'mfa_verified_ids:' . $userId;
+        return "mfa_verified_tokens_lock:{$userId}";
     }
 
-    public static function isVerified(int $userId, int $tokenId): bool
+    private static function tokenKey(int|string $userId, string $tokenId): string
     {
-        return Cache::has(self::key($userId, $tokenId));
+        return "mfa_verified:{$userId}:{$tokenId}";
     }
 
-    public static function stamp(int $userId, int $tokenId): void
+    public static function stamp(int|string $userId, string $tokenId): void
     {
-        Cache::put(self::key($userId, $tokenId), now(), self::TTL_SECONDS);
+        Cache::lock(self::lockKey($userId), 10)->block(5, function () use ($userId, $tokenId): void {
+            Cache::put(self::tokenKey($userId, $tokenId), true, now()->addMinutes(self::TTL_MINUTES));
 
-        $ids = Cache::get(self::indexKey($userId), []);
-        $ids = is_array($ids) ? $ids : [];
-        if (!in_array($tokenId, $ids, true)) {
-            $ids[] = $tokenId;
-        }
-        Cache::put(self::indexKey($userId), $ids, self::TTL_SECONDS);
+            $index = Cache::get(self::indexKey($userId), []);
+            if (!is_array($index)) {
+                $index = [];
+            }
+            $index[] = $tokenId;
+
+            Cache::put(
+                self::indexKey($userId),
+                array_values(array_unique($index)),
+                now()->addMinutes(self::TTL_MINUTES)
+            );
+        });
     }
 
-    public static function forgetToken(int $userId, int $tokenId): void
+    public static function isVerified(int|string $userId, string $tokenId): bool
     {
-        Cache::forget(self::key($userId, $tokenId));
-        $ids = Cache::get(self::indexKey($userId), []);
-        if (is_array($ids)) {
-            Cache::put(self::indexKey($userId), array_values(array_filter(
-                $ids,
-                fn ($id) => (int) $id !== $tokenId
-            )), self::TTL_SECONDS);
-        }
+        return Cache::get(self::tokenKey($userId, $tokenId), false) === true;
     }
 
-    public static function forgetAll(int $userId): void
+    public static function forgetToken(int|string $userId, string $tokenId): void
     {
-        $ids = Cache::get(self::indexKey($userId), []);
-        foreach ((array) $ids as $id) {
-            Cache::forget(self::key($userId, (int) $id));
-        }
-        Cache::forget(self::indexKey($userId));
+        Cache::lock(self::lockKey($userId), 10)->block(5, function () use ($userId, $tokenId): void {
+            Cache::forget(self::tokenKey($userId, $tokenId));
+
+            $index = Cache::get(self::indexKey($userId), []);
+            if (is_array($index)) {
+                $index = array_values(array_filter(
+                    $index,
+                    static fn ($id): bool => (string) $id !== $tokenId
+                ));
+                if ($index === []) {
+                    Cache::forget(self::indexKey($userId));
+                } else {
+                    Cache::put(self::indexKey($userId), $index, now()->addMinutes(self::TTL_MINUTES));
+                }
+            }
+        });
+    }
+
+    public static function forgetAll(int|string $userId): void
+    {
+        Cache::lock(self::lockKey($userId), 10)->block(5, function () use ($userId): void {
+            $index = Cache::get(self::indexKey($userId), []);
+            if (is_array($index)) {
+                foreach ($index as $tokenId) {
+                    Cache::forget(self::tokenKey($userId, (string) $tokenId));
+                }
+            }
+            Cache::forget(self::indexKey($userId));
+        });
     }
 }

@@ -13,6 +13,11 @@
  */
 export type AppMode = 'public' | 'demo' | 'production';
 
+/** Public/demo builds may use bundled sample catalog data; real production may not. */
+export function allowsPublicSeedFallback(mode: AppMode): boolean {
+  return mode !== 'production';
+}
+
 export function resolveModeFromEnv(env?: { VITE_APP_MODE?: string; VITE_DEMO_MODE?: string }): AppMode {
   const safeEnv = env || {};
   const raw = String(safeEnv.VITE_APP_MODE || '').toLowerCase().trim();

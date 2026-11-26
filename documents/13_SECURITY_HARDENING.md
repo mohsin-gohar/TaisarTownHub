@@ -2,6 +2,9 @@
 
 **Version:** 2.0.0 · **Last updated:** 2026-11-08
 
+> **Historical security design:** verify every claim against current middleware, policies, migrations and tests. The current security baseline is `../docs/SECURITY.md`.
+
+
 ## 1. CSRF Protection
 
 - Sanctum cookie-based auth not used (token-based), so CSRF not required for API.

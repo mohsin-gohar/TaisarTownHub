@@ -142,15 +142,22 @@ export const AdminLayout: React.FC = () => {
       })).filter((option) => option.id)
     : platformAgencies.map((agency) => ({ id: String(agency.id), name: agency.name }));
 
+  const activeMembership = agencyMemberships.find(
+    (membership) => String(membership.agency_id) === String(agencyContextId),
+  ) ?? agencyMemberships[0];
+  const displayRole = activeMembership?.role_name || activeRole.replace('_', ' ');
+
   const handleAgencyContext = (id: string) => {
     setAgencyContextId(id);
     setApiAgencyId(id || null);
     if (id) setAdminTab('agency_dashboard');
   };
 
-  // Dealer accounts only ever see deals booked under their own dealer profile,
-  // so their badge must count the scoped set — never the full ledger size.
-  const isDealerViewer = normalizeRole(currentUser.role) === 'dealer';
+  // Only an actual agency agent (or standalone dealer) is restricted to their
+  // own dealer profile. An agency owner may have the legacy base role "dealer"
+  // but must see the agency-scoped ledger granted by the owner membership.
+  const isDealerViewer = normalizeRole(currentUser.role) === 'dealer'
+    && (!activeMembership || activeMembership.role_key === 'agent');
   const scopedTransactions = isDealerViewer
     ? transactions.filter((t) => t.dealerId && t.dealerId === currentUser.dealerId)
     : transactions;
@@ -226,16 +233,25 @@ export const AdminLayout: React.FC = () => {
   const accessibleSidebarLinks = sidebarLinks.filter((l) => {
     if (!l.permission) return true;
     const wanted = l.altPermission ? [l.permission, l.altPermission] : [l.permission];
-    return hasAnyPermission(activeRole, wanted);
+    // Agency membership capabilities (including legacy aliases) are
+    // authoritative for tenant navigation; retain the legacy role fallback.
+    if (wanted.some(hasEnterprise)) return true;
+    // Never authorize sidebar visibility from a mutable/display role. Use the
+    // authenticated principal's canonical role as the legacy fallback; agency
+    // membership capabilities above remain the only source of tenant grants.
+    return hasAnyPermission(currentUser.role, wanted);
   });
 
   useEffect(() => {
     if (!enterpriseContextReady) return;
     const isCurrentTabAccessible = accessibleSidebarLinks.some((l) => l.id === adminTab);
     if (!isCurrentTabAccessible && accessibleSidebarLinks.length > 0) {
-      setAdminTab(accessibleSidebarLinks[0].id);
+      const agencyHome = agencyMemberships.length > 0
+        ? accessibleSidebarLinks.find((l) => l.id === 'agency_dashboard')
+        : undefined;
+      setAdminTab(agencyHome?.id ?? accessibleSidebarLinks[0].id);
     }
-  }, [activeRole, adminTab, accessibleSidebarLinks, enterpriseContextReady, setAdminTab]);
+  }, [activeRole, adminTab, accessibleSidebarLinks, agencyMemberships, enterpriseContextReady, setAdminTab]);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -314,7 +330,7 @@ export const AdminLayout: React.FC = () => {
           <div className="px-4 pt-3 pb-1">
             <div className="px-3 py-1.5 rounded-lg bg-[#07141E] border border-slate-800 flex items-center justify-between text-[11px]">
               <span className="text-slate-400">Role:</span>
-              <span className="font-bold text-[#E7C878] capitalize">{activeRole.replace('_', ' ')}</span>
+              <span className="font-bold text-[#E7C878] capitalize">{displayRole}</span>
             </div>
           </div>
 
@@ -422,7 +438,7 @@ export const AdminLayout: React.FC = () => {
           <div className="flex items-center gap-3 shrink-0">
             <div className="hidden sm:flex items-center gap-2 text-xs text-slate-300">
               <span className="w-2 h-2 rounded-full bg-[#E7C878]" />
-              <span>Active Role: <strong className="text-[#E7C878] capitalize">{activeRole.replace('_', ' ')}</strong></span>
+              <span>Active Role: <strong className="text-[#E7C878] capitalize">{displayRole}</strong></span>
             </div>
             <button
               onClick={() => setCurrentView('home')}

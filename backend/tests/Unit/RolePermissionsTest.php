@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Support\Permissions;
 use App\Support\RolePermissions;
 use PHPUnit\Framework\TestCase;
 
@@ -15,6 +16,15 @@ class RolePermissionsTest extends TestCase
         $this->assertFalse(RolePermissions::allows('admin', 'void_transactions'));
         $this->assertTrue(RolePermissions::allows('admin', 'view_commissions'));
         $this->assertTrue(RolePermissions::allows('super_admin', 'void_transactions'));
+    }
+
+    public function test_admin_role_grants_do_not_override_the_legacy_void_restriction(): void
+    {
+        $this->assertNotContains('legacy.void_transactions', Permissions::platformRoleGrants('admin'));
+        $this->assertContains('legacy.void_transactions', Permissions::platformRoleGrants('super_admin'));
+        $this->assertContains('legacy.void_transactions', Permissions::agencyRoleGrants('agency_owner'));
+        $this->assertNotContains('legacy.void_transactions', Permissions::agencyRoleGrants('agency_manager'));
+        $this->assertNotContains('legacy.void_transactions', Permissions::agencyRoleGrants('accountant'));
     }
 
     public function test_operator_uploads_but_never_verifies_and_unknown_roles_are_operators(): void

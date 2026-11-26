@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 /**
  * A per-account marketplace search with optional email alerts.
@@ -16,6 +17,19 @@ class SavedSearch extends Model
     public const FREQUENCIES = ['instant', 'daily', 'weekly'];
 
     protected $table = 'saved_searches';
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $search): void {
+            // Saved-search IDs are public opaque identifiers, not auto-incrementing
+            // integers. Generate one for every creation path unless explicitly
+            // supplied (e.g. deterministic legacy/import fixtures).
+            if (blank($search->getKey())) {
+                $search->id = 'ss_' . strtolower((string) Str::ulid());
+            }
+        });
+    }
+
 
     public $incrementing = false;
     protected $keyType = 'string';

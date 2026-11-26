@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Dealer;
 use App\Models\Transaction;
 use App\Models\User;
-use Illuminate\Database\QueryException;
+use App\Services\DealNumberAllocator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -82,12 +82,19 @@ class TransactionController extends Controller
             'dealerId' => 'nullable|string|exists:dealers,id',
             'dealerName' => 'nullable|string|max:255',
             'transactionType' => 'required|string|in:Sale,Purchase,Lease,Transfer',
-            'agreementAmountPKR' => 'required|numeric|min:0',
-            'advancePaymentPKR' => 'nullable|numeric|min:0',
-            'commissionAmountPKR' => 'nullable|numeric|min:0',
+            'agreementAmountPKR' => 'required|integer|min:0|max:999999999999',
+            'advancePaymentPKR' => 'nullable|integer|min:0|max:999999999999',
+            'commissionAmountPKR' => 'nullable|integer|min:0|max:999999999999',
             'commissionStatus' => 'nullable|string|in:Pending Accrual,Accrued,Partially Paid,Completed,Cancelled',
             'dealStatus' => 'nullable|string|in:Draft,Negotiation,Agreement Signed,Token Paid,Advance Received,Payment Pending,Partially Paid,Fully Paid,Under Transfer,Completed,Cancelled',
         ]);
+
+        $advance = (int) ($data['advancePaymentPKR'] ?? 0);
+        if ($advance > (int) $data['agreementAmountPKR']) {
+            throw ValidationException::withMessages([
+                'advancePaymentPKR' => ['Advance payment cannot exceed the agreed deal amount.'],
+            ]);
+        }
 
         // Prefer dealers.agency_id (the real ownership link); membership
         // remains the fallback for legacy rows.
@@ -97,7 +104,6 @@ class TransactionController extends Controller
             ]);
         }
 
-        $advance = $data['advancePaymentPKR'] ?? 0;
         $data['remainingBalancePKR'] = max(0, $data['agreementAmountPKR'] - $advance);
         $data['dealStatus'] ??= 'Draft';
         $data['commissionStatus'] ??= 'Pending Accrual';
@@ -107,37 +113,11 @@ class TransactionController extends Controller
         $data['id'] = 'txn-' . Str::uuid();
 
         $year = now()->year;
-        $transaction = null;
+        $transaction = DB::transaction(function () use ($data, $year) {
+            $data['dealNumber'] = app(DealNumberAllocator::class)->nextForYear($year);
 
-        // Deal numbers must be unique under concurrent requests. The locked
-        // read + unique index + bounded retry mirrors FinanceController::store.
-        for ($attempt = 0; $attempt < 3 && $transaction === null; $attempt++) {
-            try {
-                $transaction = DB::transaction(function () use ($data, $year) {
-                    $lastDeal = Transaction::where('dealNumber', 'like', "TXN-{$year}-%")
-                        ->lockForUpdate()
-                        ->orderByDesc('dealNumber')
-                        ->first();
-                    $nextNumber = 1;
-                    if ($lastDeal && preg_match('/TXN-\d{4}-(\d+)/', $lastDeal->dealNumber, $matches)) {
-                        $nextNumber = (int) $matches[1] + 1;
-                    }
-                    $data['dealNumber'] = sprintf('TXN-%d-%04d', $year, $nextNumber);
-
-                    return Transaction::create($data);
-                }, 3);
-            } catch (QueryException $e) {
-                if (!str_contains(strtolower($e->getMessage()), 'duplicate') && $e->getCode() !== '23000') {
-                    throw $e;
-                }
-            }
-        }
-
-        if ($transaction === null) {
-            throw ValidationException::withMessages([
-                'dealNumber' => ['Could not allocate a unique deal number. Please retry.'],
-            ]);
-        }
+            return Transaction::create($data);
+        }, 10);
 
         $this->writeAudit($request, 'transaction_created', $transaction->id, "Deal {$transaction->dealNumber} created", [
             'agency_id' => $agencyId,

@@ -8,7 +8,10 @@ use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Services\SubscriptionActivationService;
+use DomainException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /** Platform agency administration: directory, verification, moderation. */
@@ -185,8 +188,8 @@ class AdminAgencyController extends Controller
             'key' => 'required|string|max:60|unique:subscription_plans,key',
             'name' => 'required|string|max:100',
             'description' => 'nullable|string|max:2000',
-            'price' => 'required|numeric|min:0|max:99999999',
-            'currency' => 'nullable|string|size:3',
+            'price' => 'required|integer|min:0|max:99999999',
+            'currency' => 'nullable|in:PKR',
             'interval' => 'nullable|in:month,year',
             'limits' => 'nullable|array',
             'features' => 'nullable|array',
@@ -195,10 +198,13 @@ class AdminAgencyController extends Controller
             'sort_order' => 'nullable|integer|min:0|max:9999',
         ]);
 
-        $plan = SubscriptionPlan::create($request->only([
-            'key', 'name', 'description', 'price', 'currency', 'interval',
+        $planData = $request->only([
+            'key', 'name', 'description', 'price', 'interval',
             'limits', 'features', 'is_active', 'is_default', 'sort_order',
-        ]));
+        ]);
+        // The finance schema and Stripe integration are PKR/whole-rupee based.
+        $planData['currency'] = 'PKR';
+        $plan = SubscriptionPlan::create($planData);
 
         $this->writeAudit($request, 'plan.create', $plan->key, "Plan created: {$plan->name}", [
             'entity_type' => 'subscription_plan',
@@ -218,7 +224,8 @@ class AdminAgencyController extends Controller
         $request->validate([
             'name' => 'sometimes|string|max:100',
             'description' => 'nullable|string|max:2000',
-            'price' => 'sometimes|numeric|min:0|max:99999999',
+            'price' => 'sometimes|integer|min:0|max:99999999',
+            'currency' => 'sometimes|in:PKR',
             'interval' => 'sometimes|in:month,year',
             'limits' => 'nullable|array',
             'features' => 'nullable|array',
@@ -228,7 +235,7 @@ class AdminAgencyController extends Controller
         ]);
 
         $plan->fill($request->only([
-            'name', 'description', 'price', 'interval', 'limits', 'features',
+            'name', 'description', 'price', 'currency', 'interval', 'limits', 'features',
             'is_active', 'is_default', 'sort_order',
         ]));
 
@@ -261,28 +268,56 @@ class AdminAgencyController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        $agency = Agency::findOrFail($id);
+        $result = DB::transaction(function () use ($request, $id): array {
+            $agency = Agency::whereKey($id)->lockForUpdate()->firstOrFail();
+            $current = AgencySubscription::where('agency_id', $agency->id)->lockForUpdate()->first();
 
-        $subscription = AgencySubscription::updateOrCreate(
-            ['agency_id' => $agency->id],
-            [
-                'plan_id' => $request->plan_id,
-                'status' => $request->get('status', 'active'),
-                'starts_at' => $request->starts_at ?: now(),
-                'ends_at' => $request->ends_at,
-                'trial_ends_at' => $request->trial_ends_at,
-                'limits_override' => $request->limits_override,
-                'notes' => $request->notes,
-                'created_by' => $request->user()->id,
-            ]
-        );
+            // Never overwrite the local link to a live Stripe subscription:
+            // doing so would orphan an external recurring charge.
+            if ($current && $current->stripe_subscription_id
+                && !in_array($current->status, ['cancelled', 'expired'], true)) {
+                return ['conflict' => true];
+            }
+
+            $subscription = AgencySubscription::updateOrCreate(
+                ['agency_id' => $agency->id],
+                [
+                    'plan_id' => $request->plan_id,
+                    'status' => $request->get('status', 'active'),
+                    'starts_at' => $request->starts_at ?: now(),
+                    'ends_at' => $request->ends_at,
+                    'trial_ends_at' => $request->trial_ends_at,
+                    'limits_override' => $request->limits_override,
+                    'notes' => $request->notes,
+                    'auto_renew' => false,
+                    'stripe_subscription_id' => null,
+                    'provider' => 'manual',
+                    'cancelled_at' => null,
+                    'created_by' => $request->user()->id,
+                ]
+            );
+
+            return ['agency' => $agency, 'subscription' => $subscription];
+        }, 3);
+
+        if (($result['conflict'] ?? false) === true) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cancel the active Stripe subscription before applying a manual plan assignment.',
+            ], 409);
+        }
+
+        /** @var Agency $agency */
+        $agency = $result['agency'];
+        /** @var AgencySubscription $subscription */
+        $subscription = $result['subscription'];
 
         $this->writeAudit($request, 'subscription.assign', $agency->id, "Subscription assigned to {$agency->name}", [
             'agency_id' => $agency->id,
             'entity_type' => 'agency_subscription',
             'entity_id' => (string) $subscription->id,
             'cross_agency' => true,
-            'metadata' => ['plan_id' => $request->plan_id, 'status' => $subscription->status],
+            'metadata' => ['plan_id' => $request->plan_id, 'status' => $subscription->status, 'provider' => 'manual'],
         ]);
 
         return response()->json([
@@ -381,34 +416,42 @@ class AdminAgencyController extends Controller
     {
         $this->requirePermission($request, 'admin.manage_subscriptions');
 
-        $invoice = SubscriptionInvoice::findOrFail($id);
-
         $data = $request->validate([
             'payment_method' => 'required|string|max:40',
             'payment_reference' => 'nullable|string|max:120',
         ]);
 
-        if ($invoice->status === 'paid') {
-            return response()->json([
-                'success' => false,
-                'message' => 'This invoice is already paid — financial history cannot be modified.',
-            ], 422);
-        }
+        try {
+            $invoice = DB::transaction(function () use ($request, $id, $data): SubscriptionInvoice {
+                $invoice = SubscriptionInvoice::query()->whereKey($id)->lockForUpdate()->firstOrFail();
 
-        if ($invoice->status === 'void') {
-            return response()->json([
-                'success' => false,
-                'message' => 'A voided invoice cannot be paid.',
-            ], 422);
-        }
+                if ($invoice->status === 'paid') {
+                    throw new \LogicException('This invoice is already paid — financial history cannot be modified.');
+                }
 
-        $invoice->forceFill([
-            'status' => 'paid',
-            'paid_at' => now(),
-            'payment_method' => $data['payment_method'],
-            'payment_reference' => $data['payment_reference'] ?? null,
-            'verified_by' => $request->user()->id,
-        ])->save();
+                if ($invoice->status === 'void') {
+                    throw new \LogicException('A voided invoice cannot be paid.');
+                }
+
+                $invoice->forceFill([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'payment_method' => $data['payment_method'],
+                    'payment_reference' => $data['payment_reference'] ?? null,
+                    'verified_by' => $request->user()->id,
+                ])->save();
+
+                if ($invoice->plan_id) {
+                    app(SubscriptionActivationService::class)->activate($invoice);
+                }
+
+                return $invoice->fresh();
+            }, 3);
+        } catch (DomainException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
+        } catch (\LogicException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
 
         $this->writeAudit($request, 'subscription.invoice_paid', $invoice->invoice_number,
             "Invoice {$invoice->invoice_number} marked paid (PKR {$invoice->total_pkr})", [

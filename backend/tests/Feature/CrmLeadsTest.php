@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Agency;
+use App\Models\BusinessRecord;
 use App\Models\Inquiry;
 use Illuminate\Support\Str;
 
@@ -221,4 +222,61 @@ class CrmLeadsTest extends EnterpriseTestCase
             ->assertJsonPath('lead.agency_id', $agency->id)
             ->assertJsonPath('lead.lead_status', 'new');
     }
+
+    public function test_public_inquiry_rejects_unknown_listing_instead_of_creating_a_platform_lead(): void
+    {
+        $this->asGuest();
+
+        $this->postJson('/api/inquiries', [
+            'fullName' => 'Unknown Listing Visitor',
+            'phone' => '03009998877',
+            'message' => 'I want to ask about this listing.',
+            'propertyId' => 'missing-property-id',
+        ] + $this->solveInquiryCaptcha())->assertStatus(404);
+
+        $this->assertDatabaseMissing('inquiries', ['phone' => '03009998877']);
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'inquiries',
+            'record_id' => 'missing-property-id',
+        ]);
+    }
+
+    public function test_public_inquiry_legacy_workspace_record_is_attributed_to_the_listing_agency(): void
+    {
+        [, $agency] = $this->agencyUser($this->crmPermissions(true), 'manager');
+        $property = $this->makePublicProperty($agency, ['title' => 'Legacy Workspace Attribution']);
+
+        $this->asGuest();
+        $this->postJson('/api/inquiries', [
+            'fullName' => 'Workspace Visitor',
+            'phone' => '03008887766',
+            'message' => 'Please contact me.',
+            'propertyId' => $property->id,
+        ] + $this->solveInquiryCaptcha())->assertStatus(201);
+
+        $lead = Inquiry::where('phone', '03008887766')->firstOrFail();
+        $legacy = BusinessRecord::where('collection', 'inquiries')->where('record_id', $lead->id)->firstOrFail();
+
+        $this->assertSame($agency->id, $legacy->agency_id);
+    }
+
+    public function test_legacy_inquiry_status_and_notes_responses_mask_cnic(): void
+    {
+        [$manager, $agency] = $this->agencyUser($this->crmPermissions(true), 'manager');
+        $lead = $this->createInquiry($agency, [
+            'cnic' => '42101-1234567-1',
+            'assigned_agent_id' => $manager->id,
+        ]);
+        BusinessRecord::put('inquiries', $lead->id, ['cnic' => '42101-1234567-1'], $agency->id);
+        $headers = $this->authHeaders($this->tokenFor($manager));
+
+        $this->patchJson("/api/inquiries/{$lead->id}/status", ['status' => 'Contacted'], $headers)
+            ->assertStatus(200)
+            ->assertJsonPath('cnic', '42101****5671');
+
+        $this->patchJson("/api/inquiries/{$lead->id}/notes", ['notes' => 'Follow up tomorrow.'], $headers)
+            ->assertStatus(200)
+            ->assertJsonPath('cnic', '42101****5671');
+    }
+
 }

@@ -162,7 +162,14 @@ class MfaTest extends EnterpriseTestCase
         $service = app(MfaService::class);
         $token = $this->tokenFor($user);
 
-        $setup = $this->postJson('/api/auth/mfa/setup', [], $this->authHeaders($token))->assertOk();
+        $this->postJson('/api/auth/mfa/setup', [
+            'password' => 'WrongPassword123!',
+        ], $this->authHeaders($token))->assertStatus(422);
+        $this->assertNull($user->fresh()->mfa_secret);
+
+        $setup = $this->postJson('/api/auth/mfa/setup', [
+            'password' => 'Secret123!',
+        ], $this->authHeaders($token))->assertOk();
         $setup->assertJsonPath('success', true);
         $secret = $setup->json('secret');
         $this->assertNotEmpty($secret);

@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\AgencySubscription;
 use App\Models\Property;
+use App\Models\SubscriptionPlan;
 
 /**
  * Property lifecycle: draft → pending → approved/rejected, agency ownership,
@@ -31,15 +33,83 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         ];
     }
 
-    private function moderatorPermissions(): array
+    private function platformModerator()
     {
-        return ['view_properties', 'properties.view', 'properties.approve', 'properties.feature'];
+        $this->seedPlatformRole('moderator');
+
+        return $this->makeUser('moderator');
+    }
+
+    public function test_agency_cannot_self_assign_featured_status_when_creating_or_updating_listing(): void
+    {
+        [$agent] = $this->agencyUser($this->agentPermissions());
+        $headers = $this->authHeaders($this->tokenFor($agent));
+
+        $created = $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Cannot Self Feature Listing',
+            'isFeatured' => true,
+            'submit' => true,
+        ]), $headers)
+            ->assertStatus(201)
+            ->assertJsonPath('isFeatured', false)
+            ->assertJsonPath('featured_status', null);
+
+        $id = $created->json('id');
+
+        $this->patchJson("/api/properties/{$id}", [
+            'isFeatured' => true,
+        ], $headers)
+            ->assertStatus(200)
+            ->assertJsonPath('isFeatured', false)
+            ->assertJsonPath('featured_status', null);
+
+        $this->assertDatabaseHas('properties', [
+            'id' => $id,
+            'isFeatured' => false,
+            'featured_status' => null,
+        ]);
+    }
+
+    public function test_agency_cannot_extend_listing_expiry_beyond_the_plan_window(): void
+    {
+        [$agent] = $this->agencyUser($this->agentPermissions());
+        $moderator = $this->platformModerator();
+        $created = $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Expiry Is Server Controlled',
+            'submit' => true,
+        ]), $this->authHeaders($this->tokenFor($agent)))->assertStatus(201);
+
+        $id = $created->json('id');
+        $this->postJson("/api/properties/{$id}/approve", [], $this->authHeaders($this->tokenFor($moderator)))
+            ->assertStatus(200);
+
+        $before = Property::findOrFail($id)->expires_at->toDateTimeString();
+        $this->patchJson("/api/properties/{$id}", [
+            'expires_at' => now()->addYears(5)->toDateTimeString(),
+        ], $this->authHeaders($this->tokenFor($agent)))->assertStatus(200);
+
+        $this->assertSame($before, Property::findOrFail($id)->fresh()->expires_at->toDateTimeString());
     }
 
     public function test_member_creates_submits_and_moderator_approves_listing(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
+        $moderator = $this->platformModerator();
+        $plan = SubscriptionPlan::create([
+            'key' => 'listing-days-' . bin2hex(random_bytes(4)),
+            'name' => '60 Day Listings',
+            'price' => 0,
+            'currency' => 'PKR',
+            'interval' => 'month',
+            'limits' => ['listings' => 10, 'staff' => 2, 'featured_credits' => 1, 'listing_days' => 60],
+            'is_active' => true,
+        ]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+        ]);
 
         $create = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Public Marketplace Plot',
@@ -75,6 +145,11 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->app['auth']->forgetGuards();
         $publicTitlesAfter = array_column($this->getJson('/api/properties')->json(), 'title');
         $this->assertContains('Public Marketplace Plot', $publicTitlesAfter);
+        $this->assertSame(
+            now()->addDays(60)->toDateString(),
+            Property::findOrFail($id)->expires_at->toDateString(),
+            'Approved listings must use the agency plan listing_days value.'
+        );
 
         // Audit trail captured the transition.
         $this->assertDatabaseHas('audit_logs', ['action' => 'property.approve', 'entity_id' => $id]);
@@ -170,7 +245,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_editing_an_approved_listing_stages_changes_for_reapproval(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Original Title',
@@ -193,7 +268,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_rejecting_a_reapproval_edit_keeps_the_live_listing_approved(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Live Listing Title',
@@ -223,7 +298,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_rejecting_a_first_submission_hides_it_and_records_the_reason(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Rejected First Submission',
@@ -255,8 +330,23 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_denying_a_feature_request_clears_the_featured_flag(): void
     {
         $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
-        [$agent] = $this->agencyUser($agentPerms);
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
+        [$agent, $agency] = $this->agencyUser($agentPerms);
+        $moderator = $this->platformModerator();
+        $plan = SubscriptionPlan::create([
+            'key' => 'featured-slots-' . bin2hex(random_bytes(4)),
+            'name' => 'One Featured Slot',
+            'price' => 0,
+            'currency' => 'PKR',
+            'interval' => 'month',
+            'limits' => ['listings' => 10, 'staff' => 2, 'featured_credits' => 1, 'listing_days' => 30],
+            'is_active' => true,
+        ]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+        ]);
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Feature Denied Plot',
@@ -285,9 +375,9 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->assertDatabaseHas('properties', ['id' => $id, 'isFeatured' => false]);
     }
 
-    public function test_owner_detail_exposes_confidential_fields_but_never_a_storage_path(): void
+    public function test_member_with_sensitive_permission_can_read_confidential_fields_but_never_a_storage_path(): void
     {
-        [$agent, $agency] = $this->agencyUser($this->agentPermissions());
+        [$agent, $agency] = $this->agencyUser(array_merge($this->agentPermissions(), ['documents.view_sensitive']));
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Owner Confidentiality Plot',
@@ -310,9 +400,51 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->assertStringNotContainsString('"disk_path"', $response->getContent());
     }
 
-    public function test_public_listing_detail_hides_private_internal_fields(): void
+    public function test_agency_member_without_sensitive_permission_cannot_read_or_change_confidential_property_fields(): void
     {
         [$agent] = $this->agencyUser($this->agentPermissions());
+        $headers = $this->authHeaders($this->tokenFor($agent));
+
+        $id = $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Sensitive Fields Stay Private',
+            'submit' => true,
+        ]), $headers)->assertStatus(201)->json('id');
+
+        Property::whereKey($id)->update([
+            'purchasePricePKR' => 4000000,
+            'sellingPricePKR' => 5000000,
+            'internalNotes' => 'Confidential owner note',
+        ]);
+
+        $this->getJson("/api/properties/{$id}", $headers)
+            ->assertOk()
+            ->assertJsonMissingPath('purchasePricePKR')
+            ->assertJsonMissingPath('sellingPricePKR')
+            ->assertJsonMissingPath('internalNotes');
+
+        $this->patchJson("/api/properties/{$id}", ['title' => 'Ordinary title update'], $headers)
+            ->assertOk()
+            ->assertJsonMissingPath('purchasePricePKR')
+            ->assertJsonMissingPath('sellingPricePKR')
+            ->assertJsonMissingPath('internalNotes');
+
+        $this->patchJson("/api/properties/{$id}", ['purchasePricePKR' => 1], $headers)
+            ->assertStatus(403);
+
+        $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Unauthorized Sensitive Create',
+            'purchasePricePKR' => 1,
+        ]), $headers)->assertStatus(403);
+
+        $this->assertSame(4000000, (int) Property::findOrFail($id)->purchasePricePKR);
+        $this->assertSame(5000000, (int) Property::findOrFail($id)->sellingPricePKR);
+        $this->assertSame('Confidential owner note', Property::findOrFail($id)->internalNotes);
+        $this->assertDatabaseMissing('properties', ['title' => 'Unauthorized Sensitive Create']);
+    }
+
+    public function test_public_listing_detail_hides_private_internal_fields(): void
+    {
+        [$agent] = $this->agencyUser(array_merge($this->agentPermissions(), ['documents.view_sensitive']));
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Detail Visibility Plot',
@@ -326,4 +458,115 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->app['auth']->forgetGuards();
         $this->getJson("/api/properties/{$id}")->assertStatus(404);
     }
+    public function test_featured_slot_limit_blocks_extra_grants_and_releases_a_slot_when_denied(): void
+    {
+        $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
+        [$agent, $agency] = $this->agencyUser($agentPerms);
+        $moderator = $this->platformModerator();
+        $plan = SubscriptionPlan::create([
+            'key' => 'one-featured-slot-' . bin2hex(random_bytes(4)),
+            'name' => 'One Featured Slot',
+            'price' => 0,
+            'currency' => 'PKR',
+            'interval' => 'month',
+            'limits' => ['listings' => 10, 'staff' => 2, 'featured_credits' => 1, 'listing_days' => 30],
+            'is_active' => true,
+        ]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+        ]);
+
+        $headers = $this->authHeaders($this->tokenFor($agent));
+        $moderatorHeaders = $this->authHeaders($this->tokenFor($moderator));
+        $first = $this->postJson('/api/properties', $this->basePayload(['title' => 'Featured Slot One', 'submit' => true]), $headers)
+            ->assertStatus(201)->json('id');
+        $second = $this->postJson('/api/properties', $this->basePayload(['title' => 'Featured Slot Two', 'submit' => true]), $headers)
+            ->assertStatus(201)->json('id');
+
+        $this->asGuest(); // switch from the agent token to the platform moderator token
+        $this->postJson("/api/properties/{$first}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->postJson("/api/properties/{$second}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->asGuest(); // switch back to the agency member token
+        $this->postJson("/api/properties/{$first}/feature", [], $headers)->assertStatus(200);
+        $this->postJson("/api/properties/{$second}/feature", [], $headers)->assertStatus(200);
+
+        $this->asGuest(); // switch back to the platform moderator token
+        $this->postJson("/api/properties/{$first}/feature", ['status' => 'granted'], $moderatorHeaders)
+            ->assertStatus(200)
+            ->assertJsonPath('property.isFeatured', true);
+
+        $this->postJson("/api/properties/{$second}/feature", ['status' => 'granted'], $moderatorHeaders)
+            ->assertStatus(402)
+            ->assertJsonPath('code', 'plan_limit_reached')
+            ->assertJsonPath('limit', 1)
+            ->assertJsonPath('used', 1);
+
+        // Denying the first placement releases its active slot for the second.
+        $this->postJson("/api/properties/{$first}/feature", ['status' => 'denied'], $moderatorHeaders)
+            ->assertStatus(200)
+            ->assertJsonPath('property.isFeatured', false);
+        $this->postJson("/api/properties/{$second}/feature", ['status' => 'granted'], $moderatorHeaders)
+            ->assertStatus(200)
+            ->assertJsonPath('property.isFeatured', true);
+
+        // An expired featured listing is no longer publicly active and must
+        // release its slot for the next eligible listing.
+        Property::whereKey($second)->update(['expires_at' => now()->subDay()]);
+        $this->asGuest(); // switch back to the agency member token
+        $this->postJson("/api/properties/{$second}/feature", [], $headers)
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Expired listings cannot request featured placement.');
+        $third = $this->postJson('/api/properties', $this->basePayload(['title' => 'Featured Slot Three', 'submit' => true]), $headers)
+            ->assertStatus(201)->json('id');
+        $this->asGuest(); // switch back to the platform moderator token
+        $this->postJson("/api/properties/{$third}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->asGuest(); // switch back to the agency member token
+        $this->postJson("/api/properties/{$third}/feature", [], $headers)->assertStatus(200);
+        $this->asGuest(); // switch back to the platform moderator token
+        $this->postJson("/api/properties/{$third}/feature", ['status' => 'granted'], $moderatorHeaders)
+            ->assertStatus(200)
+            ->assertJsonPath('property.isFeatured', true);
+    }
+
+    public function test_zero_featured_slots_means_no_featured_grants(): void
+    {
+        $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
+        [$agent, $agency] = $this->agencyUser($agentPerms);
+        $moderator = $this->platformModerator();
+        $plan = SubscriptionPlan::create([
+            'key' => 'zero-featured-slots-' . bin2hex(random_bytes(4)),
+            'name' => 'No Featured Slots',
+            'price' => 0,
+            'currency' => 'PKR',
+            'interval' => 'month',
+            'limits' => ['listings' => 10, 'staff' => 2, 'featured_credits' => 0, 'listing_days' => 30],
+            'is_active' => true,
+        ]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+        ]);
+
+        $headers = $this->authHeaders($this->tokenFor($agent));
+        $moderatorHeaders = $this->authHeaders($this->tokenFor($moderator));
+        $id = $this->postJson('/api/properties', $this->basePayload(['title' => 'No Featured Slot', 'submit' => true]), $headers)
+            ->assertStatus(201)->json('id');
+        $this->asGuest(); // switch from the agency member to the platform moderator
+        $this->postJson("/api/properties/{$id}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->asGuest(); // switch back to the agency member
+        $this->postJson("/api/properties/{$id}/feature", [], $headers)->assertStatus(200);
+
+        $this->asGuest(); // switch back to the platform moderator
+        $this->postJson("/api/properties/{$id}/feature", ['status' => 'granted'], $moderatorHeaders)
+            ->assertStatus(402)
+            ->assertJsonPath('limit', 0)
+            ->assertJsonPath('used', 0);
+        $this->assertDatabaseHas('properties', ['id' => $id, 'isFeatured' => false]);
+    }
+
 }

@@ -78,7 +78,7 @@ export const Navbar: React.FC = () => {
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20 items-center gap-4">
-            <button type="button" onClick={() => handleNavClick('/')} className="flex-shrink-0 flex items-center gap-3 cursor-pointer group">
+            <button type="button" onClick={() => handleNavClick('/')} aria-current={isActive('/') ? 'page' : undefined} className="flex-shrink-0 flex items-center gap-3 cursor-pointer group">
               <div className="w-11 h-11 rounded-full border-2 border-[#E7C878]/60 bg-[#0B1220] flex items-center justify-center shadow-md shadow-[#E7C878]/20 group-hover:border-[#F6E3B4] transition-colors shrink-0">
                 <img src="/logo.jpg" alt="" className="w-full h-full rounded-full object-contain" />
               </div>
@@ -99,6 +99,7 @@ export const Navbar: React.FC = () => {
                   key={item.label + item.path}
                   type="button"
                   onClick={() => handleNavClick(item.path)}
+                  aria-current={isActive(item.path) ? 'page' : undefined}
                   className={`nav-underline px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
                     isActive(item.path) ? 'text-[#E7C878] bg-[#E7C878]/10 is-active' : 'text-slate-300 hover:text-white hover:bg-white/5'
                   }`}
@@ -131,13 +132,14 @@ export const Navbar: React.FC = () => {
                     type="button"
                     onClick={() => handleNavClick('/properties')}
                     aria-label="Search properties"
+                    aria-current={isActive('/properties') ? 'page' : undefined}
                     title="Search properties"
                     className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-[#E7C878]/40 text-[#E7C878] hover:bg-[#E7C878] hover:text-[#0B1220] transition-colors cursor-pointer"
                   >
                     <Search className="w-4 h-4" />
                   </button>
-                  <button type="button" onClick={() => handleNavClick('/login')} className="px-4 py-2 rounded-lg border border-[#E7C878]/50 text-[#E7C878] hover:bg-[#E7C878]/10 text-sm font-semibold transition-colors cursor-pointer">Login</button>
-                  <button type="button" onClick={() => handleNavClick('/register')} className="px-4 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-sm font-bold transition-colors cursor-pointer">Register</button>
+                  <button type="button" onClick={() => handleNavClick('/login')} aria-current={isActive('/login') ? 'page' : undefined} className="px-4 py-2 rounded-lg border border-[#E7C878]/50 text-[#E7C878] hover:bg-[#E7C878]/10 text-sm font-semibold transition-colors cursor-pointer">Login</button>
+                  <button type="button" onClick={() => handleNavClick('/register')} aria-current={isActive('/register') ? 'page' : undefined} className="px-4 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-sm font-bold transition-colors cursor-pointer">Register</button>
                 </div>
               )}
 

@@ -2,6 +2,9 @@
 
 **Version:** 2.0.0 · **Last updated:** 2026-11-08
 
+> **Historical schema reference:** this predates later enterprise migrations. The authoritative schema is `../backend/database/migrations/`; do not create or modify tables from this document alone.
+
+
 ## 1. Migration Inventory
 
 Located in `backend/database/migrations/`. All tables use `utf8mb4`, InnoDB, strict FKs, and soft deletes where audit-relevant.

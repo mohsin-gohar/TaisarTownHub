@@ -4,11 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 /**
  * A billing invoice for one agency/plan period. PAID invoices are immutable
- * financial history — only pending → paid (verify) and pending → void
- * transitions exist, both audited server-side.
+ * financial history. Gateway retries may transition failed → paid; staff can
+ * verify pending invoices or void pending invoices through audited actions.
  */
 class SubscriptionInvoice extends Model
 {
@@ -21,7 +22,7 @@ class SubscriptionInvoice extends Model
         'id', 'invoice_number', 'agency_id', 'plan_id', 'amount_pkr', 'tax_pkr',
         'total_pkr', 'currency', 'period_start', 'period_end', 'status',
         'paid_at', 'payment_method', 'payment_reference', 'verified_by', 'notes',
-        'stripe_session_id', 'stripe_payment_intent_id', 'stripe_subscription_id',
+        'stripe_session_id', 'stripe_payment_intent_id', 'stripe_subscription_id', 'stripe_invoice_id',
         'flutterwave_tx_ref', 'flutterwave_tx_id', 'due_at',
     ];
 
@@ -56,15 +57,44 @@ class SubscriptionInvoice extends Model
     /** Unique sequential invoice number: INV-YYYY-NNNNNN. */
     public static function nextNumber(): string
     {
-        $year = now()->format('Y');
-        $seq = (int) self::where('invoice_number', 'like', "INV-{$year}-%")->count() + 1;
+        $year = (int) now()->format('Y');
 
-        // Walk forward until unique (defensive against concurrent seeds).
-        do {
-            $number = sprintf('INV-%s-%06d', $year, $seq);
-            $seq++;
-        } while (self::where('invoice_number', $number)->exists());
+        $sequence = DB::transaction(function () use ($year): int {
+            DB::table('subscription_invoice_number_sequences')->insertOrIgnore([
+                'year' => $year,
+                'next_number' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
 
-        return $number;
+            $row = DB::table('subscription_invoice_number_sequences')
+                ->where('year', $year)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$row) {
+                throw new \RuntimeException('Invoice number sequence row could not be locked.');
+            }
+
+            // Reconcile against imported/manual invoice rows as well as the
+            // sequence counter so historical data can never cause reuse.
+            $lastInvoiceNumber = self::where('invoice_number', 'like', "INV-{$year}-%")
+                ->orderByDesc('invoice_number')
+                ->value('invoice_number');
+            $lastIssued = 0;
+            if (is_string($lastInvoiceNumber)
+                && preg_match('/^INV-\d{4}-(\d+)$/', $lastInvoiceNumber, $matches) === 1) {
+                $lastIssued = (int) $matches[1];
+            }
+
+            $next = max((int) $row->next_number, $lastIssued) + 1;
+            DB::table('subscription_invoice_number_sequences')
+                ->where('year', $year)
+                ->update(['next_number' => $next, 'updated_at' => now()]);
+
+            return $next;
+        }, 10);
+
+        return sprintf('INV-%04d-%06d', $year, $sequence);
     }
 }

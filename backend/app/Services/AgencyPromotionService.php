@@ -94,6 +94,8 @@ class AgencyPromotionService
     {
         $now = now();
         $liveCount = AgencyPromotion::query()->live()->count();
+        $occupiedCount = AgencyPromotion::query()->current()->count();
+        $pending = AgencyPromotion::query()->current()->where('status', 'pending')->count();
         $scheduled = AgencyPromotion::query()
             ->where('status', 'active')
             ->whereNotNull('starts_at')
@@ -108,9 +110,11 @@ class AgencyPromotionService
         return [
             'live' => $liveCount,
             'scheduled' => $scheduled,
+            'pending' => $pending,
             'expiring_7d' => $expiring,
             'max_slots' => $this->maxSlots(),
-            'available_slots' => max(0, $this->maxSlots() - $liveCount),
+            'reserved' => $occupiedCount,
+            'available_slots' => max(0, $this->maxSlots() - $occupiedCount),
             'free_launch' => true,
             'total_placements' => AgencyPromotion::query()->count(),
         ];
@@ -121,17 +125,29 @@ class AgencyPromotionService
      */
     public function promote(Agency $agency, array $data, User $actor): AgencyPromotion
     {
-        $this->assertEligible($agency);
+        $packageId = !empty($data['package_id']) ? (int) $data['package_id'] : null;
 
-        if (AgencyPromotion::query()->current()->where('agency_id', $agency->id)->exists()) {
-            throw new \DomainException('This agency already has a current featured placement. Edit or cancel it first.');
-        }
+        $promotion = DB::transaction(function () use ($agency, $data, $actor, $packageId): AgencyPromotion {
+            // All placement writers take this same row lock before counting
+            // occupied slots. This prevents two concurrent admins from both
+            // seeing the final slot as available.
+            $this->lockSlotMutex();
 
-        $package = !empty($data['package_id'])
-            ? PromotionPackage::where('is_active', true)->findOrFail($data['package_id'])
-            : null;
+            $lockedAgency = Agency::whereKey($agency->id)->lockForUpdate()->firstOrFail();
+            $this->assertEligible($lockedAgency);
 
-        return DB::transaction(function () use ($agency, $data, $actor, $package) {
+            if (AgencyPromotion::query()->current()->where('agency_id', $lockedAgency->id)->exists()) {
+                throw new \DomainException('This agency already has a current featured placement. Edit or cancel it first.');
+            }
+
+            $package = $packageId !== null
+                ? PromotionPackage::where('is_active', true)->lockForUpdate()->findOrFail($packageId)
+                : null;
+
+            $status = $data['status'] ?? 'active';
+            if (!in_array($status, ['pending', 'active'], true)) {
+                throw new \DomainException('A new featured placement must be pending or active.');
+            }
             $this->assertSlotAvailable();
 
             $startsAt = !empty($data['starts_at'])
@@ -146,21 +162,18 @@ class AgencyPromotionService
                 throw new \DomainException('The promotion end date must be after its start date.');
             }
 
-            $price = 0; // Free launch: placement is never billed or sold.
-            $paymentStatus = 'waived';
             $requestedPosition = isset($data['position']) ? (int) $data['position'] : null;
 
-            $promotion = AgencyPromotion::create([
-                'agency_id' => $agency->id,
+            $created = AgencyPromotion::create([
+                'agency_id' => $lockedAgency->id,
                 'package_id' => $package?->id,
-                'status' => $data['status'] ?? 'active',
-                // Renumbered immediately below; this is only a starting value.
+                'status' => $status,
                 'position' => 0,
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
-                'price' => $price,
+                'price' => 0,
                 'currency' => 'PKR',
-                'payment_status' => $paymentStatus,
+                'payment_status' => 'waived',
                 'payment_method' => null,
                 'payment_reference' => null,
                 'notes' => $data['notes'] ?? null,
@@ -168,27 +181,47 @@ class AgencyPromotionService
                 'approved_by' => $actor->id,
             ]);
 
-            $this->reorderCurrent($promotion->id, $requestedPosition);
-            $promotion->refresh();
+            $this->reorderCurrent($created->id, $requestedPosition);
 
+            return $created->fresh();
+        }, 3);
+
+        $promotion->load('agency');
+        if ($promotion->agency) {
             $this->notifyOwner(
-                $agency,
+                $promotion->agency,
                 'Featured placement confirmed',
-                "{$agency->name} is now scheduled in the homepage featured roster (position {$promotion->position})."
+                "{$promotion->agency->name} is now scheduled in the homepage featured roster (position {$promotion->position})."
             );
+        }
 
-            return $promotion->load(['agency:id,name,slug', 'package']);
-        });
+        return $promotion->load(['agency:id,name,slug', 'package']);
     }
 
     public function update(AgencyPromotion $promotion, array $data, User $actor): AgencyPromotion
     {
         return DB::transaction(function () use ($promotion, $data, $actor) {
-            $status = $data['status'] ?? $promotion->status;
+            $this->lockSlotMutex();
+
+            // Match promote() lock order: agency row before placement row.
+            $lockedAgency = Agency::whereKey($promotion->agency_id)->lockForUpdate()->firstOrFail();
+            $lockedPromotion = AgencyPromotion::whereKey($promotion->id)
+                ->where('agency_id', $lockedAgency->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $status = $data['status'] ?? $lockedPromotion->status;
 
             if (in_array($status, ['active', 'pending'], true)) {
-                $this->assertEligible($promotion->agency);
-                $this->assertSlotAvailable($promotion->id);
+                $this->assertEligible($lockedAgency);
+                $duplicate = AgencyPromotion::query()
+                    ->current()
+                    ->where('agency_id', $lockedAgency->id)
+                    ->where('id', '!=', $lockedPromotion->id)
+                    ->exists();
+                if ($duplicate) {
+                    throw new \DomainException('This agency already has a current featured placement. Edit or cancel it first.');
+                }
+                $this->assertSlotAvailable($lockedPromotion->id);
             }
 
             $requestedPosition = array_key_exists('position', $data) && $data['position'] !== null
@@ -196,37 +229,36 @@ class AgencyPromotionService
                 : null;
 
             if (array_key_exists('starts_at', $data)) {
-                $promotion->starts_at = $data['starts_at'] ? Carbon::parse($data['starts_at']) : null;
+                $lockedPromotion->starts_at = $data['starts_at'] ? Carbon::parse($data['starts_at']) : null;
             }
             if (array_key_exists('ends_at', $data)) {
-                $promotion->ends_at = $data['ends_at'] ? Carbon::parse($data['ends_at']) : null;
+                $lockedPromotion->ends_at = $data['ends_at'] ? Carbon::parse($data['ends_at']) : null;
             }
-            if ($promotion->starts_at && $promotion->ends_at && $promotion->ends_at->lessThanOrEqualTo($promotion->starts_at)) {
+            if ($lockedPromotion->starts_at && $lockedPromotion->ends_at
+                && $lockedPromotion->ends_at->lessThanOrEqualTo($lockedPromotion->starts_at)) {
                 throw new \DomainException('The promotion end date must be after its start date.');
             }
 
-            // Free launch: payment metadata is retained in the schema for a
-            // future billing release, but it is not writable now and the public
-            // roster never labels a placement as Sponsored.
-            $promotion->price = 0;
-            $promotion->currency = 'PKR';
-            $promotion->payment_status = 'waived';
-            $promotion->payment_method = null;
-            $promotion->payment_reference = null;
+            // Free launch: billing metadata remains non-writable until the
+            // billing release and no placement is presented as a paid advert.
+            $lockedPromotion->price = 0;
+            $lockedPromotion->currency = 'PKR';
+            $lockedPromotion->payment_status = 'waived';
+            $lockedPromotion->payment_method = null;
+            $lockedPromotion->payment_reference = null;
             if (array_key_exists('notes', $data)) {
-                $promotion->notes = $data['notes'];
+                $lockedPromotion->notes = $data['notes'];
             }
 
-            $promotion->status = $status;
-            $promotion->approved_by = $actor->id;
-            $promotion->cancelled_at = $status === 'cancelled' ? now() : null;
-            $promotion->save();
+            $lockedPromotion->status = $status;
+            $lockedPromotion->approved_by = $actor->id;
+            $lockedPromotion->cancelled_at = $status === 'cancelled' ? now() : null;
+            $lockedPromotion->save();
 
-            $this->reorderCurrent($promotion->id, $requestedPosition);
-            $promotion->refresh();
+            $this->reorderCurrent($lockedPromotion->id, $requestedPosition);
 
-            return $promotion->load(['agency:id,name,slug', 'package']);
-        });
+            return $lockedPromotion->fresh()->load(['agency:id,name,slug', 'package']);
+        }, 3);
     }
 
     public function cancel(AgencyPromotion $promotion, User $actor, ?string $reason = null): AgencyPromotion
@@ -244,51 +276,68 @@ class AgencyPromotionService
         if (count($ids) !== count(array_unique($ids))) {
             throw new \DomainException('Duplicate placements in the requested order.');
         }
-        if (count($ids) > $this->maxSlots()) {
-            throw new \DomainException('The requested order exceeds the configured featured-slot limit.');
-        }
 
         DB::transaction(function () use ($ids) {
-            $rows = AgencyPromotion::query()->current()->whereIn('id', $ids)->get()->keyBy('id');
-            if ($rows->count() !== count($ids)) {
-                throw new \DomainException('One or more placements are no longer active. Refresh and try again.');
+            $this->lockSlotMutex();
+
+            if (count($ids) > $this->maxSlots()) {
+                throw new \DomainException('The requested order exceeds the configured featured-slot limit.');
+            }
+
+            $rows = AgencyPromotion::query()
+                ->current()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            $currentIds = $rows->keys()->map(fn ($id) => (int) $id)->all();
+
+            if (count($currentIds) !== count($ids)
+                || array_diff($currentIds, $ids) !== []
+                || array_diff($ids, $currentIds) !== []) {
+                throw new \DomainException('The order must include every current placement exactly once. Refresh and try again.');
             }
 
             foreach ($ids as $index => $id) {
                 AgencyPromotion::whereKey($id)->update(['position' => $index + 1]);
             }
-        });
+        }, 3);
 
         Log::info('Featured placement order updated', ['ids' => $ids, 'by' => $actor->id]);
     }
 
-    /**
-     * Expire finished placements. Files/listings are untouched; only the
-     * homepage advertisement state changes.
-     */
     public function expireDue(): int
     {
-        $due = AgencyPromotion::query()->expiredDue()->get();
-        if ($due->isEmpty()) {
-            return 0;
-        }
+        $expired = DB::transaction(function () {
+            $this->lockSlotMutex();
 
-        DB::transaction(function () use ($due) {
+            $due = AgencyPromotion::query()
+                ->expiredDue()
+                ->lockForUpdate()
+                ->with('agency')
+                ->get();
+
             foreach ($due as $promotion) {
                 $promotion->status = 'expired';
                 $promotion->save();
-
-                if ($promotion->agency) {
-                    $this->notifyOwner(
-                        $promotion->agency,
-                        'Featured placement ended',
-                        "The homepage featured placement for {$promotion->agency->name} has ended. Its listings and files remain available."
-                    );
-                }
             }
-        });
 
-        return $due->count();
+            $this->reorderCurrent();
+
+            return $due;
+        }, 3);
+
+        foreach ($expired as $promotion) {
+            if ($promotion->agency) {
+                $this->notifyOwner(
+                    $promotion->agency,
+                    'Featured placement ended',
+                    "The homepage featured placement for {$promotion->agency->name} has ended. Its listings and files remain available."
+                );
+            }
+        }
+
+        return $expired->count();
     }
 
     public function assertEligible(Agency $agency): void
@@ -296,6 +345,27 @@ class AgencyPromotionService
         if ($agency->status !== 'active' || $agency->verification_status !== 'verified') {
             throw new \DomainException('Only approved, verified and active agencies can receive a featured placement.');
         }
+    }
+
+    /**
+     * A stable database row serializes every placement operation that can
+     * consume or release a featured slot, including future-dated placements.
+     */
+    private function lockSlotMutex(): void
+    {
+        SystemSetting::query()->firstOrCreate(
+            ['key' => 'promotions.max_slots'],
+            [
+                'value' => self::DEFAULT_MAX_SLOTS,
+                'group' => 'promotions',
+                'description' => 'Maximum concurrent homepage featured agency placements.',
+            ]
+        );
+
+        SystemSetting::query()
+            ->where('key', 'promotions.max_slots')
+            ->lockForUpdate()
+            ->firstOrFail();
     }
 
     private function assertSlotAvailable(?int $ignorePromotionId = null): void

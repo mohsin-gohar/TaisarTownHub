@@ -19,6 +19,10 @@
  */
 const API = process.env.PROBE_API || 'http://127.0.0.1:8090/api';
 const stamp = Date.now();
+// Docker CI seeds every demo persona with one ephemeral password. Prefer it
+// so the API-backed workflow never relies on repository/demo credentials.
+const sharedDemoPassword = process.env.DEMO_STAFF_PASSWORD;
+const demoPassword = (fallback: string) => sharedDemoPassword || fallback;
 
 type Row = { workflow: string; step: string; ok: boolean; evidence: string };
 const rows: Row[] = [];
@@ -66,9 +70,9 @@ async function login(email: string, password: string) {
 
 (async () => {
   // Shared personas (real accounts, throttled sign-ins).
-  const owner = await login('admin@taisartownhub.com', 'Admin@Taisar2026');
+  const owner = await login('admin@taisartownhub.com', demoPassword('Admin@Taisar2026'));
   const ownerToken = owner.token;
-  const sa = await login('superadmin@taisartownhub.com', 'Super@Admin2026!');
+  const sa = await login('superadmin@taisartownhub.com', demoPassword('Super@Admin2026!'));
   record('setup', 'personas signed in', Boolean(ownerToken) && Boolean(sa.token), `owner=${owner.status} superadmin=${sa.status}`);
 
   // ===================== W2: property lifecycle (first — W1 uses its listing)
@@ -103,7 +107,7 @@ async function login(email: string, password: string) {
       record('W2 property', 'approved listing is publicly visible', detail.status === 200, `status=${detail.status}`);
 
       // manager@ must NOT be able to moderate (no properties.approve/reject)
-      const mgr = await login('manager@taisartownhub.com', 'Manager@2026');
+      const mgr = await login('manager@taisartownhub.com', demoPassword('Manager@2026'));
       if (mgr.token) {
         const reject = await call(`/properties/${w2PropertyId}/reject`, { method: 'POST', token: mgr.token, agency: 'agency-demo' });
         record('W2 property', 'agency manager cannot moderate (403)', reject.status === 403, `status=${reject.status}`);
@@ -221,7 +225,7 @@ async function login(email: string, password: string) {
     }
   }
 
-  const dealer = await login('dealer@taisartownhub.com', 'Dealer@2026');
+  const dealer = await login('dealer@taisartownhub.com', demoPassword('Dealer@2026'));
   if (dealer.token) {
     const file = await call('/dealer-files', {
       method: 'POST',

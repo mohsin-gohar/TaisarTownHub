@@ -4,6 +4,7 @@ import {
   TRANSACTION_STAGES,
   TERMINAL_STATUSES,
   validateTransition,
+  validateVoid,
   isTerminal,
   dealMoney,
   collectedForTx,
@@ -12,6 +13,7 @@ import {
   accrueCommission,
   validateDealPayload,
   validatePayment,
+  validateRefund,
   nextDealNumber,
   genId,
   computeFinancials,
@@ -85,6 +87,11 @@ describe('lifecycle: state machine', () => {
     assert.equal(validateTransition('Under Transfer', 'Completed').ok, true);
   });
 
+  test('backward corrections are limited to one lifecycle stage', () => {
+    assert.equal(validateTransition('Fully Paid', 'Partially Paid').ok, true);
+    assert.equal(validateTransition('Fully Paid', 'Negotiation').ok, false);
+  });
+
   test('isTerminal recognises exactly the terminal set', () => {
     assert.equal(isTerminal(txn({ status: 'Completed' })), true);
     assert.equal(isTerminal(txn({ status: 'Cancelled' })), true);
@@ -93,6 +100,14 @@ describe('lifecycle: state machine', () => {
 });
 
 describe('ledger: payments', () => {
+  test('void requires zero collected payments and no paid commission', () => {
+    const unpaid = txn({ id: 'tx-void', status: 'Negotiation', advancePKR: 0 });
+    assert.equal(validateVoid(unpaid, [], []).ok, true);
+    assert.equal(validateVoid(unpaid, [pay('p1', 'tx-void', 100)], []).ok, false);
+    assert.equal(validateVoid(unpaid, [], [comm({ transactionId: 'tx-void', status: 'Paid', paidPKR: 500 })]).ok, false);
+    assert.equal(validateVoid(txn({ ...unpaid, status: 'Completed' }), [], []).ok, false);
+  });
+
   test('collected comes from the ledger when present', () => {
     const t = txn({ advancePKR: 1000000 });
     assert.equal(
@@ -104,6 +119,56 @@ describe('ledger: payments', () => {
   test('legacy rows without ledger fall back to recorded advance', () => {
     const t = txn({ advancePKR: 1000000, advancePaymentPKR: 900000 });
     assert.equal(collectedForTx(t, []), 1000000);
+  });
+
+  test('refund validation permits cancelled deals but blocks voided and over-refund attempts', () => {
+    const t = txn({ dealAmountPKR: 1000000, status: 'Cancelled' });
+    const ledger = [pay('p1', 'tx-1', 500000)];
+    assert.equal(validateRefund(t, ledger, 200000).ok, true);
+    assert.equal(validateRefund(t, ledger, 600000).ok, false);
+    assert.equal(validateRefund({ ...t, voided: true }, ledger, 100000).ok, false);
+    assert.equal(validateRefund(t, ledger, 0.5).ok, false);
+  });
+
+  test('refund ledger entries reduce net collections and outstanding balance', () => {
+    const t = txn({ dealAmountPKR: 4000000, advancePKR: 4000000 });
+    const ledger = [
+      pay('p1', 'tx-1', 4000000),
+      { ...pay('r1', 'tx-1', -1000000), type: 'refund' as const },
+    ];
+    assert.equal(collectedForTx(t, ledger), 3000000);
+    assert.equal(dealMoney(t, ledger).balance, 1000000);
+    assert.equal(impliedStatusByPayment(t, ledger), 'Partially Paid');
+    assert.equal(shouldAccrueCommission(t, ledger), false);
+  });
+
+  test('positive and negative refund representations both reduce collections', () => {
+    const t = txn({ dealAmountPKR: 1000000 });
+    const negativeRefund = { ...pay('r1', 'tx-1', -250000), type: 'refund' as const };
+    const positiveRefund = { ...pay('r2', 'tx-1', 250000), type: 'refund' as const };
+    assert.equal(collectedForTx(t, [pay('p1', 'tx-1', 1000000), negativeRefund]), 750000);
+    assert.equal(collectedForTx(t, [pay('p1', 'tx-1', 1000000), positiveRefund]), 750000);
+  });
+
+  test('legacy advance is reduced when a refund exists without an imported payment row', () => {
+    const t = txn({ advancePKR: 1000000 });
+    const refund = { ...pay('r1', 'tx-1', -400000), type: 'refund' as const };
+    assert.equal(collectedForTx(t, [refund]), 600000);
+  });
+
+  test('legacy advance remains included when later payments are first added', () => {
+    const t = txn({ advancePKR: 1000000 });
+    const laterPayment = pay('p1', 'tx-1', 300000);
+    assert.equal(collectedForTx(t, [laterPayment]), 1300000);
+    const refund = { ...pay('r1', 'tx-1', -200000), type: 'refund' as const };
+    assert.equal(collectedForTx(t, [laterPayment, refund]), 1100000);
+  });
+
+  test('explicit advance ledger row prevents double-counting legacy advance summary', () => {
+    const t = txn({ advancePKR: 1000000 });
+    const advance = { ...pay('a1', 'tx-1', 1000000), note: 'Advance recorded at deal creation.' };
+    const laterPayment = pay('p1', 'tx-1', 300000);
+    assert.equal(collectedForTx(t, [advance, laterPayment]), 1300000);
   });
 
   test('dealMoney clamps balance at zero and flags Fully Paid', () => {
@@ -132,6 +197,7 @@ describe('ledger: payments', () => {
     assert.equal(r3.ok, true);
     const r4 = validatePayment(t, [], -5);
     assert.equal(r4.ok, false);
+    assert.equal(validatePayment(t, [], 0.5).ok, false);
     assert.equal(validatePayment(txn({ status: 'Cancelled', dealAmountPKR: 100 }), [], 50).ok, false);
   });
 });
@@ -188,6 +254,8 @@ describe('validation & ids', () => {
     assert.equal(validateDealPayload({ ...base, buyerId: 'b-x' }, { propertyId: 'p-1', sellerId: 's-1', buyerId: 'b-x' }, entities).ok, false);
     assert.equal(validateDealPayload({ ...base, buyerId: 's-1' }, { propertyId: 'p-1', sellerId: 's-1', buyerId: 's-1' }, entities).ok, false);
     assert.equal(validateDealPayload({ ...base, dealAmountPKR: 0 }, base, entities).ok, false);
+    assert.equal(validateDealPayload({ ...base, dealAmountPKR: 1000.5 }, base, entities).ok, false);
+    assert.equal(validateDealPayload({ ...base, advancePKR: 1000.5 }, base, entities).ok, false);
     assert.equal(validateDealPayload({ ...base, advancePKR: -1 }, base, entities).ok, false);
     assert.equal(validateDealPayload({ ...base, advancePKR: 4000001 }, base, entities).ok, false);
     assert.equal(validateDealPayload(base, base, entities).ok, true);
@@ -249,6 +317,19 @@ describe('financials: ledger-backed totals', () => {
     assert.equal(fin.totalCommissionPaid, 50000);
     assert.equal(fin.completedDealsCount, 1);
     assert.equal(fin.activeDealsCount, 2);
+  });
+
+  test('multiple beneficiary commissions on one deal are all included in financial totals', () => {
+    const rows = [txn({ id: 'tx-shared', dealAmountPKR: 4000000, status: 'Fully Paid' })];
+    const commissions = [
+      comm({ id: 'cm-dealer', transactionId: 'tx-shared', amountPKR: 20000, status: 'Accrued' }),
+      comm({ id: 'cm-agent', transactionId: 'tx-shared', amountPKR: 10000, paidPKR: 4000, status: 'Partially Paid' }),
+      comm({ id: 'cm-pending', transactionId: 'tx-shared', amountPKR: 5000, status: 'Pending Accrual' }),
+    ];
+    const fin = computeFinancials(rows, [pay('p1', 'tx-shared', 4000000)], commissions);
+    assert.equal(fin.totalCommissionAccrued, 30000);
+    assert.equal(fin.totalCommissionPaid, 4000);
+    assert.equal(fin.totalCommissionPayable, 26000);
   });
 
   test('accrued but unpaid commission shows as payable', () => {

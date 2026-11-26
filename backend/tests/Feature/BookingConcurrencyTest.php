@@ -25,6 +25,8 @@ class BookingConcurrencyTest extends EnterpriseTestCase
             'id' => 'dlr_' . Str::random(10),
             'fullName' => 'Concurrency Dealer',
             'phone' => '0300-0000000',
+            'commissionType' => 'Percentage',
+            'commissionRate' => 100,
         ]);
 
         $user = $this->makeUser('agent', ['dealer_id' => $dealer->id]);
@@ -127,7 +129,7 @@ class BookingConcurrencyTest extends EnterpriseTestCase
 
     public function test_void_is_idempotent_and_payments_are_blocked_on_voided_deals(): void
     {
-        [$user, $agency] = $this->agencyUser(['finance.update_transaction', 'finance.manage_payments']);
+        [$user, $agency] = $this->agencyUser(['finance.update_transaction', 'finance.manage_payments', 'void_transactions']);
         $token = $this->tokenFor($user);
 
         $transaction = Transaction::create([
@@ -152,13 +154,13 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $this->postJson('/api/agency/transactions/' . $transaction->id . '/void', [
             'reason' => 'Second void attempt.',
         ], $headers)
-            ->assertStatus(422)
+            ->assertStatus(409)
             ->assertJsonPath('success', false);
 
         $this->postJson('/api/agency/transactions/' . $transaction->id . '/payments', [
             'amount' => 50000,
         ], $headers)
-            ->assertStatus(422)
+            ->assertStatus(409)
             ->assertJsonPath('success', false);
     }
 

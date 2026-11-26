@@ -3,8 +3,9 @@
  *
  * Drives realistic concurrent traffic against the running API and reports
  * latency percentiles, throughput and error rates per endpoint family. It
- * also runs a **concurrency safety** check: N parallel attempts to book the
- * same property must not produce more than one successful deal.
+ * also runs a **concurrency integrity** check: N parallel transactions for
+ * one disposable property must receive distinct deal numbers. Dealer-file
+ * double-sell protection is covered separately by BookingConcurrencyTest.
  *
  * Usage:
  *   npx tsx scripts/load-test.mts [durationSeconds] [concurrency]
@@ -13,6 +14,24 @@ const API = process.env.PROBE_API || 'http://127.0.0.1:8090/api';
 
 const DURATION = Number(process.argv[2] || 20);
 const CONCURRENCY = Number(process.argv[3] || 10);
+
+// This harness creates disposable properties and transactions. Never let a
+// forgotten command or a copied production URL mutate a real customer system.
+const apiUrl = new URL(API);
+const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(apiUrl.hostname);
+if (process.env.LOAD_TEST_ALLOW_MUTATIONS !== 'true') {
+  throw new Error('Refusing to run: set LOAD_TEST_ALLOW_MUTATIONS=true only for an approved disposable test environment.');
+}
+if (!isLoopback && process.env.LOAD_TEST_ALLOW_REMOTE !== 'true') {
+  throw new Error('Refusing a non-local API target. Use a disposable staging environment and explicitly set LOAD_TEST_ALLOW_REMOTE=true.');
+}
+if (!process.env.LOAD_TEST_EMAIL || !process.env.LOAD_TEST_PASSWORD) {
+  throw new Error('Set LOAD_TEST_EMAIL and LOAD_TEST_PASSWORD for a dedicated disposable test account; built-in credentials are not allowed.');
+}
+if (!Number.isInteger(DURATION) || DURATION < 1 || DURATION > 600
+  || !Number.isInteger(CONCURRENCY) || CONCURRENCY < 1 || CONCURRENCY > 100) {
+  throw new Error('Duration must be 1..600 seconds and concurrency must be 1..100.');
+}
 
 type Sample = { ms: number; status: number; endpoint: string };
 type Family = { name: string; samples: Sample[]; errors: number; throttled: number; serverErrors: number };
@@ -25,7 +44,8 @@ function record(endpoint: string, ms: number, status: number) {
   }
   const entry = families.get(family)!;
   entry.samples.push({ ms, status, endpoint });
-  if (status >= 400) entry.errors += 1;
+  // HTTP 429 is an expected rate-limit outcome during a deliberate load run.
+  if (status >= 400 && status !== 429) entry.errors += 1;
   if (status === 429) entry.throttled += 1;
   if (status >= 500) entry.serverErrors += 1;
 }
@@ -59,13 +79,16 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
   const login = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: jsonHeaders,
-    body: JSON.stringify({ email: 'superadmin@taisartownhub.com', password: 'Super@Admin2026!' }),
+    body: JSON.stringify({ email: process.env.LOAD_TEST_EMAIL, password: process.env.LOAD_TEST_PASSWORD }),
   });
   const session = await login.json().catch(() => ({}));
   const token = session?.token;
-  const authHeaders = token ? { ...jsonHeaders, Authorization: `Bearer ${token}` } : jsonHeaders;
+  if (!login.ok || !token) {
+    throw new Error(`Dedicated load-test account login failed (HTTP ${login.status}); no load or mutations were started.`);
+  }
+  const authHeaders = { ...jsonHeaders, Authorization: `Bearer ${token}` };
 
-  console.log(`load test: ${DURATION}s, concurrency ${CONCURRENCY}, authenticated=${Boolean(token)}`);
+  console.log(`load test: ${DURATION}s, concurrency ${CONCURRENCY}, authenticated=true, target=${apiUrl.origin}`);
 
   const stopAt = Date.now() + DURATION * 1000;
   const publicEndpoints = ['/catalog', '/properties', '/projects', '/locations', '/videos', '/dealers'];
@@ -86,7 +109,8 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
     }),
   );
 
-  // --- concurrency safety: parallel booking of the SAME property ---
+  // --- concurrency integrity: allocate distinct deal numbers for parallel
+  // transaction writes against one disposable property ---
   // The API throttles to 60 requests/minute per IP, so the load phase above
   // consumes the window. Cooldown first, otherwise every parallel attempt is
   // rejected by the throttle and the test proves nothing.
@@ -110,7 +134,10 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
     }),
   });
   const probePropertyBody = await probeProperty.json().catch(() => ({}));
-  const propertyId = probePropertyBody?.property?.id || probePropertyBody?.id || 'prop-15';
+  const propertyId = probePropertyBody?.property?.id || probePropertyBody?.id;
+  if (!probeProperty.ok || !propertyId) {
+    throw new Error(`Disposable property creation failed (HTTP ${probeProperty.status}); refusing to book any existing property.`);
+  }
   console.log(`\nbooking target: ${propertyId} (created: ${probeProperty.status})`);
   const attempts = 8;
   const bookingResults = await Promise.all(
@@ -123,6 +150,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
           propertyId,
           propertyTitle: `Load-test concurrent booking ${Date.now()}-${index}`,
           sector: 'Sector 70-D',
+          transactionType: 'Sale',
           sellerName: 'Load Test Seller',
           buyerName: `Load Test Buyer ${index}`,
           agreementAmountPKR: 10000000,
@@ -140,7 +168,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
 
   // --- report ---
   const all = [...families.values()].flatMap((f) => f.samples);
-  const errors = all.filter((s) => s.status === 0 || s.status >= 400).length;
+  const errors = all.filter((s) => s.status === 0 || (s.status >= 400 && s.status !== 429)).length;
   const throttled = all.filter((s) => s.status === 429).length;
   const serverErrors = all.filter((s) => s.status >= 500).length;
   const clientErrors = all.filter((s) => s.status >= 400 && s.status < 500 && s.status !== 429).length;
@@ -156,7 +184,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
       `${family.name.padEnd(28)} ${String(family.samples.length).padStart(4)} ` +
         `${rps.toFixed(1).padStart(6)} ${String(percentile(times, 50)).padStart(5)} ` +
         `${String(percentile(times, 95)).padStart(5)} ${String(percentile(times, 99)).padStart(5)} ` +
-        `${String(Math.max(...times)).padStart(5)} ${String(family.throttled).padStart(4)} ` +
+        `${String(times.reduce((max, value) => Math.max(max, value), 0)).padStart(5)} ${String(family.throttled).padStart(4)} ` +
         `${String(family.serverErrors).padStart(5)}`,
     );
   }
@@ -165,14 +193,15 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
   console.log('\n--- totals ---');
   console.log(`requests          : ${all.length}`);
   console.log(`throughput        : ${(all.length / duration).toFixed(1)} req/s (concurrency ${CONCURRENCY})`);
-  console.log(`latency p50/p95/p99/max : ${percentile(times, 50)} / ${percentile(times, 95)} / ${percentile(times, 99)} / ${Math.max(...times)} ms`);
+  console.log(`latency p50/p95/p99/max : ${percentile(times, 50)} / ${percentile(times, 95)} / ${percentile(times, 99)} / ${times.reduce((max, value) => Math.max(max, value), 0)} ms`);
   console.log(`429 (throttled)   : ${throttled}`);
   console.log(`5xx (server bugs) : ${serverErrors}`);
   console.log(`4xx (client)      : ${clientErrors}`);
   console.log(`network failures  : ${networkErrors}`);
   console.log(`total error rate  : ${((errors / all.length) * 100).toFixed(2)}%`);
+  if (serverErrors > 0 || networkErrors > 0) process.exitCode = 1;
 
-  console.log('\n--- concurrency safety (parallel booking of one property) ---');
+  console.log('\n--- concurrency integrity (parallel transaction writes) ---');
   bookingResults.forEach((r, i) =>
     console.log(
       `  attempt ${i + 1}: status=${r.status} ${r.ms}ms ${r.status === 201 ? 'CREATED' : ''} ${
@@ -180,11 +209,22 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
       }`,
     ),
   );
+  const dealNumbers = bookingResults
+    .filter((r) => r.status === 201)
+    .map((r) => r.body?.transaction?.dealNumber || r.body?.dealNumber)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const uniqueDealNumbers = new Set(dealNumbers);
+  const bookingIntegrityPass = bookingResults.every((r) => r.status === 201)
+    && dealNumbers.length === created
+    && uniqueDealNumbers.size === created;
+  const unexpectedServerErrors = bookingResults.filter((r) => r.status === 0 || r.status >= 500).length;
+
   console.log(
-    created <= 1
-      ? `PASS — ${created} deal(s) created out of ${attempts} parallel attempts (no double booking)`
-      : `FAIL — ${created} deals created from ${attempts} parallel attempts`,
+    bookingIntegrityPass
+      ? `PASS — ${created} parallel transactions received ${uniqueDealNumbers.size} unique deal numbers`
+      : `FAIL — ${created}/${attempts} transactions created; ${dealNumbers.length} deal numbers, ${uniqueDealNumbers.size} unique`,
   );
+  if (unexpectedServerErrors > 0 || !bookingIntegrityPass) process.exitCode = 1;
 
   console.log(JSON.stringify({
     generatedAt: new Date().toISOString(),
@@ -195,7 +235,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
     p50: percentile(times, 50),
     p95: percentile(times, 95),
     p99: percentile(times, 99),
-    max: Math.max(...times),
+    max: times.reduce((max, value) => Math.max(max, value), 0),
     errors,
     throttled,
     serverErrors,
@@ -217,12 +257,17 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
       body: JSON.stringify({ reason: 'automated load-test cleanup' }),
     });
     console.log(`cleanup: void transaction ${id} -> ${res.status}`);
+    if (!res.ok) process.exitCode = 1;
   }
-  if (propertyId && /^prop_[a-f0-9]+$/i.test(propertyId)) {
+  if (propertyId) {
     const res = await fetch(`${API}/properties/${propertyId}`, {
       method: 'DELETE',
       headers: authHeaders,
     });
-    console.log(`cleanup: delete load-test property ${propertyId} -> ${res.status}`);
+    console.log(`cleanup: delete disposable load-test property ${propertyId} -> ${res.status}`);
+    if (!res.ok) {
+      console.error('WARNING: disposable load-test property cleanup failed; inspect the test environment before re-running.');
+      process.exitCode = 1;
+    }
   }
 })();

@@ -1,5 +1,5 @@
 /**
- * Browser interaction audit (one-off, not part of CI gates).
+ * Browser interaction audit for the disposable full-stack CI environment.
  *
  * Goes beyond the passive crawl: for every public route it actually
  *   1. navigates every internal link and records the HTTP status,
@@ -35,6 +35,7 @@ type Sink = {
   pageErrors: string[];
   failedRequests: string[];
   httpErrors: string[];
+  requests: string[];
 };
 
 type ButtonInfo = {
@@ -43,6 +44,8 @@ type ButtonInfo = {
   type: string;
   disabled: boolean;
   expanded: string | null;
+  current: string | null;
+  pressed: boolean;
   visible: boolean;
   inForm: boolean;
 };
@@ -75,15 +78,24 @@ type FormResult = {
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function attachSink(page: Page): Sink {
-  const sink: Sink = { consoleErrors: [], pageErrors: [], failedRequests: [], httpErrors: [] };
+  const sink: Sink = { consoleErrors: [], pageErrors: [], failedRequests: [], httpErrors: [], requests: [] };
   page.on('console', (msg) => {
     if (msg.type() === 'error' && !IGNORE_CONSOLE.some((r) => r.test(msg.text()))) {
       sink.consoleErrors.push(msg.text().slice(0, 300));
     }
   });
   page.on('pageerror', (err) => sink.pageErrors.push(String(err).slice(0, 300)));
+  page.on('request', (req) => {
+    if (req.resourceType() === 'fetch' || req.resourceType() === 'xhr') {
+      sink.requests.push(req.method() + ' ' + req.url().slice(0, 160));
+    }
+  });
   page.on('requestfailed', (req) => {
-    sink.failedRequests.push(`${req.method()} ${req.url().slice(0, 160)} — ${req.failure()?.errorText || 'failed'}`);
+    const failure = req.failure()?.errorText || 'failed';
+    // Navigation intentionally aborts in-flight third-party map/image scripts.
+    // This is not a page error or broken resource in the destination document.
+    if (failure === 'net::ERR_ABORTED') return;
+    sink.failedRequests.push(`${req.method()} ${req.url().slice(0, 160)} — ${failure}`);
   });
   page.on('response', (res) => {
     if (res.status() >= 400) {
@@ -131,6 +143,8 @@ async function listButtons(page: Page): Promise<ButtonInfo[]> {
         type: el.getAttribute('type') || 'submit',
         disabled: (el as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true',
         expanded: el.getAttribute('aria-expanded'),
+        current: el.getAttribute('aria-current'),
+        pressed: el.getAttribute('aria-pressed') === 'true',
         visible:
           rect.width > 0 &&
           rect.height > 0 &&
@@ -276,6 +290,9 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
     // Only skip real form submits — most icon/CTA buttons inherit the HTML
     // default type="submit" without living inside a form.
     if (button.type === 'submit' && button.inForm) continue;
+    // Re-clicking the current route or already-selected filter is intentionally
+    // idempotent; it is not a dead control.
+    if (button.current === 'page' || button.pressed) continue;
     if (DESTRUCTIVE.test(button.name)) continue;
     const key = /^save .* to favorites?/i.test(button.name)
       ? 'save to favorites'
@@ -291,6 +308,7 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
     const sink = attachSink(page);
     await gotoRoute(page, route);
     const before = await snapshot(page);
+    sink.requests.length = 0;
 
     // Re-resolve after reload: prefer accessible name, fall back to index.
     let locator = page.getByRole('button', { name: target.name, exact: true }).first();
@@ -324,6 +342,7 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
     if (popup) await popup.close().catch(() => {});
     await delay(950);
     const after = await snapshot(page);
+    const requests = sink.requests.splice(0);
     const errors = takeErrors(sink);
 
     let effect = '';
@@ -336,6 +355,7 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
     else if (after.bodyOverflow !== before.bodyOverflow) effect = 'body scroll lock changed';
     else if (after.hash !== before.hash) effect = 'DOM changed';
     else if (Math.abs(after.scrollY - before.scrollY) > 20) effect = 'scrolled';
+    else if (requests.length > 0) effect = 'network activity (' + requests.length + ' request(s))';
     else effect = 'NO VISIBLE EFFECT';
 
     results.push({
@@ -350,6 +370,30 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
   }
 
   return results;
+}
+
+async function solveVisibleMathCaptcha(page: Page): Promise<void> {
+  const question = page.locator('#inquiry-captcha-question').first();
+  if (!(await question.isVisible().catch(() => false))) return;
+  const text = await question.innerText();
+  // NFKC normalises full-width operators/digits; remove zero-width marks that
+  // can be introduced by rendered text before parsing the visible challenge.
+  const normalized = text.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/[−–—]/g, '-');
+  const match = normalized.match(/(-?\d+)\s*([+×x*\/÷-])\s*(-?\d+)/i);
+  if (!match) throw new Error(`Unsupported inquiry captcha question: ${JSON.stringify(text)}`);
+  const left = Number(match[1]);
+  const right = Number(match[3]);
+  const operator = match[2];
+  const result = operator === '+' ? left + right
+    : operator === '-' ? left - right
+    : operator === '×' || operator.toLowerCase() === 'x' ? left * right
+    : operator === '÷' || operator === '/' ? left / right
+    : Number.NaN;
+  if (!Number.isFinite(result) || !Number.isInteger(result)) {
+    throw new Error(`Invalid inquiry captcha expression: ${JSON.stringify(text)}`);
+  }
+  const answer = page.locator('#inquiry-captcha-answer').first();
+  await answer.fill(String(result));
 }
 
 async function fillAndSubmit(
@@ -378,6 +422,9 @@ async function fillAndSubmit(
     }
     await input.fill(field.value);
   }
+
+  // Public inquiry forms require a signed, single-use math captcha.
+  await solveVisibleMathCaptcha(page);
 
   const submit = page.getByRole('button', { name: submitName }).first();
   if (!(await submit.isVisible().catch(() => false))) {
@@ -510,7 +557,7 @@ async function runPublic(browser: Browser): Promise<{
     await gotoRoute(page, '/');
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await delay(600);
-    const email = page.getByPlaceholder('you@email.com').first();
+    const email = page.getByPlaceholder('Enter your email').first();
     if (!(await email.isVisible().catch(() => false))) {
       forms.push({ form: 'newsletter', ok: false, detail: 'email input not found', errors: takeErrors(sink) });
     } else {
@@ -567,7 +614,7 @@ async function runPublic(browser: Browser): Promise<{
     await gotoRoute(page, '/login');
     const form = page.locator('form').filter({ has: page.locator('input[placeholder="Enter password"]') }).first();
     await form.locator('input[type="email"]').fill('not-a-user@taisartownhub.com');
-    await form.locator('input[type="password"]').fill('WrongPass123!');
+    await form.locator('input[type="password"]').fill((process.env.DEMO_STAFF_PASSWORD || 'WrongPass123!'));
     await form.locator('button[type="submit"]').click();
     await delay(1800);
     const errorVisible =
@@ -587,7 +634,7 @@ async function runPublic(browser: Browser): Promise<{
     await gotoRoute(page, '/login');
     const form = page.locator('form').filter({ has: page.locator('input[placeholder="Enter password"]') }).first();
     await form.locator('input[type="email"]').fill('superadmin@taisartownhub.com');
-    await form.locator('input[type="password"]').fill('Super@Admin2026!');
+    await form.locator('input[type="password"]').fill(process.env.DEMO_STAFF_PASSWORD || 'Super@Admin2026!');
     await form.locator('button[type="submit"]').click();
     await delay(3000);
     const ok =
@@ -713,7 +760,7 @@ async function runPublic(browser: Browser): Promise<{
     const text = await page.locator('#main-content').innerText();
     const robots = await page.locator('meta[name="robots"]').getAttribute('content').catch(() => '');
     const title = await page.title();
-    const homeButton = page.getByRole('button', { name: /Back to Home/i }).first();
+    const homeButton = page.getByRole('link', { name: /Back to Home/i }).first();
     const has404 = /404|not.*found|off the map/i.test(text);
     let recovered = false;
     if (await homeButton.isVisible().catch(() => false)) {
@@ -747,10 +794,10 @@ async function runPublic(browser: Browser): Promise<{
       await menu.click();
       await delay(600);
     }
-    const drawer = mobilePage.locator('#primary-drawer');
+    const drawer = mobilePage.locator('#mobile-nav-drawer');
     const drawerVisible = await drawer.isVisible().catch(() => false);
-    const drawerLinks = drawerVisible ? await drawer.locator('a').count() : 0;
-    const close = mobilePage.getByRole('button', { name: /Close navigation menu/i }).first();
+    const drawerLinks = drawerVisible ? await drawer.locator('a, button').count() : 0;
+    const close = mobilePage.getByRole('button', { name: /Close menu/i }).first();
     if (await close.isVisible().catch(() => false)) {
       await close.click();
       await delay(400);
@@ -802,4 +849,8 @@ async function runPublic(browser: Browser): Promise<{
   console.log(`\nForms / flows: ${result.forms.length + result.flows.length}, failed: ${failedForms.length}`);
   failedForms.forEach((f) => console.log(`  FAIL [${f.form}] ${f.detail} ${f.errors.join(' | ')}`));
   [...result.forms, ...result.flows].forEach((f) => console.log(`  ${f.ok ? 'OK  ' : 'FAIL'} ${f.form} — ${f.detail}`));
+
+  if (brokenLinks.length || noEffect.length || clickFailed.length || errorProbes.length || failedForms.length) {
+    process.exitCode = 1;
+  }
 })();

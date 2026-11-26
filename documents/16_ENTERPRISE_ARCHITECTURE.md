@@ -1,5 +1,8 @@
 # TaisarTownHub — Enterprise Architecture Blueprint (Phase 2 Design)
 
+> **Historical Phase 1/2 blueprint:** the “Current-State Summary” below describes the pre-enterprise audit snapshot and is not the current codebase state. Use current migrations, permission catalog, controllers and `../docs/STATUS.md` for the actual implementation.
+
+
 > This document defines the target database architecture, multi-tenant isolation
 > model and RBAC permission structure for the enterprise upgrade. It is derived
 > from the Phase 1 code audit (see `UPGRADE_MASTER.md`) and is the specification

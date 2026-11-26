@@ -84,6 +84,25 @@ class AgencyVideoPublishingTest extends EnterpriseTestCase
         $this->assertSame($dealer->fullName, $response->json('dealerName'));
     }
 
+    public function test_video_urls_must_be_https_and_directly_playable(): void
+    {
+        [$user] = $this->agencyUser(['upload_media'], 'agency_manager');
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson('/api/videos', $this->payload([
+            'videoUrl' => 'http://cdn.example.com/tour.mp4',
+        ]), $headers)->assertStatus(422);
+
+        $this->postJson('/api/videos', $this->payload([
+            'videoUrl' => 'https://www.youtube.com/watch?v=abc123',
+        ]), $headers)->assertStatus(422);
+
+        $this->postJson('/api/videos', $this->payload([
+            'videoUrl' => 'https://cdn.example.com/tour.mp4',
+            'thumbnailUrl' => 'http://cdn.example.com/poster.jpg',
+        ]), $headers)->assertStatus(422);
+    }
+
     public function test_publishing_requires_a_media_permission(): void
     {
         [$user] = $this->agencyUser(['properties.view'], 'agent');

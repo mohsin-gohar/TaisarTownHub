@@ -71,6 +71,13 @@ class SubscriptionController extends Controller
                 : max(0, (int) $limit - (int) $used);
         }
 
+        // Unlike ordinary quotas, featured_credits=0 means no featured slots.
+        // A null override is the only way to make featured placements unlimited.
+        $featuredLimit = $limits['featured_credits'] ?? 0;
+        $remaining['featured_credits'] = $featuredLimit === null
+            ? null
+            : max(0, (int) $featuredLimit - (int) ($usage['featured_credits'] ?? 0));
+
         return response()->json([
             'success' => true,
             'subscription' => $subscription ? [

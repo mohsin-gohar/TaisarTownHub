@@ -50,28 +50,31 @@ class AppServiceProvider extends ServiceProvider
         // resolves from X-Forwarded-For only for configured trusted proxies,
         // preventing IP spoofing).
         // ------------------------------------------------------------------
-        RateLimiter::for('api.public', function (Request $request) {
-            return Limit::perMinute(300)->by($request->ip());
+        $publicPerMinute = max(1, (int) env('API_PUBLIC_RATE_LIMIT', 300));
+        $authPerMinute = max(1, (int) env('API_AUTH_RATE_LIMIT', 10));
+        $writePerMinute = max(1, (int) env('API_WRITE_RATE_LIMIT', 30));
+        $fallbackPerMinute = max(1, (int) env('API_FALLBACK_RATE_LIMIT', 300));
+        $fallbackAuthenticatedPerMinute = max(1, (int) env('API_FALLBACK_AUTH_RATE_LIMIT', 600));
+
+        RateLimiter::for('api.public', function (Request $request) use ($publicPerMinute) {
+            return Limit::perMinute($publicPerMinute)->by($request->ip());
         }); // public reads
 
-        RateLimiter::for('api.auth', function (Request $request) {
-            return Limit::perMinute(10)->by($request->ip());
+        RateLimiter::for('api.auth', function (Request $request) use ($authPerMinute) {
+            return Limit::perMinute($authPerMinute)->by($request->ip());
         }); // login/register/password/MFA — credential-attack surface
 
-        RateLimiter::for('api.write', function (Request $request) {
-            return Limit::perMinute(30)->by($request->user()?->id ?: $request->ip());
+        RateLimiter::for('api.write', function (Request $request) use ($writePerMinute) {
+            return Limit::perMinute($writePerMinute)->by($request->user()?->id ?: $request->ip());
         }); // state-changing writes
 
-        RateLimiter::for('api', function (Request $request) {
-            // Fallback for routes without a specific limiter. throttleApi()
-            // applies this in addition to every route's own throttle, so this
-            // ceiling must never sit BELOW the route-specific limits: the old
-            // 60/min value silently capped the 300/min public marketplace and
-            // throttled ordinary browsing (61st request -> 429). Auth (10/min)
-            // and write (30/min) routes still enforce their stricter limits.
+        RateLimiter::for('api', function (Request $request) use ($fallbackPerMinute, $fallbackAuthenticatedPerMinute) {
+            // Fallback must never sit below route-specific limits. Production
+            // defaults remain 300/min public, 10/min auth, 30/min writes.
+            // Disposable CI may raise these limits for exhaustive browser audits.
             return $request->user()
-                ? Limit::perMinute(600)->by($request->user()->getAuthIdentifier())
-                : Limit::perMinute(300)->by($request->ip());
+                ? Limit::perMinute($fallbackAuthenticatedPerMinute)->by($request->user()->getAuthIdentifier())
+                : Limit::perMinute($fallbackPerMinute)->by($request->ip());
         }); // legacy fallback limiter (kept for backwards compatibility)
     }
 }

@@ -87,6 +87,52 @@ export function validateTransition(
     }
     return { ok: true };
   }
+
+  const fromIndex = stageIndex(from);
+  const toIndex = stageIndex(to);
+  if (fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex - 1) {
+    return { ok: false, error: 'A deal can only be corrected back by one lifecycle stage at a time.' };
+  }
+
+  return { ok: true };
+}
+
+export function validateVoid(
+  txn: Transaction,
+  payments: PaymentEntry[] = [],
+  commissions: CommissionEntry[] = [],
+): TransitionResult {
+  if (txn.voided || txn.status === 'Completed' || txn.status === 'Cancelled') {
+    return { ok: false, error: 'Completed, cancelled or already-voided deals cannot be voided again.' };
+  }
+
+  const advance = Math.max(0, Number(txn.advancePKR ?? 0), Number(txn.advancePaymentPKR ?? 0));
+  if (advance > 0) {
+    return { ok: false, error: 'Refund or reconcile the recorded advance before voiding this deal.' };
+  }
+
+  const netLedger = payments
+    .filter((entry) => entry.transactionId === txn.id)
+    .reduce((sum, entry) => {
+      const isRefund = String(entry.type ?? '').toLowerCase().includes('refund');
+      return sum + (isRefund ? -Math.abs(entry.amountPKR) : Math.abs(entry.amountPKR));
+    }, 0);
+  if (netLedger !== 0) {
+    return { ok: false, error: 'Refund or reconcile all collected payments before voiding this deal.' };
+  }
+
+  const hasPaidCommission = commissions.some((entry) =>
+    entry.transactionId === txn.id
+      && (
+        entry.status === 'Paid'
+        || (entry.paidPKR ?? 0) > 0
+        || (entry.payouts ?? []).some((payout) => payout.amountPKR > 0)
+      ),
+  );
+  if (hasPaidCommission) {
+    return { ok: false, error: 'A deal with a paid commission cannot be voided; use the audited commission reversal process.' };
+  }
+
   return { ok: true };
 }
 
@@ -96,11 +142,30 @@ export function validateTransition(
  * their recorded advance.
  */
 export function collectedForTx(txn: Transaction, payments: PaymentEntry[] = []): number {
-  const ledger = payments.filter((p) => p.transactionId === txn.id && p.amountPKR > 0);
-  const fromLedger = ledger.reduce((sum, p) => sum + p.amountPKR, 0);
-  if (fromLedger > 0) return fromLedger;
+  const ledger = payments.filter((payment) => payment.transactionId === txn.id);
   const advance = txn.advancePKR ?? txn.advancePaymentPKR ?? 0;
-  return Number.isFinite(advance) ? Math.max(0, advance) : 0;
+  const legacyAdvance = Number.isFinite(advance) ? Math.max(0, advance) : 0;
+
+  if (ledger.length === 0) return legacyAdvance;
+
+  // Refunds are stored as negative amounts by the API, but older imports may
+  // carry a positive amount with type=refund. Normalize both shapes and
+  // subtract refunds from gross receipts instead of silently ignoring them.
+  const grossPayments = ledger
+    .filter((payment) => String(payment.type ?? '').toLowerCase() !== 'refund')
+    .reduce((sum, payment) => sum + Math.abs(payment.amountPKR), 0);
+  const refunds = ledger
+    .filter((payment) => String(payment.type ?? '').toLowerCase() === 'refund')
+    .reduce((sum, payment) => sum + Math.abs(payment.amountPKR), 0);
+
+  // When a payment ledger exists it is authoritative for the payments it
+  // contains. The transaction's recorded advance is added only when the
+  // ledger has not already covered it (legacy rows where the advance was
+  // never imported as a payment row); this avoids double-counting modern
+  // rows while preserving legacy totals and refund handling.
+  const sourceGross = grossPayments + (legacyAdvance > grossPayments ? legacyAdvance : 0);
+
+  return Math.max(0, sourceGross - refunds);
 }
 
 export interface DealMoney {
@@ -217,12 +282,12 @@ export function validateDealPayload(
     return { ok: false, error: 'Seller and buyer cannot be the same record.' };
   }
   const amount = Number(payload.dealAmountPKR);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, error: 'Agreed deal amount must be a positive number.' };
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return { ok: false, error: 'Agreed deal amount must be a positive whole-rupee PKR amount.' };
   }
   const advance = Number(payload.advancePKR ?? 0);
-  if (!Number.isFinite(advance) || advance < 0) {
-    return { ok: false, error: 'Advance cannot be negative.' };
+  if (!Number.isSafeInteger(advance) || advance < 0) {
+    return { ok: false, error: 'Advance must be a non-negative whole-rupee PKR amount.' };
   }
   if (advance > amount) {
     return { ok: false, error: 'Advance deposit cannot exceed the agreed deal amount.' };
@@ -247,13 +312,32 @@ export function validatePayment(
   if (txn.voided) return { ok: false, error: 'This deal is voided — payments are frozen.' };
   if (txn.status === 'Cancelled') return { ok: false, error: 'This deal is cancelled — payments are frozen.' };
   const money = dealMoney(txn, payments);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, error: 'Payment amount must be a positive number.' };
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return { ok: false, error: 'Payment amount must be a positive whole-rupee PKR amount.' };
   }
   if (!opts?.allowOverpay && money.collected + amount > money.dealAmount) {
     return {
       ok: false,
       error: `Payment of ${amount.toLocaleString()} exceeds the outstanding balance of ${money.balance.toLocaleString()} on this deal.`,
+    };
+  }
+  return { ok: true, currentCollected: money.collected };
+}
+
+export function validateRefund(
+  txn: Transaction,
+  payments: PaymentEntry[],
+  amount: number,
+): ValidatePaymentResult {
+  if (txn.voided) return { ok: false, error: 'This deal is voided — refunds are frozen.' };
+  const money = dealMoney(txn, payments);
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return { ok: false, error: 'Refund amount must be a positive whole-rupee PKR amount.' };
+  }
+  if (amount > money.collected) {
+    return {
+      ok: false,
+      error: `Refund of ${amount.toLocaleString()} exceeds the net collected amount of ${money.collected.toLocaleString()} on this deal.`,
     };
   }
   return { ok: true, currentCollected: money.collected };
@@ -327,7 +411,12 @@ export function computeFinancials(
     voidedDealsCount: 0,
   };
 
-  const commissionByTx = new Map(commissions.map((c) => [c.transactionId, c]));
+  const commissionsByTx = new Map<string, CommissionEntry[]>();
+  for (const commission of commissions) {
+    const entries = commissionsByTx.get(commission.transactionId) ?? [];
+    entries.push(commission);
+    commissionsByTx.set(commission.transactionId, entries);
+  }
 
   for (const t of transactions) {
     if (t.voided) {
@@ -347,10 +436,10 @@ export function computeFinancials(
     if (t.status === 'Completed') totals.completedDealsCount += 1;
     else totals.activeDealsCount += 1;
 
-    const entry = commissionByTx.get(t.id);
-    if (entry) {
-      totals.totalCommissionAccrued += entry.amountPKR;
-      totals.totalCommissionPaid += Math.min(entry.paidPKR, entry.amountPKR);
+    for (const entry of commissionsByTx.get(t.id) ?? []) {
+      const isAccrued = ['Accrued', 'Partially Paid', 'Paid'].includes(entry.status);
+      if (isAccrued) totals.totalCommissionAccrued += Math.max(0, entry.amountPKR);
+      totals.totalCommissionPaid += Math.min(Math.max(0, entry.paidPKR), Math.max(0, entry.amountPKR));
       if (entry.status === 'Accrued' || entry.status === 'Partially Paid') {
         totals.totalCommissionPayable += Math.max(0, entry.amountPKR - entry.paidPKR);
       }

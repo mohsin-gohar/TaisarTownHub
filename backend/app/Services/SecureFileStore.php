@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use RuntimeException;
 
 /**
  * Secure Document & Media Vault — the single gateway for writing private
@@ -30,10 +31,27 @@ class SecureFileStore
     /** Encrypt-on-write for uploaded files. Returns the logical (plaintext) size. */
     public static function storeUpload(string $disk, string $path, UploadedFile $file): int
     {
-        $plain = (string) file_get_contents($file->getRealPath());
-        $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
+        $realPath = $file->getRealPath();
+        if (!is_string($realPath) || !is_file($realPath) || !is_readable($realPath)) {
+            throw new RuntimeException('Uploaded file could not be read from temporary storage.');
+        }
 
-        Storage::disk($disk)->put($path, $blob);
+        $plain = file_get_contents($realPath);
+        if ($plain === false) {
+            throw new RuntimeException('Uploaded file could not be read from temporary storage.');
+        }
+
+        $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
+        $storage = Storage::disk($disk);
+        if (!$storage->put($path, $blob)) {
+            if ($storage->exists($path) && !$storage->delete($path)) {
+                Log::critical('Partial vault upload could not be cleaned after a failed write', [
+                    'disk' => $disk,
+                    'path_len' => strlen($path),
+                ]);
+            }
+            throw new RuntimeException('Vault storage write failed; upload was not committed.');
+        }
 
         return strlen($plain);
     }
@@ -42,24 +60,97 @@ class SecureFileStore
     public static function putBytes(string $disk, string $path, string $plain): int
     {
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
-        Storage::disk($disk)->put($path, $blob);
+        $storage = Storage::disk($disk);
+        if (!$storage->put($path, $blob)) {
+            if ($storage->exists($path) && !$storage->delete($path)) {
+                Log::critical('Partial vault byte write could not be cleaned', [
+                    'disk' => $disk,
+                    'path_len' => strlen($path),
+                ]);
+            }
+            throw new RuntimeException('Vault storage write failed; bytes were not committed.');
+        }
 
         return strlen($plain);
+    }
+
+    /**
+     * Copy bytes between private disks without deleting the source. This is
+     * used for database-backed quarantine transitions where the source must
+     * remain authoritative until the metadata transaction commits.
+     */
+    public static function copy(string $fromDisk, string $fromPath, string $toDisk, string $toPath): void
+    {
+        if (!Storage::disk($fromDisk)->exists($fromPath)) {
+            throw new RuntimeException('Vault source file is missing; copy was not performed.');
+        }
+
+        $plain = self::get($fromDisk, $fromPath);
+        self::putBytes($toDisk, $toPath, $plain);
+
+        if (self::checksum($toDisk, $toPath) !== hash('sha256', $plain)) {
+            try {
+                Storage::disk($toDisk)->delete($toPath);
+            } catch (\Throwable $exception) {
+                Log::critical('Failed to clean an unverifiable vault copy', [
+                    'to_disk' => $toDisk,
+                    'to_path_len' => strlen($toPath),
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+            throw new RuntimeException('Vault copy verification failed; source file was preserved.');
+        }
     }
 
     /** Move bytes between disks (re-encrypting) — used by quarantine promotion. */
     public static function move(string $fromDisk, string $fromPath, string $toDisk, string $toPath): void
     {
-        $plain = FileVaultCrypto::decrypt((string) Storage::disk($fromDisk)->get($fromPath));
+        $source = Storage::disk($fromDisk);
+        $target = Storage::disk($toDisk);
+
+        if (!$source->exists($fromPath)) {
+            throw new RuntimeException('Vault source file is missing; move was not performed.');
+        }
+
+        $stored = $source->get($fromPath);
+        if (!is_string($stored)) {
+            throw new RuntimeException('Vault source file could not be read; move was not performed.');
+        }
+
+        $plain = FileVaultCrypto::decrypt($stored);
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
-        Storage::disk($toDisk)->put($toPath, $blob);
-        Storage::disk($fromDisk)->delete($fromPath);
+        if (!$target->put($toPath, $blob)) {
+            if ($target->exists($toPath) && !$target->delete($toPath)) {
+                Log::critical('Partial vault move destination could not be cleaned', [
+                    'to_disk' => $toDisk,
+                    'to_path_len' => strlen($toPath),
+                ]);
+            }
+            throw new RuntimeException('Vault destination write failed; source file was preserved.');
+        }
+
+        if (!$source->delete($fromPath)) {
+            // Do not silently leave two competing copies. If cleanup also
+            // fails, log it; the source remains authoritative until DB commit.
+            if (!$target->delete($toPath)) {
+                Log::critical('Vault move destination cleanup failed after source delete failure', [
+                    'from_disk' => $fromDisk, 'from_path_len' => strlen($fromPath),
+                    'to_disk' => $toDisk, 'to_path_len' => strlen($toPath),
+                ]);
+            }
+            throw new RuntimeException('Vault source delete failed; move was not committed.');
+        }
     }
 
     /** Read plaintext bytes transparently (decrypts when the envelope is present). */
     public static function get(string $disk, string $path): string
     {
-        return FileVaultCrypto::decrypt((string) Storage::disk($disk)->get($path));
+        $stored = Storage::disk($disk)->get($path);
+        if (!is_string($stored)) {
+            throw new RuntimeException('Vault file could not be read from storage.');
+        }
+
+        return FileVaultCrypto::decrypt($stored);
     }
 
     /** SHA-256 of the plaintext content (integrity checksum stored in DB). */
@@ -83,10 +174,22 @@ class SecureFileStore
             return \App\Support\MalwareScanResult::skipped('clamav', 'temp_file_unavailable');
         }
 
-        file_put_contents($temp, self::get($disk, $path));
-
         try {
+            $plain = self::get($disk, $path);
+            $written = @file_put_contents($temp, $plain);
+            if ($written === false || $written !== strlen($plain)) {
+                return \App\Support\MalwareScanResult::skipped('clamav', 'temp_file_write_failed');
+            }
+
             return $scanner->scan($temp);
+        } catch (\Throwable $exception) {
+            Log::warning('Vault rescan could not materialize a readable plaintext file', [
+                'disk' => $disk,
+                'path_len' => strlen($path),
+                'error' => $exception->getMessage(),
+            ]);
+
+            return \App\Support\MalwareScanResult::skipped('clamav', 'vault_read_failed');
         } finally {
             @unlink($temp);
         }
@@ -122,7 +225,7 @@ class SecureFileStore
 
         return response()->streamDownload(
             function () use ($disk, $path) {
-                echo FileVaultCrypto::decrypt((string) Storage::disk($disk)->get($path));
+                echo self::get($disk, $path);
             },
             $safeName,
             [

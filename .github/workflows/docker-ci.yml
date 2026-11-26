@@ -15,11 +15,15 @@
 
 name: Docker CI
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
-    branches: [main]
+    branches: [main, qa/cross-browser-multireplica]
   pull_request:
-    branches: [main]
+    branches: [main, qa/cross-browser-multireplica]
 
 env:
   REGISTRY: ghcr.io
@@ -28,8 +32,11 @@ env:
   # base file BEFORE merging docker-compose.ci.yml, so the values must exist in
   # the environment; setting them only at service level in the override is not
   # enough and aborts every `docker compose` command in this workflow.
+  APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
   DB_ROOT_PASSWORD: test-root-password
   DB_PASSWORD: test-password
+  DB_DATABASE: taisartownhub_test
+  DB_USERNAME: taisar
   REDIS_PASSWORD: test-redis-password
 
 jobs:
@@ -74,6 +81,14 @@ jobs:
 
       - name: Run backend healthcheck
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php scripts/healthcheck.php
+
+      - name: Run strict production configuration preflight
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm production-preflight
+
+      - name: Verify real antivirus clean and threat verdicts
+        # The disposable CI stack has a healthy ClamAV daemon with signatures.
+        # This sends actual file bytes over clamd INSTREAM; no production data.
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php scripts/clamav-smoke.php
 
       - name: Dump diagnostics on failure
         if: failure()
@@ -253,6 +268,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up PHP CLI for Docker-volume backup helper
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
       # Images built in the other jobs live on different runners, so they are
       # not available here. Rebuild the same two images with the shared GHA
       # cache and force Compose to reuse them (`--no-build`), instead of letting
@@ -279,7 +300,7 @@ jobs:
           load: true
           tags: taisartownhub-frontend:test
           build-args: |
-            VITE_API_URL=http://localhost/api
+            VITE_API_URL=http://127.0.0.1/api
             VITE_APP_MODE=production
             VITE_STRIPE_PUBLIC_KEY=pk_test_ci
             VITE_SENTRY_DSN=
@@ -296,7 +317,7 @@ jobs:
           set -euo pipefail
           docker run --rm --add-host frontend:127.0.0.1 \
             -v "$PWD/docker/nginx.ci.conf:/etc/nginx/nginx.ci.conf:ro" \
-            nginx:1.27-alpine nginx -t -c /etc/nginx/nginx.ci.conf
+            nginx:1.30.8-alpine nginx -t -c /etc/nginx/nginx.ci.conf
           mkdir -p nginx/ssl
           openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
             -subj "/CN=localhost" \
@@ -304,16 +325,16 @@ jobs:
           docker run --rm --add-host frontend:127.0.0.1 \
             -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
             -v "$PWD/nginx/ssl:/etc/nginx/ssl:ro" \
-            nginx:1.27-alpine nginx -t
+            nginx:1.30.8-alpine nginx -t
           # Legacy image configs (root Dockerfile.prod, deprecated but still
           # tracked) had the same invalid CORS block. Validate them too so no
           # shipped config can fail on startup.
           docker run --rm \
             -v "$PWD/docker/backend/nginx.conf:/etc/nginx/nginx.conf:ro" \
-            nginx:1.27-alpine nginx -t
+            nginx:1.30.8-alpine nginx -t
           docker run --rm --add-host backend:127.0.0.1 \
             -v "$PWD/docker/frontend/nginx.conf:/etc/nginx/nginx.conf:ro" \
-            nginx:1.27-alpine nginx -t
+            nginx:1.30.8-alpine nginx -t
 
       - name: Start full stack
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build
@@ -329,11 +350,68 @@ jobs:
             backend:healthy frontend:healthy nginx:healthy \
             worker:healthy scheduler:healthy
 
-      - name: Seed enterprise catalog (production-safe)
-        # APP_ENV=production makes DatabaseSeeder run EnterpriseSeeder only:
-        # permissions, roles, plans and settings. No demo accounts or fixtures.
-        # Registration below needs the agency-owner role and plan catalog.
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend php artisan db:seed --force --no-interaction
+      - name: Verify two-replica backend operation
+        # Scale only the disposable CI stack. No production systems or data
+        # are involved. Both replicas must pass their own PHP healthcheck and
+        # the nginx gateway must continue serving API traffic after scaling.
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build --scale backend=2 backend
+          deadline=$((SECONDS + 180))
+          healthy=0
+          replicas=()
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            mapfile -t replicas < <(docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -q backend)
+            if [ "${#replicas[@]}" -eq 2 ]; then
+              healthy=0
+              for id in "${replicas[@]}"; do
+                if docker exec "$id" php scripts/healthcheck.php >/dev/null 2>&1; then
+                  healthy=$((healthy + 1))
+                fi
+              done
+              if [ "$healthy" -eq 2 ]; then
+                echo "both backend replicas are healthy"
+                break
+              fi
+            fi
+            sleep 5
+          done
+          test "${#replicas[@]}" -eq 2
+          test "$healthy" -eq 2
+          for attempt in $(seq 1 12); do
+            BODY=$(curl -fsS --retry 3 --retry-delay 1 --retry-connrefused http://localhost/api/health)
+            grep -q "healthy" <<<"$BODY"
+          done
+          echo "two-replica gateway health requests passed"
+
+      - name: Verify shared private quarantine volume across replicas and worker
+        run: |
+          set -euo pipefail
+          mapfile -t replicas < <(docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -q backend)
+          test "${#replicas[@]}" -eq 2
+          smoke_file=/var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt
+          docker exec "${replicas[0]}" sh -c 'mkdir -p /var/www/html/storage/app/private/quarantine && printf "shared-volume-ok" > /var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt'
+          docker exec "${replicas[1]}" test -f "$smoke_file"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T worker test -f "$smoke_file"
+
+      - name: Run Docker-volume-aware backup smoke
+        run: |
+          set -euo pipefail
+          backup_dir="$RUNNER_TEMP/tth compose backup"
+          bash scripts/backup.sh "$backup_dir"
+          vault_archive="$(find "$backup_dir" -maxdepth 1 -name 'tth_vault_*.tar.gz' -print -quit)"
+          test -n "$vault_archive"
+          tar -tzf "$vault_archive" | grep -q '^private/quarantine/replica-volume-smoke.txt$'
+          tar -tzf "$vault_archive" | grep -q '^public/'
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend rm -f /var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt
+
+      - name: Generate ephemeral demo password for disposable CI data
+        run: echo "CI_DEMO_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - name: Seed disposable enterprise data and demo personas
+        # The password exists only for this isolated job; the seeder never
+        # writes it into production or source control.
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e DEMO_STAFF_PASSWORD="$CI_DEMO_PASSWORD" backend php artisan db:seed --force --no-interaction
 
       - name: Run integration smoke tests
         run: |
@@ -391,6 +469,54 @@ jobs:
           grep -q "$EMAIL" <<<"$BODY"
           echo "integration smoke tests: gateway, preflight, register, login, me, logout all passed"
 
+      - name: Set up Node 24 for API-backed browser role matrix
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install browser test dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium for API-backed browser role matrix
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run API-backed browser role matrix
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1
+          PLAYWRIGHT_API_URL: http://127.0.0.1/api
+          PLAYWRIGHT_SKIP_WEBSERVER: "true"
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+        run: npx playwright test e2e/role-based.spec.ts --workers=1
+
+      - name: Audit public links, buttons, forms and user flows
+        working-directory: frontend
+        env:
+          AUDIT_BASE: http://127.0.0.1
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+        run: npx tsx scripts/browser-interactions.mts
+
+      - name: Audit admin tabs and buttons across agency personas
+        working-directory: frontend
+        env:
+          AUDIT_BASE: http://127.0.0.1
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+        run: npx tsx scripts/browser-admin-interactions.mts
+
+      - name: Run disposable 10-worker API load and transaction integrity probe
+        working-directory: frontend
+        env:
+          PROBE_API: http://127.0.0.1/api
+          LOAD_TEST_EMAIL: admin@taisartownhub.com
+          LOAD_TEST_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+          LOAD_TEST_ALLOW_MUTATIONS: "true"
+          LOAD_COOLDOWN: "65"
+        run: npx tsx scripts/load-test.mts 10 10
+
       - name: Dump diagnostics on failure
         if: failure()
         run: |
@@ -400,3 +526,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+

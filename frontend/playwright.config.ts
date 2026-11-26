@@ -28,7 +28,9 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
+  // Integration CI can target the already-running Docker/nginx frontend
+  // and API directly; ordinary local/CI browser suites still start Vite.
+  webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER === 'true' ? undefined : {
     command: `npm run dev:e2e -- --port ${basePort}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,

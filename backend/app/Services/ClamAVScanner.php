@@ -136,43 +136,46 @@ class ClamAVScanner implements MalwareScanner
         stream_set_timeout($socket, $this->timeout);
 
         try {
-            // 1) command
             if ($this->writeAll($socket, "zINSTREAM\0") === false) {
                 return null;
             }
 
-            // 2) chunks: [4-byte big-endian length][data]
             $handle = @fopen($filePath, 'rb');
             if ($handle === false) {
                 return null;
             }
 
-            while (!feof($handle)) {
-                $chunk = fread($handle, self::CHUNK_SIZE);
-                if ($chunk === false) {
-                    break;
-                }
-                if ($chunk === '') {
-                    if (feof($handle)) {
-                        break;
+            try {
+                while (!feof($handle)) {
+                    $chunk = fread($handle, self::CHUNK_SIZE);
+                    if ($chunk === false) {
+                        return null;
                     }
-                    continue;
-                }
-                if ($this->writeAll($socket, pack('N', strlen($chunk)) . $chunk) === false) {
-                    fclose($handle);
+                    if ($chunk === '') {
+                        if (feof($handle)) {
+                            break;
+                        }
 
-                    return null;
+                        // A local file stream should either yield bytes or EOF.
+                        // An empty non-EOF read is not a complete scan input.
+                        return null;
+                    }
+                    if ($this->writeAll($socket, pack('N', strlen($chunk)) . $chunk) === false) {
+                        return null;
+                    }
                 }
+            } finally {
+                fclose($handle);
             }
-            fclose($handle);
 
-            // 3) end of stream
             if ($this->writeAll($socket, pack('N', 0)) === false) {
                 return null;
             }
 
-            // 4) reply (null-terminated)
+            // clamd replies are null-terminated. Never accept an unterminated
+            // "OK" from a timed-out or prematurely closed connection.
             $response = '';
+            $terminated = false;
             while (!feof($socket)) {
                 $read = fread($socket, 4096);
                 if ($read === false || $read === '') {
@@ -180,12 +183,22 @@ class ClamAVScanner implements MalwareScanner
                 }
                 $response .= $read;
                 if (str_contains($response, "\0")) {
+                    $terminated = true;
                     break;
                 }
             }
 
-            $reply = trim(str_replace("\0", '', $response));
+            if (!$terminated) {
+                Log::warning('ClamAV clamd reply was not null-terminated — verdict unknown', [
+                    'host' => $host,
+                    'port' => $port,
+                    'timed_out' => (bool) (stream_get_meta_data($socket)['timed_out'] ?? false),
+                ]);
 
+                return null;
+            }
+
+            $reply = trim(str_replace("\0", '', $response));
             if ($reply === '') {
                 Log::warning('ClamAV clamd returned an empty reply — verdict unknown', [
                     'host' => $host,
@@ -195,7 +208,7 @@ class ClamAVScanner implements MalwareScanner
                 return null;
             }
 
-            if (str_starts_with($reply, 'OK')) {
+            if (preg_match('/^(?:stream:\s*)?OK$/i', $reply) === 1) {
                 return MalwareScanResult::clean('clamav');
             }
 
@@ -203,8 +216,6 @@ class ClamAVScanner implements MalwareScanner
                 return MalwareScanResult::infected('clamav', [$reply]);
             }
 
-            // Anything else (e.g. "INSTREAM size limit exceeded. ERROR") is an
-            // error, not a clean verdict — never report it as clean.
             Log::warning('ClamAV clamd returned an unexpected reply', [
                 'reply' => Str::limit($reply, 200),
             ]);

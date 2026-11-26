@@ -82,6 +82,7 @@ class Permissions
         'legacy.edit_properties' => ['(legacy) edit_properties', 'legacy', false],
         'legacy.delete_properties' => ['(legacy) delete_properties', 'legacy', false],
         'legacy.view_private_documents' => ['(legacy) view_private_documents', 'legacy', false],
+        'legacy.view_sensitive_cnic' => ['(legacy) view_sensitive_cnic', 'legacy', false],
         'legacy.upload_documents' => ['(legacy) upload_documents', 'legacy', false],
         'legacy.verify_documents' => ['(legacy) verify_documents', 'legacy', false],
         'legacy.manage_sellers' => ['(legacy) manage_sellers', 'legacy', false],
@@ -91,6 +92,8 @@ class Permissions
         'legacy.create_transactions' => ['(legacy) create_transactions', 'legacy', false],
         'legacy.update_transactions' => ['(legacy) update_transactions', 'legacy', false],
         'legacy.cancel_transactions' => ['(legacy) cancel_transactions', 'legacy', false],
+        'legacy.void_transactions' => ['(legacy) void_transactions', 'legacy', false],
+        'legacy.approve_transactions' => ['(legacy) approve_transactions', 'legacy', false],
         'legacy.view_commissions' => ['(legacy) view_commissions', 'legacy', false],
         'legacy.manage_payments' => ['(legacy) manage_payments', 'legacy', false],
         'legacy.view_inquiries' => ['(legacy) view_inquiries', 'legacy', false],
@@ -114,8 +117,9 @@ class Permissions
         'finance.create_transaction' => ['create_transactions'],
         'finance.update_transaction' => ['update_transactions', 'cancel_transactions'],
         'finance.manage_payments' => ['manage_payments'],
-        'agency.view' => ['view_reports'],
+        // agency.view is profile/workspace access, not permission to view reports.
         'documents.manage_permissions' => ['verify_documents'],
+        'documents.view_sensitive' => ['view_sensitive_cnic'],
     ];
 
     /** System agency role key => enterprise permission keys (aliases appended by grants()). */
@@ -126,9 +130,10 @@ class Permissions
             'properties.publish', 'properties.assign', 'properties.feature',
             'documents.view', 'documents.upload', 'documents.update', 'documents.download',
             'documents.delete', 'documents.restore', 'documents.manage_permissions', 'documents.view_sensitive',
+            'legacy.view_sensitive_cnic',
             'crm.view', 'crm.create_lead', 'crm.update_lead', 'crm.assign_lead', 'crm.delete_lead', 'crm.export',
             'finance.view', 'finance.create_transaction', 'finance.update_transaction',
-            'finance.manage_payments', 'finance.view_reports',
+            'finance.manage_payments', 'finance.view_reports', 'legacy.void_transactions', 'legacy.approve_transactions',
             'legacy.manage_sellers', 'legacy.manage_buyers', 'legacy.submit_buyer',
             'legacy.manage_media', 'legacy.upload_media',
         ],
@@ -198,7 +203,7 @@ class Permissions
     /** Platform role key => permission keys (legacy + enterprise). */
     public const PLATFORM_ROLE_GRANTS = [
         'super_admin' => null, // null = ALL catalog keys
-        'admin' => null,       // ALL except platform-settings/users management below
+        'admin' => null,       // ALL except the explicit exclusions below
         'moderator' => [
             'properties.approve', 'properties.view', 'properties.update',
             'admin.view_audit_logs', 'admin.view_reports', 'admin.view_security_events',
@@ -227,10 +232,13 @@ class Permissions
         ],
     ];
 
-    /** Platform keys that even the legacy `admin` role does not get when resolving "ALL". */
+    /** Keys that the legacy `admin` role must not receive from its broad catalog grant. */
     public const ADMIN_EXCLUDED = [
         'admin.manage_platform_settings',
         'admin.manage_users',
+        // Irreversible bookkeeping voids are reserved for Super Admin and
+        // the tenant's Agency Owner, not the platform's legacy Admin role.
+        'legacy.void_transactions',
     ];
 
     public static function allKeys(): array

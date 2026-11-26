@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\EmailVerificationToken;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Hash;
 
@@ -52,6 +53,49 @@ class AuthSecurityTest extends EnterpriseTestCase
             'password' => 'Secret123!',
         ])->assertStatus(422)
             ->assertJsonValidationErrors('email');
+    }
+
+    public function test_suspended_account_state_is_not_disclosed_by_login_errors(): void
+    {
+        $user = $this->makeUser('operator', ['email' => 'suspended@example.test']);
+        $user->forceFill(['status' => 'suspended'])->save();
+
+        $wrongPassword = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'WrongPassword!',
+        ])->assertStatus(422)->json('errors.email.0');
+
+        $correctPassword = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'Secret123!',
+        ])->assertStatus(422)->json('errors.email.0');
+
+        $this->assertSame('The provided credentials are incorrect.', $wrongPassword);
+        $this->assertSame($wrongPassword, $correctPassword);
+    }
+
+    public function test_email_verification_token_is_consumed_once_via_post_body(): void
+    {
+        $user = $this->makeUser('operator', ['email' => 'verify@example.test']);
+        $plainToken = str_repeat('V', 40);
+
+        EmailVerificationToken::create([
+            'email' => $user->email,
+            'token_hash' => hash('sha256', $plainToken),
+        ]);
+
+        $this->postJson('/api/auth/email/verify', [
+            'email' => $user->email,
+            'token' => $plainToken,
+        ])->assertOk()->assertJsonPath('success', true);
+
+        $user->refresh();
+        $this->assertNotNull($user->email_verified_at);
+
+        $this->postJson('/api/auth/email/verify', [
+            'email' => $user->email,
+            'token' => $plainToken,
+        ])->assertStatus(400);
     }
 
     public function test_successful_login_issues_token_and_me_returns_user(): void

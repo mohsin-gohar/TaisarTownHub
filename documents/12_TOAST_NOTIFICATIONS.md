@@ -2,6 +2,9 @@
 
 **Version:** 2.0.0 · **Last updated:** 2026-11-08
 
+> **Historical interaction design:** current toast and mutation behavior is defined by the live frontend source and tests; do not treat the original UX notes as implementation evidence.
+
+
 ## 1. Toast System
 
 - **Component:** `ToastContainer` (rendered in App.tsx, both public and admin).

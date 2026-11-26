@@ -63,51 +63,90 @@ class AgencyStaffController extends Controller
             'role_id' => 'required|string|max:64',
         ]);
 
-        $agency = Agency::findOrFail($agencyId);
-
-        // G-8: staff quota (active members + pending invitations) enforced server-side.
-        if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId))) {
-            return PlanLimits::deny('Staff limit reached for your subscription plan. Upgrade to invite more members.', $block);
-        }
-
+        $email = mb_strtolower(trim((string) $request->email));
         $role = $this->resolveAgencyRole($agencyId, $request->role_id);
 
-        // Only an existing owner may mint another owner invitation. Without
-        // this guard any agency.manage_staff holder could invite themselves
-        // (or an accomplice) into full agency ownership.
+        // Only an existing owner may mint another owner invitation.
         if ($role->id === 'role_agency_owner' && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Only an agency owner may invite another owner.',
             ], 403);
         }
-
-        if (User::where('email', $request->email)->exists()
-            && AgencyMember::where('agency_id', $agencyId)
-                ->whereHas('user', fn ($q) => $q->where('email', $request->email))
-                ->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This user is already a member of your agency.',
-            ], 422);
-        }
+        $this->assertCanGrantPermissions($request, $agencyId, $role->permissions ?? []);
 
         $token = Str::random(48);
-        $invitation = AgencyInvitation::create([
-            'agency_id' => $agencyId,
-            'email' => $request->email,
-            'role_id' => $role->id,
-            'token_hash' => hash('sha256', $token),
-            'invited_by' => $request->user()->id,
-            'status' => 'pending',
-            'expires_at' => now()->addDays(7),
-        ]);
+        $result = DB::transaction(function () use ($agencyId, $email, $role, $request, $token): array {
+            // Serialize invitations and acceptances for this agency so two
+            // concurrent requests cannot both consume the last staff slot.
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
 
-        $this->writeAudit($request, 'agency.invite', 'invitation:' . $invitation->id, 'Invited ' . $request->email . ' as ' . $role->name, [
+            if ($role->id === 'role_agency_owner' && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
+                return ['error' => 'owner_only'];
+            }
+
+            $alreadyMember = User::whereRaw('LOWER(email) = ?', [$email])
+                ->whereHas('memberships', fn ($query) => $query
+                    ->where('agency_id', $agencyId)
+                    ->where('status', 'active'))
+                ->exists();
+
+            if ($alreadyMember) {
+                return ['error' => 'already_member'];
+            }
+
+            $pendingInvite = AgencyInvitation::where('agency_id', $agencyId)
+                ->whereRaw('LOWER(email) = ?', [$email])
+                ->where('status', 'pending')
+                ->where('expires_at', '>', now())
+                ->exists();
+
+            if ($pendingInvite) {
+                return ['error' => 'pending_invitation'];
+            }
+
+            if ($block = PlanLimits::block(
+                Agency::findOrFail($agencyId),
+                'staff',
+                fn () => PlanLimits::staffUsed($agencyId)
+            )) {
+                return ['blocked' => $block];
+            }
+
+            $invitation = AgencyInvitation::create([
+                'agency_id' => $agencyId,
+                'email' => $email,
+                'role_id' => $role->id,
+                'token_hash' => hash('sha256', $token),
+                'invited_by' => $request->user()->id,
+                'status' => 'pending',
+                'expires_at' => now()->addDays(7),
+            ]);
+
+            return ['invitation' => $invitation];
+        }, 3);
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Staff limit reached for your subscription plan. Upgrade to invite more members.', $result['blocked']);
+        }
+
+        if (($result['error'] ?? null) === 'owner_only') {
+            return response()->json(['success' => false, 'message' => 'Only an agency owner may invite another owner.'], 403);
+        }
+        if (($result['error'] ?? null) === 'already_member') {
+            return response()->json(['success' => false, 'message' => 'This user is already a member of your agency.'], 422);
+        }
+        if (($result['error'] ?? null) === 'pending_invitation') {
+            return response()->json(['success' => false, 'message' => 'A pending invitation already exists for this email. Revoke it before sending another.'], 409);
+        }
+
+        /** @var AgencyInvitation $invitation */
+        $invitation = $result['invitation'];
+        $this->writeAudit($request, 'agency.invite', 'invitation:' . $invitation->id, 'Invited ' . $email . ' as ' . $role->name, [
             'agency_id' => $agencyId,
             'entity_type' => 'agency_invitation',
             'entity_id' => (string) $invitation->id,
-            'metadata' => ['email' => $request->email, 'role' => $role->key],
+            'metadata' => ['email' => $email, 'role' => $role->key],
         ]);
 
         // No mail provider is configured (MAIL_MAILER=log), so the token is
@@ -120,14 +159,12 @@ class AgencyStaffController extends Controller
                 'id' => $invitation->id,
                 'email' => $invitation->email,
                 'role_id' => $invitation->role_id,
-                'role_name' => $role->name,
-                'expires_at' => $invitation->expires_at,
+                'expires_at' => $invitation->expires_at?->toIso8601String(),
                 'invite_token' => $token,
             ],
         ], 201);
     }
 
-    /** GET /api/agency/invitations */
     public function invitations(Request $request)
     {
         $agencyId = $this->requireAgency($request);
@@ -155,21 +192,32 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
-        $invitation = AgencyInvitation::where('agency_id', $agencyId)->findOrFail($id);
-        $invitation->update(['status' => 'revoked']);
+        $result = DB::transaction(function () use ($agencyId, $id): array {
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+            $invitation = AgencyInvitation::where('agency_id', $agencyId)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        $this->writeAudit($request, 'agency.invite.revoke', 'invitation:' . $id, 'Invitation revoked', [
-            'agency_id' => $agencyId,
-        ]);
+            if ($invitation->status !== 'pending') {
+                return ['revoked' => false];
+            }
+
+            $invitation->status = 'revoked';
+            $invitation->save();
+
+            return ['revoked' => true];
+        }, 3);
+
+        if (!$result['revoked']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only pending invitations can be revoked.',
+            ], 422);
+        }
 
         return response()->json(['success' => true, 'message' => 'Invitation revoked.']);
     }
 
-    /**
-     * POST /api/agency/invitations/accept — accept an invite.
-     * Authenticated users join directly; new users may register through the
-     * invite by supplying name + password with the token.
-     */
     public function acceptInvitation(Request $request)
     {
         $request->validate([
@@ -178,103 +226,129 @@ class AgencyStaffController extends Controller
             'password' => 'nullable|string|min:8',
         ]);
 
-        $invitation = AgencyInvitation::where('token_hash', hash('sha256', $request->token))
-            ->where('status', 'pending')
-            ->first();
-
+        $invitation = AgencyInvitation::where('token_hash', hash('sha256', $request->token))->first();
         if (!$invitation) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid or already used invitation token.',
             ], 422);
         }
-        if ($invitation->expires_at !== null && $invitation->expires_at->isPast()) {
-            $invitation->update(['status' => 'expired']);
-            return response()->json([
-                'success' => false,
-                'message' => 'This invitation has expired.',
-            ], 422);
-        }
 
-        $user = null;
+        $authenticatedUser = null;
         if ($request->bearerToken()) {
             try {
-                $user = auth('sanctum')->user();
-            } catch (\Throwable $e) {
-                $user = null;
+                $authenticatedUser = auth('sanctum')->user();
+            } catch (\Throwable $exception) {
+                $authenticatedUser = null;
             }
         }
 
-        if (!$user) {
-            // Register through invitation
+        if (!$authenticatedUser) {
             $request->validate([
                 'name' => 'required|string|min:2|max:255',
                 'password' => 'required|string|min:8',
             ]);
-
-            if (User::where('email', $invitation->email)->exists()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An account with this email already exists — please sign in first.',
-                ], 422);
-            }
-
-            // SECURITY: agency roles live ONLY in agency_members.role_id.
-            // users.role is the legacy *platform* role key. Mapping an agency
-            // owner invitation to 'admin' here made every invitee a platform
-            // administrator (isPlatformUser() grants admin.manage_agencies).
-            // Use the same non-platform base role as agency self-registration
-            // (AgencyController::register) for every invited account.
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $invitation->email,
-                'password' => Hash::make($request->password),
-                'role' => 'dealer',
-                'last_login_at' => now(),
-            ]);
-        } elseif (strtolower($user->email) !== strtolower($invitation->email)) {
+        } elseif (strtolower($authenticatedUser->email) !== strtolower($invitation->email)) {
             return response()->json([
                 'success' => false,
                 'message' => 'This invitation was issued to a different email address.',
             ], 403);
         }
 
-        try {
-            $membership = DB::transaction(function () use ($invitation, $user) {
-                // Re-read and claim the row INSIDE the transaction. The initial
-                // lookup above is inherently race-prone: two concurrent calls
-                // could otherwise both mint a token from one invitation.
-                $claim = AgencyInvitation::where('id', $invitation->id)
-                    ->where('status', 'pending')
+        $result = DB::transaction(function () use ($invitation, $authenticatedUser, $request): array {
+            // Keep the same lock order as invite/revoke: agency first, then
+            // invitation. Expiry is checked again after both locks are held.
+            $agency = Agency::whereKey($invitation->agency_id)->lockForUpdate()->firstOrFail();
+            $claim = AgencyInvitation::whereKey($invitation->id)->lockForUpdate()->first();
+
+            if (!$claim || $claim->status !== 'pending') {
+                return ['error' => 'used'];
+            }
+
+            if ($claim->expires_at !== null && $claim->expires_at->isPast()) {
+                $claim->status = 'expired';
+                $claim->save();
+
+                return ['error' => 'expired'];
+            }
+
+            // The pending invitation already occupies one staff slot. Check
+            // the post-acceptance usage (active members + other live invites)
+            // so a valid invite is not blocked merely because it is at quota.
+            $staffUsageAfterAcceptance = max(0, PlanLimits::staffUsed($agency->id) - 1);
+            if ($block = PlanLimits::block($agency, 'staff', fn () => $staffUsageAfterAcceptance)) {
+                return ['blocked' => $block];
+            }
+
+            if ($authenticatedUser === null) {
+                $existing = User::whereRaw('LOWER(email) = ?', [strtolower($claim->email)])
                     ->lockForUpdate()
                     ->first();
-                if (!$claim) {
-                    throw new \RuntimeException('invitation_already_claimed');
+                if ($existing) {
+                    return ['error' => 'account_exists'];
                 }
 
-                $membership = AgencyMember::updateOrCreate(
-                    ['agency_id' => $claim->agency_id, 'user_id' => $user->id],
-                    [
-                        'role_id' => $claim->role_id,
-                        'status' => 'active',
-                        'deactivated_at' => null,
-                        'invited_by' => $claim->invited_by,
-                    ]
-                );
-                $claim->update(['status' => 'accepted', 'accepted_at' => now()]);
-                return $membership;
-            });
-        } catch (\RuntimeException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid or already used invitation token.',
-            ], 422);
+                // Agency roles live only in agency_members.role_id. The base
+                // user role must never be promoted to a platform administrator.
+                $user = User::create([
+                    'name' => strip_tags($request->name),
+                    'email' => strtolower($claim->email),
+                    'password' => Hash::make($request->password),
+                    'role' => 'dealer',
+                    'last_login_at' => now(),
+                ]);
+            } else {
+                $user = User::whereKey($authenticatedUser->id)->lockForUpdate()->first();
+                if (!$user || strtolower($user->email) !== strtolower($claim->email)) {
+                    return ['error' => 'email_mismatch'];
+                }
+                if ($user->authenticationBlockedReason() !== null) {
+                    return ['error' => 'account_blocked'];
+                }
+            }
+
+            $membership = AgencyMember::updateOrCreate(
+                ['agency_id' => $claim->agency_id, 'user_id' => $user->id],
+                [
+                    'role_id' => $claim->role_id,
+                    'status' => 'active',
+                    'deactivated_at' => null,
+                    'invited_by' => $claim->invited_by,
+                ]
+            );
+
+            $claim->update(['status' => 'accepted', 'accepted_at' => now()]);
+
+            return ['user' => $user->fresh(), 'membership' => $membership, 'agency' => $agency];
+        }, 3);
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Staff limit reached for your subscription plan. Contact the agency owner to upgrade.', $result['blocked']);
         }
+
+        if (isset($result['error'])) {
+            $message = match ($result['error']) {
+                'expired' => 'This invitation has expired.',
+                'account_exists' => 'An account with this email already exists — please sign in first.',
+                'email_mismatch' => 'This invitation was issued to a different email address.',
+                'account_blocked' => 'This account cannot accept invitations right now.',
+                default => 'Invalid or already used invitation token.',
+            };
+            $status = $result['error'] === 'email_mismatch' ? 403 : 422;
+
+            return response()->json(['success' => false, 'message' => $message], $status);
+        }
+
+        /** @var User $user */
+        $user = $result['user'];
+        /** @var AgencyMember $membership */
+        $membership = $result['membership'];
+        $agency = $result['agency'];
 
         $token = $user->createToken('auth-token')->plainTextToken;
 
-        $this->writeAudit($request, 'agency.invite.accept', 'user:' . $user->id, 'Joined agency ' . $invitation->agency_id, [
-            'agency_id' => $invitation->agency_id,
+        $this->writeAudit($request, 'agency.invite.accept', 'user:' . $user->id, 'Joined agency ' . $agency->id, [
+            'agency_id' => $agency->id,
             'entity_type' => 'agency_member',
             'entity_id' => (string) $membership->id,
         ]);
@@ -284,7 +358,7 @@ class AgencyStaffController extends Controller
         return response()->json([
             'success' => true,
             'token' => $token,
-            'message' => 'Invitation accepted. You now belong to ' . ($invitation->agency?->name ?? 'the agency') . '.',
+            'message' => 'Invitation accepted. You now belong to ' . $agency->name . '.',
             'user' => [
                 'id' => $fresh->id,
                 'name' => $fresh->name,
@@ -292,7 +366,7 @@ class AgencyStaffController extends Controller
                 'role' => $fresh->role,
                 'dealer_id' => $fresh->dealer_id,
                 'permissions' => \App\Support\RolePermissions::forRole($fresh->role),
-                'enterprise_permissions' => $fresh->permissionsFor($invitation->agency_id),
+                'enterprise_permissions' => $fresh->permissionsFor($agency->id),
                 'agencies' => $fresh->memberAgencies(),
                 'is_platform' => $fresh->isPlatformUser(),
             ],
@@ -307,8 +381,6 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
-        $member = AgencyMember::where('agency_id', $agencyId)->findOrFail($id);
-
         $request->validate([
             'role_id' => 'sometimes|string|max:64',
             'status' => 'sometimes|in:active,deactivated',
@@ -316,64 +388,80 @@ class AgencyStaffController extends Controller
             'permissions.*' => 'string|max:100',
         ]);
 
-        $payload = [];
+        return DB::transaction(function () use ($request, $agencyId, $id) {
+            // Serialize owner changes on the agency row. Without this lock,
+            // two concurrent requests could each see two owners and remove
+            // one, leaving the agency with no active owner.
+            Agency::where('id', $agencyId)->lockForUpdate()->firstOrFail();
+            $member = AgencyMember::where('agency_id', $agencyId)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        if ($request->has('role_id')) {
-            $role = $this->resolveAgencyRole($agencyId, $request->role_id);
-            // Privilege escalation guard: only an existing owner may promote to
-            // or demote from the owner role.
-            $requesterIsOwner = $this->requesterIsOwner($agencyId, $request->user()->id);
-            if (($role->id === 'role_agency_owner' || $member->role_id === 'role_agency_owner')
-                && !$requesterIsOwner) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Only an agency owner may change owner membership.',
-                ], 403);
+            $payload = [];
+
+            if ($request->has('role_id')) {
+                $role = $this->resolveAgencyRole($agencyId, $request->role_id);
+                $requesterIsOwner = $this->requesterIsOwner($agencyId, $request->user()->id);
+                if (($role->id === 'role_agency_owner' || $member->role_id === 'role_agency_owner')
+                    && !$requesterIsOwner) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Only an agency owner may change owner membership.',
+                    ], 403);
+                }
+                $this->assertCanGrantPermissions($request, $agencyId, $role->permissions ?? []);
+                if ($member->role_id === 'role_agency_owner' && $role->id !== 'role_agency_owner'
+                    && $member->status === 'active' && $this->activeOwnerCount($agencyId) <= 1) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'An agency must keep at least one active owner.',
+                    ], 422);
+                }
+                $payload['role_id'] = $role->id;
             }
-            // Never demote the last active owner
-            if ($member->role_id === 'role_agency_owner' && $role->id !== 'role_agency_owner'
-                && $this->activeOwnerCount($agencyId) <= 1) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An agency must keep at least one active owner.',
-                ], 422);
+
+            if ($request->has('status')) {
+                if ($member->role_id === 'role_agency_owner' && $request->status === 'deactivated'
+                    && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Only an agency owner may deactivate an owner membership.',
+                    ], 403);
+                }
+                if ($member->role_id === 'role_agency_owner' && $member->status === 'active'
+                    && $request->status === 'deactivated' && $this->activeOwnerCount($agencyId) <= 1) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'An agency must keep at least one active owner.',
+                    ], 422);
+                }
+                $payload['status'] = $request->status;
+                $payload['deactivated_at'] = $request->status === 'deactivated' ? now() : null;
             }
-            $payload['role_id'] = $role->id;
-        }
 
-        if ($request->has('status')) {
-            if ($member->role_id === 'role_agency_owner' && $request->status === 'deactivated'
-                && $this->activeOwnerCount($agencyId) <= 1) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An agency must keep at least one active owner.',
-                ], 422);
+            if ($request->has('permissions')) {
+                $invalid = array_diff($request->permissions, Permissions::agencyAssignable());
+                if ($invalid) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
+                    ], 422);
+                }
+                $this->assertCanGrantPermissions($request, $agencyId, $request->permissions);
+                $payload['permissions'] = array_values($request->permissions);
             }
-            $payload['status'] = $request->status;
-            $payload['deactivated_at'] = $request->status === 'deactivated' ? now() : null;
-        }
 
-        if ($request->has('permissions')) {
-            $invalid = array_diff($request->permissions, Permissions::agencyAssignable());
-            if ($invalid) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
-                ], 422);
-            }
-            $payload['permissions'] = array_values($request->permissions);
-        }
+            $member->update($payload);
 
-        $member->update($payload);
+            $this->writeAudit($request, 'agency.member.update', 'member:' . $member->id, 'Member updated', [
+                'agency_id' => $agencyId,
+                'entity_type' => 'agency_member',
+                'entity_id' => (string) $member->id,
+                'metadata' => $payload,
+            ]);
 
-        $this->writeAudit($request, 'agency.member.update', 'member:' . $member->id, 'Member updated', [
-            'agency_id' => $agencyId,
-            'entity_type' => 'agency_member',
-            'entity_id' => (string) $member->id,
-            'metadata' => $payload,
-        ]);
-
-        return response()->json(['success' => true, 'message' => 'Member updated.']);
+            return response()->json(['success' => true, 'message' => 'Member updated.']);
+        }, 3);
     }
 
     /** DELETE /api/agency/members/{id} — deactivate (never hard-delete). */
@@ -382,24 +470,37 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
-        $member = AgencyMember::where('agency_id', $agencyId)->findOrFail($id);
+        return DB::transaction(function () use ($request, $agencyId, $id) {
+            Agency::where('id', $agencyId)->lockForUpdate()->firstOrFail();
+            $member = AgencyMember::where('agency_id', $agencyId)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        if ($member->role_id === 'role_agency_owner' && $this->activeOwnerCount($agencyId) <= 1) {
-            return response()->json([
-                'success' => false,
-                'message' => 'An agency must keep at least one active owner.',
-            ], 422);
-        }
+            if ($member->role_id === 'role_agency_owner'
+                && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only an agency owner may remove an owner membership.',
+                ], 403);
+            }
+            if ($member->role_id === 'role_agency_owner' && $member->status === 'active'
+                && $this->activeOwnerCount($agencyId) <= 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An agency must keep at least one active owner.',
+                ], 422);
+            }
 
-        $member->update(['status' => 'deactivated', 'deactivated_at' => now()]);
+            $member->update(['status' => 'deactivated', 'deactivated_at' => now()]);
 
-        $this->writeAudit($request, 'agency.member.remove', 'member:' . $member->id, 'Member deactivated', [
-            'agency_id' => $agencyId,
-            'entity_type' => 'agency_member',
-            'entity_id' => (string) $member->id,
-        ]);
+            $this->writeAudit($request, 'agency.member.remove', 'member:' . $member->id, 'Member deactivated', [
+                'agency_id' => $agencyId,
+                'entity_type' => 'agency_member',
+                'entity_id' => (string) $member->id,
+            ]);
 
-        return response()->json(['success' => true, 'message' => 'Member deactivated.']);
+            return response()->json(['success' => true, 'message' => 'Member deactivated.']);
+        }, 3);
     }
 
     /* ================= Roles ================= */
@@ -452,6 +553,7 @@ class AgencyStaffController extends Controller
                 'message' => 'Platform-level permissions cannot be granted to agency roles: ' . implode(', ', $invalid),
             ], 422);
         }
+        $this->assertCanGrantPermissions($request, $agencyId, $request->permissions);
 
         if (Role::where('scope', 'agency')->where('key', $request->key)
             ->where(function ($q) use ($agencyId) {
@@ -513,6 +615,7 @@ class AgencyStaffController extends Controller
                     'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
                 ], 422);
             }
+            $this->assertCanGrantPermissions($request, $agencyId, $request->permissions);
             $role->permissions = array_values($request->permissions);
         }
         if ($request->has('name')) {
@@ -579,6 +682,25 @@ class AgencyStaffController extends Controller
         }
 
         return $role;
+    }
+
+    /**
+     * A staff manager may delegate only permissions they already hold.
+     * Otherwise a manager could create/assign a custom role to self and
+     * acquire owner-only billing or settings access. Active agency owners
+     * remain the authority for granting any agency-scoped capability.
+     */
+    private function assertCanGrantPermissions(Request $request, string $agencyId, array $permissions): void
+    {
+        if ($this->requesterIsOwner($agencyId, (int) $request->user()->id)) {
+            return;
+        }
+
+        $held = $request->user()->permissionsFor($agencyId);
+        $excess = array_values(array_diff(array_unique($permissions), $held));
+        if ($excess !== []) {
+            abort(403, 'You cannot grant agency permissions you do not hold: ' . implode(', ', $excess));
+        }
     }
 
     private function activeOwnerCount(string $agencyId): int

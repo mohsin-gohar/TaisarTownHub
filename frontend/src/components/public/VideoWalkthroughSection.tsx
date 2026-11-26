@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Play, Heart, MessageSquare, Share2, Clock, MapPin, ArrowRight } from 'lucide-react';
 import { api } from '../../services/api';
+import { VideoModal } from '../common/VideoModal';
 
 interface VideoItem {
   id: string;
@@ -24,6 +25,7 @@ export const VideoWalkthroughSection: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
 
   const fetchVideos = useCallback(async () => {
     setLoading(true);
@@ -93,9 +95,9 @@ export const VideoWalkthroughSection: React.FC = () => {
     <div className="max-w-3xl border-t border-slate-800 pt-6 space-y-6">
       {videos.map((video) => (
         <article key={video.id} className="group relative overflow-hidden rounded-xl border border-slate-800 bg-[#0a1a26]">
-          <div className="relative aspect-video rounded-t-xl overflow-hidden">
+          <button type="button" onClick={() => setSelectedVideo(video)} aria-label={'Play video: ' + video.title} className="relative block w-full aspect-video rounded-t-xl overflow-hidden text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E7C878]">
             <img
-              src={video.thumbnailUrl}
+              src={video.thumbnailUrl || '/video-placeholder.svg'}
               alt={video.title}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               loading="lazy"
@@ -109,7 +111,7 @@ export const VideoWalkthroughSection: React.FC = () => {
             <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur px-3 py-1 rounded text-[11px] text-white font-medium">
               {video.views.toLocaleString()} views
             </div>
-          </div>
+          </button>
           <div className="p-4">
             <div className="flex items-center gap-2 mb-2">
               <img
@@ -148,6 +150,12 @@ export const VideoWalkthroughSection: React.FC = () => {
           </div>
         </article>
       ))}
+      <VideoModal
+        isOpen={selectedVideo !== null}
+        onClose={() => setSelectedVideo(null)}
+        title={selectedVideo?.title ?? ''}
+        videoUrl={selectedVideo?.videoUrl}
+      />
     </div>
   );
 };

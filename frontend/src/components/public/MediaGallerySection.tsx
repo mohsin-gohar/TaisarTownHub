@@ -181,6 +181,7 @@ export const MediaGallerySection: React.FC = () => {
               <button
                 key={phase}
                 onClick={() => setSelectedPhase(phase)}
+                aria-pressed={isActive}
                 className={`px-5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-2 ${
                   isActive
                     ? 'bg-[#E7C878] text-[#0B1220] shadow-md shadow-[#E7C878]/25 font-bold'

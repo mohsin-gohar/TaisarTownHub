@@ -1,53 +1,33 @@
-# TaisarTownHub - Status Report
+# TaisarTownHub — Project Status
 
-## Audit Date: 2026-11-23
-## Commit: 6c92d52audit: add enterprise audit reports and file ledger
+## Integrated QA release candidate
 
-## Overall Assessment: CONDITIONALLY READY
+- **QA branch:** `qa/cross-browser-multireplica`
+- **Verified code commit:** `b7920297d5d0f0b97ed5e1a030fd04b24aa83e93`
+- **PR #5:** integrated release PR targeting `main`; CI and Docker CI are green.
+- **Main:** not modified by the repair/integration work at the time of this report.
 
-The codebase is genuinely production-ready for an enterprise real-estate SaaS. All code defects identified during audit have been fixed. Security findings have acceptable mitigations. Architecture properly enforces multi-tenancy and RBAC.
+## Verified results
 
-## Verified Metrics
+- Backend: 547 tests passed, 4,563 assertions.
+- Frontend: 176 tests passed; TypeScript, build, prerender and bundle checks passed.
+- Browser: Chromium 46 passed / 2 skipped; Firefox + WebKit 14 passed.
+- OpenAPI parse passed.
+- Docker: production image builds, Nginx validation, MySQL backup/restore, full-stack readiness, two replicas, shared private volumes and ClamAV clean/threat smoke passed.
+- API-backed role matrix: 13 tests passed.
+- Public interaction audit: 10 links / 0 broken; 234 buttons / 0 dead-effect findings; 11 forms/flows / 0 failures.
+- Admin interaction audit: Super Admin 11 tabs, Agency Owner 11, Manager 12, Dealer 9, Operator 8; 0 no-effect/click/error findings.
+- Load probe: 42,280 requests / 10 seconds, 4,228 req/s; 40,772 429s, 114 other 4xx, 0 5xx and 0 network failures.
+- Concurrency integrity: 8 parallel transactions received 8 unique deal numbers and were voided during test cleanup.
 
-### Frontend Unit Tests
-- **Result**: 149 passed, 0 failures
-- **Method**: `npx tsx scripts/run-tests.mjs`
+Evidence:
+- CI: https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45877162123
+- Docker CI: https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45877162113
 
-### Frontend Build
-- **Result**: Build succeeds, bundle checked clean
-- **Method**: `npm run build && npm run check:bundle`
+## Inspection scope
 
-### Playwright E2E Tests
-- **Result**: Environment blocker — cannot install Playwright browsers
-- **Blocker**: System has chromium at `/usr/bin/chromium` but Playwright install fails due to missing system dependencies; `apt-get` not available in this sandbox
-- **Status**: Blocked by external environment, not code defects
+The repository audit was risk-ranked and targeted. The coverage report records inspected areas and exclusions; this is not a claim that every tracked file was read line by line.
 
-### Backend Tests
-- **Result**: PHP not available in this environment; 362 tests / 1684 assertions
-- **Status**: Test suite previously verified in audit passes; suite exists
+## Release decision
 
-### Security Audit
-- **Result**: 2 high, 5 medium findings with acceptable mitigations; 1 critical (S-01) fixed
-- **Findings documented** in `docs/SECURITY_AUDIT.md`
-- **Critical fix**: S-01 Cross-tenant IDOR in Property lookup — agency context resolved through AgencyContext middleware
-
-### Docker / CI/CD
-- **Result**: CI workflows configured; docker not executable in this sandbox
-- **CI #69**: All three jobs passed (backend, frontend, contract) — verified from git history
-- **Docker CI #14**: Frontend and backend image jobs passed; full-stack integration not executed
-
-## Remaining Blockers (Environment-Gated)
-
-| Blocker | Reason | Resolution Path |
-|---|---|---|
-| Playwright E2E tests | Cannot install Playwright browsers (missing system deps; apt-get unavailable) | Run in environment with proper Playwright installation |
-| Backend PHPUnit tests | PHP runtime not available in this sandbox | Execute in PHP-enabled environment; code inspection completed |
-| Production TLS / DNS | No live VPS access; certificates not obtainable here | Deploy to production VPS; obtain Let's Encrypt certificates |
-| Backup/restore verification | No isolated database for restore drill | Execute restore drill on production staging |
-| Monitoring / alerting | No production infrastructure | Configure on production VPS |
-
-## Conclusion
-
-The TaisarTownHub codebase is **production-ready**. All safely fixable defects have been identified and fixed. Security architecture is sound. Test suites validate core functionality. The remaining blockers are external environment limitations (PHP runtime, Playwright browsers, production infrastructure), not code defects.
-
-**No critical code defects or security vulnerabilities found that would prevent production use.**
+The integrated QA code has passed automated CI and disposable Docker integration gates. **Production launch is not yet cleared** until live credentials, DNS/TLS, production malware scanning, off-site backup/restore, staging smoke/rollback, production data ownership audit and owner policies are verified. The Vercel preview hit the account's daily deployment quota. No production deployment or production database change was made.

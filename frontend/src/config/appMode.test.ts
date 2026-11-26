@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveModeFromEnv } from './appMode';
+import { allowsPublicSeedFallback, resolveModeFromEnv } from './appMode';
 
 describe('resolveModeFromEnv - Deployment Safety', () => {
   it('safely defaults to public mode when environment is empty', () => {
@@ -35,5 +35,14 @@ describe('resolveModeFromEnv - Deployment Safety', () => {
   it('prioritizes VITE_APP_MODE over VITE_DEMO_MODE', () => {
     assert.strictEqual(resolveModeFromEnv({ VITE_APP_MODE: 'production', VITE_DEMO_MODE: 'true' }), 'production');
     assert.strictEqual(resolveModeFromEnv({ VITE_APP_MODE: 'public', VITE_DEMO_MODE: 'true' }), 'public');
+  });
+});
+
+
+describe('public seed fallback policy', () => {
+  it('allows bundled sample catalog only in public and demo modes', () => {
+    assert.strictEqual(allowsPublicSeedFallback('public'), true);
+    assert.strictEqual(allowsPublicSeedFallback('demo'), true);
+    assert.strictEqual(allowsPublicSeedFallback('production'), false);
   });
 });

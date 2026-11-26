@@ -7,7 +7,9 @@ use App\Models\AgencyInvitation;
 use App\Models\AgencyMember;
 use App\Models\Document;
 use App\Models\DocumentVersion;
+use App\Models\DocumentQuarantine;
 use App\Models\MediaFile;
+use App\Models\Inquiry;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -35,20 +37,60 @@ class PlanLimits
             ->where('agency_id', $agency->id)
             ->sum('size_bytes');
 
+        // The current version is already represented by documents.size_bytes.
+        // Only archived versions add additional retained bytes; counting every
+        // DocumentVersion row double-counts the current version after each upload.
         $versionBytes = (int) DocumentVersion::query()
-            ->whereIn('document_id', Document::withTrashed()->where('agency_id', $agency->id)->select('id'))
-            ->sum('size_bytes');
+            ->join('documents as vault_documents', 'vault_documents.id', '=', 'document_versions.document_id')
+            ->where('vault_documents.agency_id', $agency->id)
+            ->whereColumn('document_versions.version', '<', 'vault_documents.version')
+            ->sum('document_versions.size_bytes');
 
         $mediaBytes = (int) MediaFile::withTrashed()
             ->where('agency_id', $agency->id)
+            ->sum('size_bytes');
+        $quarantineBytes = (int) DocumentQuarantine::where('agency_id', $agency->id)
+            ->whereNull('document_id')
             ->sum('size_bytes');
 
         return [
             'listings' => $agency->properties()->whereNull('deleted_at')->count(),
             'members' => $agency->activeMembers()->count(),
-            'storage_bytes' => $documentBytes + $versionBytes + $mediaBytes,
+            'storage_bytes' => $documentBytes + $versionBytes + $mediaBytes + $quarantineBytes,
             'leads' => $agency->inquiries()->count(),
+            'featured_credits' => $agency->properties()
+                ->whereNull('deleted_at')
+                ->where('approval_status', 'approved')
+                ->where('isFeatured', true)
+                ->where(function ($query) {
+                    $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+                })
+                ->count(),
         ];
+    }
+
+    /**
+     * Featured credits are concurrent featured-listing slots, not an unlimited
+     * counter: zero means no slots, while null explicitly means unlimited.
+     * This differs from the generic listing/staff convention where zero means
+     * unlimited, so it has its own guard.
+     *
+     * @return array{limit:int,used:int}|null
+     */
+    public static function featuredSlotBlock(Agency $agency): ?array
+    {
+        $limits = $agency->limits();
+        $limit = array_key_exists('featured_credits', $limits) ? $limits['featured_credits'] : 0;
+        if ($limit === null) {
+            return null; // explicit null means unlimited
+        }
+
+        $limit = max(0, (int) $limit);
+        $used = self::usage($agency)['featured_credits'];
+
+        return $used + 1 > $limit
+            ? ['limit' => $limit, 'used' => $used]
+            : null;
     }
 
     /**
@@ -101,8 +143,18 @@ class PlanLimits
             return true; // no subscription row — legacy/default access
         }
 
+        if ($subscription->starts_at !== null && $subscription->starts_at->isFuture()) {
+            return false; // scheduled subscription has not started yet
+        }
+
+        if ($subscription->status === 'trialing') {
+            return $subscription->trial_ends_at !== null
+                && $subscription->trial_ends_at->isFuture()
+                && ($subscription->ends_at === null || $subscription->ends_at->isFuture());
+        }
+
         if ($subscription->status !== 'active') {
-            return false; // past_due, cancelled, ...
+            return false; // past_due, expired, cancelled, ...
         }
 
         if ($subscription->ends_at !== null && $subscription->ends_at->isPast()) {
@@ -110,6 +162,12 @@ class PlanLimits
         }
 
         return true;
+    }
+
+    /** Current lead usage; kept identical to Agency::inquiries()->count(). */
+    public static function leadUsed(string $agencyId): int
+    {
+        return Inquiry::where('agency_id', $agencyId)->count();
     }
 
     /** Standardised 403 response for subscription-blocked commerce actions. */
@@ -125,8 +183,11 @@ class PlanLimits
     /** Staff counter for the invite flow: active members + pending invitations. */
     public static function staffUsed(string $agencyId): int
     {
-        return AgencyMember::where('agency_id', $agencyId)->count()
-            + AgencyInvitation::where('agency_id', $agencyId)->where('status', 'pending')->count();
+        return AgencyMember::where('agency_id', $agencyId)->where('status', 'active')->count()
+            + AgencyInvitation::where('agency_id', $agencyId)
+                ->where('status', 'pending')
+                ->where('expires_at', '>', now())
+                ->count();
     }
 }
 

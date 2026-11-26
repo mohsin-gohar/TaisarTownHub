@@ -8,6 +8,7 @@ use App\Models\AgencyMember;
 use App\Models\Property;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\Permissions;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -194,6 +195,116 @@ class MysqlConcurrencyTest extends TestCase
         $this->assertSame(2, $invitee->tokens()->count(), 'one original + one accepted-session token');
     }
 
+    public function test_concurrent_invoice_allocations_get_unique_numbers(): void
+    {
+        $agency = $this->makeAgency();
+        $this->track('agencies', $agency->id);
+
+        // Platform role rows carry the modern permission catalog. The legacy
+        // role-name fallback alone does not grant admin.manage_subscriptions.
+        $platformRole = Role::where('scope', 'platform')
+            ->where('key', 'super_admin')
+            ->first();
+        if (!$platformRole) {
+            $platformRole = new Role([
+                'scope' => 'platform',
+                'agency_id' => null,
+                'key' => 'super_admin',
+                'name' => 'Super Admin',
+                'is_system' => true,
+                'permissions' => Permissions::platformRoleGrants('super_admin'),
+            ]);
+            $platformRole->id = 'role_platform_super_admin';
+            $platformRole->save();
+            $this->track('roles', $platformRole->id);
+        }
+
+        $admins = [];
+        foreach (['invoice-a-' . Str::random(8) . '@audit.test', 'invoice-b-' . Str::random(8) . '@audit.test'] as $email) {
+            $admin = $this->makeUser($email, ['role' => 'super_admin']);
+            $this->track('users', (string) $admin->id);
+            $admins[] = $admin->createToken('invoice-session')->plainTextToken;
+        }
+
+        $payload = [
+            'agency_id' => $agency->id,
+            'amount_pkr' => 10000,
+            'tax_pkr' => 0,
+            'notes' => 'Concurrent invoice sequence probe',
+        ];
+
+        $results = [];
+        if ($this->mysql) {
+            $processes = [];
+            foreach ($admins as $token) {
+                $processes[] = $this->runProcess('/api/admin/subscription-invoices', $payload, $token);
+            }
+            foreach ($processes as $process) {
+                $results[] = $this->workerResult($process);
+            }
+        } else {
+            foreach ($admins as $token) {
+                $this->asGuest();
+                $response = $this->postJson('/api/admin/subscription-invoices', $payload, $this->authHeaders($token));
+                $results[] = [$response->getStatusCode(), $response->json()];
+            }
+        }
+
+        foreach ($results as [$status, $body]) {
+            $this->assertSame(201, $status, 'every concurrent invoice creation must succeed');
+            $this->assertNotEmpty($body['invoice']['invoice_number'] ?? null);
+            if (!empty($body['invoice']['id'])) {
+                $this->track('subscription_invoices', (string) $body['invoice']['id']);
+            }
+        }
+
+        $numbers = array_map(
+            fn (array $result) => $result[1]['invoice']['invoice_number'] ?? null,
+            $results
+        );
+        $this->assertCount(2, array_unique($numbers), 'invoice numbers must be unique under concurrency');
+    }
+
+    public function test_seeded_deal_sequence_starts_after_existing_legacy_numbers(): void
+    {
+        $year = (int) now()->year;
+        $transactionId = 'txn-sequence-seed-' . Str::random(8);
+        $lastNumber = 987654;
+        $dealNumber = sprintf('TXN-%d-%04d', $year, $lastNumber);
+
+        DB::table('transaction_number_sequences')->where('year', $year)->delete();
+        \App\Models\Transaction::create([
+            'id' => $transactionId,
+            'dealNumber' => $dealNumber,
+            'propertyId' => null,
+            'propertyTitle' => 'Sequence seed fixture',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agreementAmountPKR' => 1000,
+            'advancePaymentPKR' => 0,
+            'remainingBalancePKR' => 1000,
+            'commissionAmountPKR' => 0,
+            'commissionStatus' => 'Pending',
+            'dealStatus' => 'Draft',
+        ]);
+
+        try {
+            $migration = require database_path('migrations/2026_11_26_000002_seed_transaction_number_sequences.php');
+            $migration->up();
+
+            $this->assertSame($lastNumber + 1, (int) DB::table('transaction_number_sequences')
+                ->where('year', $year)->value('next_number'));
+
+            $next = DB::transaction(
+                fn () => app(\App\Services\DealNumberAllocator::class)->nextForYear($year)
+            );
+            $this->assertSame(sprintf('TXN-%d-%04d', $year, $lastNumber + 1), $next);
+        } finally {
+            DB::table('transactions')->where('id', $transactionId)->delete();
+            DB::table('transaction_number_sequences')->where('year', $year)->delete();
+        }
+    }
+
     public function test_concurrent_deal_allocations_get_unique_numbers(): void
     {
         $agency = $this->makeAgency();
@@ -260,8 +371,37 @@ class MysqlConcurrencyTest extends TestCase
             $this->assertNotEmpty($body['dealNumber'] ?? null);
         }
         $numbers = array_column(array_column($results, 1), 'dealNumber');
-        $this->assertCount(2, array_unique($numbers), 'deal numbers must be unique under concurrency');
-        $this->assertSame(2, DB::table('transactions')->count());
+        $this->assertCount(2, array_unique($numbers), 'legacy deal numbers must be unique under concurrency');
+
+        // Exercise the agency finance endpoint too; it previously had a
+        // separate allocator and failed intermittently under parallel writes.
+        $financeResults = [];
+        if ($this->mysql) {
+            $processes = [];
+            foreach ($users as [, $token]) {
+                $processes[] = $this->runProcess('/api/agency/transactions', $payload, $token);
+            }
+            foreach ($processes as $process) {
+                $financeResults[] = $this->workerResult($process);
+            }
+        } else {
+            foreach ($users as [, $token]) {
+                $this->asGuest();
+                $response = $this->postJson('/api/agency/transactions', $payload, $this->authHeaders($token));
+                $financeResults[] = [$response->getStatusCode(), $response->json()];
+            }
+        }
+
+        foreach ($financeResults as [$status, $body]) {
+            $this->assertSame(201, $status, 'every concurrent finance create must succeed');
+            $this->assertNotEmpty($body['transaction']['dealNumber'] ?? null);
+        }
+        $financeNumbers = array_map(
+            fn (array $result) => $result[1]['transaction']['dealNumber'] ?? null,
+            $financeResults
+        );
+        $this->assertCount(2, array_unique($financeNumbers), 'finance deal numbers must be unique under concurrency');
+        $this->assertSame(4, DB::table('transactions')->where('propertyId', $property->id)->count());
     }
 }
 

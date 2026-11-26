@@ -21,7 +21,7 @@ class DocumentQuarantine extends Model
     protected $fillable = [
         'id', 'agency_id', 'document_id', 'original_name', 'stored_name',
         'disk_path', 'mime_type', 'size_bytes', 'checksum', 'reason',
-        'threats', 'uploaded_by', 'created_at',
+        'is_sensitive', 'threats', 'uploaded_by', 'created_at',
     ];
 
     protected $hidden = ['disk_path', 'stored_name', 'checksum'];
@@ -30,6 +30,7 @@ class DocumentQuarantine extends Model
     {
         return [
             'size_bytes' => 'integer',
+            'is_sensitive' => 'boolean',
             'threats' => 'array',
             'created_at' => 'datetime',
         ];
@@ -38,6 +39,11 @@ class DocumentQuarantine extends Model
     public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class, 'agency_id');
+    }
+
+    public function document(): BelongsTo
+    {
+        return $this->belongsTo(Document::class, 'document_id')->withTrashed();
     }
 
     public function uploader(): BelongsTo
