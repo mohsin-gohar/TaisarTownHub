@@ -87,16 +87,19 @@ class PaymentController extends Controller
                     throw new DomainException('An active subscription already exists. Contact support to change or renew your plan.');
                 }
 
-                $pending = SubscriptionInvoice::where('agency_id', $agencyId)
+                $pendingInvoices = SubscriptionInvoice::where('agency_id', $agencyId)
                     ->where('status', 'pending')
-                    ->whereNull('flutterwave_tx_ref')
                     ->where('created_at', '>=', now()->subHours(24))
                     ->latest()
                     ->lockForUpdate()
-                    ->first();
+                    ->get();
 
-                if ($pending && (int) $pending->plan_id !== (int) $plan->id) {
-                    throw new DomainException('A pending invoice already exists for another plan. Pay or void it before starting a new checkout.');
+                $pending = $pendingInvoices->first();
+                if ($pendingInvoices->contains(
+                    fn (SubscriptionInvoice $item): bool => (int) $item->plan_id !== (int) $plan->id
+                        || !empty($item->flutterwave_tx_ref)
+                )) {
+                    throw new DomainException('A pending invoice already exists for another plan or payment provider. Pay or void it before starting a new checkout.');
                 }
 
                 if ($pending) {
