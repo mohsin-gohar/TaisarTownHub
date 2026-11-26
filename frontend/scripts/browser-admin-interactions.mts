@@ -59,6 +59,7 @@ type Sink = {
   pageErrors: string[];
   failedRequests: string[];
   httpErrors: string[];
+  detach: () => void;
 };
 
 type ProbeResult = {
@@ -105,22 +106,34 @@ async function logout(page: Page) {
 }
 
 function attachSink(page: Page): Sink {
-  const sink: Sink = { consoleErrors: [], pageErrors: [], failedRequests: [], httpErrors: [] };
-  page.on('console', (msg) => {
+  const sink: Omit<Sink, 'detach'> = { consoleErrors: [], pageErrors: [], failedRequests: [], httpErrors: [] };
+  const onConsole = (msg: import('@playwright/test').ConsoleMessage) => {
     if (msg.type() === 'error' && !IGNORE_CONSOLE.some((r) => r.test(msg.text()))) {
       sink.consoleErrors.push(msg.text().slice(0, 300));
     }
-  });
-  page.on('pageerror', (err) => sink.pageErrors.push(String(err).slice(0, 300)));
-  page.on('requestfailed', (req) => {
+  };
+  const onPageError = (err: Error) => sink.pageErrors.push(String(err).slice(0, 300));
+  const onRequestFailed = (req: import('@playwright/test').Request) => {
     sink.failedRequests.push(`${req.method()} ${req.url().slice(0, 160)} — ${req.failure()?.errorText || 'failed'}`);
-  });
-  page.on('response', (res) => {
+  };
+  const onResponse = (res: import('@playwright/test').Response) => {
     if (res.status() >= 400) {
       sink.httpErrors.push(`${res.status()} ${res.request().method()} ${res.url().slice(0, 160)}`);
     }
-  });
-  return sink;
+  };
+  page.on('console', onConsole);
+  page.on('pageerror', onPageError);
+  page.on('requestfailed', onRequestFailed);
+  page.on('response', onResponse);
+  return {
+    ...sink,
+    detach: () => {
+      page.off('console', onConsole);
+      page.off('pageerror', onPageError);
+      page.off('requestfailed', onRequestFailed);
+      page.off('response', onResponse);
+    },
+  };
 }
 
 function takeErrors(sink: Sink): string[] {
@@ -130,6 +143,7 @@ function takeErrors(sink: Sink): string[] {
     ...sink.failedRequests.splice(0),
     ...sink.httpErrors.splice(0),
   ];
+  sink.detach();
   return out;
 }
 
@@ -197,7 +211,7 @@ async function mainTabProbe(page: Page, tabLabel: string): Promise<ProbeResult[]
   const tabButton = page.getByRole('button', { name: new RegExp(`^${tabLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }).first();
   if (!(await tabButton.isVisible().catch(() => false))) return results;
   await tabButton.click();
-  await page.waitForTimeout(1600);
+  await page.waitForTimeout(650);
 
   const sink = attachSink(page);
   const before = await snapshot(page);
@@ -217,7 +231,7 @@ async function mainTabProbe(page: Page, tabLabel: string): Promise<ProbeResult[]
     const sink2 = attachSink(page);
     const probeBefore = await snapshot(page);
     let popup: Page | null = null;
-    const popupPromise = page.context().waitForEvent('page', { timeout: 700 }).catch(() => null);
+    const popupPromise = page.context().waitForEvent('page', { timeout: 350 }).catch(() => null);
     const buttonLocator = page.getByRole('button', { name: target.name, exact: true }).first();
     if (!(await buttonLocator.isVisible().catch(() => false))) {
       results.push({ page: `admin / ${tabLabel}`, button: target.name, effect: 'NOT FOUND / NOT VISIBLE', urlBefore: probeBefore.url, urlAfter: probeBefore.url, errors: takeErrors(sink2) });
@@ -230,9 +244,9 @@ async function mainTabProbe(page: Page, tabLabel: string): Promise<ProbeResult[]
       results.push({ page: `admin / ${tabLabel}`, button: target.name, effect: `CLICK FAILED: ${String(error).slice(0, 160)}`, urlBefore: probeBefore.url, urlAfter: probeBefore.url, errors: takeErrors(sink2) });
       continue;
     }
-    popup = await popupPromise;
+    popup = await Promise.race([popupPromise, page.waitForTimeout(180).then(() => null)]);
     if (popup) await popup.close().catch(() => {});
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(450);
     const after = await snapshot(page);
     await dismissOverlay(page);
 
