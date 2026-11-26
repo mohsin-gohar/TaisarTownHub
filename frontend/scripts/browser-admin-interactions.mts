@@ -14,6 +14,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const BASE = process.env.AUDIT_BASE || 'http://127.0.0.1:3000';
+const sharedDemoPassword = process.env.DEMO_STAFF_PASSWORD;
+const demoPassword = (fallback: string) => sharedDemoPassword || fallback;
 const OUT = path.resolve(import.meta.dirname, '..', 'audit');
 mkdirSync(OUT, { recursive: true });
 
@@ -279,17 +281,21 @@ async function runRole(
 (async () => {
   const browser = await chromium.launch();
   const started = Date.now();
-  const superadmin = await runRole(browser, 'superadmin', 'superadmin@taisartownhub.com', 'Super@Admin2026!');
-  await new Promise((r) => setTimeout(r, 4000));
-  const manager = await runRole(browser, 'manager', 'manager@taisartownhub.com', 'Manager@2026!');
-  await new Promise((r) => setTimeout(r, 4000));
-  const dealer = await runRole(browser, 'dealer', 'dealer@taisartownhub.com', 'Dealer@2026!');
+  const superadmin = await runRole(browser, 'superadmin', 'superadmin@taisartownhub.com', demoPassword('Super@Admin2026!'));
+  await new Promise((r) => setTimeout(r, 2000));
+  const agencyOwner = await runRole(browser, 'agency_owner', 'admin@taisartownhub.com', demoPassword('Admin@Taisar2026'));
+  await new Promise((r) => setTimeout(r, 2000));
+  const manager = await runRole(browser, 'manager', 'manager@taisartownhub.com', demoPassword('Manager@2026'));
+  await new Promise((r) => setTimeout(r, 2000));
+  const dealer = await runRole(browser, 'dealer', 'dealer@taisartownhub.com', demoPassword('Dealer@2026'));
+  await new Promise((r) => setTimeout(r, 2000));
+  const operator = await runRole(browser, 'operator', 'operator@taisartownhub.com', demoPassword('Operator@2026'));
 
   const report = {
     base: BASE,
     generatedAt: new Date().toISOString(),
     durationMs: Date.now() - started,
-    results: [superadmin, manager, dealer],
+    results: [superadmin, agencyOwner, manager, dealer, operator],
   };
   writeFileSync(path.join(OUT, 'admin-interactions.json'), JSON.stringify(report, null, 2));
 
@@ -304,4 +310,12 @@ async function runRole(
     clickFailed.forEach((f) => console.log(`  CLICK FAILED [${f.page}] "${f.button}" → ${f.effect}`));
     errorEntries.forEach((f) => console.log(`  ERR [${f.page}] "${f.button}" → ${f.errors.slice(0, 3).join(' | ')}`));
   }
+
+  const hasInteractionFailures = report.results.some((run) =>
+    run.findings.some((finding) =>
+      (finding.effect === 'NO VISIBLE EFFECT' || finding.effect.startsWith('CLICK FAILED'))
+      || (finding.button !== '__tab__' && finding.errors.length > 0)
+    )
+  );
+  if (hasInteractionFailures) process.exitCode = 1;
 })();
