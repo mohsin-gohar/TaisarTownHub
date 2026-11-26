@@ -597,7 +597,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
             'deleted_at' => null,
         ]);
 
-        $this->get("/api/agency/documents/{$documentId}/download", $headers)->assertStatus(422);
+        $this->get("/api/agency/documents/{$documentId}/download", $headers)->assertStatus(423);
     }
 
     public function test_permanent_delete_retains_document_metadata_when_private_storage_delete_fails(): void
