@@ -79,11 +79,14 @@ class PaymentController extends Controller
                 $currentSubscription = AgencySubscription::where('agency_id', $agencyId)
                     ->lockForUpdate()
                     ->first();
-                if ($currentSubscription
+                $liveStripeSubscription = $currentSubscription
+                    && $currentSubscription->stripe_subscription_id
+                    && in_array($currentSubscription->status, ['trialing', 'active', 'past_due'], true);
+                $activeManualTerm = $currentSubscription
                     && in_array($currentSubscription->status, ['active', 'past_due'], true)
-                    && ($currentSubscription->stripe_subscription_id
-                        || !$currentSubscription->ends_at
-                        || $currentSubscription->ends_at->isFuture())) {
+                    && (!$currentSubscription->ends_at || $currentSubscription->ends_at->isFuture());
+
+                if ($liveStripeSubscription || $activeManualTerm) {
                     throw new DomainException('An active subscription already exists. Contact support to change or renew your plan.');
                 }
 
