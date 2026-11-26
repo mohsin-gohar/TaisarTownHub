@@ -195,8 +195,8 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'provider' => 'stripe',
         ]);
 
-        $controller = app(\\App\\Http\\Controllers\\Api\\PaymentController::class);
-        $handler = new \\ReflectionMethod($controller, 'handleStripeSubscriptionChanged');
+        $controller = app(\App\Http\Controllers\Api\PaymentController::class);
+        $handler = new \ReflectionMethod($controller, 'handleStripeSubscriptionChanged');
         $handler->setAccessible(true);
         $paidPeriodEnd = $subscription->fresh()->ends_at->getTimestamp();
 
