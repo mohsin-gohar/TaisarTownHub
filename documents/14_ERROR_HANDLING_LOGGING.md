@@ -2,6 +2,9 @@
 
 **Version:** 2.0.0 · **Last updated:** 2026-11-08
 
+> **Historical error-handling design:** current logging, API error rendering and correlation behavior are defined by live Laravel middleware/configuration and tests.
+
+
 ## 1. Global Exception Handler
 
 Laravel's `Handler` (in `app/Exceptions/`) renders:
