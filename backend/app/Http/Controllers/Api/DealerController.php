@@ -42,7 +42,7 @@ class DealerController extends Controller
      */
     public function store(Request $request)
     {
-        $this->requireAny($request, ['manage_dealers']);
+        $this->requireAny($request, ['dealers.manage', 'manage_dealers']);
 
         $data = $request->validate([
             'id' => 'required|string|unique:dealers,id',
@@ -96,7 +96,7 @@ class DealerController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $this->requireAny($request, ['manage_dealers']);
+        $this->requireAny($request, ['dealers.manage', 'manage_dealers']);
 
         $dealer = Dealer::findOrFail($id);
 
@@ -153,7 +153,7 @@ class DealerController extends Controller
      */
     public function destroy(Request $request, $id)
     {
-        $this->requireAny($request, ['manage_dealers']);
+        $this->requireAny($request, ['dealers.manage', 'manage_dealers']);
 
         $actingAgencyId = $this->agencyId($request);
         $query = Dealer::query()->whereKey($id);
