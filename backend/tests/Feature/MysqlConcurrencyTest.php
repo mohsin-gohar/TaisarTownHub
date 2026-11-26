@@ -200,7 +200,7 @@ class MysqlConcurrencyTest extends TestCase
         $this->track('agencies', $agency->id);
 
         $admins = [];
-        foreach (['invoice-a@audit.test', 'invoice-b@audit.test'] as $email) {
+        foreach (['invoice-a-' . Str::random(8) . '@audit.test', 'invoice-b-' . Str::random(8) . '@audit.test'] as $email) {
             $admin = $this->makeUser($email, ['role' => 'super_admin']);
             $this->track('users', (string) $admin->id);
             $admins[] = $admin->createToken('invoice-session')->plainTextToken;
