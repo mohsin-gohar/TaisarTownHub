@@ -356,6 +356,36 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->assertEquals(3000000, (int) $transaction->advancePaymentPKR);
     }
 
+    public function test_commission_payouts_record_actor_and_paid_status_is_terminal(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $created = $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
+            'amount' => 25000,
+            'rate' => 1.5,
+            'notes' => 'Agency commission',
+        ], $headers)->assertStatus(201)->json('commission');
+
+        $accrued = $this->patchJson("/api/agency/commissions/{$created['id']}", [
+            'status' => 'accrued',
+        ], $headers)->assertOk()->json('commission');
+        $this->assertNotNull($accrued['accrued_at']);
+
+        $paid = $this->patchJson("/api/agency/commissions/{$created['id']}", [
+            'status' => 'paid',
+        ], $headers)->assertOk()->json('commission');
+        $this->assertNotNull($paid['paid_at']);
+        $this->assertSame((string) $user->id, (string) $paid['paid_by']);
+
+        $this->patchJson("/api/agency/commissions/{$created['id']}", [
+            'status' => 'pending',
+        ], $headers)->assertStatus(409);
+
+        $this->assertSame('paid', Commission::findOrFail($created['id'])->status);
+    }
+
     public function test_refunds_cannot_exceed_the_amount_already_collected(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
