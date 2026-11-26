@@ -48,7 +48,7 @@ class SubscriptionActivationService
             $current
             && $current->stripe_subscription_id
             && $current->stripe_subscription_id !== $invoice->stripe_subscription_id
-            && in_array($current->status, ['trialing', 'active', 'past_due'], true)
+            && !in_array($current->status, ['cancelled', 'expired'], true)
             && $current->ends_at
             && $current->ends_at->isFuture()
         ) {
