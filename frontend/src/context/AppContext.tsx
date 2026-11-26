@@ -1573,10 +1573,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setCommissionEntries((prev) =>
-      prev.map((e) => {
-        if (e.transactionId !== id) return e;
-        const r = accrueCommission(e, voidedTx, paymentEntries);
-        return r.changed ? r.entry : e;
+      prev.map((entry) => {
+        if (entry.transactionId !== id || entry.status === 'Paid' || entry.paidPKR > 0) return entry;
+        return { ...entry, status: 'Cancelled' };
       })
     );
     setTransactions((prev) => prev.map((t) => (t.id === id ? voidedTx : t)));
