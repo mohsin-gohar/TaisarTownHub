@@ -57,6 +57,7 @@ class SavedSearchController extends Controller
             }
 
             return SavedSearch::create([
+                'id' => 'ss_' . Str::random(24),
                 'user_id' => $user->id,
                 'name' => $data['name'],
                 'filters' => $data['filters'],
