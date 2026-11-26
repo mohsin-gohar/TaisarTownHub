@@ -89,7 +89,7 @@ class InquiryController extends Controller
             'propertyId' => 'nullable|string|max:256',
             'preferredPropertyOrProject' => 'nullable|string|max:255',
             'budgetRange' => 'nullable|string|max:100',
-            'captchaToken' => 'required|string|max:120',
+            'captchaToken' => 'required|string|max:1024',
             'captchaAnswer' => 'required|string|max:20',
             'companyWebsite' => 'nullable|string|max:255',
         ]);
@@ -102,7 +102,7 @@ class InquiryController extends Controller
             ], 201);
         }
 
-        if (!$this->captcha->verify($data['captchaToken'], $data['captchaAnswer'], $request->ip())) {
+        if (!InquiryCaptcha::verify($data['captchaToken'], $data['captchaAnswer'])) {
             return response()->json([
                 'success' => false,
                 'code' => 'captcha_failed',
