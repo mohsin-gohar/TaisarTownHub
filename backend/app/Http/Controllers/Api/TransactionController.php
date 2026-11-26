@@ -117,7 +117,7 @@ class TransactionController extends Controller
             $data['dealNumber'] = app(DealNumberAllocator::class)->nextForYear($year);
 
             return Transaction::create($data);
-        }, 3);
+        }, 10);
 
         $this->writeAudit($request, 'transaction_created', $transaction->id, "Deal {$transaction->dealNumber} created", [
             'agency_id' => $agencyId,
