@@ -633,28 +633,41 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
-        $role = Role::where('scope', 'agency')
-            ->where('agency_id', $agencyId)
-            ->where('is_system', false)
-            ->findOrFail($id);
+        $result = DB::transaction(function () use ($agencyId, $id): array {
+            // Share the agency lock used by invitation creation/acceptance so
+            // a role cannot be deleted between an invite's validation and
+            // its commit.
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+            $role = Role::where('scope', 'agency')
+                ->where('agency_id', $agencyId)
+                ->where('is_system', false)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        $inUse = AgencyMember::where('role_id', $role->id)->exists();
-        $pendingInvites = AgencyInvitation::where('role_id', $role->id)
-            ->where('status', 'pending')->exists();
+            $inUse = AgencyMember::where('role_id', $role->id)->exists();
+            $pendingInvites = AgencyInvitation::where('role_id', $role->id)
+                ->where('status', 'pending')->exists();
 
-        if ($inUse || $pendingInvites) {
+            if ($inUse || $pendingInvites) {
+                return ['deleted' => false];
+            }
+
+            $role->delete();
+
+            return ['deleted' => true, 'role_id' => $role->id];
+        }, 3);
+
+        if (!$result['deleted']) {
             return response()->json([
                 'success' => false,
                 'message' => 'Role is still assigned to members or pending invitations.',
             ], 422);
         }
 
-        $role->delete();
-
-        $this->writeAudit($request, 'agency.role.delete', 'role:' . $id, 'Custom role deleted', [
+        $this->writeAudit($request, 'agency.role.delete', 'role:' . $result['role_id'], 'Custom role deleted', [
             'agency_id' => $agencyId,
             'entity_type' => 'role',
-            'entity_id' => $id,
+            'entity_id' => $result['role_id'],
         ]);
 
         return response()->json(['success' => true, 'message' => 'Role deleted.']);
