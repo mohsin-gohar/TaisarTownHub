@@ -85,6 +85,53 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
         }
     }
 
+    public function test_storage_usage_counts_current_document_bytes_and_only_archived_versions(): void
+    {
+        [$agency] = $this->agencyWithLimits(['storage_mb' => 1]);
+
+        $documentId = 'doc_' . bin2hex(random_bytes(8));
+        Document::create([
+            'id' => $documentId,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Versioned file',
+            'original_name' => 'versioned.pdf',
+            'stored_name' => 'versioned-v2.pdf',
+            'disk_path' => $agency->id . '/versioned-v2.pdf',
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 100,
+            'version' => 2,
+            'status' => 'active',
+            'scan_status' => 'scanned_clean',
+        ]);
+
+        DocumentVersion::create([
+            'document_id' => $documentId,
+            'version' => 1,
+            'stored_name' => 'versioned-v1.pdf',
+            'disk_path' => $agency->id . '/versioned-v1.pdf',
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 80,
+            'note' => 'Superseded',
+            'created_at' => now()->subMinute(),
+        ]);
+        DocumentVersion::create([
+            'document_id' => $documentId,
+            'version' => 2,
+            'stored_name' => 'versioned-v2.pdf',
+            'disk_path' => $agency->id . '/versioned-v2.pdf',
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 100,
+            'note' => 'Current',
+            'created_at' => now(),
+        ]);
+
+        $this->assertSame(180, PlanLimits::usage($agency)['storage_bytes']);
+    }
+
     public function test_storage_quota_does_not_block_document_uploads(): void
     {
         Storage::fake('documents');
