@@ -204,7 +204,7 @@ interface AppContextType {
   deleteInquiry: (id: string) => void;
   
   cmsConfig: CMSConfig;
-  updateCMSConfig: (updates: Partial<CMSConfig>) => void;
+  updateCMSConfig: (updates: Partial<CMSConfig>) => Promise<boolean>;
   
   // Toasts & Reset
   toasts: ToastMessage[];
@@ -751,6 +751,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const requirePermission = (permission: Permission | Permission[], scope?: { dealerId?: string }): boolean => {
     if (!isAdminAuthenticated || currentUser.workspaceAccess?.allowed === false) {
       showToast('error', 'An approved agency session is required.');
+      return false;
+    }
+    if (!IS_DEMO && !backendConnected) {
+      showToast('error', 'The API is unavailable. This change was not saved; reconnect before trying again.');
       return false;
     }
     const gate = authorize(currentUser, permission, scope);
@@ -2033,49 +2037,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateInquiryStatus = (id: string, status: InquiryStatus) => {
     if (!requirePermission(['crm.update_lead', 'crm.delete_lead'])) return;
-    setInquiries((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, status } : i))
-    );
-    if (backendConnected) {
-      api.updateInquiryStatus(id, status).then((result) => {
-        if (!result) {
-          // Rollback optimistic status on API failure.
-          setInquiries((prev) =>
-            prev.map((i) => (i.id === id ? { ...i, status: 'Pending' } : i))
-          );
-          showToast('error', 'Could not change inquiry status. Please try again.');
-        }
-      }).catch(() => {
-        setInquiries((prev) =>
-          prev.map((i) => (i.id === id ? { ...i, status: 'Pending' } : i))
-        );
-        showToast('error', 'Could not change inquiry status. Please try again.');
-      });
-    } else {
-      showToast('info', 'Status change saved locally — will sync when backend is available.');
+    const previous = inquiries.find((inquiry) => inquiry.id === id);
+    if (!previous) {
+      showToast('error', 'Inquiry not found.');
+      return;
     }
+    if (IS_DEMO) {
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, status } : inquiry)));
+      showToast('info', 'Demo-only inquiry status changed locally; it is not saved to the live workspace.');
+      return;
+    }
+
+    api.updateInquiryStatus(id, status).then((result) => {
+      if (!result) {
+        showToast('error', 'Could not change inquiry status. Please try again.');
+        return;
+      }
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, status } : inquiry)));
+      showToast('success', 'Inquiry status updated.');
+    }).catch(() => {
+      showToast('error', 'Could not change inquiry status. Please try again.');
+    });
   };
 
   const updateInquiryNotes = (id: string, notes: string) => {
     if (!requirePermission('crm.update_lead')) return;
-    setInquiries((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, adminNotes: notes } : i))
-    );
-    if (backendConnected) {
-      api.updateInquiryNotes(id, notes).then((result) => {
-        if (!result) {
-          // Rollback local notes on API failure.
-          setInquiries((prev) =>
-            prev.map((i) => (i.id === id ? { ...i, adminNotes: '' } : i))
-          );
-          showToast('error', 'Could not save inquiry notes. Please try again.');
-        }
-      }).catch(() => {
-        showToast('error', 'Could not save inquiry notes. Please try again.');
-      });
-    } else {
-      showToast('info', 'Notes saved locally — will sync when backend is available.');
+    const previous = inquiries.find((inquiry) => inquiry.id === id);
+    if (!previous) {
+      showToast('error', 'Inquiry not found.');
+      return;
     }
+    if (IS_DEMO) {
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, adminNotes: notes } : inquiry)));
+      showToast('info', 'Demo-only inquiry notes changed locally; they are not saved to the live workspace.');
+      return;
+    }
+
+    api.updateInquiryNotes(id, notes).then((result) => {
+      if (!result) {
+        showToast('error', 'Could not save inquiry notes. Please try again.');
+        return;
+      }
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, adminNotes: notes } : inquiry)));
+      showToast('success', 'Inquiry notes saved.');
+    }).catch(() => {
+      showToast('error', 'Could not save inquiry notes. Please try again.');
+    });
   };
 
   const deleteInquiry = (id: string) => {
@@ -2097,10 +2104,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // CMS Updates
-  const updateCMSConfig = (updates: Partial<CMSConfig>) => {
-    if (!requirePermission('edit_cms')) return;
-    setCmsConfig((prev) => ({ ...prev, ...updates }));
-    showToast('info', 'CMS settings updated locally — changes persist only in this session until a backend CMS endpoint is implemented.');
+  const updateCMSConfig = async (updates: Partial<CMSConfig>): Promise<boolean> => {
+    if (!requirePermission('edit_cms')) return false;
+
+    const nextConfig = { ...cmsConfig, ...updates };
+    const saved = await api.saveCmsConfig(nextConfig);
+    if (!saved) {
+      showToast('error', 'Website changes were not saved. Check platform CMS permission and API connection.');
+      return false;
+    }
+
+    setCmsConfig(nextConfig);
+    showToast('success', 'Website content saved and published.');
+    return true;
   };
 
   const resetToDefaultData = async () => {
