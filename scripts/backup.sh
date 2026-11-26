@@ -78,26 +78,33 @@ mysqldump --defaults-extra-file="$MYSQL_DEFAULTS" --single-transaction --routine
 DB_ARTEFACT="$WORK/db.sql.gz"
 TABLE_COUNT="$(zcat "$DB_ARTEFACT" | grep -c 'CREATE TABLE' || true)"
 
-# ---------------------------------------------------------------- vault
-PRIVATE_DIR="$BACKEND/storage/app/private"
-if [ ! -d "$PRIVATE_DIR/documents" ]; then
-    echo "[backup] FATAL: private documents vault is missing at $PRIVATE_DIR/documents" >&2
+# ---------------------------------------------------------------- app storage
+APP_STORAGE="$BACKEND/storage/app"
+if [ ! -d "$APP_STORAGE/private/documents" ]; then
+    echo "[backup] FATAL: private documents vault is missing at $APP_STORAGE/private/documents" >&2
     exit 1
 fi
 
-VAULT_DIRS=(documents)
-if [ -d "$PRIVATE_DIR/quarantine" ]; then
-    VAULT_DIRS+=(quarantine)
+# Preserve paths relative to storage/app so one archive restores private
+# documents, quarantined uploads, and public map/media assets to their
+# original locations.
+VAULT_PATHS="$WORK/vault-paths.txt"
+printf '%s\n' 'private/documents' > "$VAULT_PATHS"
+if [ -d "$APP_STORAGE/private/quarantine" ]; then
+    printf '%s\n' 'private/quarantine' >> "$VAULT_PATHS"
+fi
+if [ -d "$APP_STORAGE/public" ]; then
+    printf '%s\n' 'public' >> "$VAULT_PATHS"
 fi
 
-tar -czf "$WORK/vault.tar.gz" -C "$PRIVATE_DIR" "${VAULT_DIRS[@]}"
+tar -czf "$WORK/vault.tar.gz" -C "$APP_STORAGE" -T "$VAULT_PATHS"
 VAULT_ARTEFACT="$WORK/vault.tar.gz"
 VAULT_ENTRIES="$(tar -tzf "$VAULT_ARTEFACT" | wc -l)"
 if [ "$VAULT_ENTRIES" -le 0 ]; then
-    echo "[backup] FATAL: private vault archive is empty or unreadable." >&2
+    echo "[backup] FATAL: application storage archive is empty or unreadable." >&2
     exit 1
 fi
-echo "[backup] private vault archived ($VAULT_ENTRIES entries: ${VAULT_DIRS[*]})"
+echo "[backup] application storage archived ($VAULT_ENTRIES entries)"
 
 # ---------------------------------------------------------------- verify
 if [ "$TABLE_COUNT" -le 0 ]; then
