@@ -7,6 +7,7 @@ use App\Models\AgencyInvitation;
 use App\Models\AgencyMember;
 use App\Models\Document;
 use App\Models\DocumentVersion;
+use App\Models\DocumentQuarantine;
 use App\Models\MediaFile;
 use Illuminate\Http\JsonResponse;
 
@@ -51,7 +52,7 @@ class PlanLimits
         return [
             'listings' => $agency->properties()->whereNull('deleted_at')->count(),
             'members' => $agency->activeMembers()->count(),
-            'storage_bytes' => $documentBytes + $versionBytes + $mediaBytes,
+            'storage_bytes' => $documentBytes + $versionBytes + $mediaBytes + $quarantineBytes,
             'leads' => $agency->inquiries()->count(),
             'featured_credits' => $agency->properties()
                 ->whereNull('deleted_at')
