@@ -339,7 +339,7 @@ class WorkspaceController extends Controller
                 $this->auditNewMediaSales($request, $clean);
             }
 
-            $result = $this->syncList($name, $clean, $agencyId, $mode);
+            $result = $this->syncList($request, $user, $name, $clean, $agencyId, $mode);
             $changedIds = $result['changed'];
             $removed = $result['removed'];
 
@@ -609,7 +609,7 @@ class WorkspaceController extends Controller
      * Unchanged rows are skipped so the debounced frontend autosave does not
      * generate audit/write churn on every keystroke.
      */
-    private function syncList(string $collection, array $rows, ?string $agencyId, string $mode): array
+    private function syncList(Request $request, $user, string $collection, array $rows, ?string $agencyId, string $mode): array
     {
         $ids = [];
         $changed = [];
@@ -624,6 +624,7 @@ class WorkspaceController extends Controller
 
             $existing = BusinessRecord::where('collection', $collection)
                 ->where('record_id', $recordId)
+                ->lockForUpdate()
                 ->first();
 
             $owner = $existing ? ($existing->agency_id ?? null) : null;
@@ -674,6 +675,27 @@ class WorkspaceController extends Controller
 
             if (! $payloadDiffers && ! $deletedDiffers) {
                 continue; // nothing changed — skip write
+            }
+
+            // Client-supplied deletedAt cannot turn an update permission into
+            // a delete/restore permission.
+            if (($deletedAt !== null || $oldDeletedAt !== null) && ! $this->canReplace($request, $user, $collection, $agencyId)) {
+                $blocked++;
+
+                continue;
+            }
+
+            if ($existing === null && ! $this->canCreateRow($request, $user, $collection, $agencyId)) {
+                $blocked++;
+
+                continue;
+            }
+
+            if ($existing !== null && $deletedAt === null && $oldDeletedAt === null
+                && ! $this->canUpdateRow($request, $user, $collection, $agencyId, $oldPayload ?? [], $newPayload)) {
+                $blocked++;
+
+                continue;
             }
 
             BusinessRecord::put($collection, $recordId, $row);
@@ -1057,7 +1079,150 @@ class WorkspaceController extends Controller
         return false;
     }
 
-    /** Replace (destructive) mode requires delete-level rights; financial ledgers are append-only here. */
+    private function canCreateRow(Request $request, $user, string $collection, ?string $agencyId): bool
+    {
+        if (in_array($collection, ['projects', 'testimonials', 'cms'], true) && ! $user->isPlatformUser()) {
+            return false;
+        }
+
+        $gates = [
+            'projects' => ['manage_projects'],
+            'properties' => ['create_properties', 'properties.create'],
+            'dealers' => ['manage_dealers'],
+            'sellers' => ['manage_sellers'],
+            'buyers' => ['submit_buyer', 'manage_buyers'],
+            'transactions' => ['create_transactions', 'finance.create_transaction'],
+            'payments' => ['manage_payments', 'finance.manage_payments'],
+            'commissions' => ['pay_commissions', 'manage_payments', 'finance.manage_payments'],
+            'files' => ['upload_documents', 'documents.upload'],
+            'plots' => ['edit_properties', 'properties.update'],
+            'media' => ['upload_media', 'manage_media'],
+            'videos' => ['upload_media', 'manage_media'],
+            'inquiries' => ['crm.update_lead'],
+            'subscribers' => ['crm.update_lead'],
+            'testimonials' => ['edit_cms'],
+        ];
+
+        foreach ($gates[$collection] ?? [] as $permission) {
+            if ($this->perm($request, $user, $permission, $agencyId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function canUpdateRow(
+        Request $request,
+        $user,
+        string $collection,
+        ?string $agencyId,
+        array $oldPayload,
+        array $newPayload
+    ): bool {
+        if (in_array($collection, ['projects', 'testimonials', 'cms'], true) && ! $user->isPlatformUser()) {
+            return false;
+        }
+
+        $gates = [
+            'projects' => ['manage_projects'],
+            'properties' => ['edit_properties', 'properties.update'],
+            'dealers' => ['manage_dealers'],
+            'sellers' => ['manage_sellers'],
+            'buyers' => ['manage_buyers'],
+            'transactions' => ['update_transactions'],
+            'payments' => [], // payment records are append-only; create a refund entry instead
+            'commissions' => ['pay_commissions', 'manage_payments', 'finance.manage_payments'],
+            'files' => ['verify_documents', 'documents.update'],
+            'plots' => ['edit_properties', 'properties.update'],
+            'media' => ['manage_media'],
+            'videos' => ['manage_media'],
+            'inquiries' => ['crm.update_lead'],
+            'subscribers' => ['crm.update_lead'],
+            'testimonials' => ['edit_cms'],
+        ];
+
+        if ($collection === 'transactions') {
+            $moneyKeys = [
+                'agreementAmountPKR', 'advancePaymentPKR', 'remainingBalancePKR',
+                'totalPaidPKR', 'commissionAmountPKR', 'paymentStatus',
+            ];
+            $moneyChanged = false;
+            foreach ($moneyKeys as $key) {
+                if (($oldPayload[$key] ?? null) !== ($newPayload[$key] ?? null)) {
+                    $moneyChanged = true;
+                    break;
+                }
+            }
+            if ($moneyChanged && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+                return false;
+            }
+
+            $oldStatus = strtolower((string) ($oldPayload['status'] ?? ''));
+            $newStatus = strtolower((string) ($newPayload['status'] ?? ''));
+            if ($newStatus === 'voided' && $oldStatus !== 'voided') {
+                return $this->perm($request, $user, 'void_transactions', $agencyId)
+                    && filled($newPayload['voidReason'] ?? $newPayload['notes'] ?? null)
+                    && (int) ($oldPayload['advancePaymentPKR'] ?? 0) === 0
+                    && $this->netCollectedForTransaction((string) ($newPayload['id'] ?? ''), $agencyId) === 0;
+            }
+        }
+
+        if ($collection === 'commissions') {
+            $oldStatus = strtolower((string) ($oldPayload['status'] ?? ''));
+            $newStatus = strtolower((string) ($newPayload['status'] ?? ''));
+            $amountKeys = ['commissionAmountPKR', 'amountPKR', 'commissionAmount'];
+            foreach ($amountKeys as $key) {
+                if (($oldPayload[$key] ?? null) !== ($newPayload[$key] ?? null)
+                    && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+                    return false;
+                }
+            }
+            if ($oldStatus === 'paid' && $oldPayload !== $newPayload) {
+                return false;
+            }
+            if ($newStatus === 'paid' && $oldStatus !== 'paid'
+                && ! $this->perm($request, $user, 'pay_commissions', $agencyId)
+                && ! $this->perm($request, $user, 'finance.manage_payments', $agencyId)) {
+                return false;
+            }
+        }
+
+        foreach ($gates[$collection] ?? [] as $permission) {
+            if ($this->perm($request, $user, $permission, $agencyId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function netCollectedForTransaction(string $transactionId, ?string $agencyId): int
+    {
+        if ($transactionId === '') {
+            return 0;
+        }
+
+        $query = BusinessRecord::where('collection', 'payments')->whereNull('deleted_at');
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        }
+
+        return (int) $query->get()->sum(function (BusinessRecord $record) use ($transactionId): int {
+            $row = $record->payload ?? [];
+            $rowTransactionId = (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '');
+            if ($rowTransactionId !== $transactionId) {
+                return 0;
+            }
+
+            $amount = (int) ($row['amountPKR'] ?? $row['paymentAmountPKR'] ?? $row['amount'] ?? 0);
+            $type = strtolower((string) ($row['type'] ?? $row['paymentType'] ?? 'payment'));
+
+            return str_contains($type, 'refund') ? -abs($amount) : abs($amount);
+        });
+    }
+
+    /** Replace (destructive) mode requires delete-level rights; financial ledgers cannot be bulk-replaced. */
     private function canReplace(Request $request, $user, string $collection, ?string $agencyId): bool
     {
         if (in_array($collection, ['projects', 'testimonials', 'cms'], true) && ! $user->isPlatformUser()) {
