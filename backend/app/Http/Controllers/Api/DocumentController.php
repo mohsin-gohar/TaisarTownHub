@@ -438,6 +438,9 @@ class DocumentController extends Controller
         $this->requirePermission($request, 'documents.update');
 
         $document = $this->findScoped($agencyId, $id);
+        if ($document->is_sensitive) {
+            $this->requirePermission($request, 'documents.view_sensitive');
+        }
         if ($document->status !== 'active' || $document->scan_status !== 'scanned_clean') {
             return response()->json([
                 'success' => false,
@@ -636,6 +639,9 @@ class DocumentController extends Controller
         $this->requirePermission($request, 'documents.view');
 
         $document = $this->findScoped($agencyId, $id);
+        if ($document->is_sensitive) {
+            $this->requirePermission($request, 'documents.view_sensitive');
+        }
 
         return response()->json([
             'success' => true,
@@ -1200,6 +1206,9 @@ class DocumentController extends Controller
         $this->requirePermission($request, 'documents.manage_permissions');
 
         $document = $this->findScoped($agencyId, $id);
+        if ($document->is_sensitive) {
+            $this->requirePermission($request, 'documents.view_sensitive');
+        }
 
         $logs = DocumentAccessLog::where('document_id', $document->id)
             ->with('user:id,name,email')
@@ -1222,8 +1231,12 @@ class DocumentController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'documents.view');
 
-        $logs = DocumentAccessLog::where('agency_id', $agencyId)
-            ->with(['user:id,name,email', 'document:id,title,category'])
+        $query = DocumentAccessLog::where('agency_id', $agencyId);
+        if (!$this->can($request, 'documents.view_sensitive')) {
+            $query->whereHas('document', fn ($documentQuery) => $documentQuery->where('is_sensitive', false));
+        }
+
+        $logs = $query->with(['user:id,name,email', 'document:id,title,category'])
             ->orderByDesc('created_at')
             ->paginate(min((int) $request->get('per_page', 30), 100));
 
@@ -1254,6 +1267,9 @@ class DocumentController extends Controller
         $this->requirePermission($request, 'documents.view');
 
         $document = $this->findScoped($agencyId, $id);
+        if ($document->is_sensitive) {
+            $this->requirePermission($request, 'documents.view_sensitive');
+        }
 
         $shares = DocumentShare::where('document_id', $document->id)
             ->with('creator:id,name')
