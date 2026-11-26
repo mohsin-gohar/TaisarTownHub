@@ -96,7 +96,7 @@ class MfaEnforcementTest extends EnterpriseTestCase
         $token = $this->tokenFor($user);
         $service = app(MfaService::class);
 
-        $secret = $this->postJson('/api/auth/mfa/setup', [], $this->authHeaders($token))
+        $secret = $this->postJson('/api/auth/mfa/setup', ['password' => 'Secret123!'], $this->authHeaders($token))
             ->assertOk()->json('secret');
         $this->postJson('/api/auth/mfa/enable', [
             'code' => $service->currentCode($secret),
