@@ -402,6 +402,47 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_workspace_cannot_void_while_adding_payment_or_paid_commission_in_same_save(): void
+    {
+        [$user, $agency] = $this->agencyUser(['void_transactions', 'finance.manage_payments']);
+        BusinessRecord::put('transactions', 'same-save-payment-deal', [
+            'id' => 'same-save-payment-deal', 'status' => 'Draft', 'voided' => false,
+            'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000,
+        ], $agency->id);
+        BusinessRecord::put('transactions', 'same-save-commission-deal', [
+            'id' => 'same-save-commission-deal', 'status' => 'Draft', 'voided' => false,
+            'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000,
+        ], $agency->id);
+
+        $this->putJson('/api/workspace', [
+            'collections' => [
+                'transactions' => [
+                    ['id' => 'same-save-payment-deal', 'status' => 'Cancelled', 'voided' => true, 'voidReason' => 'Duplicate booking.', 'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000],
+                    ['id' => 'same-save-commission-deal', 'status' => 'Cancelled', 'voided' => true, 'voidReason' => 'Duplicate booking.', 'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000],
+                ],
+                'payments' => [[
+                    'id' => 'same-save-payment',
+                    'transactionId' => 'same-save-payment-deal',
+                    'amountPKR' => 5000,
+                    'type' => 'payment',
+                    'paidAt' => now()->toDateString(),
+                ]],
+                'commissions' => [[
+                    'id' => 'same-save-paid-commission',
+                    'transactionId' => 'same-save-commission-deal',
+                    'amountPKR' => 10000,
+                    'paidPKR' => 10000,
+                    'status' => 'Paid',
+                ]],
+            ],
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertSame('Draft', $this->record('transactions', 'same-save-payment-deal')->payload['status']);
+        $this->assertSame('Draft', $this->record('transactions', 'same-save-commission-deal')->payload['status']);
+        $this->assertDatabaseHas('business_records', ['collection' => 'payments', 'record_id' => 'same-save-payment']);
+        $this->assertDatabaseHas('business_records', ['collection' => 'commissions', 'record_id' => 'same-save-paid-commission']);
+    }
+
     public function test_workspace_requires_cancel_permission_and_reason_for_non_void_cancellation(): void
     {
         [$updater, $agency] = $this->agencyUser(['update_transactions']);
