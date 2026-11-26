@@ -132,7 +132,7 @@ class Permissions
             'legacy.view_sensitive_cnic',
             'crm.view', 'crm.create_lead', 'crm.update_lead', 'crm.assign_lead', 'crm.delete_lead', 'crm.export',
             'finance.view', 'finance.create_transaction', 'finance.update_transaction',
-            'finance.manage_payments', 'finance.view_reports', 'legacy.void_transactions',
+            'finance.manage_payments', 'finance.view_reports', 'legacy.void_transactions', 'legacy.approve_transactions',
             'legacy.manage_sellers', 'legacy.manage_buyers', 'legacy.submit_buyer',
             'legacy.manage_media', 'legacy.upload_media',
         ],
