@@ -1,36 +1,38 @@
 # Testing Report
 
-Branch: `audit/full-repository-hardening-20261126`
-Date: 2026-11-26
+**Integrated QA commit:** `1e43393fc728fb9ce11746869a331f5e852d4b58`  
+**Release path:** PR #11 merged into QA; PR #5 carries the integrated QA branch toward main.
 
-## Latest successful GitHub Actions run
-Run #652 — commit `8ffd9197d78738202950521663cf39f129a3053f`
-https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45859982724
+## GitHub Actions CI
 
-This run includes the dealer commission validation follow-up and all five jobs completed successfully.
+Run: https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45864429885
 
-All five jobs completed successfully:
-- Backend suite (PHP 8.3, MySQL 8): **540 passed, 0 failed, 4,527 assertions**.
-- Frontend verify (Node 24): **173 tests, 0 failures**; TypeScript check, production build, 29 prerendered pages, 9-URL sitemap and public bundle guard passed.
-- Browser UI regression (Playwright Chromium): **46 passed**.
-- Browser cross-engine regression (Firefox + WebKit): **14 combined passed**.
-- OpenAPI spec parse: passed.
+| Gate | Result |
+|---|---:|
+| Backend PHP 8.3 + MySQL 8 | 547 passed; 4,563 assertions |
+| Frontend tests / lint / TypeScript / build | 176 passed |
+| Chromium Playwright | 46 passed, 2 skipped |
+| Firefox + WebKit | 14 passed |
+| OpenAPI parse | Passed |
 
-## Browser coverage
-The Chromium workflow runs cross-browser smoke, responsive, maps, interactive-elements, WhatsApp and public-page suites. Responsive tests exercise 11 widths: 320, 360, 375, 390, 414, 430, 768, 1024, 1280, 1440 and 1920px across public routes.
-Firefox and WebKit use the cross-browser smoke suite. These tests do not constitute authenticated Super Admin/agency/staff role-journey coverage.
+SEO build generated 29 prerendered pages and a 9-URL sitemap. The public bundle guard passed with no private ERP data or demo credentials found in public chunks.
 
-## Follow-up dealer validation change — CI verified
-- `2ab933cd8fe228c3c44b5f36ef365fc02c862b5b`: aligns dealer commission update validation with create validation, allowing Fixed/Custom PKR amounts above 100 while retaining a 100% Percentage cap.
-- `668c83edf7c141d332daa908e751e5f39734dfaf`: adds regression coverage for valid fixed amount and rejected percentage above 100%.
-- `50cf80e91fe0c8b30cfd6079402aa3dfb2b3bc83`: corrects the validator closure type hint.
-- `8b660344ca71012f6379f4ffd49ed490694eea84`: removes a brittle assertion that depended on JSON numeric casting.
-- All follow-up commits above are included in run #652 and passed the backend, frontend, Chromium, Firefox/WebKit and OpenAPI jobs.
+## Docker CI
 
-## Environment limitations
-PR #22 was merged into this audit branch after its run #652 CI passed. Docker image/Compose verification must run on the updated audit release candidate before it is promoted through PR #11. Real ClamAV, TLS, SMTP, DNS, payment-provider credentials, Lighthouse and production deployment were not tested. No production data or service was modified.
+Run: https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45864438598
 
+- Backend/frontend production images and nginx configuration checks passed.
+- MySQL backup/restore drill passed.
+- Full-stack readiness and two-replica backend checks passed.
+- Shared private vault/quarantine volume checks passed.
+- API smoke and seeded role-based browser matrix passed.
+- 10-worker load: 90,801 requests / 10 seconds, 9,080.1 req/s, zero 5xx.
+- Concurrent transaction integrity: 8/8 created with unique deal numbers.
 
-## Integration update
-- PR #22 (`fix/workspace-transaction-lifecycle-20261126`) merged into this audit branch at `af3220edfcd0e414b9594131bca852450224c223` after run #652 passed.
-- PR #11 now points at the updated audit branch. The prior run #569 and Docker run #569 verified the pre-merge audit SHA `bae7c431`; the merged SHA still requires fresh CI and Docker CI evidence.
+## Additional probe not accepted as a green gate
+
+The separate PR #9 workflow probe recorded 15/20. The failed steps were caused by missing test setup for captcha, trial staff quota, dealer agency context and malware scan completion before sharing. This probe was not merged into the release workflow and is not represented as passed.
+
+## Remaining operational verification
+
+Live DNS/TLS, SMTP, OAuth/payment/monitoring credentials, production ClamAV, production backup target, production data migration, staging smoke/rollback, Lighthouse, deep SEO and independent penetration testing remain external or unverified. No production deployment was performed.
