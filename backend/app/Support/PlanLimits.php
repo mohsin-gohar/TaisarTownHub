@@ -125,6 +125,19 @@ class PlanLimits
     }
 
     /**
+     * Visitor-safe lead-quota response. Public callers must not learn the
+     * agency's configured limit or current lead count.
+     */
+    public static function denyPublicLead(): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'code' => 'plan_limit_reached',
+            'message' => 'This listing is not accepting new inquiries right now.',
+        ], 402);
+    }
+
+    /**
      * Commercial gate: an agency may only record sales (dealer files, media)
      * while its subscription is genuinely active. Agencies without a
      * subscription row keep working (legacy/default plans), but a
