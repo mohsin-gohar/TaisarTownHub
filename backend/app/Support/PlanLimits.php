@@ -9,6 +9,7 @@ use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\DocumentQuarantine;
 use App\Models\MediaFile;
+use App\Models\Inquiry;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -148,6 +149,12 @@ class PlanLimits
         }
 
         return true;
+    }
+
+    /** Current lead usage; kept identical to Agency::inquiries()->count(). */
+    public static function leadUsed(string $agencyId): int
+    {
+        return Inquiry::where('agency_id', $agencyId)->count();
     }
 
     /** Standardised 403 response for subscription-blocked commerce actions. */
