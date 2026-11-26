@@ -184,7 +184,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
       `${family.name.padEnd(28)} ${String(family.samples.length).padStart(4)} ` +
         `${rps.toFixed(1).padStart(6)} ${String(percentile(times, 50)).padStart(5)} ` +
         `${String(percentile(times, 95)).padStart(5)} ${String(percentile(times, 99)).padStart(5)} ` +
-        `${String(Math.max(...times)).padStart(5)} ${String(family.throttled).padStart(4)} ` +
+        `${String(times.reduce((max, value) => Math.max(max, value), 0)).padStart(5)} ${String(family.throttled).padStart(4)} ` +
         `${String(family.serverErrors).padStart(5)}`,
     );
   }
@@ -193,7 +193,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
   console.log('\n--- totals ---');
   console.log(`requests          : ${all.length}`);
   console.log(`throughput        : ${(all.length / duration).toFixed(1)} req/s (concurrency ${CONCURRENCY})`);
-  console.log(`latency p50/p95/p99/max : ${percentile(times, 50)} / ${percentile(times, 95)} / ${percentile(times, 99)} / ${Math.max(...times)} ms`);
+  console.log(`latency p50/p95/p99/max : ${percentile(times, 50)} / ${percentile(times, 95)} / ${percentile(times, 99)} / ${times.reduce((max, value) => Math.max(max, value), 0)} ms`);
   console.log(`429 (throttled)   : ${throttled}`);
   console.log(`5xx (server bugs) : ${serverErrors}`);
   console.log(`4xx (client)      : ${clientErrors}`);
@@ -235,7 +235,7 @@ const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/j
     p50: percentile(times, 50),
     p95: percentile(times, 95),
     p99: percentile(times, 99),
-    max: Math.max(...times),
+    max: times.reduce((max, value) => Math.max(max, value), 0),
     errors,
     throttled,
     serverErrors,
