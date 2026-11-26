@@ -49,7 +49,9 @@ class PlanLimits
         $mediaBytes = (int) MediaFile::withTrashed()
             ->where('agency_id', $agency->id)
             ->sum('size_bytes');
-        $quarantineBytes = (int) DocumentQuarantine::where('agency_id', $agency->id)->sum('size_bytes');
+        $quarantineBytes = (int) DocumentQuarantine::where('agency_id', $agency->id)
+            ->whereNull('document_id')
+            ->sum('size_bytes');
 
         return [
             'listings' => $agency->properties()->whereNull('deleted_at')->count(),
@@ -140,8 +142,14 @@ class PlanLimits
             return true; // no subscription row — legacy/default access
         }
 
+        if ($subscription->status === 'trialing') {
+            return $subscription->trial_ends_at !== null
+                && $subscription->trial_ends_at->isFuture()
+                && ($subscription->ends_at === null || $subscription->ends_at->isFuture());
+        }
+
         if ($subscription->status !== 'active') {
-            return false; // past_due, cancelled, ...
+            return false; // past_due, expired, cancelled, ...
         }
 
         if ($subscription->ends_at !== null && $subscription->ends_at->isPast()) {
