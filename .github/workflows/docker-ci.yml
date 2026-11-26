@@ -262,7 +262,7 @@ jobs:
   docker-integration:
     name: Full Stack Integration Test
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 20
     needs: [docker-backend, docker-frontend]
     steps:
       - name: Checkout
