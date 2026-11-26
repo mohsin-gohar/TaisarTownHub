@@ -1,6 +1,9 @@
 # TaisarTownHub — Product Requirements Document (PRD) & User Stories
 
 **Version:** 2.0.0 · **Last updated:** 2026-11-08
+
+> **Historical PRD snapshot (2026-11-08):** reconcile these original user stories with the current sale-only marketplace scope and the live implementation. Current acceptance evidence and remaining decisions are in `../docs/STATUS.md`.
+
 **Product:** TaisarTownHub Real Estate ERP SaaS — MDA Taiser Town Scheme 45, Karachi
 
 ---
