@@ -1,5 +1,5 @@
 /**
- * Browser interaction audit (one-off, not part of CI gates).
+ * Browser interaction audit for the disposable full-stack CI environment.
  *
  * Goes beyond the passive crawl: for every public route it actually
  *   1. navigates every internal link and records the HTTP status,
@@ -567,7 +567,7 @@ async function runPublic(browser: Browser): Promise<{
     await gotoRoute(page, '/login');
     const form = page.locator('form').filter({ has: page.locator('input[placeholder="Enter password"]') }).first();
     await form.locator('input[type="email"]').fill('not-a-user@taisartownhub.com');
-    await form.locator('input[type="password"]').fill('WrongPass123!');
+    await form.locator('input[type="password"]').fill((process.env.DEMO_STAFF_PASSWORD || 'WrongPass123!'));
     await form.locator('button[type="submit"]').click();
     await delay(1800);
     const errorVisible =
@@ -802,4 +802,8 @@ async function runPublic(browser: Browser): Promise<{
   console.log(`\nForms / flows: ${result.forms.length + result.flows.length}, failed: ${failedForms.length}`);
   failedForms.forEach((f) => console.log(`  FAIL [${f.form}] ${f.detail} ${f.errors.join(' | ')}`));
   [...result.forms, ...result.flows].forEach((f) => console.log(`  ${f.ok ? 'OK  ' : 'FAIL'} ${f.form} — ${f.detail}`));
+
+  if (brokenLinks.length || noEffect.length || clickFailed.length || errorProbes.length || failedForms.length) {
+    process.exitCode = 1;
+  }
 })();
