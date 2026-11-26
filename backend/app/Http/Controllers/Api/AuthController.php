@@ -719,19 +719,26 @@ class AuthController extends Controller
         $suspicious = false;
 
         if ($success && $user !== null) {
-            $previous = LoginHistory::where('user_id', $user->id)
+            $recentSuccessful = LoginHistory::where('user_id', $user->id)
                 ->where('success', true)
-                ->where('created_at', '>=', now()->subDays(30))
-                ->get();
+                ->where('created_at', '>=', now()->subDays(30));
 
-            if ($previous->isNotEmpty()) {
-                $knownIps = $previous->pluck('ip_address')->filter()->unique()->all();
-                $knownAgents = $previous->pluck('user_agent')->filter()->unique()->all();
+            if ($recentSuccessful->exists()) {
+                $knownIp = $ip !== null && LoginHistory::where('user_id', $user->id)
+                    ->where('success', true)
+                    ->where('created_at', '>=', now()->subDays(30))
+                    ->where('ip_address', $ip)
+                    ->exists();
+                $knownAgent = $userAgent !== '' && LoginHistory::where('user_id', $user->id)
+                    ->where('success', true)
+                    ->where('created_at', '>=', now()->subDays(30))
+                    ->where('user_agent', $userAgent)
+                    ->exists();
 
-                if ($ip && !in_array($ip, $knownIps, true)) {
+                if ($ip && !$knownIp) {
                     $suspicious = true;
                     $reason = 'new_ip_address';
-                } elseif ($userAgent && !in_array($userAgent, $knownAgents, true)) {
+                } elseif ($userAgent && !$knownAgent) {
                     $suspicious = true;
                     $reason = 'new_device';
                 }
@@ -750,7 +757,15 @@ class AuthController extends Controller
         ]);
 
         if ($suspicious && $user !== null) {
-            $user->notify(new SuspiciousLoginDetected($reason ?? 'unknown', $ip, $userAgent));
+            try {
+                $user->notify(new SuspiciousLoginDetected($reason ?? 'unknown', $ip, $userAgent));
+            } catch (\\Throwable $exception) {
+                // A mail/queue outage must not turn a valid sign-in into a 500.
+                Log::warning('Suspicious-login notification could not be queued', [
+                    'user_id' => $user->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
 
             $this->writeAudit($request, 'auth.suspicious_login', (string) $user->id, 'Sign-in from a new IP address or device detected.', [
                 'entity_type' => 'user',
@@ -980,7 +995,12 @@ class AuthController extends Controller
             'role' => $user->role,
             'dealer_id' => $user->dealer_id,
             'phone' => $user->phone,
-            'permissions' => $access['allowed'] ? RolePermissions::forRole($user->role) : [],
+            // Legacy UI permission keys must come from the active agency
+            // membership for tenant users. A stale users.role value such as
+            // "admin" must never leak platform capabilities into an agency UI.
+            'permissions' => $access['allowed']
+                ? ($user->isPlatformUser() ? RolePermissions::forRole($user->role) : $user->permissionsFor($actingAgency))
+                : [],
             'enterprise_permissions' => $access['allowed']
                 ? $user->permissionsFor($user->isPlatformUser() ? null : $actingAgency) : [],
             'agencies' => $memberships,
