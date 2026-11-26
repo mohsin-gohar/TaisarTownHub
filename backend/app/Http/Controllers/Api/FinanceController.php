@@ -1231,9 +1231,22 @@ public function destroyPayment(Request $request, int $id)
             'notes' => 'nullable|string|max:1000',
         ]);
 
-        // Agency users are confined to their own ledger. Platform users with
-        // the payout permission can act across agencies.
-        [$commission, $from, $error] = DB::transaction(function () use ($id, $agencyId, $request): array {
+        // Resolve the parent before entering the transaction, then lock the
+        // deal before the commission. Cancellation/void uses this same order.
+        $commissionPreview = Commission::where('id', $id)
+            ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+            ->firstOrFail();
+
+        [$commission, $from, $error] = DB::transaction(function () use ($id, $agencyId, $request, $commissionPreview): array {
+            $transaction = Transaction::where('id', $commissionPreview->transaction_id)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($transaction->isVoided() || strtolower((string) $transaction->dealStatus) === 'cancelled') {
+                return [null, '', 'Commissions cannot be changed after a deal is cancelled or voided.'];
+            }
+
             $commission = Commission::where('id', $id)
                 ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
                 ->lockForUpdate()
