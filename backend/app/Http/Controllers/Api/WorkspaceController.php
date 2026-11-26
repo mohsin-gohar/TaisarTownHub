@@ -34,7 +34,8 @@ class WorkspaceController extends Controller
     use AuthorizesApi;
 
     private const COLLECTIONS = [
-        'projects', 'properties', 'dealers', 'sellers', 'buyers',
+        // Parent records first so dependent rows can be created in one atomic sync.
+        'projects', 'dealers', 'sellers', 'buyers', 'properties',
         'transactions', 'payments', 'commissions', 'files', 'plots',
         'media', 'videos', 'inquiries', 'testimonials', 'subscribers',
     ];
