@@ -56,15 +56,33 @@ class SubscriptionInvoice extends Model
     /** Unique sequential invoice number: INV-YYYY-NNNNNN. */
     public static function nextNumber(): string
     {
-        $year = now()->format('Y');
-        $seq = (int) self::where('invoice_number', 'like', "INV-{$year}-%")->count() + 1;
+        $year = (int) now()->format('Y');
 
-        // Walk forward until unique (defensive against concurrent seeds).
-        do {
-            $number = sprintf('INV-%s-%06d', $year, $seq);
-            $seq++;
-        } while (self::where('invoice_number', $number)->exists());
+        $sequence = DB::transaction(function () use ($year): int {
+            DB::table('subscription_invoice_number_sequences')->insertOrIgnore([
+                'year' => $year,
+                'next_number' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
 
-        return $number;
+            $row = DB::table('subscription_invoice_number_sequences')
+                ->where('year', $year)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$row) {
+                throw new \\RuntimeException('Invoice number sequence row could not be locked.');
+            }
+
+            $next = (int) $row->next_number + 1;
+            DB::table('subscription_invoice_number_sequences')
+                ->where('year', $year)
+                ->update(['next_number' => $next, 'updated_at' => now()]);
+
+            return $next;
+        }, 10);
+
+        return sprintf('INV-%04d-%06d', $year, $sequence);
     }
 }
