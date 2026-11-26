@@ -41,7 +41,7 @@ class PaymentController extends Controller
             'success_url' => [
                 'required',
                 'url',
-                function (string $attribute, mixed $value, \Closure $fail): void {
+                function ($attribute, $value, $fail): void {
                     if (!$this->isTrustedCheckoutReturnUrl((string) $value)) {
                         $fail('The checkout return URL must use a configured application origin.');
                     }
@@ -50,7 +50,7 @@ class PaymentController extends Controller
             'cancel_url' => [
                 'required',
                 'url',
-                function (string $attribute, mixed $value, \Closure $fail): void {
+                function ($attribute, $value, $fail): void {
                     if (!$this->isTrustedCheckoutReturnUrl((string) $value)) {
                         $fail('The checkout return URL must use a configured application origin.');
                     }
