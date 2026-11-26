@@ -144,6 +144,50 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             ->assertJsonFragment(['message' => 'Deal is cancelled — the record is read-only for bookkeeping.']);
     }
 
+    public function test_completed_deal_is_read_only_even_for_non_status_updates(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+
+        foreach (['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Completed'] as $stage) {
+            $this->patchStatus($user, $deal['id'], $stage)->assertStatus(200);
+        }
+
+        $this->patchJson(
+            "/api/agency/transactions/{$deal['id']}",
+            ['propertyTitle' => 'Attempted post-completion edit'],
+            $this->authHeaders($this->tokenFor($user))
+        )->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Completed deals are read-only.']);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $deal['id'],
+            'propertyTitle' => 'Finance Test Plot',
+            'dealStatus' => 'Completed',
+        ]);
+    }
+
+    public function test_payment_endpoint_rechecks_void_state_before_writing(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Duplicate deal record',
+        ], $headers)->assertOk();
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 1000,
+            'type' => 'advance',
+        ], $headers)->assertStatus(409);
+
+        $this->assertDatabaseMissing('transaction_payments', [
+            'transaction_id' => $deal['id'],
+            'amount' => 1000,
+        ]);
+    }
+
     public function test_seeded_agency_manager_can_create_and_update_a_deal(): void
     {
         // Regression: store/update required `manage_deals`, a key that exists
