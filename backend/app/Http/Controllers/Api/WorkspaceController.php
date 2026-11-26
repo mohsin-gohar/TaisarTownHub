@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\BusinessRecord;
 use App\Models\Agency;
+use App\Models\AgencyMember;
+use App\Models\Dealer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -472,6 +474,84 @@ class WorkspaceController extends Controller
     }
 
     /**
+     * Agency-scoped workspace rows may only reference records owned by the
+     * same agency. Unchanged historical references are tolerated so that a
+     * dealer later made inactive does not freeze every unrelated edit.
+     */
+    private function agencyReferencesValid(string $collection, array $row, array $oldPayload, string $agencyId): bool
+    {
+        $references = [
+            'properties' => ['assignedDealerId' => 'dealer'],
+            'transactions' => [
+                'dealerId' => 'dealer',
+                'propertyId' => 'properties',
+                'buyerId' => 'buyers',
+                'sellerId' => 'sellers',
+            ],
+            'payments' => [
+                'transactionId' => 'transactions',
+                'transaction_id' => 'transactions',
+                'dealId' => 'transactions',
+            ],
+            'commissions' => [
+                'dealerId' => 'dealer',
+                'transactionId' => 'transactions',
+                'transaction_id' => 'transactions',
+            ],
+            'files' => [
+                'dealerId' => 'dealer',
+                'dealer_id' => 'dealer',
+                'propertyId' => 'properties',
+            ],
+            'media' => [
+                'dealerId' => 'dealer',
+                'propertyId' => 'properties',
+            ],
+            'videos' => [
+                'dealerId' => 'dealer',
+                'propertyId' => 'properties',
+            ],
+            'plots' => ['propertyId' => 'properties'],
+            'inquiries' => [
+                'propertyId' => 'properties',
+                'assignedAgentId' => 'agency_member',
+                'assigned_agent_id' => 'agency_member',
+            ],
+            'buyers' => ['dealerId' => 'dealer'],
+            'sellers' => ['dealerId' => 'dealer'],
+        ];
+
+        foreach ($references[$collection] ?? [] as $field => $target) {
+            $value = $row[$field] ?? null;
+            if (! filled($value) || (string) $value === (string) ($oldPayload[$field] ?? null)) {
+                continue;
+            }
+
+            $valid = match ($target) {
+                'dealer' => Dealer::whereKey((string) $value)
+                    ->where('agency_id', $agencyId)
+                    ->whereRaw('LOWER(status) = ?', ['active'])
+                    ->exists(),
+                'agency_member' => AgencyMember::where('agency_id', $agencyId)
+                    ->where('user_id', (string) $value)
+                    ->where('status', 'active')
+                    ->exists(),
+                default => BusinessRecord::where('collection', $target)
+                    ->where('record_id', (string) $value)
+                    ->where('agency_id', $agencyId)
+                    ->whereNull('deleted_at')
+                    ->exists(),
+            };
+
+            if (! $valid) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Reject fractional, negative, non-finite and out-of-range PKR values on
      * every legacy workspace write. FinanceController's strict validators
      * are not enough because the SPA persists its ledger through this endpoint.
@@ -674,6 +754,19 @@ class WorkspaceController extends Controller
 
             $newPayload = $row;
             $oldPayload = $existing?->payload ?? null;
+
+            if ($scoped && $agencyId !== null
+                && ! $this->agencyReferencesValid($collection, $newPayload, $oldPayload ?? [], $agencyId)) {
+                $blocked++;
+                Log::warning('Workspace row rejected (cross-agency reference)', [
+                    'collection' => $collection,
+                    'record_id' => $recordId,
+                    'agency_id' => $agencyId,
+                ]);
+
+                continue;
+            }
+
             $deletedAt = ! empty($row['deletedAt']) ? now() : null;
             $oldDeletedAt = $existing?->deleted_at;
 
