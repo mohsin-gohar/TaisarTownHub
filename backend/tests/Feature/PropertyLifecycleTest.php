@@ -33,9 +33,11 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         ];
     }
 
-    private function moderatorPermissions(): array
+    private function platformModerator(): \\App\\Models\\User
     {
-        return ['view_properties', 'properties.view', 'properties.approve', 'properties.feature'];
+        $this->seedPlatformRole('moderator');
+
+        return $this->makeUser('moderator');
     }
 
     public function test_agency_cannot_self_assign_featured_status_when_creating_or_updating_listing(): void
@@ -71,7 +73,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_member_creates_submits_and_moderator_approves_listing(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
+        $moderator = $this->platformModerator();
         $plan = SubscriptionPlan::create([
             'key' => 'listing-days-' . bin2hex(random_bytes(4)),
             'name' => '60 Day Listings',
@@ -222,7 +224,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_editing_an_approved_listing_stages_changes_for_reapproval(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Original Title',
@@ -245,7 +247,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_rejecting_a_reapproval_edit_keeps_the_live_listing_approved(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Live Listing Title',
@@ -275,7 +277,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_rejecting_a_first_submission_hides_it_and_records_the_reason(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Rejected First Submission',
@@ -308,7 +310,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     {
         $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
         [$agent, $agency] = $this->agencyUser($agentPerms);
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
+        $moderator = $this->platformModerator();
         $plan = SubscriptionPlan::create([
             'key' => 'featured-slots-' . bin2hex(random_bytes(4)),
             'name' => 'One Featured Slot',
@@ -397,7 +399,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     {
         $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
         [$agent, $agency] = $this->agencyUser($agentPerms);
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
         $plan = SubscriptionPlan::create([
             'key' => 'one-featured-slot-' . bin2hex(random_bytes(4)),
             'name' => 'One Featured Slot',
@@ -463,7 +465,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     {
         $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
         [$agent, $agency] = $this->agencyUser($agentPerms);
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
         $plan = SubscriptionPlan::create([
             'key' => 'zero-featured-slots-' . bin2hex(random_bytes(4)),
             'name' => 'No Featured Slots',
