@@ -61,10 +61,9 @@ class AgencyPromotion extends Model
     /** Slots that hold/release capacity (scheduled or currently running). */
     public function scopeCurrent(Builder $query): Builder
     {
+        // Future-dated active placements reserve a slot immediately. The
+        // public/live scope below still hides them until starts_at is reached.
         return $query->where('status', 'active')
-            ->where(function (Builder $q) {
-                $q->whereNull('starts_at')->orWhere('starts_at', '<=', now());
-            })
             ->where(function (Builder $q) {
                 $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
             });
