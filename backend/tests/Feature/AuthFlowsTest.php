@@ -239,4 +239,25 @@ class AuthFlowsTest extends EnterpriseTestCase
         Notification::assertSentTo($user, VerifyEmailLink::class);
         $this->assertNotNull(EmailVerificationToken::where('email', 'resendme@example.test')->first());
     }
+    public function test_agency_membership_never_receives_legacy_platform_permissions_from_user_role(): void
+    {
+        $user = $this->memberUser('viewer', ['agency.view', 'properties.view']);
+        // Legacy base roles are not the agency permission source once a user
+        // has an active membership. This guards stale manager/admin role data.
+        $user->forceFill(['role' => 'manager'])->save();
+        $agencyId = (string) $user->memberships()->value('agency_id');
+
+        $response = $this->getJson('/api/auth/me', array_merge(
+            $this->authHeaders($this->tokenFor($user)),
+            ['X-Agency-Id' => $agencyId]
+        ))->assertOk();
+
+        $permissions = $response->json('user.permissions');
+        $this->assertFalse($response->json('user.is_platform'));
+        $this->assertContains('view_properties', $permissions);
+        $this->assertNotContains('view_reports', $permissions);
+        $this->assertNotContains('create_transactions', $permissions);
+        $this->assertNotContains('manage_users', $permissions);
+    }
+
 }
