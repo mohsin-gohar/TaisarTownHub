@@ -2,6 +2,9 @@
 
 **Version:** 2.0.0 · **Last updated:** 2026-11-08
 
+> **Historical RBAC snapshot:** current authorization is defined by `../backend/app/Support/Permissions.php`, role seeders, `AuthorizesApi`, middleware and their tests. Use `../docs/SECURITY.md` for current operational guidance.
+
+
 ## 1. Authentication
 
 - **Mechanism:** Laravel Sanctum (token-based).
