@@ -259,7 +259,7 @@ class DocumentController extends Controller
 
         if ($scannerUnavailable) {
             if (config('malware.fail_closed', false)) {
-                $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats);
+                $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats, null, $isSensitive);
                 Log::warning('Upload rejected: malware scanner unavailable (fail-closed)', [
                     'file' => $file->getClientOriginalName(),
                     'agency_id' => $agencyId,
@@ -282,7 +282,7 @@ class DocumentController extends Controller
                 ]);
             }
         } elseif (!$scan->isClean) {
-            $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'infected', $scan->threats);
+            $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'infected', $scan->threats, null, $isSensitive);
             Log::warning('Upload rejected: malware detected', [
                 'file' => $file->getClientOriginalName(),
                 'agency_id' => $agencyId,
@@ -464,7 +464,7 @@ class DocumentController extends Controller
         $scannerUnavailable = $scan->skipped || in_array('scan_unavailable', $scan->threats, true);
 
         if ($scannerUnavailable && config('malware.fail_closed', false)) {
-            $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats, $document->id);
+            $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats, $document->id, $document->is_sensitive);
             Log::warning('Version rejected: malware scanner unavailable (fail-closed)', [
                 'document_id' => $document->id,
                 'agency_id' => $agencyId,
@@ -477,7 +477,7 @@ class DocumentController extends Controller
         }
 
         if (!$scannerUnavailable && !$scan->isClean) {
-            $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'infected', $scan->threats, $document->id);
+            $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'infected', $scan->threats, $document->id, $document->is_sensitive);
             Log::warning('Version rejected: malware detected', [
                 'document_id' => $document->id,
                 'agency_id' => $agencyId,
@@ -907,10 +907,12 @@ class DocumentController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'documents.manage_permissions');
 
-        $held = Document::where('agency_id', $agencyId)
-            ->whereIn('status', ['quarantined'])
-            ->orderByDesc('created_at')
-            ->get()
+        $heldQuery = Document::where('agency_id', $agencyId)
+            ->whereIn('status', ['quarantined']);
+        if (!$this->can($request, 'documents.view_sensitive')) {
+            $heldQuery->where('is_sensitive', false);
+        }
+        $held = $heldQuery->orderByDesc('created_at')->get()
             ->map(fn (Document $d) => [
                 'id' => $d->id,
                 'title' => $d->title,
@@ -925,8 +927,12 @@ class DocumentController extends Controller
                 'source' => 'vault_hold',
             ]);
 
-        $rejected = DocumentQuarantine::where('agency_id', $agencyId)
-            ->with('uploader:id,name')
+        $rejectedQuery = DocumentQuarantine::where('agency_id', $agencyId);
+        if (!$this->can($request, 'documents.view_sensitive')) {
+            $rejectedQuery->where('is_sensitive', false)
+                ->whereDoesntHave('document', fn ($query) => $query->where('is_sensitive', true));
+        }
+        $rejected = $rejectedQuery->with('uploader:id,name')
             ->orderByDesc('created_at')
             ->limit(100)
             ->get()
@@ -1552,7 +1558,8 @@ class DocumentController extends Controller
         string $ext,
         string $reason,
         array $threats,
-        ?string $documentId = null
+        ?string $documentId = null,
+        bool $isSensitive = false
     ): void {
         $qPath = null;
         $recordCreated = false;
@@ -1575,6 +1582,7 @@ class DocumentController extends Controller
                 'size_bytes' => (int) $file->getSize(),
                 'checksum' => hash_file('sha256', $file->getRealPath()) ?: null,
                 'reason' => $reason,
+                'is_sensitive' => $isSensitive,
                 'threats' => $threats,
                 'uploaded_by' => $request->user()?->id,
                 'created_at' => now(),
