@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Support\Permissions;
 use App\Support\RolePermissions;
 use PHPUnit\Framework\TestCase;
 
