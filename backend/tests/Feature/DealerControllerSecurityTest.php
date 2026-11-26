@@ -29,7 +29,7 @@ class DealerControllerSecurityTest extends EnterpriseTestCase
         $headers = $this->authHeaders($this->tokenFor($manager));
         $headers['X-Agency-Id'] = $agencyA->id;
 
-        $this->deleteJson('/api/dealers/' . $dealerB->id, $headers)->assertNotFound();
+        $this->deleteJson('/api/dealers/' . $dealerB->id, [], $headers)->assertNotFound();
 
         $this->assertNull($dealerB->fresh()->deleted_at);
     }
