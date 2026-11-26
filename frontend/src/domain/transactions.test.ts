@@ -4,6 +4,7 @@ import {
   TRANSACTION_STAGES,
   TERMINAL_STATUSES,
   validateTransition,
+  validateVoid,
   isTerminal,
   dealMoney,
   collectedForTx,
@@ -85,6 +86,11 @@ describe('lifecycle: state machine', () => {
     assert.equal(validateTransition('Under Transfer', 'Completed').ok, true);
   });
 
+  test('backward corrections are limited to one lifecycle stage', () => {
+    assert.equal(validateTransition('Fully Paid', 'Partially Paid').ok, true);
+    assert.equal(validateTransition('Fully Paid', 'Negotiation').ok, false);
+  });
+
   test('isTerminal recognises exactly the terminal set', () => {
     assert.equal(isTerminal(txn({ status: 'Completed' })), true);
     assert.equal(isTerminal(txn({ status: 'Cancelled' })), true);
@@ -93,6 +99,14 @@ describe('lifecycle: state machine', () => {
 });
 
 describe('ledger: payments', () => {
+  test('void requires zero collected payments and no paid commission', () => {
+    const unpaid = txn({ id: 'tx-void', status: 'Negotiation', advancePKR: 0 });
+    assert.equal(validateVoid(unpaid, [], []).ok, true);
+    assert.equal(validateVoid(unpaid, [pay('p1', 'tx-void', 100)], []).ok, false);
+    assert.equal(validateVoid(unpaid, [], [comm({ transactionId: 'tx-void', status: 'Paid', paidPKR: 500 })]).ok, false);
+    assert.equal(validateVoid(txn({ ...unpaid, status: 'Completed' }), [], []).ok, false);
+  });
+
   test('collected comes from the ledger when present', () => {
     const t = txn({ advancePKR: 1000000 });
     assert.equal(
