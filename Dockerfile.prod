@@ -53,7 +53,7 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 # ====================================================================
 # Multi-stage build for frontend (Nginx-served production build)
 # ====================================================================
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 
 WORKDIR /app
 COPY frontend/package*.json ./
