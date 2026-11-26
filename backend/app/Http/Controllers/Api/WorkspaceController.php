@@ -1599,8 +1599,17 @@ class WorkspaceController extends Controller
                 continue;
             }
             $linkedId = (string) ($commission['transactionId'] ?? $commission['transaction_id'] ?? $commission['dealId'] ?? '');
+            $hasPaidPayout = collect((array) ($commission['payouts'] ?? []))->contains(
+                fn ($payout) => is_array($payout) && (int) ($payout['amountPKR'] ?? $payout['amount'] ?? 0) > 0
+            );
             if ($linkedId === $transactionId
-                && (strtolower((string) ($commission['status'] ?? '')) === 'paid' || (int) ($commission['paidPKR'] ?? 0) > 0)) {
+                && (
+                    strtolower((string) ($commission['status'] ?? '')) === 'paid'
+                    || (int) ($commission['paidPKR'] ?? 0) > 0
+                    || ! empty($commission['paidAt'])
+                    || ! empty($commission['paid_at'])
+                    || $hasPaidPayout
+                )) {
                 return true;
             }
         }
@@ -1620,8 +1629,17 @@ class WorkspaceController extends Controller
         return $legacy->get()->contains(function (BusinessRecord $record) use ($transactionId): bool {
             $row = $record->payload ?? [];
             $linkedId = (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '');
+            $hasPaidPayout = collect((array) ($row['payouts'] ?? []))->contains(
+                fn ($payout) => is_array($payout) && (int) ($payout['amountPKR'] ?? $payout['amount'] ?? 0) > 0
+            );
             return $linkedId === $transactionId
-                && (strtolower((string) ($row['status'] ?? '')) === 'paid' || (int) ($row['paidPKR'] ?? 0) > 0);
+                && (
+                    strtolower((string) ($row['status'] ?? '')) === 'paid'
+                    || (int) ($row['paidPKR'] ?? 0) > 0
+                    || ! empty($row['paidAt'])
+                    || ! empty($row['paid_at'])
+                    || $hasPaidPayout
+                );
         });
     }
 
