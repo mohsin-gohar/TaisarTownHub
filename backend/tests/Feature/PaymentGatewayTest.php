@@ -297,6 +297,45 @@ class PaymentGatewayTest extends EnterpriseTestCase
         $this->assertGreaterThan($failedPeriodEnd, $subscription->fresh()->ends_at->getTimestamp());
     }
 
+    public function test_failed_flutterwave_invoice_can_be_paid_on_a_later_retry(): void
+    {
+        config(['services.flutterwave.webhook_secret' => 'fw_test_hash']);
+
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['flutterwave_tx_ref' => 'fw-retry-ref']);
+
+        $this->asGuest();
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
+            'event' => 'charge.completed',
+            'data' => [
+                'status' => 'failed',
+                'tx_ref' => 'fw-retry-ref',
+                'id' => 1201,
+            ],
+        ])->assertOk()->assertJsonPath('success', true);
+        $this->assertSame('failed', $invoice->fresh()->status);
+
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
+            'event' => 'charge.completed',
+            'data' => [
+                'status' => 'successful',
+                'tx_ref' => 'fw-retry-ref',
+                'id' => 1202,
+                'amount' => 5000,
+                'currency' => 'PKR',
+            ],
+        ])->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame('paid', $invoice->fresh()->status);
+        $this->assertSame('1202', $invoice->fresh()->flutterwave_tx_id);
+        $this->assertDatabaseHas('agency_subscriptions', [
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+        ]);
+    }
+
     public function test_flutterwave_webhook_requires_amount_and_currency_before_activation(): void
     {
         config(['services.flutterwave.webhook_secret' => 'fw_test_hash']);
