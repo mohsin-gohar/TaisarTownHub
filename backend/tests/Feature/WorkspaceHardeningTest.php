@@ -152,4 +152,120 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
         $this->assertArrayNotHasKey('agency_id', $row->payload, 'payload must not carry tenancy fields');
         $this->assertEquals($user->id, $row->payload['created_by']);
     }
+    public function test_workspace_financial_sync_rejects_fractional_pkr_on_every_ledger_collection(): void
+    {
+        [$user, $agency] = $this->agencyUser([
+            'finance.view',
+            'finance.create_transaction',
+            'finance.manage_payments',
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $cases = [
+            ['transactions', 'agreementAmountPKR', 1000.50],
+            ['transactions', 'commissionPKR', 250.25],
+            ['payments', 'amountPKR', 1000.50],
+            ['commissions', 'amountPKR', 500.75],
+            ['commissions', 'paidPKR', 100.25],
+        ];
+
+        foreach ($cases as [$collection, $field, $amount]) {
+            $id = 'fractional-' . $collection . '-' . $field;
+            $this->putJson('/api/workspace', [
+                'collections' => [$collection => [[
+                    'id' => $id,
+                    $field => $amount,
+                ]]],
+            ], $headers)
+                ->assertStatus(422)
+                ->assertJsonValidationErrors("collections.{$collection}.0.{$field}");
+
+            $this->assertDatabaseMissing('business_records', [
+                'collection' => $collection,
+                'record_id' => $id,
+            ]);
+        }
+    }
+
+    public function test_workspace_commission_sync_rejects_fractional_nested_payouts(): void
+    {
+        [$user] = $this->agencyUser([
+            'finance.view',
+            'finance.manage_payments',
+        ]);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['commissions' => [[
+                'id' => 'fractional-payout',
+                'amountPKR' => 1000,
+                'paidPKR' => 100.50,
+                'payouts' => [[
+                    'id' => 'payout-1',
+                    'amountPKR' => 100.50,
+                ]],
+            ]]],
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('collections.commissions.0.paidPKR');
+
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'commissions',
+            'record_id' => 'fractional-payout',
+        ]);
+    }
+
+    public function test_workspace_financial_sync_preserves_existing_row_when_fractional_amount_is_rejected(): void
+    {
+        [$user, $agency] = $this->agencyUser([
+            'finance.view',
+            'finance.create_transaction',
+        ]);
+        BusinessRecord::put('transactions', 'precision-existing', [
+            'id' => 'precision-existing',
+            'agreementAmountPKR' => 1000,
+        ]);
+        BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', 'precision-existing')
+            ->update(['agency_id' => $agency->id]);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [[
+                'id' => 'precision-existing',
+                'agreementAmountPKR' => 1000.50,
+            ]]],
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('collections.transactions.0.agreementAmountPKR');
+
+        $this->assertSame(
+            1000,
+            BusinessRecord::where('collection', 'transactions')
+                ->where('record_id', 'precision-existing')
+                ->firstOrFail()->payload['agreementAmountPKR']
+        );
+    }
+
+    public function test_workspace_financial_sync_normalizes_whole_rupee_decimal_strings_to_integers(): void
+    {
+        [$user] = $this->agencyUser([
+            'finance.view',
+            'finance.manage_payments',
+        ]);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['payments' => [[
+                'id' => 'whole-rupee-payment',
+                'amountPKR' => '1000.00',
+            ]]],
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(200);
+
+        $this->assertSame(
+            1000,
+            BusinessRecord::where('collection', 'payments')
+                ->where('record_id', 'whole-rupee-payment')
+                ->firstOrFail()->payload['amountPKR']
+        );
+    }
+
 }
