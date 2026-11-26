@@ -108,6 +108,55 @@ class MfaEnforcementTest extends EnterpriseTestCase
             ->assertJsonPath('success', true);
     }
 
+    public function test_global_mfa_policy_covers_every_platform_persona(): void
+    {
+        \Illuminate\Support\Facades\DB::table('system_settings')->updateOrInsert(
+            ['key' => 'security.mfa_required_for_admins'],
+            [
+                'value' => json_encode(true),
+                'group' => 'security',
+                'description' => 'test',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        foreach (['super_admin', 'admin', 'manager', 'moderator', 'support', 'operator'] as $role) {
+            $user = $this->makeUser($role);
+            $this->asGuest();
+            $this->getJson('/api/auth/me', $this->authHeaders($this->tokenFor($user)))
+                ->assertForbidden()
+                ->assertJsonPath('mfa_required', true);
+        }
+    }
+
+    public function test_a_recovery_code_cannot_be_replayed_by_a_second_challenge(): void
+    {
+        $user = $this->makeUser('operator');
+        $service = app(MfaService::class);
+        [, $recoveryCodes] = $this->enroll($user, $service);
+
+        $firstChallenge = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'Secret123!',
+        ])->assertOk()->json('challenge');
+
+        $this->postJson('/api/auth/mfa/verify', [
+            'challenge' => $firstChallenge,
+            'code' => $recoveryCodes[0],
+        ])->assertOk();
+
+        $secondChallenge = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'Secret123!',
+        ])->assertOk()->json('challenge');
+
+        $this->postJson('/api/auth/mfa/verify', [
+            'challenge' => $secondChallenge,
+            'code' => $recoveryCodes[0],
+        ])->assertStatus(422);
+    }
+
     public function test_global_mfa_policy_uses_active_agency_role(): void
     {
         \Illuminate\Support\Facades\DB::table('system_settings')->updateOrInsert(
