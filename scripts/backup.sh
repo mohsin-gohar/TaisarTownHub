@@ -31,13 +31,13 @@ echo "[backup] destination: $DEST"
 php - "$BACKEND" "$MYSQL_DEFAULTS" "$WORK/db-meta" <<'PHP'
 <?php
 require $argv[1] . '/vendor/autoload.php';
-Dotenv\\Dotenv::createImmutable($argv[1])->safeLoad();
+Dotenv\Dotenv::createImmutable($argv[1])->safeLoad();
 
 $get = static function (string $key, string $default = ''): string {
     $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
     return $value === false || $value === null ? $default : (string) $value;
 };
-$escape = static fn (string $value): string => '"' . addcslashes($value, "\\\\"\\\"\\n\\r") . '"';
+$escape = static fn (string $value): string => '"' . addcslashes($value, "\\\"\n\r") . '"';
 
 $driver = $get('DB_CONNECTION', 'mysql');
 $database = $get('DB_DATABASE');
@@ -47,22 +47,21 @@ $user = $get('DB_USERNAME');
 $password = $get('DB_PASSWORD');
 
 if ($database === '' || $user === '') {
-    fwrite(STDERR, "[backup] FATAL: DB_DATABASE and DB_USERNAME must be configured.\\n");
+    fwrite(STDERR, "[backup] FATAL: DB_DATABASE and DB_USERNAME must be configured.\n");
     exit(2);
 }
 
-$config = "[client]\\n"
-    . "host=" . $escape($host) . "\\n"
-    . "port=" . $escape($port) . "\\n"
-    . "user=" . $escape($user) . "\\n"
-    . "password=" . $escape($password) . "\\n";
+$config = "[client]\n"
+    . "host=" . $escape($host) . "\n"
+    . "port=" . $escape($port) . "\n"
+    . "user=" . $escape($user) . "\n"
+    . "password=" . $escape($password) . "\n";
 if (file_put_contents($argv[2], $config, LOCK_EX) === false || ! chmod($argv[2], 0600)) {
-    fwrite(STDERR, "[backup] FATAL: could not create protected MySQL option file.\\n");
+    fwrite(STDERR, "[backup] FATAL: could not create protected MySQL option file.\n");
     exit(2);
 }
-file_put_contents($argv[3], implode("\\n", [$driver, $database, $host, $port, $user]) . "\\n", LOCK_EX);
+file_put_contents($argv[3], implode("\n", [$driver, $database, $host, $port, $user]) . "\n", LOCK_EX);
 PHP
-
 mapfile -t DB_META < "$WORK/db-meta"
 DB_DRIVER="${DB_META[0]:-}"
 DB_NAME="${DB_META[1]:-}"
