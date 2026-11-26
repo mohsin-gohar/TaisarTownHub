@@ -94,7 +94,8 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
             ]],
         ], $this->authHeaders($this->tokenFor($user)))->assertOk();
 
-        $this->assertSame('Own updated', $this->record($collection, $ownId)->payload['title']);
+        $expectedOwnTitle = $collection === 'payments' ? 'Own row' : 'Own updated';
+        $this->assertSame($expectedOwnTitle, $this->record($collection, $ownId)->payload['title']);
         $this->assertSame('Foreign row', $this->record($collection, $foreignId)->payload['title']);
         $this->assertSame('Legacy row', $this->record($collection, $legacyId)->payload['title']);
         $this->assertSame($other->id, $this->record($collection, $foreignId)->agency_id);
@@ -218,6 +219,91 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         $this->assertSame(['deal-self'], array_column($body['transactions'], 'id'));
         $this->assertSame(['payment-self'], array_column($body['payments'], 'id'));
         $this->assertSame(['commission-self'], array_column($body['commissions'], 'id'));
+    }
+
+
+    public function test_create_only_finance_permission_cannot_update_an_existing_transaction(): void
+    {
+        [$user, $agency] = $this->agencyUser(['finance.create_transaction']);
+        BusinessRecord::put('transactions', 'existing-deal', [
+            'id' => 'existing-deal',
+            'title' => 'Original title',
+            'agreementAmountPKR' => 100000,
+            'advancePaymentPKR' => 0,
+            'remainingBalancePKR' => 100000,
+        ], $agency->id);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [[
+                'id' => 'existing-deal',
+                'title' => 'Tampered title',
+                'agreementAmountPKR' => 1,
+                'advancePaymentPKR' => 0,
+                'remainingBalancePKR' => 1,
+            ]]],
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertSame('Original title', $this->record('transactions', 'existing-deal')->payload['title']);
+        $this->assertSame(100000, $this->record('transactions', 'existing-deal')->payload['agreementAmountPKR']);
+    }
+
+    public function test_void_permission_can_only_void_unpaid_deals_with_a_reason(): void
+    {
+        [$user, $agency] = $this->agencyUser(['void_transactions']);
+        BusinessRecord::put('transactions', 'unpaid-deal', [
+            'id' => 'unpaid-deal',
+            'status' => 'Active',
+            'advancePaymentPKR' => 0,
+            'agreementAmountPKR' => 100000,
+            'remainingBalancePKR' => 100000,
+        ], $agency->id);
+        BusinessRecord::put('transactions', 'paid-deal', [
+            'id' => 'paid-deal',
+            'status' => 'Active',
+            'advancePaymentPKR' => 5000,
+            'agreementAmountPKR' => 100000,
+            'remainingBalancePKR' => 95000,
+        ], $agency->id);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [
+                [
+                    'id' => 'unpaid-deal',
+                    'status' => 'Voided',
+                    'voidReason' => 'Duplicate booking.',
+                    'advancePaymentPKR' => 0,
+                    'agreementAmountPKR' => 100000,
+                    'remainingBalancePKR' => 100000,
+                ],
+                [
+                    'id' => 'paid-deal',
+                    'status' => 'Voided',
+                    'voidReason' => 'Duplicate booking.',
+                    'advancePaymentPKR' => 5000,
+                    'agreementAmountPKR' => 100000,
+                    'remainingBalancePKR' => 95000,
+                ],
+            ]],
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertSame('Voided', $this->record('transactions', 'unpaid-deal')->payload['status']);
+        $this->assertSame('Active', $this->record('transactions', 'paid-deal')->payload['status']);
+    }
+
+    public function test_update_permission_cannot_soft_delete_a_row_without_delete_permission(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.update']);
+        $this->seedRecord('properties', 'protected-property', 'Protected', $agency->id);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['properties' => [[
+                'id' => 'protected-property',
+                'title' => 'Protected',
+                'deletedAt' => now()->toIso8601String(),
+            ]]],
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertNull($this->record('properties', 'protected-property')->deleted_at);
     }
 
 }
