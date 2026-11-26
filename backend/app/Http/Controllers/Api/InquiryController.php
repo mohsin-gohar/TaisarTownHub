@@ -107,7 +107,7 @@ class InquiryController extends Controller
             'phone' => $data['phone'],
             'email' => $data['email'] ?? '',
             'message' => $data['message'],
-            'status' => 'new',
+            'status' => 'Pending',
             'createdAt' => now()->toIso8601String(),
             'source' => 'public_website',
             'ipAddress' => $request->ip(),
@@ -134,25 +134,22 @@ class InquiryController extends Controller
                 }
             }
 
-            BusinessRecord::put('inquiries', $id, $record);
-            if ($agencyId !== null) {
-                BusinessRecord::where('collection', 'inquiries')
-                    ->where('record_id', $id)
-                    ->update(['agency_id' => $agencyId]);
-            }
+            BusinessRecord::put('inquiries', $id, $record, $agencyId);
 
             Inquiry::updateOrCreate(
                 ['id' => $id],
                 [
                     'agency_id' => $agencyId,
                     'property_id' => $property?->id,
-                    'name' => 'Website Visitor',
+                    'fullName' => 'Website Visitor',
+                    'subject' => 'Property Consultation',
+                    'preferredPropertyOrProject' => $data['preferredPropertyOrProject'],
+                    'budgetRange' => null,
                     'email' => $data['email'] ?? null,
                     'phone' => $data['phone'],
                     'message' => $data['message'],
-                    'status' => 'new',
+                    'status' => 'Pending',
                     'source' => 'public_website',
-                    'ip_address' => $request->ip(),
                 ]
             );
 
