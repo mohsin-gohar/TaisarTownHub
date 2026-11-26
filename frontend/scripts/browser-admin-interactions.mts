@@ -309,6 +309,7 @@ async function runRole(
 
 (async () => {
   const browser = await chromium.launch();
+  try {
   const started = Date.now();
   const superadmin = await runRole(browser, 'superadmin', 'superadmin@taisartownhub.com', demoPassword('Super@Admin2026!'));
   await new Promise((r) => setTimeout(r, 2000));
@@ -347,5 +348,7 @@ async function runRole(
     )
   );
   if (hasInteractionFailures) process.exitCode = 1;
-  await browser.close();
+  } finally {
+    await browser.close().catch(() => {});
+  }
 })();
