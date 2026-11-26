@@ -632,6 +632,21 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'notes' => 'Agency commission',
         ], $headers)->assertStatus(201)->json('commission');
 
+        $this->patchJson("/api/agency/commissions/{$created['id']}", [
+            'status' => 'accrued',
+        ], $headers)->assertStatus(409)
+            ->assertJsonPath('message', 'Commission can only accrue after the deal is fully paid or marked completed.');
+
+        $this->patchJson("/api/agency/commissions/{$created['id']}", [
+            'status' => 'paid',
+        ], $headers)->assertStatus(409);
+
+        // Pay the remaining balance before accruing or paying commission.
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 2500000,
+            'type' => 'installment',
+        ], $headers)->assertStatus(201)->assertJsonPath('totals.balance', 0);
+
         $accrued = $this->patchJson("/api/agency/commissions/{$created['id']}", [
             'status' => 'accrued',
         ], $headers)->assertOk()->json('commission');
