@@ -1389,4 +1389,70 @@ class WorkspaceController extends Controller
 
         return false;
     }
+    private function cmsPayload(): array
+    {
+        $record = BusinessRecord::where('collection', 'cms')->where('record_id', 'default')->first();
+
+        return $record?->payload ?? [];
+    }
+
+    private function publicCms(): array
+    {
+        return $this->onlyKeys($this->cmsPayload(), self::PUBLIC_CMS_KEYS);
+    }
+
+    private function onlyKeys(array $row, array $keys): array
+    {
+        $out = [];
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $row)) {
+                $out[$key] = $row[$key];
+            }
+        }
+
+        return $out;
+    }
+
+    private function publicDealer(array $row): array
+    {
+        // Public catalog: allowlist only. CNIC, contact details and commission
+        // figures are internal workspace data and must never be published.
+        return $this->onlyKeys($row, self::PUBLIC_DEALER_KEYS);
+    }
+
+    private function publicVideo(array $row): array
+    {
+        $row = $this->onlyKeys($row, self::PUBLIC_VIDEO_KEYS);
+
+        if (isset($row['comments']) && is_array($row['comments'])) {
+            $comments = [];
+            foreach ($row['comments'] as $comment) {
+                if (! is_array($comment)) {
+                    continue;
+                }
+                $clean = $this->onlyKeys($comment, self::PUBLIC_VIDEO_COMMENT_KEYS);
+                if ($clean !== []) {
+                    $comments[] = $clean;
+                }
+            }
+            $row['comments'] = $comments;
+        } else {
+            unset($row['comments']);
+        }
+
+        return $row;
+    }
+
+    private function publicPlot(array $row): array
+    {
+        // Public catalog: allowlist only. Owner identity, marker labels and
+        // internal notes are workspace data, never public plot data.
+        return $this->onlyKeys($row, self::PUBLIC_PLOT_KEYS);
+    }
+
+    private function publicMedia(array $row): array
+    {
+        return $this->onlyKeys($row, self::PUBLIC_MEDIA_KEYS);
+    }
+
 }
