@@ -267,6 +267,7 @@ class CrmLeadsTest extends EnterpriseTestCase
             'cnic' => '42101-1234567-1',
             'assigned_agent_id' => $manager->id,
         ]);
+        BusinessRecord::put('inquiries', $lead->id, ['cnic' => '42101-1234567-1'], $agency->id);
         $headers = $this->authHeaders($this->tokenFor($manager));
 
         $this->patchJson("/api/inquiries/{$lead->id}/status", ['status' => 'Contacted'], $headers)
