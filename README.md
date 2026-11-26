@@ -25,7 +25,7 @@ cd frontend && npm ci && cp .env.example .env && npm run dev
 # or the full stack (return to the repository root first)
 cd ..
 cp .env.example .env
-# Replace every CHANGE_ME value. Generate APP_KEY with:
+# Replace every CHANGE_ME value and install nginx/ssl/fullchain.pem + privkey.pem before production. Generate APP_KEY with:
 # openssl rand -base64 32, then prefix the output with "base64:"
 # Generate DB_PASSWORD, DB_ROOT_PASSWORD and REDIS_PASSWORD with:
 # openssl rand -hex 32
