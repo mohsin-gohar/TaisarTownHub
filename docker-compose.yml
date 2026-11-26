@@ -152,6 +152,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-warning}
       SANCTUM_TOKEN_PREFIX: ${SANCTUM_TOKEN_PREFIX:-tth_}
       APP_URL: https://api.taisartownhub.com
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://api.taisartownhub.com/api/auth/google/callback}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
