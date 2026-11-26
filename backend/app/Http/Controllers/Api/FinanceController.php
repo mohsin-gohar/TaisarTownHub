@@ -1055,7 +1055,7 @@ public function update(Request $request, string $id)
                 ->firstOrFail();
 
             if ($locked->isVoided()) {
-                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                throw \Illuminate\Validation\ValidationException::withMessages([
                     'transaction' => 'Voided deals cannot receive new commissions.',
                 ]);
             }
