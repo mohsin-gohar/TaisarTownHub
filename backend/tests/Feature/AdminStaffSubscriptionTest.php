@@ -441,6 +441,45 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->assertContains('starter-test', array_column($subB['available_plans'], 'key'));
     }
 
+    public function test_manual_subscription_assignment_is_non_recurring_and_cannot_orphan_stripe_billing(): void
+    {
+        $admin = $this->makeUser('super_admin');
+        [, $agency] = $this->agencyUser($this->staffPermissions(), 'agency_owner');
+        $plan = $this->makePlan();
+        $headers = $this->authHeaders($this->tokenFor($admin));
+
+        $this->putJson('/api/admin/agencies/' . $agency->id . '/subscription', [
+            'plan_id' => $plan->id,
+            'status' => 'active',
+        ], $headers)
+            ->assertOk()
+            ->assertJsonPath('subscription.provider', 'manual')
+            ->assertJsonPath('subscription.auto_renew', false)
+            ->assertJsonPath('subscription.stripe_subscription_id', null);
+
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+        $subscription->forceFill([
+            'provider' => 'stripe',
+            'stripe_subscription_id' => 'sub-current-live',
+            'auto_renew' => true,
+            'status' => 'active',
+            'ends_at' => now()->addMonth(),
+        ])->save();
+
+        $replacementPlan = $this->makePlan();
+        $this->putJson('/api/admin/agencies/' . $agency->id . '/subscription', [
+            'plan_id' => $replacementPlan->id,
+            'status' => 'active',
+        ], $headers)
+            ->assertStatus(409)
+            ->assertJsonPath('success', false);
+
+        $this->assertSame($plan->id, $subscription->fresh()->plan_id);
+        $this->assertSame('stripe', $subscription->fresh()->provider);
+        $this->assertSame('sub-current-live', $subscription->fresh()->stripe_subscription_id);
+        $this->assertTrue((bool) $subscription->fresh()->auto_renew);
+    }
+
     public function test_dashboard_separates_platform_wide_and_agency_scoped_data(): void
     {
         $this->seedPlatformRole('super_admin');
