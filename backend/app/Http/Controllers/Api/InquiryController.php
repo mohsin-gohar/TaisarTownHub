@@ -332,12 +332,13 @@ class InquiryController extends Controller
 
     private function presentInquiry(Inquiry $inquiry): array
     {
+        // Inquiry::cnic is intentionally hidden from normal model serialization.
+        // CRM mutation responses may expose only the masked form, never the raw CNIC.
         $payload = $inquiry->toArray();
-        if (array_key_exists('cnic', $payload)) {
-            $payload['cnic'] = filled($payload['cnic'])
-                ? $this->maskCnic((string) $payload['cnic'])
-                : null;
-        }
+        $cnic = $inquiry->getRawOriginal('cnic');
+        $payload['cnic'] = filled($cnic)
+            ? $this->maskCnic((string) $cnic)
+            : null;
 
         return $payload;
     }
