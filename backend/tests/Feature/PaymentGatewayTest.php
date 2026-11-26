@@ -180,6 +180,57 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_stale_stripe_subscription_events_cannot_regress_a_paid_term(): void
+    {
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $subscription = AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now()->subMonth(),
+            'ends_at' => now()->addMonth(),
+            'auto_renew' => true,
+            'stripe_subscription_id' => 'sub-stale-event',
+            'provider' => 'stripe',
+        ]);
+
+        $controller = app(\\App\\Http\\Controllers\\Api\\PaymentController::class);
+        $handler = new \\ReflectionMethod($controller, 'handleStripeSubscriptionChanged');
+        $handler->setAccessible(true);
+        $paidPeriodEnd = $subscription->fresh()->ends_at->getTimestamp();
+
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-stale-event',
+            'status' => 'past_due',
+            'current_period_end' => $paidPeriodEnd - 86400,
+        ]);
+        $this->assertSame('active', $subscription->fresh()->status);
+
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-stale-event',
+            'status' => 'past_due',
+            'current_period_end' => $paidPeriodEnd + 86400,
+        ]);
+        $this->assertSame('past_due', $subscription->fresh()->status);
+
+        $failedPeriodEnd = $subscription->fresh()->ends_at->getTimestamp();
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-stale-event',
+            'status' => 'active',
+            'current_period_end' => $paidPeriodEnd,
+        ]);
+        $this->assertSame('past_due', $subscription->fresh()->status);
+
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-stale-event',
+            'status' => 'active',
+            'current_period_end' => $failedPeriodEnd + 86400,
+        ]);
+        $this->assertSame('active', $subscription->fresh()->status);
+        $this->assertGreaterThan($failedPeriodEnd, $subscription->fresh()->ends_at->getTimestamp());
+    }
+
     public function test_flutterwave_webhook_requires_amount_and_currency_before_activation(): void
     {
         config(['services.flutterwave.webhook_secret' => 'fw_test_hash']);
