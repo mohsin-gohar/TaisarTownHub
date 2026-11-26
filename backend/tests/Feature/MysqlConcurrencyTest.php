@@ -265,6 +265,46 @@ class MysqlConcurrencyTest extends TestCase
         $this->assertCount(2, array_unique($numbers), 'invoice numbers must be unique under concurrency');
     }
 
+    public function test_seeded_deal_sequence_starts_after_existing_legacy_numbers(): void
+    {
+        $year = (int) now()->year;
+        $transactionId = 'txn-sequence-seed-' . Str::random(8);
+        $lastNumber = 7;
+        $dealNumber = sprintf('TXN-%d-%04d', $year, $lastNumber);
+
+        DB::table('transaction_number_sequences')->where('year', $year)->delete();
+        \App\Models\Transaction::create([
+            'id' => $transactionId,
+            'dealNumber' => $dealNumber,
+            'propertyId' => null,
+            'propertyTitle' => 'Sequence seed fixture',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agreementAmountPKR' => 1000,
+            'advancePaymentPKR' => 0,
+            'remainingBalancePKR' => 1000,
+            'commissionAmountPKR' => 0,
+            'commissionStatus' => 'Pending',
+            'dealStatus' => 'Draft',
+        ]);
+
+        try {
+            $migration = require database_path('migrations/2026_11_26_000002_seed_transaction_number_sequences.php');
+            $migration->up();
+
+            $this->assertSame($lastNumber + 1, (int) DB::table('transaction_number_sequences')
+                ->where('year', $year)->value('next_number'));
+
+            $next = DB::transaction(
+                fn () => app(\App\Services\DealNumberAllocator::class)->nextForYear($year)
+            );
+            $this->assertSame(sprintf('TXN-%d-%04d', $year, $lastNumber + 1), $next);
+        } finally {
+            DB::table('transactions')->where('id', $transactionId)->delete();
+            DB::table('transaction_number_sequences')->where('year', $year)->delete();
+        }
+    }
+
     public function test_concurrent_deal_allocations_get_unique_numbers(): void
     {
         $agency = $this->makeAgency();
