@@ -7,8 +7,10 @@ use App\Models\Agency;
 use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /** Platform agency administration: directory, verification, moderation. */
@@ -80,48 +82,58 @@ class AdminAgencyController extends Controller
     {
         $this->requirePermission($request, 'admin.manage_agencies');
 
-        $request->validate([
+        $data = $request->validate([
             'verification_status' => 'required|in:verified,rejected,unverified',
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        $agency = Agency::findOrFail($id);
-        $from = $agency->verification_status;
+        [$agency, $from] = DB::transaction(function () use ($request, $id, $data): array {
+            $agency = Agency::whereKey($id)->lockForUpdate()->firstOrFail();
+            $from = $agency->verification_status;
 
-        $agency->verification_status = $request->verification_status;
-        $agency->verification_notes = $request->notes;
-        $agency->verified_by = $request->user()->id;
-        $agency->verified_at = now();
+            $agency->verification_status = $data['verification_status'];
+            $agency->verification_notes = $data['notes'] ?? null;
+            $agency->verified_by = $request->user()->id;
+            $agency->verified_at = $data['verification_status'] === 'verified' ? now() : null;
 
-        // Approval also activates the agency
-        if ($request->verification_status === 'verified' && $agency->status === 'pending') {
-            $agency->status = 'active';
-        }
+            // Approval activates a pending agency, but never silently revives
+            // an agency separately suspended/rejected by platform moderation.
+            if ($data['verification_status'] === 'verified' && $agency->status === 'pending') {
+                $agency->status = 'active';
+            }
 
-        $agency->save();
+            $agency->save();
 
-        // Approval is the safe moment to guarantee a quota row for legacy
-        // agencies that were created before onboarding provisioning existed.
-        if ($request->verification_status === 'verified') {
-            \App\Services\AgencyOnboarding::ensureStarterSubscription($agency, $request->user()->id);
-        }
+            if ($data['verification_status'] === 'verified') {
+                \App\Services\AgencyOnboarding::ensureStarterSubscription($agency, $request->user()->id);
+            }
 
-        $this->writeAudit($request, 'agency.verify', $agency->id, "Agency {$from} → {$request->verification_status}: {$agency->name}", [
+            return [$agency->fresh(), $from];
+        }, 3);
+
+        $this->writeAudit($request, 'agency.verify', $agency->id, "Agency {$from} → {$data['verification_status']}: {$agency->name}", [
             'agency_id' => $agency->id,
             'entity_type' => 'agency',
             'entity_id' => $agency->id,
             'cross_agency' => true,
-            'metadata' => ['from' => $from, 'to' => $request->verification_status, 'notes' => $request->notes],
+            'metadata' => ['from' => $from, 'to' => $data['verification_status'], 'notes' => $data['notes'] ?? null],
         ]);
 
         if ($agency->owner_user_id) {
-            $owner = User::find($agency->owner_user_id);
-            $owner?->notify(new \App\Notifications\ListingUpdated(
-                'Agency ' . $request->verification_status,
-                "Your agency \"{$agency->name}\" is now {$request->verification_status}."
-                . ($request->notes ? " Note: {$request->notes}" : ''),
-                $agency->id
-            ));
+            try {
+                $owner = User::find($agency->owner_user_id);
+                $owner?->notify(new \App\Notifications\ListingUpdated(
+                    'Agency ' . $data['verification_status'],
+                    "Your agency \"{$agency->name}\" is now {$data['verification_status']}."
+                        . (!empty($data['notes']) ? " Note: {$data['notes']}" : ''),
+                    $agency->id
+                ));
+            } catch (\Throwable $exception) {
+                Log::warning('Agency verification notification could not be queued', [
+                    'agency_id' => $agency->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
 
         return response()->json([
@@ -199,9 +211,20 @@ class AdminAgencyController extends Controller
             'key', 'name', 'description', 'price', 'interval',
             'limits', 'features', 'is_active', 'is_default', 'sort_order',
         ]);
-        // The finance schema and Stripe integration are PKR/whole-rupee based.
         $planData['currency'] = 'PKR';
-        $plan = SubscriptionPlan::create($planData);
+
+        if (($planData['is_default'] ?? false) && array_key_exists('is_active', $planData) && !$planData['is_active']) {
+            return response()->json(['success' => false, 'message' => 'An inactive plan cannot be the default plan.'], 422);
+        }
+
+        $plan = DB::transaction(function () use ($planData): SubscriptionPlan {
+            if ($planData['is_default'] ?? false) {
+                $this->lockDefaultPlanMutex();
+                SubscriptionPlan::where('is_default', true)->update(['is_default' => false]);
+            }
+
+            return SubscriptionPlan::create($planData);
+        }, 3);
 
         $this->writeAudit($request, 'plan.create', $plan->key, "Plan created: {$plan->name}", [
             'entity_type' => 'subscription_plan',
@@ -216,8 +239,6 @@ class AdminAgencyController extends Controller
     {
         $this->requirePermission($request, 'admin.manage_subscriptions');
 
-        $plan = SubscriptionPlan::findOrFail($id);
-
         $request->validate([
             'name' => 'sometimes|string|max:100',
             'description' => 'nullable|string|max:2000',
@@ -231,15 +252,34 @@ class AdminAgencyController extends Controller
             'sort_order' => 'sometimes|integer|min:0|max:9999',
         ]);
 
-        $plan->fill($request->only([
+        $fields = $request->only([
             'name', 'description', 'price', 'currency', 'interval', 'limits', 'features',
             'is_active', 'is_default', 'sort_order',
-        ]));
+        ]);
 
-        if ($request->boolean('is_default')) {
-            SubscriptionPlan::where('id', '!=', $plan->id)->update(['is_default' => false]);
+        if ($request->boolean('is_default') && array_key_exists('is_active', $fields) && !$fields['is_active']) {
+            return response()->json(['success' => false, 'message' => 'An inactive plan cannot be the default plan.'], 422);
         }
-        $plan->save();
+
+        $plan = DB::transaction(function () use ($request, $id, $fields): SubscriptionPlan {
+            $plan = SubscriptionPlan::whereKey($id)->lockForUpdate()->firstOrFail();
+
+            if ($request->boolean('is_default')) {
+                if (array_key_exists('is_active', $fields) ? !$fields['is_active'] : !$plan->is_active) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'is_default' => ['An inactive plan cannot be the default plan.'],
+                    ]);
+                }
+
+                $this->lockDefaultPlanMutex();
+                SubscriptionPlan::where('id', '!=', $plan->id)->update(['is_default' => false]);
+            }
+
+            $plan->fill($fields);
+            $plan->save();
+
+            return $plan->fresh();
+        }, 3);
 
         $this->writeAudit($request, 'plan.update', $plan->key, "Plan updated: {$plan->name}", [
             'entity_type' => 'subscription_plan',
@@ -255,7 +295,7 @@ class AdminAgencyController extends Controller
     {
         $this->requirePermission($request, 'admin.manage_subscriptions');
 
-        $request->validate([
+        $data = $request->validate([
             'plan_id' => 'required|integer|exists:subscription_plans,id',
             'status' => 'nullable|in:trialing,active,expired,cancelled',
             'starts_at' => 'nullable|date',
@@ -265,28 +305,38 @@ class AdminAgencyController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        $agency = Agency::findOrFail($id);
+        [$agency, $subscription] = DB::transaction(function () use ($request, $id, $data): array {
+            $agency = Agency::whereKey($id)->lockForUpdate()->firstOrFail();
+            $plan = SubscriptionPlan::whereKey($data['plan_id'])->lockForUpdate()->firstOrFail();
+            if (!$plan->is_active) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'plan_id' => ['The selected subscription plan is inactive.'],
+                ]);
+            }
 
-        $subscription = AgencySubscription::updateOrCreate(
-            ['agency_id' => $agency->id],
-            [
-                'plan_id' => $request->plan_id,
-                'status' => $request->get('status', 'active'),
-                'starts_at' => $request->starts_at ?: now(),
-                'ends_at' => $request->ends_at,
-                'trial_ends_at' => $request->trial_ends_at,
-                'limits_override' => $request->limits_override,
-                'notes' => $request->notes,
-                'created_by' => $request->user()->id,
-            ]
-        );
+            $subscription = AgencySubscription::updateOrCreate(
+                ['agency_id' => $agency->id],
+                [
+                    'plan_id' => $plan->id,
+                    'status' => $data['status'] ?? 'active',
+                    'starts_at' => $data['starts_at'] ?? now(),
+                    'ends_at' => $data['ends_at'] ?? null,
+                    'trial_ends_at' => $data['trial_ends_at'] ?? null,
+                    'limits_override' => $data['limits_override'] ?? null,
+                    'notes' => $data['notes'] ?? null,
+                    'created_by' => $request->user()->id,
+                ]
+            );
+
+            return [$agency, $subscription];
+        }, 3);
 
         $this->writeAudit($request, 'subscription.assign', $agency->id, "Subscription assigned to {$agency->name}", [
             'agency_id' => $agency->id,
             'entity_type' => 'agency_subscription',
             'entity_id' => (string) $subscription->id,
             'cross_agency' => true,
-            'metadata' => ['plan_id' => $request->plan_id, 'status' => $subscription->status],
+            'metadata' => ['plan_id' => $data['plan_id'], 'status' => $subscription->status],
         ]);
 
         return response()->json([
@@ -385,35 +435,42 @@ class AdminAgencyController extends Controller
     {
         $this->requirePermission($request, 'admin.manage_subscriptions');
 
-        $invoice = SubscriptionInvoice::findOrFail($id);
-
         $data = $request->validate([
             'payment_method' => 'required|string|max:40',
             'payment_reference' => 'nullable|string|max:120',
         ]);
 
-        if ($invoice->status === 'paid') {
+        $result = DB::transaction(function () use ($request, $id, $data): array {
+            $invoice = SubscriptionInvoice::whereKey($id)->lockForUpdate()->firstOrFail();
+
+            if ($invoice->status === 'paid') {
+                return ['error' => 'paid'];
+            }
+            if ($invoice->status === 'void') {
+                return ['error' => 'void'];
+            }
+
+            $invoice->forceFill([
+                'status' => 'paid',
+                'paid_at' => now(),
+                'payment_method' => $data['payment_method'],
+                'payment_reference' => $data['payment_reference'] ?? null,
+                'verified_by' => $request->user()->id,
+            ])->save();
+
+            return ['invoice' => $invoice->fresh(['agency:id,name', 'verifier:id,name'])];
+        }, 3);
+
+        if (isset($result['error'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'This invoice is already paid — financial history cannot be modified.',
+                'message' => $result['error'] === 'paid'
+                    ? 'This invoice is already paid — financial history cannot be modified.'
+                    : 'A voided invoice cannot be paid.',
             ], 422);
         }
 
-        if ($invoice->status === 'void') {
-            return response()->json([
-                'success' => false,
-                'message' => 'A voided invoice cannot be paid.',
-            ], 422);
-        }
-
-        $invoice->forceFill([
-            'status' => 'paid',
-            'paid_at' => now(),
-            'payment_method' => $data['payment_method'],
-            'payment_reference' => $data['payment_reference'] ?? null,
-            'verified_by' => $request->user()->id,
-        ])->save();
-
+        $invoice = $result['invoice'];
         $this->writeAudit($request, 'subscription.invoice_paid', $invoice->invoice_number,
             "Invoice {$invoice->invoice_number} marked paid (PKR {$invoice->total_pkr})", [
                 'agency_id' => $invoice->agency_id,
@@ -426,7 +483,28 @@ class AdminAgencyController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Invoice marked as paid.',
-            'invoice' => $invoice->load(['agency:id,name', 'verifier:id,name']),
+            'invoice' => $invoice,
         ]);
     }
+
+
+    /** Serialize default-plan changes even when the plan catalogue is empty. */
+    private function lockDefaultPlanMutex(): void
+    {
+        SystemSetting::query()->firstOrCreate(
+            ['key' => 'subscriptions.default_plan_lock'],
+            [
+                'value' => 1,
+                'group' => 'subscriptions',
+                'description' => 'Serializes default subscription plan changes.',
+            ]
+        );
+
+        SystemSetting::query()
+            ->where('key', 'subscriptions.default_plan_lock')
+            ->lockForUpdate()
+            ->firstOrFail();
+    }
+
+
 }
