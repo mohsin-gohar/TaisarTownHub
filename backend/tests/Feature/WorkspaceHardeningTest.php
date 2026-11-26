@@ -200,6 +200,45 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
         $this->assertDatabaseHas('business_records', ['collection' => 'properties', 'record_id' => 'valid-1']);
     }
 
+    public function test_member_without_sensitive_permission_cannot_create_or_change_property_confidential_fields(): void
+    {
+        [$user, $agency] = $this->memberWithPropertiesWrite();
+        BusinessRecord::put('properties', 'private-property-row', [
+            'id' => 'private-property-row',
+            'title' => 'Original title',
+            'purchasePricePKR' => 4000000,
+            'sellingPricePKR' => 5000000,
+            'internalNotes' => 'Private note',
+        ], $agency->id);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['properties' => [
+                [
+                    'id' => 'private-property-row',
+                    'title' => 'Attempted update',
+                    'purchasePricePKR' => 1,
+                    'sellingPricePKR' => 2,
+                    'internalNotes' => 'Tampered',
+                ],
+                [
+                    'id' => 'new-private-property-row',
+                    'title' => 'Attempted confidential create',
+                    'purchasePricePKR' => 3,
+                ],
+            ]],
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $stored = BusinessRecord::where('collection', 'properties')->where('record_id', 'private-property-row')->first();
+        $this->assertSame('Original title', $stored->payload['title']);
+        $this->assertSame(4000000, $stored->payload['purchasePricePKR']);
+        $this->assertSame(5000000, $stored->payload['sellingPricePKR']);
+        $this->assertSame('Private note', $stored->payload['internalNotes']);
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'new-private-property-row',
+        ]);
+    }
+
     public function test_client_supplied_tenancy_fields_are_ignored(): void
     {
         [$user, $agency] = $this->memberWithPropertiesWrite();
