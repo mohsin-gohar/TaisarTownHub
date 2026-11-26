@@ -443,10 +443,10 @@ class FinanceIsolationTest extends EnterpriseTestCase
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/schedules", [
             'schedules' => [['installment_no' => 1, 'due_date' => now()->addMonth()->toDateString(), 'amount' => 1000]],
-        ], $headers())->assertStatus(409);
+        ], $headers())->assertStatus(422);
 
         // A voided deal cannot be approved either.
-        $this->postJson("/api/agency/transactions/{$deal['id']}/approve", [], $headers())->assertStatus(409);
+        $this->postJson("/api/agency/transactions/{$deal['id']}/approve", [], $headers())->assertStatus(422);
     }
 
     public function test_platform_super_admin_can_update_a_commission_without_agency_context(): void
