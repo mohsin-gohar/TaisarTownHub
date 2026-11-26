@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="Video walkthrough placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07141E"/>
+      <stop offset="1" stop-color="#152B38"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <circle cx="640" cy="360" r="92" fill="#D4AF37" fill-opacity=".16" stroke="#D4AF37" stroke-opacity=".7" stroke-width="3"/>
+  <path d="M610 305v110l92-55z" fill="#F6E3B4"/>
+  <text x="640" y="520" text-anchor="middle" fill="#F6E3B4" font-family="Arial,sans-serif" font-size="30" letter-spacing="6">VIDEO WALKTHROUGH</text>
+</svg>
