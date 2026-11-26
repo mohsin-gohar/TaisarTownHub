@@ -294,7 +294,7 @@ class PaymentController extends Controller
                     return 'not_pending';
                 }
 
-                if ((int) round((float) $amount) !== (int) $invoice->total_pkr) {
+                if (abs((float) $amount - (float) $invoice->total_pkr) > 0.00001) {
                     Log::error('Flutterwave webhook amount mismatch', [
                         'tx_ref' => $txRef,
                         'expected' => (int) $invoice->total_pkr,
@@ -405,12 +405,12 @@ class PaymentController extends Controller
                 ], 422);
             }
 
-            $remoteAmount = (int) round((float) ($remote['amount'] ?? 0));
+            $remoteAmount = (float) ($remote['amount'] ?? 0);
             $remoteCurrency = strtoupper((string) ($remote['currency'] ?? ''));
 
             if ($remoteCurrency !== 'PKR'
                 || strtoupper((string) $invoice->currency) !== 'PKR'
-                || $remoteAmount !== (int) $invoice->total_pkr) {
+                || abs($remoteAmount - (float) $invoice->total_pkr) > 0.00001) {
                 Log::warning('Flutterwave verification amount/currency mismatch', [
                     'agency_id' => $agencyId,
                     'tx_ref' => $txRef,
@@ -653,6 +653,8 @@ class PaymentController extends Controller
 
             if (!is_numeric($periodStart) || !is_numeric($periodEnd) || (int) $periodEnd <= (int) $periodStart
                 || !is_numeric($amountMinor) || (float) $amountMinor < 0
+                || (float) $amountMinor !== floor((float) $amountMinor)
+                || ((int) $amountMinor % 100) !== 0
                 || $currency !== 'PKR' || strtoupper((string) $plan->currency) !== 'PKR') {
                 throw new \RuntimeException('Stripe renewal invoice is missing a valid period, amount or plan currency.');
             }
@@ -684,7 +686,7 @@ class PaymentController extends Controller
             }
 
             if (!$localInvoice) {
-                $amountPkr = (int) round(((float) $amountMinor) / 100);
+                $amountPkr = (int) (((float) $amountMinor) / 100);
                 $localInvoice = SubscriptionInvoice::create([
                     'id' => (string) Str::uuid(),
                     'invoice_number' => SubscriptionInvoice::nextNumber(),
@@ -758,6 +760,8 @@ class PaymentController extends Controller
             if (!is_numeric($periodStart) || !is_numeric($periodEnd)
                 || (int) $periodEnd <= (int) $periodStart
                 || !is_numeric($amountMinor) || (float) $amountMinor < 0
+                || (float) $amountMinor !== floor((float) $amountMinor)
+                || ((int) $amountMinor % 100) !== 0
                 || $currency !== 'PKR') {
                 Log::warning('Stripe failed invoice did not contain a valid PKR period and amount', [
                     'stripe_invoice_id' => $stripeInvoiceId,
@@ -786,7 +790,7 @@ class PaymentController extends Controller
                 return;
             }
 
-            $amountPkr = (int) round(((float) $amountMinor) / 100);
+            $amountPkr = (int) (((float) $amountMinor) / 100);
             if (!$localInvoice) {
                 $subscription->loadMissing('plan');
                 $localInvoice = SubscriptionInvoice::create([
