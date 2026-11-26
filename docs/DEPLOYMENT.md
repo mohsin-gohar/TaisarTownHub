@@ -15,9 +15,9 @@ Consolidates the former root `DEPLOYMENT.md`, `DEPLOYMENT_GUIDE.md`, `HOSTINGER_
                              │
         ┌────────────────────┼────────────────────┐
         ▼                    ▼                    ▼
-   MySQL 8 (data)      queue worker         private disk
-   Redis (cache/queue) scheduler             (vault documents)
-                        ClamAV sidecar (fail-closed scans)
+   MySQL 8 (data)      queue worker         shared private volumes
+   Redis (cache/queue) scheduler             (documents + quarantine)
+                        public storage + ClamAV sidecar
 ```
 
 ## 2. Local pre-deploy verification
@@ -58,7 +58,7 @@ Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `sch
 
 ## 5. Vercel (frontend-only preview — NOT the production deployment)
 
-The live Vercel deployment serves the SPA only, with the bundled public catalog and no API. It is a preview, not the required full-stack production deployment; set `VITE_API_URL` there if you want it to talk to the API origin.
+A Vercel frontend-only deployment serves the SPA without the backend, database or private file volumes. Treat it as a preview/static public site, not the required full-stack production deployment; set `VITE_API_URL` there if it should call a separately hosted API.
 
 ## 6. Production .env checklist (all keys, NO secrets committed)
 
@@ -74,7 +74,7 @@ The live Vercel deployment serves the SPA only, with the bundled public catalog 
 | `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` | exact production origin(s) — never `*` |
 | `TRUSTED_PROXIES` | real load-balancer/nginx IPs (X-Forwarded-For spoofing prevention) |
 | `MALWARE_SCAN_ENABLED=true`, `MALWARE_SCAN_FAIL_CLOSED=true`, `MALWARE_SCANNER=clamav`, `CLAMD_SOCKET=clamav:3310` | fail-closed upload scanning |
-| `STRIPE_*`, `FLUTTERWAVE_*` | live keys + webhook secrets, or explicitly disable payments |
+| `STRIPE_*`, `FLUTTERWAVE_*` | Provider credentials alone do not make billing live: the agency UI currently uses platform-assigned subscriptions; Stripe checkout is API-only and Flutterwave has no checkout-initiation flow. Complete and verify the intended provider flow before enabling self-service payments |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | passed into the backend container; configure the exact API callback URI with Google |
 | `SENTRY / LOGROCKET / GA` | optional monitoring ids |
 | Backup credentials | off-site storage; `APP_KEY` stored separately from data backups |
