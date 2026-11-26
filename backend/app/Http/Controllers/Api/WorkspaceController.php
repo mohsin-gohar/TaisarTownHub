@@ -1421,7 +1421,10 @@ class WorkspaceController extends Controller
 
             if ($newStatus === 'cancelled' && $newStatus !== $oldStatus) {
                 $reason = $this->transactionCloseoutReason($newPayload) ?? $this->transactionCloseoutReason($oldPayload);
-                return $this->perm($request, $user, 'cancel_transactions', $agencyId)
+                $canCancel = $this->perm($request, $user, 'cancel_transactions', $agencyId)
+                    || $this->perm($request, $user, 'legacy.cancel_transactions', $agencyId);
+
+                return $canCancel
                     && $reason !== null
                     && (! in_array($oldStatus, ['completed', 'cancelled'], true)
                         || $this->perm($request, $user, 'approve_transactions', $agencyId));
