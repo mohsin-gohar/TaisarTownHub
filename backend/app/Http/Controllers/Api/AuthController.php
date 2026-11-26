@@ -759,7 +759,7 @@ class AuthController extends Controller
         if ($suspicious && $user !== null) {
             try {
                 $user->notify(new SuspiciousLoginDetected($reason ?? 'unknown', $ip, $userAgent));
-            } catch (\\Throwable $exception) {
+            } catch (\Throwable $exception) {
                 // A mail/queue outage must not turn a valid sign-in into a 500.
                 Log::warning('Suspicious-login notification could not be queued', [
                     'user_id' => $user->id,
