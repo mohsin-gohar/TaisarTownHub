@@ -22,6 +22,24 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
         return $this->makeUser('super_admin');
     }
 
+    public function test_invoice_number_sequence_is_monotonic_even_if_a_reservation_is_not_saved(): void
+    {
+        $first = SubscriptionInvoice::nextNumber();
+        $second = SubscriptionInvoice::nextNumber();
+
+        $this->assertMatchesRegularExpression('/^INV-\\d{4}-\\d{6}$/', $first);
+        $this->assertMatchesRegularExpression('/^INV-\\d{4}-\\d{6}$/', $second);
+        $this->assertSame(
+            (int) substr($first, -6) + 1,
+            (int) substr($second, -6)
+        );
+
+        // A failed invoice insert must not cause a later invoice to reuse an
+        // already-reserved number; the sequence row is the source of truth.
+        $third = SubscriptionInvoice::nextNumber();
+        $this->assertSame((int) substr($second, -6) + 1, (int) substr($third, -6));
+    }
+
     public function test_admin_can_raise_and_verify_an_invoice_exactly_once(): void
     {
         $admin = $this->admin();
