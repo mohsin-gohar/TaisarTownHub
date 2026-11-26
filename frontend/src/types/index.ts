@@ -258,6 +258,8 @@ export interface PaymentEntry {
   method: 'Pay Order' | 'Bank Transfer' | 'Cash / Cheque' | 'Online Transfer';
   paidAt: string;
   recordedBy: string;
+  /** Refund rows are negative in the deal's net collected balance. */
+  type?: 'payment' | 'refund';
   note?: string;
 }
 
