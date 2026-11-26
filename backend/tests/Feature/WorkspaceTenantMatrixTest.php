@@ -133,6 +133,52 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         );
     }
 
+    public function test_first_workspace_writer_atomically_owns_a_new_row(): void
+    {
+        [$agencyAUser, $agencyA] = $this->agencyUser(['properties.view', 'properties.create']);
+        [$agencyBUser] = $this->agencyUser(['properties.view', 'properties.create']);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['properties' => [[
+                'id' => 'atomic-shared-property',
+                'title' => 'Agency A original',
+            ]]],
+        ], $this->authHeaders($this->tokenFor($agencyAUser)))->assertOk();
+
+        $record = $this->record('properties', 'atomic-shared-property');
+        $this->assertSame($agencyA->id, $record->agency_id);
+        $this->assertSame('Agency A original', $record->payload['title']);
+
+        // A second agency cannot claim the same previously-created ID.
+        $this->putJson('/api/workspace', [
+            'collections' => ['properties' => [[
+                'id' => 'atomic-shared-property',
+                'title' => 'Agency B takeover',
+            ]]],
+        ], $this->authHeaders($this->tokenFor($agencyBUser)))->assertOk();
+
+        $record->refresh();
+        $this->assertSame($agencyA->id, $record->agency_id);
+        $this->assertSame('Agency A original', $record->payload['title']);
+    }
+
+    public function test_workspace_does_not_insert_new_rows_before_create_permission_is_checked(): void
+    {
+        [$viewer] = $this->agencyUser(['properties.view']);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['properties' => [[
+                'id' => 'unauthorized-new-property',
+                'title' => 'Must not be persisted',
+            ]]],
+        ], $this->authHeaders($this->tokenFor($viewer)))->assertOk();
+
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'unauthorized-new-property',
+        ]);
+    }
+
     public function test_global_project_and_testimonial_content_is_read_only_for_standard_agency_roles(): void
     {
         [$user, $agency] = $this->agencyUser([
