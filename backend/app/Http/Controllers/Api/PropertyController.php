@@ -806,6 +806,12 @@ class PropertyController extends Controller
         if ($property->approval_status !== 'approved') {
             return response()->json(['success' => false, 'message' => 'Only approved listings can request featured placement.'], 422);
         }
+        if ($property->isFeatured && $property->featured_status === 'granted') {
+            return response()->json(['success' => false, 'message' => 'This listing already has featured placement.'], 409);
+        }
+        if ($property->featured_status === 'requested') {
+            return response()->json(['success' => true, 'message' => 'Featured placement is already awaiting platform review.', 'property' => $property]);
+        }
 
         $agency = $property->agency_id ? Agency::find($property->agency_id) : null;
         if ($agency && ! PlanLimits::subscriptionActive($agency)) {
