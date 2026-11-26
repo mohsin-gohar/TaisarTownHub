@@ -382,39 +382,84 @@ public function update(Request $request, string $id)
     public function void(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        // Voiding is irreversible for bookkeeping. It must require an explicit
-        // permission; previously any workspace member could void any deal.
         $this->requireAny($request, ['void_transactions']);
-
-        $transaction = $this->findScoped($agencyId, $id, $request->user());
-
-        if ($transaction->isVoided()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Transaction is already voided.',
-            ], 422);
-        }
+        $scoped = $this->findScoped($agencyId, $id, $request->user());
 
         $request->validate([
             'reason' => 'required|string|min:3|max:500',
         ]);
 
-        $transaction->update([
-            'voided_at' => now(),
-            'void_reason' => $request->reason,
-            'voided_by' => $request->user()->id,
-        ]);
+        [$transaction, $cancelledCommissions, $cancelledSchedules, $error, $netCollected] = DB::transaction(function () use ($id, $agencyId, $request): array {
+            $transaction = Transaction::where('id', $id)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($transaction->isVoided()) {
+                return [$transaction, 0, 0, 'Transaction is already voided.', (float) $transaction->totalPaid()];
+            }
+
+            $netCollected = (float) $transaction->totalPaid();
+            if (abs($netCollected) > 0.00001) {
+                return [$transaction, 0, 0, 'Refund or reconcile all collected payments before voiding this deal.', $netCollected];
+            }
+
+            $commissions = Commission::where('transaction_id', $transaction->id)
+                ->lockForUpdate()
+                ->get();
+
+            if ($commissions->contains(fn (Commission $commission) => strtolower((string) $commission->status) === 'paid')) {
+                return [$transaction, 0, 0, 'A deal with paid commissions cannot be voided until the payout is reversed through an audited adjustment.', $netCollected];
+            }
+
+            $cancelledCommissions = Commission::where('transaction_id', $transaction->id)
+                ->whereIn('status', ['pending', 'accrued'])
+                ->update(['status' => 'cancelled']);
+
+            $cancelledSchedules = PaymentSchedule::where('transaction_id', $transaction->id)
+                ->whereIn('status', ['pending', 'overdue'])
+                ->update(['status' => 'cancelled']);
+
+            $transaction->update([
+                'voided_at' => now(),
+                'void_reason' => $request->reason,
+                'voided_by' => $request->user()->id,
+            ]);
+
+            return [
+                $transaction->fresh(),
+                $cancelledCommissions,
+                $cancelledSchedules,
+                null,
+                $netCollected,
+            ];
+        }, 3);
+
+        if ($error !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => $error,
+                'net_collected_pkr' => $netCollected,
+            ], 409);
+        }
 
         $this->writeAudit($request, 'transaction.void', $transaction->id, "Transaction voided: {$request->reason}", [
             'agency_id' => $transaction->agency_id,
             'entity_type' => 'transaction',
             'entity_id' => $transaction->id,
-            'metadata' => ['reason' => $request->reason],
+            'metadata' => [
+                'reason' => $request->reason,
+                'net_collected_pkr' => $netCollected,
+                'cancelled_commissions' => $cancelledCommissions,
+                'cancelled_schedules' => $cancelledSchedules,
+            ],
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Transaction voided successfully.',
+            'cancelled_commissions' => $cancelledCommissions,
+            'cancelled_schedules' => $cancelledSchedules,
         ]);
     }
 
