@@ -224,6 +224,16 @@ class MediaController extends Controller
             $type = $type ?: (in_array($ext, self::VIDEO_EXT, true) ? 'video'
                 : (in_array($ext, self::IMAGE_EXT, true) ? 'image' : 'document'));
 
+            if (($type === 'image' || $type === 'banner') && !in_array($ext, self::IMAGE_EXT, true)) {
+                return response()->json(['success' => false, 'message' => 'Image and banner media must use an image file.'], 422);
+            }
+            if ($type === 'video' && !in_array($ext, self::VIDEO_EXT, true)) {
+                return response()->json(['success' => false, 'message' => 'Video media must use a supported video file.'], 422);
+            }
+            if ($visibility === 'public' && $type === 'document') {
+                return response()->json(['success' => false, 'message' => 'Sensitive document media must remain private.'], 422);
+            }
+
             $storedPath = 'media/' . $agencyId . '/' . now()->format('Y/m') . '/' . $mediaId . '.' . $ext;
 
             // Storage quota/trial enforcement is not part of this release.
@@ -248,17 +258,6 @@ class MediaController extends Controller
             $originalName = Str::slug($request->title);
         }
 
-        if ($visibility === 'public' && $type === 'document') {
-            if ($storedPath) {
-                Storage::disk('documents')->delete($storedPath);
-            }
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Sensitive document media must remain private. Use brochure or floor-plan type for public PDFs.',
-            ], 422);
-        }
-
         try {
             $media = MediaFile::create([
             'id' => $mediaId,
@@ -271,6 +270,7 @@ class MediaController extends Controller
             'original_name' => $originalName,
             'stored_name' => $storedPath ? basename($storedPath) : null,
             'disk_path' => $storedPath,
+            'storage_disk' => $storedPath ? 'documents' : null,
             'url' => $request->url,
             'mime_type' => $mimeType,
             'size_bytes' => $size,
@@ -285,7 +285,7 @@ class MediaController extends Controller
         } catch (\Throwable $exception) {
             if ($storedPath !== null) {
                 try {
-                    $storage = Storage::disk('documents');
+                    $storage = Storage::disk($media->storage_disk ?: 'documents');
                     if ($storage->exists($storedPath) && !$storage->delete($storedPath)) {
                         Log::critical('Uncommitted media upload could not be cleaned after database failure', [
                             'agency_id' => $agencyId,
@@ -573,7 +573,7 @@ class MediaController extends Controller
             // Authorised streaming through the SecureFileStore (decrypts
             // encrypted-at-rest bytes; header-safe disposition; nosniff).
             return SecureFileStore::response(
-                'documents',
+                $media->storage_disk ?: 'documents',
                 $media->disk_path,
                 $media->original_name ?: basename($media->disk_path),
                 $media->mime_type ?: 'application/octet-stream',
