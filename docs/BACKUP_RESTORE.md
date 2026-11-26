@@ -58,8 +58,8 @@ php scripts/write-mysql-defaults.php "$PWD" "$PWD/backend" "$TMP_MYSQL_CNF" "$TM
 DB_NAME="$(sed -n '2p' "$TMP_DB_META")"
 rm -f "$TMP_MYSQL_CNF" "$TMP_DB_META"
 
-# 2. Restore the database inside the MySQL container using a protected
-#    temporary option file (the password never appears in process arguments).
+# 2. Restore inside MySQL. The password is inherited from the container's
+#    environment and is never placed in process arguments.
 gunzip -c "$TTH_BACKUP_DIR/tth_db_<STAMP>.sql.gz" | docker compose exec -T mysql sh -c '
   MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u root "$1"
 ' tth-restore "$DB_NAME"
