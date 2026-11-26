@@ -11,12 +11,56 @@ if ($backend === '' || $defaultsPath === '' || $metadataPath === '') {
     exit(2);
 }
 
-require $backend . '/vendor/autoload.php';
-\Dotenv\Dotenv::createImmutable($backend)->safeLoad();
+// Parse the small, single-line subset of Laravel .env needed by mysqldump.
+// This helper deliberately has no Composer/vendor dependency so it also runs
+// on Docker hosts where PHP dependencies exist only inside the application image.
+$parsed = [];
+$envPath = $backend . DIRECTORY_SEPARATOR . '.env';
+if (! is_file($envPath) || ! is_readable($envPath)) {
+    fwrite(STDERR, "[backup] FATAL: backend/.env is missing or unreadable.\n");
+    exit(2);
+}
 
-$get = static function (string $key, string $default = ''): string {
-    $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
-    return $value === false || $value === null ? $default : (string) $value;
+foreach (file($envPath, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+    $line = trim($line);
+    if ($line === '' || str_starts_with($line, '#')) {
+        continue;
+    }
+    if (str_starts_with($line, 'export ')) {
+        $line = ltrim(substr($line, 7));
+    }
+    if (! preg_match('/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $line, $matches)) {
+        continue;
+    }
+
+    $key = $matches[1];
+    $raw = trim($matches[2]);
+    if (strlen($raw) >= 2 && $raw[0] === '"' && str_ends_with($raw, '"')) {
+        $value = stripcslashes(substr($raw, 1, -1));
+    } elseif (strlen($raw) >= 2 && $raw[0] === "'" && str_ends_with($raw, "'")) {
+        $value = substr($raw, 1, -1);
+    } else {
+        $comment = strpos($raw, ' #');
+        if ($comment !== false) {
+            $raw = substr($raw, 0, $comment);
+        }
+        $value = trim($raw);
+    }
+    $parsed[$key] = $value;
+}
+
+$get = static function (string $key, string $default = '') use ($parsed): string {
+    $value = getenv($key);
+    if ($value === false && array_key_exists($key, $_ENV)) {
+        $value = $_ENV[$key];
+    }
+    if ($value === false && array_key_exists($key, $_SERVER)) {
+        $value = $_SERVER[$key];
+    }
+    if ($value === false || $value === null) {
+        $value = $parsed[$key] ?? $default;
+    }
+    return (string) $value;
 };
 
 $driver = $get('DB_CONNECTION', 'mysql');
