@@ -24,6 +24,22 @@ class SavedSearchAlertsTest extends EnterpriseTestCase
         parent::tearDown();
     }
 
+    public function test_model_generates_a_prefixed_id_when_created_without_one(): void
+    {
+        [$user] = $this->agencyUser(['properties.view']);
+
+        $search = SavedSearch::create([
+            'user_id' => $user->id,
+            'name' => 'Generated identifier',
+            'filters' => ['sector' => 'Sector 63'],
+            'frequency' => 'daily',
+            'alerts_enabled' => true,
+        ]);
+
+        $this->assertMatchesRegularExpression('/^ss_[a-z0-9]{24}$/', (string) $search->id);
+        $this->assertDatabaseHas('saved_searches', ['id' => $search->id, 'user_id' => $user->id]);
+    }
+
     public function test_saved_searches_require_authentication_and_are_owned_by_the_account(): void
     {
         $this->asGuest();
