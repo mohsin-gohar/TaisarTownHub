@@ -383,7 +383,7 @@ public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['void_transactions']);
-        $scoped = $this->findScoped($agencyId, $id, $request->user());
+        $this->findScoped($agencyId, $id, $request->user());
 
         $request->validate([
             'reason' => 'required|string|min:3|max:500',
