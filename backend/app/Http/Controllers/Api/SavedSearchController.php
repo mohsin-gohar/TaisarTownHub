@@ -60,8 +60,8 @@ class SavedSearchController extends Controller
                 'user_id' => $user->id,
                 'name' => $data['name'],
                 'filters' => $data['filters'],
-                'frequency' => $data['frequency'],
-                'alerts_enabled' => $data['alerts_enabled'],
+                'frequency' => $data['frequency'] ?? 'daily',
+                'alerts_enabled' => (bool) ($data['alerts_enabled'] ?? true),
                 'last_run_at' => now(),
             ]);
         }, 3);
