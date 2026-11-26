@@ -232,7 +232,7 @@ public function store(Request $request)
             }
 
             return $deal->load(['payments', 'commissions']);
-        }, 3);
+        }, 10);
 
         return response()->json([
             'success' => true,
