@@ -117,6 +117,7 @@ services:
   # infrastructure, while keeping the full-stack browser stack in APP_ENV=testing.
   production-preflight:
     image: taisartownhub-backend:test
+    user: www-data
     environment:
       APP_ENV: production
       APP_NAME: "TaisarTownHub API"
