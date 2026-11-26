@@ -51,6 +51,19 @@ class InquiryCaptchaTest extends EnterpriseTestCase
         $this->assertLessThanOrEqual(time() + InquiryCaptcha::LIFETIME_SECONDS + 5, $expiry);
     }
 
+    public function test_token_payload_does_not_disclose_the_math_operands_or_answer(): void
+    {
+        $challenge = $this->getJson('/api/inquiries/captcha')->assertStatus(200)->json();
+        [$payload] = explode('.', (string) $challenge['token'], 2);
+        $decoded = json_decode((string) base64_decode($payload, true), true);
+
+        $this->assertIsArray($decoded);
+        $this->assertSame(['n', 'e'], array_keys($decoded));
+        $this->assertArrayNotHasKey('a', $decoded);
+        $this->assertArrayNotHasKey('b', $decoded);
+        $this->assertArrayNotHasKey('answer', $decoded);
+    }
+
     public function test_valid_submission_with_a_solved_captcha_is_accepted(): void
     {
         $this->asGuest();
@@ -134,8 +147,6 @@ class InquiryCaptchaTest extends EnterpriseTestCase
         // the same construction as InquiryCaptcha (test-only; the app key is
         // fixed in phpunit.xml).
         $payload = base64_encode((string) json_encode([
-            'a' => 3,
-            'b' => 4,
             'n' => bin2hex(random_bytes(16)),
             'e' => time() - 10,
         ]));
