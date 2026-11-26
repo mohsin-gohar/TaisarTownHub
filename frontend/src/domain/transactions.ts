@@ -321,6 +321,25 @@ export function validatePayment(
   return { ok: true, currentCollected: money.collected };
 }
 
+export function validateRefund(
+  txn: Transaction,
+  payments: PaymentEntry[],
+  amount: number,
+): ValidatePaymentResult {
+  if (txn.voided) return { ok: false, error: 'This deal is voided — refunds are frozen.' };
+  const money = dealMoney(txn, payments);
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return { ok: false, error: 'Refund amount must be a positive whole-rupee PKR amount.' };
+  }
+  if (amount > money.collected) {
+    return {
+      ok: false,
+      error: `Refund of ${amount.toLocaleString()} exceeds the net collected amount of ${money.collected.toLocaleString()} on this deal.`,
+    };
+  }
+  return { ok: true, currentCollected: money.collected };
+}
+
 /** TXN-YYYY-NNNN human reference (P1-4). */
 export function buildDealNumber(txn: Transaction, year: string): string {
   const source = txn.transactionDate ?? txn.dealDate ?? '';
