@@ -9,6 +9,7 @@ use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\DocumentQuarantine;
 use App\Models\MediaFile;
+use App\Models\Inquiry;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -158,6 +159,12 @@ class PlanLimits
             'code' => 'subscription_inactive',
             'message' => 'Your agency subscription is inactive or expired. Renew your plan to record sales.',
         ], 403);
+    }
+
+    /** Public CRM lead counter used by the inquiry quota guard. */
+    public static function leadUsed(string $agencyId): int
+    {
+        return Inquiry::query()->where('agency_id', $agencyId)->count();
     }
 
     /** Staff counter for the invite flow: active members + pending invitations. */
