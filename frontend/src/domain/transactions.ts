@@ -157,7 +157,10 @@ export function collectedForTx(txn: Transaction, payments: PaymentEntry[] = []):
   const refunds = ledger
     .filter((payment) => String(payment.type ?? '').toLowerCase() === 'refund')
     .reduce((sum, payment) => sum + Math.abs(payment.amountPKR), 0);
-  const sourceGross = grossPayments > 0 ? grossPayments : legacyAdvance;
+  const hasAdvanceMovement = ledger.some((payment) =>
+    String(payment.note ?? '').toLowerCase().includes('advance recorded at deal creation'),
+  );
+  const sourceGross = grossPayments + (legacyAdvance > 0 && !hasAdvanceMovement ? legacyAdvance : 0);
 
   return Math.max(0, sourceGross - refunds);
 }
