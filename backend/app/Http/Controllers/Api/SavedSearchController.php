@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SavedSearch;
 use App\Support\PropertySearchFilters;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
