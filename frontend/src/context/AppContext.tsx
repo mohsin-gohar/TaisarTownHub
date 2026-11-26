@@ -200,7 +200,7 @@ interface AppContextType {
   deleteInquiry: (id: string) => void;
   
   cmsConfig: CMSConfig;
-  updateCMSConfig: (updates: Partial<CMSConfig>) => void;
+  updateCMSConfig: (updates: Partial<CMSConfig>) => Promise<boolean>;
   
   // Toasts & Reset
   toasts: ToastMessage[];
@@ -696,7 +696,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         media: mediaItems,
         videos: agencyVideos,
         inquiries,
-        cms: cmsConfig,
       }).then((ok) => {
         if (!ok) showToast('error', 'MySQL save failed. Check that the Laravel API is running.');
       });
@@ -704,7 +703,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => window.clearTimeout(handle);
   }, [
     projects, properties, dealers, sellers, buyers, transactions, paymentEntries,
-    commissionEntries, propertyFiles, plotMarkers, mediaItems, agencyVideos, inquiries, cmsConfig,
+    commissionEntries, propertyFiles, plotMarkers, mediaItems, agencyVideos, inquiries,
   ]);
 
   // Accessible confirmation dialog state (replaces window.confirm()).
@@ -2030,11 +2029,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // CMS Updates
-  const updateCMSConfig = (updates: Partial<CMSConfig>) => {
-    if (!requirePermission('edit_cms')) return;
-    setCmsConfig((prev) => ({ ...prev, ...updates }));
-    showToast('info', 'CMS settings updated locally — changes persist only in this session until a backend CMS endpoint is implemented.');
+  // CMS Updates — the global website configuration is saved explicitly
+  // and only applied locally after the backend confirms a platform-authorized write.
+  const updateCMSConfig = async (updates: Partial<CMSConfig>): Promise<boolean> => {
+    if (!requirePermission('edit_cms')) return false;
+
+    const nextConfig = { ...cmsConfig, ...updates };
+    const saved = await api.saveCmsConfig(nextConfig);
+    if (!saved) {
+      showToast('error', 'Website changes were not saved. Check platform CMS permission and API connection.');
+      return false;
+    }
+
+    setCmsConfig(nextConfig);
+    showToast('success', 'Website content saved and published.');
+    return true;
   };
 
   const resetToDefaultData = async () => {
