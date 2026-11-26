@@ -39,6 +39,41 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
         return [$agency, $plan];
     }
 
+    public function test_null_featured_credit_limit_means_unlimited_but_zero_means_no_slots(): void
+    {
+        [$unlimited] = $this->agencyWithLimits(['featured_credits' => null]);
+        $this->assertNull(PlanLimits::featuredSlotBlock($unlimited));
+
+        [$none] = $this->agencyWithLimits(['featured_credits' => 0]);
+        $this->assertSame(['limit' => 0, 'used' => 0], PlanLimits::featuredSlotBlock($none));
+    }
+
+    public function test_scheduled_subscription_does_not_unlock_commerce_before_its_start_date(): void
+    {
+        [$agency] = $this->agencyWithLimits(['dealer_files' => 10]);
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+        $subscription->update([
+            'status' => 'active',
+            'starts_at' => now()->addDay(),
+            'ends_at' => now()->addDays(31),
+        ]);
+        $agency->unsetRelation('subscription');
+
+        $this->assertFalse(PlanLimits::subscriptionActive($agency));
+
+        $subscription->update(['starts_at' => now()->subSecond()]);
+        $agency->unsetRelation('subscription');
+        $this->assertTrue(PlanLimits::subscriptionActive($agency));
+    }
+
+    public function test_explicit_null_plan_limit_is_not_replaced_by_a_default(): void
+    {
+        [$agency] = $this->agencyWithLimits(['listings' => null]);
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+
+        $this->assertNull($subscription->limit('listings', 10));
+    }
+
     public function test_listing_limit_blocks_creation_until_raised_by_override(): void
     {
         [$agency, $plan] = $this->agencyWithLimits(['listings' => 1]);
