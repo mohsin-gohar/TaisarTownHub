@@ -339,6 +339,30 @@ class PaymentGatewayTest extends EnterpriseTestCase
 
 
 
+    public function test_subscription_checkout_rejects_inactive_plans(): void
+    {
+        config([
+            'app.url' => 'https://api.taisartownhub.com',
+            'cors.allowed_origins' => ['https://taisartownhub.com'],
+        ]);
+
+        $plan = $this->makePlan(['is_active' => false]);
+        [$owner, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+
+        $this->postJson('/api/payments/subscription/checkout', [
+            'plan_id' => $plan->id,
+            'success_url' => 'https://taisartownhub.com/billing/success',
+            'cancel_url' => 'https://taisartownhub.com/billing/cancel',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('plan_id');
+
+        $this->assertDatabaseMissing('subscription_invoices', [
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+        ]);
+    }
+
     public function test_stripe_checkout_webhook_rejects_currency_or_amount_mismatch(): void
     {
         $secret = 'whsec_test_secret';
