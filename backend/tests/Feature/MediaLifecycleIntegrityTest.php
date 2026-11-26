@@ -11,6 +11,7 @@ class MediaLifecycleIntegrityTest extends EnterpriseTestCase
     private function mediaRecord($agency, array $overrides = []): MediaFile
     {
         return MediaFile::create(array_merge([
+            'id' => 'med_' . bin2hex(random_bytes(8)),
             'agency_id' => $agency->id,
             'title' => 'Media fixture',
             'type' => 'image',
