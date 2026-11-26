@@ -1379,6 +1379,17 @@ class WorkspaceController extends Controller
         }
         $payouts = array_values($payouts);
 
+        $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+        $declaredCommission = $this->declaredCommissionForTransaction($transactionId, $agencyId);
+        if ($declaredCommission > 0) {
+            $otherActiveCommission = $this->otherActiveCommissionTotal($transactionId, $agencyId, (string) ($payload['id'] ?? ''));
+            if ($otherActiveCommission + $amount > $declaredCommission) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'collections.commissions.amountPKR' => ['Total active commissions cannot exceed the deal\'s agreed commission amount.'],
+                ]);
+            }
+        }
+
         $oldPayouts = is_array($previous['payouts'] ?? null) ? array_values($previous['payouts']) : [];
         $oldPaid = $this->normalizeWholePkr($previous['paidPKR'] ?? 0) ?? 0;
         $oldStatus = strtolower(trim((string) ($previous['status'] ?? 'pending accrual')));
@@ -1555,6 +1566,57 @@ class WorkspaceController extends Controller
         $payload['payouts'] = $payouts;
 
         return $payload;
+    }
+
+    private function declaredCommissionForTransaction(string $transactionId, ?string $agencyId): int
+    {
+        if ($transactionId === '') {
+            return 0;
+        }
+
+        $query = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        $agencyId === null ? $query->whereNull('agency_id') : $query->where('agency_id', $agencyId);
+        $payload = $query->first()?->payload ?? [];
+        $declared = $this->normalizeWholePkr(
+            $payload['commissionPKR'] ?? $payload['commissionAmountPKR'] ?? $payload['commissionAmount'] ?? null
+        );
+        if ($declared !== null && $declared > 0) {
+            return $declared;
+        }
+
+        $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+
+        return (int) ($transactionQuery->value('commissionAmountPKR') ?? 0);
+    }
+
+    private function otherActiveCommissionTotal(string $transactionId, ?string $agencyId, string $excludeId): int
+    {
+        $query = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
+        if ($agencyId !== null) {
+            $query->where('agency_id', $agencyId);
+        }
+        if ($excludeId !== '') {
+            $query->where('record_id', '<>', $excludeId);
+        }
+        $query->where(function ($builder) use ($transactionId): void {
+            $builder->where('payload->transactionId', $transactionId)
+                ->orWhere('payload->transaction_id', $transactionId)
+                ->orWhere('payload->dealId', $transactionId);
+        });
+
+        return (int) $query->get()->sum(function (BusinessRecord $record): int {
+            $row = $record->payload ?? [];
+            if (strtolower((string) ($row['status'] ?? '')) === 'cancelled') {
+                return 0;
+            }
+
+            return $this->normalizeWholePkr(
+                $row['amountPKR'] ?? $row['commissionAmountPKR'] ?? $row['commissionAmount'] ?? 0
+            ) ?? 0;
+        });
     }
 
     private function commissionMilestoneReached(string $transactionId, ?string $agencyId): bool
