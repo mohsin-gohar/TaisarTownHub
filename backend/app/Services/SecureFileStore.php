@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use RuntimeException;
 
 /**
  * Secure Document & Media Vault — the single gateway for writing private
@@ -125,10 +126,22 @@ class SecureFileStore
             return \App\Support\MalwareScanResult::skipped('clamav', 'temp_file_unavailable');
         }
 
-        file_put_contents($temp, self::get($disk, $path));
-
         try {
+            $plain = self::get($disk, $path);
+            $written = @file_put_contents($temp, $plain);
+            if ($written === false || $written !== strlen($plain)) {
+                return \App\Support\MalwareScanResult::skipped('clamav', 'temp_file_write_failed');
+            }
+
             return $scanner->scan($temp);
+        } catch (\Throwable $exception) {
+            Log::warning('Vault rescan could not materialize a readable plaintext file', [
+                'disk' => $disk,
+                'path_len' => strlen($path),
+                'error' => $exception->getMessage(),
+            ]);
+
+            return \App\Support\MalwareScanResult::skipped('clamav', 'vault_read_failed');
         } finally {
             @unlink($temp);
         }
@@ -164,7 +177,7 @@ class SecureFileStore
 
         return response()->streamDownload(
             function () use ($disk, $path) {
-                echo FileVaultCrypto::decrypt((string) Storage::disk($disk)->get($path));
+                echo self::get($disk, $path);
             },
             $safeName,
             [
