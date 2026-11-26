@@ -30,10 +30,20 @@ class SecureFileStore
     /** Encrypt-on-write for uploaded files. Returns the logical (plaintext) size. */
     public static function storeUpload(string $disk, string $path, UploadedFile $file): int
     {
-        $plain = (string) file_get_contents($file->getRealPath());
-        $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
+        $realPath = $file->getRealPath();
+        if (!is_string($realPath) || !is_file($realPath) || !is_readable($realPath)) {
+            throw new RuntimeException('Uploaded file could not be read from temporary storage.');
+        }
 
-        Storage::disk($disk)->put($path, $blob);
+        $plain = file_get_contents($realPath);
+        if ($plain === false) {
+            throw new RuntimeException('Uploaded file could not be read from temporary storage.');
+        }
+
+        $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
+        if (!Storage::disk($disk)->put($path, $blob)) {
+            throw new RuntimeException('Vault storage write failed; upload was not committed.');
+        }
 
         return strlen($plain);
     }
@@ -42,7 +52,9 @@ class SecureFileStore
     public static function putBytes(string $disk, string $path, string $plain): int
     {
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
-        Storage::disk($disk)->put($path, $blob);
+        if (!Storage::disk($disk)->put($path, $blob)) {
+            throw new RuntimeException('Vault storage write failed; bytes were not committed.');
+        }
 
         return strlen($plain);
     }
@@ -50,16 +62,46 @@ class SecureFileStore
     /** Move bytes between disks (re-encrypting) — used by quarantine promotion. */
     public static function move(string $fromDisk, string $fromPath, string $toDisk, string $toPath): void
     {
-        $plain = FileVaultCrypto::decrypt((string) Storage::disk($fromDisk)->get($fromPath));
+        $source = Storage::disk($fromDisk);
+        $target = Storage::disk($toDisk);
+
+        if (!$source->exists($fromPath)) {
+            throw new RuntimeException('Vault source file is missing; move was not performed.');
+        }
+
+        $stored = $source->get($fromPath);
+        if (!is_string($stored)) {
+            throw new RuntimeException('Vault source file could not be read; move was not performed.');
+        }
+
+        $plain = FileVaultCrypto::decrypt($stored);
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
-        Storage::disk($toDisk)->put($toPath, $blob);
-        Storage::disk($fromDisk)->delete($fromPath);
+        if (!$target->put($toPath, $blob)) {
+            throw new RuntimeException('Vault destination write failed; source file was preserved.');
+        }
+
+        if (!$source->delete($fromPath)) {
+            // Do not silently leave two competing copies. If cleanup also
+            // fails, log it; the source remains authoritative until DB commit.
+            if (!$target->delete($toPath)) {
+                Log::critical('Vault move destination cleanup failed after source delete failure', [
+                    'from_disk' => $fromDisk, 'from_path_len' => strlen($fromPath),
+                    'to_disk' => $toDisk, 'to_path_len' => strlen($toPath),
+                ]);
+            }
+            throw new RuntimeException('Vault source delete failed; move was not committed.');
+        }
     }
 
     /** Read plaintext bytes transparently (decrypts when the envelope is present). */
     public static function get(string $disk, string $path): string
     {
-        return FileVaultCrypto::decrypt((string) Storage::disk($disk)->get($path));
+        $stored = Storage::disk($disk)->get($path);
+        if (!is_string($stored)) {
+            throw new RuntimeException('Vault file could not be read from storage.');
+        }
+
+        return FileVaultCrypto::decrypt($stored);
     }
 
     /** SHA-256 of the plaintext content (integrity checksum stored in DB). */
