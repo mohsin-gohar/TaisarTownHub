@@ -3,9 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\AgencySubscription;
+use App\Models\Document;
+use App\Models\DocumentVersion;
 use App\Models\Role;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Support\PlanLimits;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Feature\EnterpriseTestCase;
