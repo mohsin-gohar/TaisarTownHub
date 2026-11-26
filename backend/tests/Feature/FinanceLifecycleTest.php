@@ -303,6 +303,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         [$user] = $this->agencyUser($this->financePermissions());
         $deal = $this->createDeal($user);
         $headers = $this->authHeaders($this->tokenFor($user));
+        $initialPaymentCount = TransactionPayment::where('transaction_id', $deal['id'])->count();
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 100.50,
@@ -322,7 +323,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'rate' => 1.5,
         ], $headers)->assertStatus(422)->assertJsonValidationErrors('amount');
 
-        $this->assertSame(0, TransactionPayment::where('transaction_id', $deal['id'])->count());
+        $this->assertSame($initialPaymentCount, TransactionPayment::where('transaction_id', $deal['id'])->count());
         $this->assertSame(0, PaymentSchedule::where('transaction_id', $deal['id'])->count());
         $this->assertSame(0, Commission::where('transaction_id', $deal['id'])->count());
     }
