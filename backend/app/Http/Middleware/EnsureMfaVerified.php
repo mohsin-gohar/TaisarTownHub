@@ -92,7 +92,9 @@ class EnsureMfaVerified
         }
 
         // Platform roles always require MFA under the global policy.
-        if (in_array($user->role, ['super_admin', 'admin', 'manager'], true)) {
+        // Every platform persona is privileged; do not let moderator,
+        // support or operator accounts bypass the global MFA requirement.
+        if ($user->isPlatformUser()) {
             return true;
         }
 
