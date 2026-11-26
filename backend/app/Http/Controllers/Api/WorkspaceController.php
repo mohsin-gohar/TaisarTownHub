@@ -52,13 +52,17 @@ class WorkspaceController extends Controller
     /** Collections holding money — every sync on them is audit-logged. */
     private const FINANCIAL = ['transactions', 'payments', 'commissions'];
 
-    /** Money-ish keys coerced/validated on financial rows. */
+    /** Whole-PKR fields accepted by the legacy workspace sync surface. */
     private const MONEY_KEYS = [
-        'agreementAmountPKR', 'advancePaymentPKR', 'commissionAmountPKR',
-        'remainingBalancePKR', 'amountPKR', 'amount', 'pricePKR', 'profitPKR',
-        'soldPricePKR', 'costPricePKR', 'totalEarnedPKR', 'pendingCommissionPKR',
-        'totalPaidPKR', 'balancePKR', 'commission', 'commissionAmount',
+        'agreementAmountPKR', 'purchaseAmountPKR', 'finalSellingAmountPKR',
+        'dealAmountPKR', 'advancePaymentPKR', 'advancePKR', 'remainingBalancePKR',
+        'balancePKR', 'commissionAmountPKR', 'commissionPKR', 'commissionPaidPKR',
+        'amountPKR', 'amount', 'paidPKR', 'pricePKR', 'profitPKR', 'soldPricePKR',
+        'costPricePKR', 'totalEarnedPKR', 'pendingCommissionPKR', 'totalPaidPKR',
+        'commission', 'commissionAmount',
     ];
+
+    private const MAX_WHOLE_PKR = 999999999999;
 
     /** Server-owned keys never accepted from the client payload. */
     private const RESERVED_KEYS = [
@@ -289,7 +293,11 @@ class WorkspaceController extends Controller
 
             // ---- per-row validation + server-owned field stamping ----
             $clean = [];
-            foreach ($rows as $row) {
+            foreach ($rows as $rowIndex => $row) {
+                if (in_array($name, self::FINANCIAL, true)) {
+                    $this->validateWholePkrAmounts($name, $row, (int) $rowIndex);
+                }
+
                 $sanitized = $this->sanitizeRow($name, $row, $agencyId, $user);
                 if ($sanitized !== null) {
                     $clean[] = $sanitized;
@@ -433,15 +441,18 @@ class WorkspaceController extends Controller
 
         $row['id'] = $id;
 
-        // Money fields: numeric, finite, capped
+        // Whole-PKR values are normalized to integers after validation.
         if (in_array($collection, self::FINANCIAL, true)) {
             foreach (self::MONEY_KEYS as $key) {
                 if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') {
-                    $value = (float) $row[$key];
-                    if (! is_finite($value) || $value < 0 || $value > 999999999999) {
-                        $row[$key] = 0;
-                    } else {
-                        $row[$key] = $value;
+                    $row[$key] = $this->normalizeWholePkr($row[$key]);
+                }
+            }
+            if ($collection === 'commissions' && isset($row['payouts']) && is_array($row['payouts'])) {
+                foreach ($row['payouts'] as $index => $payout) {
+                    if (is_array($payout) && array_key_exists('amountPKR', $payout)
+                        && $payout['amountPKR'] !== null && $payout['amountPKR'] !== '') {
+                        $row['payouts'][$index]['amountPKR'] = $this->normalizeWholePkr($payout['amountPKR']);
                     }
                 }
             }
@@ -450,6 +461,87 @@ class WorkspaceController extends Controller
         $row['updated_by'] = $user->id;
 
         return $row;
+    }
+
+    /**
+     * Reject fractional, negative, non-finite and out-of-range PKR values on
+     * every legacy workspace write. FinanceController's strict validators
+     * are not enough because the SPA persists its ledger through this endpoint.
+     */
+    private function validateWholePkrAmounts(string $collection, array $row, int $rowIndex): void
+    {
+        foreach (self::MONEY_KEYS as $key) {
+            if (! array_key_exists($key, $row) || $row[$key] === null || $row[$key] === '') {
+                continue;
+            }
+
+            if ($this->normalizeWholePkr($row[$key]) === null) {
+                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                    "collections.{$collection}.{$rowIndex}.{$key}" => [
+                        'This amount must be a whole PKR value between 0 and ' . self::MAX_WHOLE_PKR . '.',
+                    ],
+                ]);
+            }
+        }
+
+        if ($collection === 'commissions' && isset($row['payouts'])) {
+            if (! is_array($row['payouts'])) {
+                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                    "collections.{$collection}.{$rowIndex}.payouts" => ['Payouts must be an array.'],
+                ]);
+            }
+
+            foreach ($row['payouts'] as $payoutIndex => $payout) {
+                if (! is_array($payout) || ! array_key_exists('amountPKR', $payout)
+                    || $payout['amountPKR'] === null || $payout['amountPKR'] === '') {
+                    continue;
+                }
+
+                if ($this->normalizeWholePkr($payout['amountPKR']) === null) {
+                    throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                        "collections.{$collection}.{$rowIndex}.payouts.{$payoutIndex}.amountPKR" => [
+                            'This payout must be a whole PKR value between 0 and ' . self::MAX_WHOLE_PKR . '.',
+                        ],
+                    ]);
+                }
+            }
+        }
+    }
+
+    /** Return a canonical integer PKR value, or null when the input is invalid. */
+    private function normalizeWholePkr(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value >= 0 && $value <= self::MAX_WHOLE_PKR ? $value : null;
+        }
+
+        if (is_float($value)) {
+            if (! is_finite($value) || floor($value) !== $value
+                || $value < 0 || $value > self::MAX_WHOLE_PKR) {
+                return null;
+            }
+
+            return (int) $value;
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+        if (! preg_match('/^\\+?\\d+(?:\\.0+)?$/D', $value)) {
+            return null;
+        }
+
+        $whole = explode('.', ltrim($value, '+'), 2)[0];
+        $canonical = ltrim($whole, '0') ?: '0';
+        $maximum = (string) self::MAX_WHOLE_PKR;
+        if (strlen($canonical) > strlen($maximum)
+            || (strlen($canonical) === strlen($maximum) && strcmp($canonical, $maximum) > 0)) {
+            return null;
+        }
+
+        return (int) $canonical;
     }
 
     /** Recursively sanitize a value: depth cap, string length cap, UTF-8. */
