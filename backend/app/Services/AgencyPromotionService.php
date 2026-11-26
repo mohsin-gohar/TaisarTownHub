@@ -202,8 +202,12 @@ class AgencyPromotionService
         return DB::transaction(function () use ($promotion, $data, $actor) {
             $this->lockSlotMutex();
 
-            $lockedPromotion = AgencyPromotion::whereKey($promotion->id)->lockForUpdate()->firstOrFail();
-            $lockedAgency = Agency::whereKey($lockedPromotion->agency_id)->lockForUpdate()->firstOrFail();
+            // Match promote() lock order: agency row before placement row.
+            $lockedAgency = Agency::whereKey($promotion->agency_id)->lockForUpdate()->firstOrFail();
+            $lockedPromotion = AgencyPromotion::whereKey($promotion->id)
+                ->where('agency_id', $lockedAgency->id)
+                ->lockForUpdate()
+                ->firstOrFail();
             $status = $data['status'] ?? $lockedPromotion->status;
 
             if (in_array($status, ['active', 'pending'], true)) {
