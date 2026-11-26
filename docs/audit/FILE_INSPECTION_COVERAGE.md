@@ -1,40 +1,34 @@
 # File Inspection Coverage
 
-Branch: `fix/workspace-transaction-lifecycle-20261126` (HEAD `5fbf3e0`)
+Branch: `fix/workspace-transaction-lifecycle-20261126`
 Date: 2026-11-26
 
-## Scope method
-- Application source and configuration were inspected; generated/vendor/build output was excluded.
-- Coverage is reported as concrete counts, not "100%" claims.
+## Method and coverage
+Counts below describe the previous risk-ranked inspection pass. They do not mean every file was read line by line. Generated/vendor/build output was excluded.
 
-## Inventory (project-owned files)
+| Area | Files | Inspection status |
+|---|---:|---|
+| Backend app PHP | 118 | 118 targeted deep reads |
+| Backend migrations | 54 | 54 reviewed for schema, indexes and constraints |
+| Backend routes | 4 | 4 reviewed |
+| Backend config | 15 | 15 reviewed |
+| Backend tests | 68 | 68 executed, not individually line-read |
+| Frontend TS/TSX source | 130 | Targeted inspection; not exhaustive line-by-line |
+| Frontend E2E | 15 | Browser suites run; see TESTING_REPORT |
+| Docker/Compose | 4 + compose | Configuration reviewed; branch Docker runtime not verified |
+| Nginx | 1 | Configuration reviewed |
+| CI workflows | 2 | Reviewed |
+| Documentation | 8 + audit reports | Reviewed selectively |
 
-| Area | Files | Inspected | Notes |
-|---|---:|---:|---|
-| Backend app (PHP) | 118 | 118 (targeted deep reads) | Controllers, models, middleware, services, requests, support |
-| Backend database (migrations) | 54 | 54 | Schema + indexes + constraints reviewed |
-| Backend routes | 4 | 4 | `api_definitions.php` dual registration reviewed |
-| Backend config | 15 | 15 | phpunit, database, cors, sanctum, etc. |
-| Backend tests | 68 | 68 (run, not line-read) | Executed via `php artisan test` |
-| Frontend src (TS/TSX) | 130 | targeted | Domain, components, pages, contexts, hooks, api clients |
-| Frontend e2e | 15 | run (Playwright) | Public pages, maps, interactive elements |
-| Docker / compose | 4 + compose | reviewed | docker-compose.yml, Dockerfiles |
-| Nginx | 1 | reviewed | nginx/nginx.conf |
-| CI workflows | 2 | reviewed | ci.yml, docker-ci.yml |
-| Docs | 8 + new audit | reviewed | status, deployment, security, backup, api |
+## Deep inspection focus
+- Dealer, finance, workspace, document and agency-staff authorization paths.
+- Tenant isolation, transaction lifecycle, payment/commission ledgers and replacement safety.
+- Regression tests for finance, workspace tenant matrix, dealer authorization, vault security and concurrency.
+- Frontend transaction domain and admin transaction UI.
+- Docker/Compose, Nginx and CI workflow definitions.
 
-## Deeply inspected files (changed or audited in detail)
-- `backend/app/Http/Controllers/Api/DealerController.php` (undefined `$effectiveCommissionType`)
-- `backend/app/Http/Controllers/Api/FinanceController.php` (updateCommission agency context)
-- `backend/app/Http/Controllers/Api/WorkspaceController.php` (platform-user agency resolution, canWrite gates, enforce* guards)
-- `backend/tests/Feature/FinanceIsolationTest.php`, `FinanceLifecycleTest.php`, `WorkspaceHardeningTest.php`, `BookingConcurrencyTest.php`
-- `frontend/src/domain/transactions.ts` (`collectedForTx` legacy-advance handling)
-- `docker-compose.yml`, `nginx/nginx.conf`, `.github/workflows/ci.yml`, `.github/workflows/docker-ci.yml`
+## Exclusions
+`backend/vendor/`, `frontend/node_modules/`, `frontend/dist/`, generated bundles, binaries and lockfile internals were not line-read as application source.
 
-## Not fully line-read (excluded as generated/non-source)
-- `backend/vendor/`, `frontend/node_modules/`, `frontend/dist/`, `frontend/audit/`, build outputs, binaries, lockfiles.
-
-## Verification evidence
-- Backend: `php artisan test` → 540 passed, 0 failed, 4527 assertions, exit 0 (see TESTING_REPORT.md).
-- Frontend: `npm run verify` → 173 tests, 0 failures, tsc clean, build + 29 prerendered pages, exit 0.
-- Browser: Playwright chromium smoke (cross-browser-smoke 7, maps 5, interactive-elements 9) all passed at desktop viewport.
+## Latest verification reference
+GitHub Actions run #641 on `d4ba0e4`: backend 540 passed; frontend 173 passed; Chromium 46 passed; Firefox/WebKit 14 combined passed. A subsequent dealer commission validation fix and regression test were committed after that run and remain pending CI verification.
