@@ -1408,8 +1408,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // release the property back to inventory.
       if (updates.status === 'Cancelled') {
         const cancellationReason = (existingTx.internalRemarks || existingTx.notes || updates.internalRemarks || updates.notes || '').trim();
-        if (cancellationReason.length < 3) {
-          showToast('error', 'A cancellation reason of at least 3 characters is required.');
+        if (cancellationReason.length < 3 || cancellationReason.length > 2000) {
+          showToast('error', 'A cancellation reason must be between 3 and 2,000 characters.');
           return;
         }
         const cancelledTx = { ...updatedTx, commissionStatus: 'Cancelled' as const };
@@ -1555,8 +1555,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const cleanReason = (reason || '').trim();
-    if (cleanReason.length < 3) {
-      showToast('error', 'Enter a void reason of at least 3 characters for the audit trail.');
+    if (cleanReason.length < 3 || cleanReason.length > 2000) {
+      showToast('error', 'Enter a void reason between 3 and 2,000 characters for the audit trail.');
       return;
     }
 
