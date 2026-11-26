@@ -50,6 +50,7 @@ return new class extends Migration
             $table->unsignedBigInteger('size_bytes')->default(0);
             $table->char('checksum', 64)->nullable();
             $table->string('reason', 40); // infected | scan_unavailable
+            $table->boolean('is_sensitive')->default(false)->index();
             $table->json('threats')->nullable();
             $table->foreignId('uploaded_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('created_at')->useCurrent();
