@@ -185,9 +185,16 @@ class InquiryController extends Controller
             $from = $locked->status;
             $locked->update(['status' => $data['status']]);
 
-            BusinessRecord::where('collection', 'inquiries')
+            $legacy = BusinessRecord::where('collection', 'inquiries')
                 ->where('record_id', $locked->id)
-                ->update(['status' => $data['status']]);
+                ->lockForUpdate()
+                ->first();
+            if ($legacy) {
+                $payload = is_array($legacy->payload) ? $legacy->payload : [];
+                $payload['status'] = $data['status'];
+                $legacy->payload = $payload;
+                $legacy->save();
+            }
 
             return [$locked->fresh(), $from];
         }, 3);
@@ -218,9 +225,16 @@ class InquiryController extends Controller
             $locked = Inquiry::whereKey($inquiry->id)->lockForUpdate()->firstOrFail();
             $locked->update(['adminNotes' => $notes]);
 
-            BusinessRecord::where('collection', 'inquiries')
+            $legacy = BusinessRecord::where('collection', 'inquiries')
                 ->where('record_id', $locked->id)
-                ->update(['adminNotes' => $notes]);
+                ->lockForUpdate()
+                ->first();
+            if ($legacy) {
+                $payload = is_array($legacy->payload) ? $legacy->payload : [];
+                $payload['adminNotes'] = $notes;
+                $legacy->payload = $payload;
+                $legacy->save();
+            }
 
             return $locked->fresh();
         }, 3);
