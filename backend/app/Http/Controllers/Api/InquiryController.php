@@ -102,7 +102,7 @@ class InquiryController extends Controller
             ], 201);
         }
 
-        if (!$this->captcha->verify($data['captchaToken'], $data['captchaAnswer'], $request->ip())) {
+        if (!InquiryCaptcha::verify($data['captchaToken'], $data['captchaAnswer'])) {
             return response()->json([
                 'success' => false,
                 'code' => 'captcha_failed',
