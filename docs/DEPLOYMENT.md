@@ -73,6 +73,7 @@ A Vercel frontend-only deployment serves the SPA without the backend, database o
 | `MAIL_MAILER/MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_FROM_ADDRESS` | real SMTP; verify delivery of verification/reset mail |
 | `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` | exact production origin(s) — never `*` |
 | `TRUSTED_PROXIES` | real load-balancer/nginx IPs (X-Forwarded-For spoofing prevention) |
+| `APP_NAME`, `BCRYPT_ROUNDS`, `LOG_CHANNEL`, `LOG_LEVEL`, `SANCTUM_TOKEN_PREFIX` | explicit production runtime defaults; warning-level logs to stderr |
 | `MALWARE_SCAN_ENABLED=true`, `MALWARE_SCAN_FAIL_CLOSED=true`, `MALWARE_SCANNER=clamav`, `CLAMD_SOCKET=clamav:3310` | fail-closed upload scanning |
 | `STRIPE_*`, `FLUTTERWAVE_*` | Provider credentials alone do not make billing live: the agency UI currently uses platform-assigned subscriptions; Stripe checkout is API-only and Flutterwave has no checkout-initiation flow. Complete and verify the intended provider flow before enabling self-service payments |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | passed into the backend container; configure the exact API callback URI with Google |
