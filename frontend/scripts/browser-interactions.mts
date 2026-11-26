@@ -567,7 +567,7 @@ async function runPublic(browser: Browser): Promise<{
     await gotoRoute(page, '/login');
     const form = page.locator('form').filter({ has: page.locator('input[placeholder="Enter password"]') }).first();
     await form.locator('input[type="email"]').fill('not-a-user@taisartownhub.com');
-    await form.locator('input[type="password"]').fill('WrongPass123!');
+    await form.locator('input[type="password"]').fill((process.env.DEMO_STAFF_PASSWORD || 'WrongPass123!'));
     await form.locator('button[type="submit"]').click();
     await delay(1800);
     const errorVisible =
