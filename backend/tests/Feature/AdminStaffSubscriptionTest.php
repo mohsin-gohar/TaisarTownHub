@@ -209,7 +209,11 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
 
     public function test_agency_roles_cannot_grant_platform_permissions(): void
     {
-        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        // A manager may delegate only capabilities they personally hold.
+        [$manager] = $this->agencyUser(array_merge($this->staffPermissions(), [
+            'properties.view',
+            'crm.view',
+        ]), 'manager');
 
         $this->postJson('/api/agency/roles', [
             'name' => 'Escalated Role',
