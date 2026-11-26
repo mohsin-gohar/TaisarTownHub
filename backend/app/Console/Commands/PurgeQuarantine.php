@@ -35,12 +35,25 @@ class PurgeQuarantine extends Command
         $purgedRejected = 0;
         DocumentQuarantine::where('created_at', '<', $cutoff)->get()->each(function (DocumentQuarantine $row) use (&$purgedRejected) {
             try {
-                if ($row->disk_path && Storage::disk('quarantine')->exists($row->disk_path)) {
-                    Storage::disk('quarantine')->delete($row->disk_path);
+                $disk = Storage::disk('quarantine');
+                if ($row->disk_path && $disk->exists($row->disk_path)
+                    && $disk->delete($row->disk_path) === false) {
+                    Log::warning('Quarantine purge retained metadata because byte deletion returned false', [
+                        'id' => $row->id,
+                        'disk_path' => $row->disk_path,
+                    ]);
+
+                    return;
                 }
-            } catch (\Throwable $e) {
-                Log::warning('Quarantine purge byte delete failed', ['id' => $row->id, 'error' => $e->getMessage()]);
+            } catch (\\Throwable $e) {
+                Log::warning('Quarantine purge byte delete failed; metadata retained for retry', [
+                    'id' => $row->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return;
             }
+
             $row->delete();
             $purgedRejected++;
         });
@@ -52,21 +65,40 @@ class PurgeQuarantine extends Command
             ->get()
             ->each(function (Document $document) use (&$purgedHolds) {
                 try {
-                    $disk = $document->storage_disk ?: 'documents';
-                    if ($document->disk_path && Storage::disk($disk)->exists($document->disk_path)) {
-                        Storage::disk($disk)->delete($document->disk_path);
+                    $disk = Storage::disk($document->storage_disk ?: 'documents');
+                    if ($document->disk_path && $disk->exists($document->disk_path)
+                        && $disk->delete($document->disk_path) === false) {
+                        Log::warning('Quarantine hold retained because document byte deletion returned false', [
+                            'id' => $document->id,
+                            'disk_path' => $document->disk_path,
+                        ]);
+
+                        return;
                     }
-                    DocumentVersion::where('document_id', $document->id)->get()->each(function (DocumentVersion $version) {
-                        $vDisk = $version->storage_disk ?: 'documents';
-                        if ($version->disk_path && Storage::disk($vDisk)->exists($version->disk_path)) {
-                            Storage::disk($vDisk)->delete($version->disk_path);
+
+                    foreach (DocumentVersion::where('document_id', $document->id)->get() as $version) {
+                        $versionDisk = Storage::disk($version->storage_disk ?: 'documents');
+                        if ($version->disk_path && $versionDisk->exists($version->disk_path)
+                            && $versionDisk->delete($version->disk_path) === false) {
+                            Log::warning('Quarantine hold retained because version byte deletion returned false', [
+                                'id' => $document->id,
+                                'version_id' => $version->id,
+                                'disk_path' => $version->disk_path,
+                            ]);
+
+                            return;
                         }
-                    });
-                } catch (\Throwable $e) {
-                    Log::warning('Quarantine hold purge failed', ['id' => $document->id, 'error' => $e->getMessage()]);
+                    }
+                } catch (\\Throwable $e) {
+                    Log::warning('Quarantine hold purge failed; metadata retained for retry', [
+                        'id' => $document->id,
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    return;
                 }
 
-                \App\Models\AuditLog::create([
+                \\App\\Models\\AuditLog::create([
                     'actor' => 'system',
                     'role' => 'system',
                     'action' => 'document.quarantine_purged',
