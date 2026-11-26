@@ -235,6 +235,9 @@ class Permissions
     public const ADMIN_EXCLUDED = [
         'admin.manage_platform_settings',
         'admin.manage_users',
+        // Irreversible bookkeeping voids are reserved for Super Admin and
+        // the tenant's Agency Owner, not the platform's legacy Admin role.
+        'legacy.void_transactions',
     ];
 
     public static function allKeys(): array
