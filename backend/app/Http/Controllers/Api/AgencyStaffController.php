@@ -63,18 +63,10 @@ class AgencyStaffController extends Controller
             'role_id' => 'required|string|max:64',
         ]);
 
-        $agency = Agency::findOrFail($agencyId);
-
-        // G-8: staff quota (active members + pending invitations) enforced server-side.
-        if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId))) {
-            return PlanLimits::deny('Staff limit reached for your subscription plan. Upgrade to invite more members.', $block);
-        }
-
+        $email = mb_strtolower(trim((string) $request->email));
         $role = $this->resolveAgencyRole($agencyId, $request->role_id);
 
-        // Only an existing owner may mint another owner invitation. Without
-        // this guard any agency.manage_staff holder could invite themselves
-        // (or an accomplice) into full agency ownership.
+        // Only an existing owner may mint another owner invitation.
         if ($role->id === 'role_agency_owner' && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
             return response()->json([
                 'success' => false,
@@ -82,32 +74,78 @@ class AgencyStaffController extends Controller
             ], 403);
         }
 
-        if (User::where('email', $request->email)->exists()
-            && AgencyMember::where('agency_id', $agencyId)
-                ->whereHas('user', fn ($q) => $q->where('email', $request->email))
-                ->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This user is already a member of your agency.',
-            ], 422);
+        $token = Str::random(48);
+        $result = DB::transaction(function () use ($agencyId, $email, $role, $request, $token): array {
+            // Serialize invitations and acceptances for this agency so two
+            // concurrent requests cannot both consume the last staff slot.
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+
+            if ($role->id === 'role_agency_owner' && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
+                return ['error' => 'owner_only'];
+            }
+
+            $alreadyMember = User::whereRaw('LOWER(email) = ?', [$email])
+                ->whereHas('memberships', fn ($query) => $query
+                    ->where('agency_id', $agencyId)
+                    ->where('status', 'active'))
+                ->exists();
+
+            if ($alreadyMember) {
+                return ['error' => 'already_member'];
+            }
+
+            $pendingInvite = AgencyInvitation::where('agency_id', $agencyId)
+                ->whereRaw('LOWER(email) = ?', [$email])
+                ->where('status', 'pending')
+                ->where('expires_at', '>', now())
+                ->exists();
+
+            if ($pendingInvite) {
+                return ['error' => 'pending_invitation'];
+            }
+
+            if ($block = PlanLimits::block(
+                Agency::findOrFail($agencyId),
+                'staff',
+                fn () => PlanLimits::staffUsed($agencyId)
+            )) {
+                return ['blocked' => $block];
+            }
+
+            $invitation = AgencyInvitation::create([
+                'agency_id' => $agencyId,
+                'email' => $email,
+                'role_id' => $role->id,
+                'token_hash' => hash('sha256', $token),
+                'invited_by' => $request->user()->id,
+                'status' => 'pending',
+                'expires_at' => now()->addDays(7),
+            ]);
+
+            return ['invitation' => $invitation];
+        }, 3);
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Staff limit reached for your subscription plan. Upgrade to invite more members.', $result['blocked']);
         }
 
-        $token = Str::random(48);
-        $invitation = AgencyInvitation::create([
-            'agency_id' => $agencyId,
-            'email' => $request->email,
-            'role_id' => $role->id,
-            'token_hash' => hash('sha256', $token),
-            'invited_by' => $request->user()->id,
-            'status' => 'pending',
-            'expires_at' => now()->addDays(7),
-        ]);
+        if (($result['error'] ?? null) === 'owner_only') {
+            return response()->json(['success' => false, 'message' => 'Only an agency owner may invite another owner.'], 403);
+        }
+        if (($result['error'] ?? null) === 'already_member') {
+            return response()->json(['success' => false, 'message' => 'This user is already a member of your agency.'], 422);
+        }
+        if (($result['error'] ?? null) === 'pending_invitation') {
+            return response()->json(['success' => false, 'message' => 'A pending invitation already exists for this email. Revoke it before sending another.'], 409);
+        }
 
-        $this->writeAudit($request, 'agency.invite', 'invitation:' . $invitation->id, 'Invited ' . $request->email . ' as ' . $role->name, [
+        /** @var AgencyInvitation $invitation */
+        $invitation = $result['invitation'];
+        $this->writeAudit($request, 'agency.invite', 'invitation:' . $invitation->id, 'Invited ' . $email . ' as ' . $role->name, [
             'agency_id' => $agencyId,
             'entity_type' => 'agency_invitation',
             'entity_id' => (string) $invitation->id,
-            'metadata' => ['email' => $request->email, 'role' => $role->key],
+            'metadata' => ['email' => $email, 'role' => $role->key],
         ]);
 
         // No mail provider is configured (MAIL_MAILER=log), so the token is
@@ -120,14 +158,12 @@ class AgencyStaffController extends Controller
                 'id' => $invitation->id,
                 'email' => $invitation->email,
                 'role_id' => $invitation->role_id,
-                'role_name' => $role->name,
-                'expires_at' => $invitation->expires_at,
+                'expires_at' => $invitation->expires_at?->toIso8601String(),
                 'invite_token' => $token,
             ],
         ], 201);
     }
 
-    /** GET /api/agency/invitations */
     public function invitations(Request $request)
     {
         $agencyId = $this->requireAgency($request);
@@ -155,21 +191,32 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
-        $invitation = AgencyInvitation::where('agency_id', $agencyId)->findOrFail($id);
-        $invitation->update(['status' => 'revoked']);
+        $result = DB::transaction(function () use ($agencyId, $id): array {
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+            $invitation = AgencyInvitation::where('agency_id', $agencyId)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        $this->writeAudit($request, 'agency.invite.revoke', 'invitation:' . $id, 'Invitation revoked', [
-            'agency_id' => $agencyId,
-        ]);
+            if ($invitation->status !== 'pending') {
+                return ['revoked' => false];
+            }
+
+            $invitation->status = 'revoked';
+            $invitation->save();
+
+            return ['revoked' => true];
+        }, 3);
+
+        if (!$result['revoked']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only pending invitations can be revoked.',
+            ], 422);
+        }
 
         return response()->json(['success' => true, 'message' => 'Invitation revoked.']);
     }
 
-    /**
-     * POST /api/agency/invitations/accept — accept an invite.
-     * Authenticated users join directly; new users may register through the
-     * invite by supplying name + password with the token.
-     */
     public function acceptInvitation(Request $request)
     {
         $request->validate([
