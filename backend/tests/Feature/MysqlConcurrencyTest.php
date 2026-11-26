@@ -194,6 +194,57 @@ class MysqlConcurrencyTest extends TestCase
         $this->assertSame(2, $invitee->tokens()->count(), 'one original + one accepted-session token');
     }
 
+    public function test_concurrent_invoice_allocations_get_unique_numbers(): void
+    {
+        $agency = $this->makeAgency();
+        $this->track('agencies', $agency->id);
+
+        $admins = [];
+        foreach (['invoice-a@audit.test', 'invoice-b@audit.test'] as $email) {
+            $admin = $this->makeUser($email, ['role' => 'super_admin']);
+            $this->track('users', (string) $admin->id);
+            $admins[] = $admin->createToken('invoice-session')->plainTextToken;
+        }
+
+        $payload = [
+            'agency_id' => $agency->id,
+            'amount_pkr' => 10000,
+            'tax_pkr' => 0,
+            'notes' => 'Concurrent invoice sequence probe',
+        ];
+
+        $results = [];
+        if ($this->mysql) {
+            $processes = [];
+            foreach ($admins as $token) {
+                $processes[] = $this->runProcess('/api/admin/subscription-invoices', $payload, $token);
+            }
+            foreach ($processes as $process) {
+                $results[] = $this->workerResult($process);
+            }
+        } else {
+            foreach ($admins as $token) {
+                $this->asGuest();
+                $response = $this->postJson('/api/admin/subscription-invoices', $payload, $this->authHeaders($token));
+                $results[] = [$response->getStatusCode(), $response->json()];
+            }
+        }
+
+        foreach ($results as [$status, $body]) {
+            $this->assertSame(201, $status, 'every concurrent invoice creation must succeed');
+            $this->assertNotEmpty($body['invoice']['invoice_number'] ?? null);
+            if (!empty($body['invoice']['id'])) {
+                $this->track('subscription_invoices', (string) $body['invoice']['id']);
+            }
+        }
+
+        $numbers = array_map(
+            fn (array $result) => $result[1]['invoice']['invoice_number'] ?? null,
+            $results
+        );
+        $this->assertCount(2, array_unique($numbers), 'invoice numbers must be unique under concurrency');
+    }
+
     public function test_concurrent_deal_allocations_get_unique_numbers(): void
     {
         $agency = $this->makeAgency();
