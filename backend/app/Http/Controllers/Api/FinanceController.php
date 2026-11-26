@@ -1048,17 +1048,30 @@ public function update(Request $request, string $id)
             }
         }
 
-        $commission = Commission::create([
-            'agency_id' => $transaction->agency_id,
-            'transaction_id' => $transaction->id,
-            'amount' => (float) $data['amount'],
-            'rate' => $data['rate'] ?? null,
-            'dealer_id' => $data['dealer_id'] ?? null,
-            'user_id' => $data['user_id'] ?? null,
-            'beneficiary_type' => $data['beneficiary_type'] ?? 'dealer',
-            'status' => 'pending',
-            'notes' => $data['notes'] ?? null,
-        ]);
+        $commission = DB::transaction(function () use ($transactionId, $agencyId, $transaction, $data): Commission {
+            $locked = Transaction::where('id', $transactionId)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($locked->isVoided()) {
+                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                    'transaction' => 'Voided deals cannot receive new commissions.',
+                ]);
+            }
+
+            return Commission::create([
+                'agency_id' => $transaction->agency_id,
+                'transaction_id' => $transaction->id,
+                'amount' => (float) $data['amount'],
+                'rate' => $data['rate'] ?? null,
+                'dealer_id' => $data['dealer_id'] ?? null,
+                'user_id' => $data['user_id'] ?? null,
+                'beneficiary_type' => $data['beneficiary_type'] ?? 'dealer',
+                'status' => 'pending',
+                'notes' => $data['notes'] ?? null,
+            ]);
+        }, 3);
 
         $this->writeAudit($request, 'commission.create', $commission->id, "Commission accrued on {$transaction->dealNumber}", [
             'agency_id' => $transaction->agency_id,
