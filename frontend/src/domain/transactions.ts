@@ -142,11 +142,24 @@ export function validateVoid(
  * their recorded advance.
  */
 export function collectedForTx(txn: Transaction, payments: PaymentEntry[] = []): number {
-  const ledger = payments.filter((p) => p.transactionId === txn.id && p.amountPKR > 0);
-  const fromLedger = ledger.reduce((sum, p) => sum + p.amountPKR, 0);
-  if (fromLedger > 0) return fromLedger;
+  const ledger = payments.filter((payment) => payment.transactionId === txn.id);
   const advance = txn.advancePKR ?? txn.advancePaymentPKR ?? 0;
-  return Number.isFinite(advance) ? Math.max(0, advance) : 0;
+  const legacyAdvance = Number.isFinite(advance) ? Math.max(0, advance) : 0;
+
+  if (ledger.length === 0) return legacyAdvance;
+
+  // Refunds are stored as negative amounts by the API, but older imports may
+  // carry a positive amount with type=refund. Normalize both shapes and
+  // subtract refunds from gross receipts instead of silently ignoring them.
+  const grossPayments = ledger
+    .filter((payment) => String(payment.type ?? '').toLowerCase() !== 'refund')
+    .reduce((sum, payment) => sum + Math.abs(payment.amountPKR), 0);
+  const refunds = ledger
+    .filter((payment) => String(payment.type ?? '').toLowerCase() === 'refund')
+    .reduce((sum, payment) => sum + Math.abs(payment.amountPKR), 0);
+  const sourceGross = grossPayments > 0 ? grossPayments : legacyAdvance;
+
+  return Math.max(0, sourceGross - refunds);
 }
 
 export interface DealMoney {
