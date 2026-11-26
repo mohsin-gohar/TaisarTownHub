@@ -34,6 +34,11 @@ class EncryptVault extends Command
     public function handle(): int
     {
         $only = $this->option('disk');
+        if ($only !== null && ! in_array($only, ['documents', 'quarantine'], true)) {
+            $this->error('Invalid --disk value. Allowed values: documents, quarantine.');
+
+            return self::FAILURE;
+        }
         $dry = (bool) $this->option('dry-run');
         $counts = ['encrypted' => 0, 'already' => 0, 'errors' => 0];
 
@@ -50,6 +55,33 @@ class EncryptVault extends Command
         $this->info("vault:encrypt done — encrypted: {$counts['encrypted']}, already encrypted: {$counts['already']}, errors: {$counts['errors']}" . ($dry ? ' (dry run)' : ''));
 
         return $counts['errors'] > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    private function writeVerifiedReplacement(string $disk, string $path, string $plain): void
+    {
+        $storage = Storage::disk($disk);
+        $temporaryPath = $path . '.rotation-' . Str::random(16);
+
+        try {
+            if (! $storage->put($temporaryPath, FileVaultCrypto::encrypt($plain))) {
+                throw new \RuntimeException('Could not write the staged vault object.');
+            }
+
+            $staged = $storage->get($temporaryPath);
+            if (! is_string($staged)
+                || ! FileVaultCrypto::usesCurrentKey($staged)
+                || FileVaultCrypto::decrypt($staged) !== $plain) {
+                throw new \RuntimeException('Staged vault object failed current-key verification.');
+            }
+
+            if (! $storage->move($temporaryPath, $path)) {
+                throw new \RuntimeException('Could not replace the original vault object.');
+            }
+        } finally {
+            if ($storage->exists($temporaryPath)) {
+                $storage->delete($temporaryPath);
+            }
+        }
     }
 
     private function processDisk(string $disk, $rows, \Closure $pathOf, array &$counts, bool $dry): void
@@ -85,28 +117,7 @@ class EncryptVault extends Command
                         continue;
                     }
 
-                    $storage = Storage::disk($disk);
-                    $temporaryPath = $path . '.rotation-' . Str::random(16);
-                    try {
-                        if (! $storage->put($temporaryPath, FileVaultCrypto::encrypt($plain))) {
-                            throw new \RuntimeException('Could not write the staged rotated vault object.');
-                        }
-
-                        $staged = (string) $storage->get($temporaryPath);
-                        if (! FileVaultCrypto::usesCurrentKey($staged)
-                            || FileVaultCrypto::decrypt($staged) !== $plain) {
-                            throw new \RuntimeException('Staged vault object failed current-key verification.');
-                        }
-
-                        if (! $storage->move($temporaryPath, $path)) {
-                            throw new \RuntimeException('Could not atomically replace the old vault object.');
-                        }
-                    } finally {
-                        if ($storage->exists($temporaryPath)) {
-                            $storage->delete($temporaryPath);
-                        }
-                    }
-
+                    $this->writeVerifiedReplacement($disk, $path, $plain);
                     $counts['encrypted']++;
                 } catch (\Throwable $e) {
                     $counts['errors']++;
@@ -123,7 +134,9 @@ class EncryptVault extends Command
             }
 
             try {
-                Storage::disk($disk)->put($path, FileVaultCrypto::encrypt($blob));
+                // Plaintext migration is staged and verified just like key
+                // rotation; never overwrite the only readable copy directly.
+                $this->writeVerifiedReplacement($disk, $path, $blob);
                 $counts['encrypted']++;
             } catch (\Throwable $e) {
                 $counts['errors']++;
