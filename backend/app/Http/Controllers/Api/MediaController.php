@@ -327,9 +327,7 @@ class MediaController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['manage_media', 'upload_media']);
 
-        $media = MediaFile::where('agency_id', $agencyId)->findOrFail($id);
-
-        $request->validate([
+        $data = $request->validate([
             'title' => 'sometimes|string|max:255',
             'folder' => 'sometimes|string|max:60',
             'visibility' => 'sometimes|in:public,private',
@@ -339,26 +337,35 @@ class MediaController extends Controller
             'tags.*' => 'string|max:40',
         ]);
 
-        if ($request->filled('property_id')) {
-            Property::where('agency_id', $agencyId)->where('id', $request->property_id)->firstOrFail();
-        }
+        $media = DB::transaction(function () use ($request, $agencyId, $id, $data): MediaFile {
+            $media = MediaFile::where('agency_id', $agencyId)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        $newVisibility = $request->input('visibility', $media->visibility);
-        if ($newVisibility === 'public' && ($media->type === 'document' || $media->status === 'sold' || ($media->scan_status !== null && $media->scan_status !== 'scanned_clean'))) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Sensitive, sold or unverified media cannot be made public.',
-            ], 422);
-        }
+            if (array_key_exists('property_id', $data) && $data['property_id'] !== null) {
+                Property::where('agency_id', $agencyId)->where('id', $data['property_id'])->firstOrFail();
+            }
 
-        $media->fill($request->only(['title', 'folder', 'visibility', 'property_id', 'description', 'tags']));
-        $media->save();
+            $newVisibility = $data['visibility'] ?? $media->visibility;
+            if ($newVisibility === 'public' && (
+                $media->type === 'document'
+                || $media->status === 'sold'
+                || ($media->scan_status !== null && $media->scan_status !== 'scanned_clean')
+            )) {
+                abort(422, 'Sensitive, sold or unverified media cannot be made public.');
+            }
+
+            $media->fill($data);
+            $media->save();
+
+            return $media->fresh();
+        }, 3);
 
         $this->writeAudit($request, 'media.update', $media->id, "Media updated: {$media->title}", [
             'agency_id' => $agencyId,
             'entity_type' => 'media_file',
             'entity_id' => $media->id,
-            'metadata' => ['fields' => array_keys($request->only(['title', 'folder', 'visibility', 'property_id', 'description', 'tags']))],
+            'metadata' => ['fields' => array_keys($data)],
         ]);
 
         return response()->json(['success' => true, 'media' => $media]);
@@ -383,7 +390,7 @@ class MediaController extends Controller
             'cost_price_pk' => 'nullable|numeric|decimal:0,2|min:0|max:9999999999999.99',
             'buyer_name' => 'required|string|max:255',
             'buyer_phone' => 'nullable|string|max:30',
-            'buyer_national_id_masked' => ['nullable', 'string', 'max:40', 'regex:/^[0-9* -]{4,40}$/'],
+            'buyer_national_id_masked' => ['nullable', 'string', 'max:40', 'regex:/^\\*{5}-\\*{7}-\\d{1,4}$/'],
             'sold_at' => 'nullable|date',
         ]);
 
