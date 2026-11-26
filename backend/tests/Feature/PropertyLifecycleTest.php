@@ -70,6 +70,29 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_agency_cannot_extend_listing_expiry_beyond_the_plan_window(): void
+    {
+        [$agent] = $this->agencyUser($this->agentPermissions());
+        $moderator = $this->platformModerator();
+        $agentHeaders = $this->authHeaders($this->tokenFor($agent));
+        $moderatorHeaders = $this->authHeaders($this->tokenFor($moderator));
+
+        $created = $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Expiry Is Server Controlled',
+            'submit' => true,
+        ]), $agentHeaders)->assertStatus(201);
+
+        $id = $created->json('id');
+        $this->postJson("/api/properties/{$id}/approve", [], $moderatorHeaders)->assertStatus(200);
+
+        $before = Property::findOrFail($id)->expires_at->toDateTimeString();
+        $this->patchJson("/api/properties/{$id}", [
+            'expires_at' => now()->addYears(5)->toDateTimeString(),
+        ], $agentHeaders)->assertStatus(200);
+
+        $this->assertSame($before, Property::findOrFail($id)->fresh()->expires_at->toDateTimeString());
+    }
+
     public function test_member_creates_submits_and_moderator_approves_listing(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
