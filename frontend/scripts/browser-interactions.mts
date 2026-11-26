@@ -352,6 +352,16 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
   return results;
 }
 
+async function solveVisibleMathCaptcha(page: Page): Promise<void> {
+  const question = page.locator('#inquiry-captcha-question').first();
+  if (!(await question.isVisible().catch(() => false))) return;
+  const text = await question.innerText();
+  const match = text.match(/(\\d+)\\s*\\+\\s*(\\d+)/);
+  if (!match) throw new Error(`Unsupported inquiry captcha question: ${text}`);
+  const answer = page.locator('#inquiry-captcha-answer').first();
+  await answer.fill(String(Number(match[1]) + Number(match[2])));
+}
+
 async function fillAndSubmit(
   page: Page,
   formLabel: string,
@@ -378,6 +388,9 @@ async function fillAndSubmit(
     }
     await input.fill(field.value);
   }
+
+  // Public inquiry forms require a signed, single-use math captcha.
+  await solveVisibleMathCaptcha(page);
 
   const submit = page.getByRole('button', { name: submitName }).first();
   if (!(await submit.isVisible().catch(() => false))) {
