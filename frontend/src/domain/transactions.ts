@@ -126,7 +126,7 @@ export function validateVoid(
       && (
         entry.status === 'Paid'
         || (entry.paidPKR ?? 0) > 0
-        || (entry.payouts ?? []).some((payout) => payout.amountPKR > 0),
+        || (entry.payouts ?? []).some((payout) => payout.amountPKR > 0)
       ),
   );
   if (hasPaidCommission) {
