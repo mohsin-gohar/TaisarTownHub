@@ -172,6 +172,7 @@ describe('ledger: payments', () => {
     assert.equal(r3.ok, true);
     const r4 = validatePayment(t, [], -5);
     assert.equal(r4.ok, false);
+    assert.equal(validatePayment(t, [], 0.5).ok, false);
     assert.equal(validatePayment(txn({ status: 'Cancelled', dealAmountPKR: 100 }), [], 50).ok, false);
   });
 });
@@ -228,6 +229,8 @@ describe('validation & ids', () => {
     assert.equal(validateDealPayload({ ...base, buyerId: 'b-x' }, { propertyId: 'p-1', sellerId: 's-1', buyerId: 'b-x' }, entities).ok, false);
     assert.equal(validateDealPayload({ ...base, buyerId: 's-1' }, { propertyId: 'p-1', sellerId: 's-1', buyerId: 's-1' }, entities).ok, false);
     assert.equal(validateDealPayload({ ...base, dealAmountPKR: 0 }, base, entities).ok, false);
+    assert.equal(validateDealPayload({ ...base, dealAmountPKR: 1000.5 }, base, entities).ok, false);
+    assert.equal(validateDealPayload({ ...base, advancePKR: 1000.5 }, base, entities).ok, false);
     assert.equal(validateDealPayload({ ...base, advancePKR: -1 }, base, entities).ok, false);
     assert.equal(validateDealPayload({ ...base, advancePKR: 4000001 }, base, entities).ok, false);
     assert.equal(validateDealPayload(base, base, entities).ok, true);
