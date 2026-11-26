@@ -1,28 +1,20 @@
 # Remaining Blockers
 
-Date: 2026-11-26
-Branch: `fix/workspace-transaction-lifecycle-20261126`
+The integrated QA code has green CI and Docker CI. These are the remaining launch gates; they must not be represented as completed by repository tests alone.
 
-## Code/CI verification still required
-1. Follow-up dealer commission validation fix and regression test (`2ab933c`, `50cf80e`, `668c83e`, `8b66034`) were committed after successful CI run #641; a new CI run is required.
-2. Authenticated browser role journeys for Super Admin, agency owner and staff require safe seeded demo accounts. Public-route tests do not substitute for role journeys.
-3. Docker image/Compose validation did not run for PR #22 because the PR targets `audit/full-repository-hardening-20261126`; Docker CI is configured for PRs to `main` or `qa/cross-browser-multireplica`. Older main Docker CI is not proof for this branch.
+1. **Live infrastructure:** provision and verify production DNS, TLS certificates, CDN/load-balancer trusted proxies and the real hosting environment.
+2. **Credentials:** configure and test SMTP, Google OAuth, Stripe/Flutterwave webhooks, Sentry/LogRocket and any analytics keys using owner-controlled secrets.
+3. **Production malware scanning:** verify the production ClamAV daemon/socket and fail-closed behavior against the actual host; CI's disposable ClamAV container is not a production deployment.
+4. **Backups:** connect the real off-site backup target, protect APP_KEY separately, and rehearse restore against a production-like copy with documented RPO/RTO.
+5. **Staging and rollback:** deploy the integrated release to staging, run smoke tests with owner-approved accounts, rehearse rollback and verify migrations/data compatibility.
+6. **Production data audit:** map legacy unowned records, verify agency ownership and perform a protected migration review before enabling tenants.
+7. **Performance and SEO:** run Lighthouse/Core Web Vitals, systematic N+1/query profiling, deep structured-data/Open Graph validation and independent penetration testing.
+8. **Owner policies:** approve privacy/retention, incident response, MFA enforcement and financial reversal procedures.
 
-## Further engineering validation
-4. Lighthouse performance scores have not been captured.
-5. Structured data, Open Graph values and full sitemap/SEO correctness need deeper validation.
-6. N+1 query behavior has not been systematically measured across all endpoints.
+## Supplemental workflow probe
 
-## External/owner-controlled
-7. Real ClamAV daemon and live upload scanning.
-8. TLS certificates, DNS, SMTP delivery, payment-provider and monitoring credentials.
-9. Protected production-data audit, legacy ownership mapping, backup/restore rehearsal, staging smoke and rollback rehearsal.
-10. Owner decisions for MFA enforcement, retention, privacy, incident response and any paid-commission reversal policy.
+A separate PR #9 workflow probe reported 15/20. Its test setup did not solve the required inquiry captcha, attempted to exceed the seeded trial staff limit, omitted dealer agency context and attempted document sharing before malware scan clearance. It is not a passing release gate and was not merged into the integrated release workflow. The corresponding backend feature/security suite is green.
 
-## Already covered by CI
-- Public browser routes and responsive layout checks across 11 widths (320, 360, 375, 390, 414, 430, 768, 1024, 1280, 1440, 1920px) passed in Chromium run #641.
-- Firefox and WebKit public smoke: 14 combined passed in run #641.
-- Backend MySQL 8, frontend verification and OpenAPI parse passed in run #641.
+## Integration status
 
-## Integration safety
-PR #22 is Draft/Open and targets the audit branch, not main. The repair branch compares to main as 550 commits ahead and 2 behind, with 139 changed files. Do not merge directly to main without a dedicated integration review.
+PR #11 has been merged into `qa/cross-browser-multireplica`. PR #5 is the release PR to `main`; do not merge it unless its latest CI and Docker CI checks remain green. Production has not been deployed or modified.
