@@ -940,6 +940,13 @@ class PaymentController extends Controller
             if ($agencySubscription->status === 'cancelled' && $status === 'active') {
                 return;
             }
+            if ($status === 'cancelled' && $currentEnd && $currentEnd->isFuture()
+                && is_numeric($periodEnd)
+                && $currentEnd->greaterThan(now()->setTimestamp((int) $periodEnd))) {
+                // A delayed deletion event for an older billing period must
+                // not cancel access already extended by a newer paid invoice.
+                return;
+            }
             if ($status === 'past_due' && $currentEnd
                 && (!is_numeric($periodEnd) || (int) $periodEnd <= $currentEnd->getTimestamp())) {
                 return;
