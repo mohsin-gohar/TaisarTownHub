@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\BusinessRecord;
+use App\Models\Agency;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -262,7 +263,7 @@ class WorkspaceController extends Controller
         $agencyId = $this->agencyId($request);
         return DB::transaction(function () use ($request, $user, $collections, $mode, $agencyId) {
             if ($agencyId !== null) {
-                \\App\\Models\\Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+                Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
             }
 
             $replaced = [];
