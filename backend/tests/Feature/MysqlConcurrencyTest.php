@@ -8,6 +8,7 @@ use App\Models\AgencyMember;
 use App\Models\Property;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\Permissions;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -198,6 +199,25 @@ class MysqlConcurrencyTest extends TestCase
     {
         $agency = $this->makeAgency();
         $this->track('agencies', $agency->id);
+
+        // Platform role rows carry the modern permission catalog. The legacy
+        // role-name fallback alone does not grant admin.manage_subscriptions.
+        $platformRole = Role::where('scope', 'platform')
+            ->where('key', 'super_admin')
+            ->first();
+        if (!$platformRole) {
+            $platformRole = new Role([
+                'scope' => 'platform',
+                'agency_id' => null,
+                'key' => 'super_admin',
+                'name' => 'Super Admin',
+                'is_system' => true,
+                'permissions' => Permissions::platformRoleGrants('super_admin'),
+            ]);
+            $platformRole->id = 'role_platform_super_admin';
+            $platformRole->save();
+            $this->track('roles', $platformRole->id);
+        }
 
         $admins = [];
         foreach (['invoice-a-' . Str::random(8) . '@audit.test', 'invoice-b-' . Str::random(8) . '@audit.test'] as $email) {
