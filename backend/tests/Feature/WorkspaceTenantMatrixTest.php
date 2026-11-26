@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\BusinessRecord;
+use App\Models\Dealer;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -327,6 +328,46 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         $this->assertDatabaseMissing('business_records', [
             'collection' => 'properties',
             'record_id' => 'atomic-property',
+        ]);
+    }
+
+
+    public function test_workspace_cannot_link_an_agency_property_or_deal_to_another_agencys_dealer(): void
+    {
+        [$user, $agencyA] = $this->agencyUser(['properties.create', 'finance.create_transaction']);
+        $agencyB = $this->makeAgency('Foreign Dealer Owner');
+        $foreignDealer = Dealer::create([
+            'id' => 'foreign-workspace-dealer',
+            'fullName' => 'Foreign Dealer',
+            'phone' => '03007776655',
+            'agency_id' => $agencyB->id,
+            'status' => 'Active',
+        ]);
+
+        $this->putJson('/api/workspace', [
+            'collections' => [
+                'properties' => [[
+                    'id' => 'property-with-foreign-dealer',
+                    'title' => 'Must not link foreign dealer',
+                    'assignedDealerId' => $foreignDealer->id,
+                ]],
+                'transactions' => [[
+                    'id' => 'deal-with-foreign-dealer',
+                    'title' => 'Must not link foreign dealer',
+                    'dealerId' => $foreignDealer->id,
+                ]],
+            ],
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'properties',
+            'record_id' => 'property-with-foreign-dealer',
+            'agency_id' => $agencyA->id,
+        ]);
+        $this->assertDatabaseMissing('business_records', [
+            'collection' => 'transactions',
+            'record_id' => 'deal-with-foreign-dealer',
+            'agency_id' => $agencyA->id,
         ]);
     }
 
