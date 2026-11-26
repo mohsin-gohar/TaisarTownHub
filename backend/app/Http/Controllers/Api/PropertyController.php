@@ -741,6 +741,9 @@ class PropertyController extends Controller
             if ($request->status === 'granted') {
                 $result = DB::transaction(function () use ($id): array {
                     $lockedProperty = Property::whereNull('deleted_at')->lockForUpdate()->findOrFail($id);
+                    if ($lockedProperty->expires_at && $lockedProperty->expires_at->isPast()) {
+                        return ['error' => 'listing_expired'];
+                    }
                     if ($lockedProperty->approval_status !== 'approved') {
                         return ['error' => 'listing_not_approved'];
                     }
@@ -776,6 +779,9 @@ class PropertyController extends Controller
                 if (($result['error'] ?? null) === 'subscription_inactive') {
                     return PlanLimits::subscriptionDenied();
                 }
+                if (($result['error'] ?? null) === 'listing_expired') {
+                    return response()->json(['success' => false, 'message' => 'Expired listings cannot receive featured placement.'], 422);
+                }
                 if (($result['error'] ?? null) === 'listing_not_approved') {
                     return response()->json(['success' => false, 'message' => 'Only approved listings can receive featured placement.'], 422);
                 }
@@ -803,6 +809,9 @@ class PropertyController extends Controller
         $this->requireAny($request, ['properties.feature']);
         $this->assertCanManage($request, $property, $agencyId);
 
+        if ($property->expires_at && $property->expires_at->isPast()) {
+            return response()->json(['success' => false, 'message' => 'Expired listings cannot request featured placement.'], 422);
+        }
         if ($property->approval_status !== 'approved') {
             return response()->json(['success' => false, 'message' => 'Only approved listings can request featured placement.'], 422);
         }
