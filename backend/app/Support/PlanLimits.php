@@ -48,6 +48,7 @@ class PlanLimits
         $mediaBytes = (int) MediaFile::withTrashed()
             ->where('agency_id', $agency->id)
             ->sum('size_bytes');
+        $quarantineBytes = (int) DocumentQuarantine::where('agency_id', $agency->id)->sum('size_bytes');
 
         return [
             'listings' => $agency->properties()->whereNull('deleted_at')->count(),
