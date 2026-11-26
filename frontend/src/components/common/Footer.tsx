@@ -20,7 +20,7 @@ import { APP_MODE } from '../../config/appMode';
  * the "Built with love for Taisar Town" line.
  */
 export const Footer: React.FC = () => {
-  const { cmsConfig, currentTheme, setCurrentView, togglePresentationMode } = useApp();
+  const { cmsConfig, currentTheme, currentView, setCurrentView, togglePresentationMode } = useApp();
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterDone, setNewsletterDone] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -78,6 +78,7 @@ export const Footer: React.FC = () => {
           <button
             type="button"
             onClick={() => setCurrentView(view)}
+            aria-current={currentView === view ? 'page' : undefined}
             className="hover:text-[#E7C878] transition-colors cursor-pointer text-left"
           >
             {label}
