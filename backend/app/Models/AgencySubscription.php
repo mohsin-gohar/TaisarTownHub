@@ -38,6 +38,14 @@ class AgencySubscription extends Model
 
     public function isExpired(): bool
     {
+        if (in_array($this->status, ['expired', 'cancelled', 'past_due'], true)) {
+            return true;
+        }
+
+        if ($this->status === 'trialing') {
+            return $this->trial_ends_at === null || $this->trial_ends_at->isPast();
+        }
+
         return $this->ends_at !== null && $this->ends_at->isPast();
     }
 
