@@ -1,11 +1,11 @@
 <?php
 
-namespace Tests\\Feature;
+namespace Tests\Feature;
 
-use App\\Models\\Document;
-use App\\Models\\DocumentQuarantine;
-use App\\Models\\DocumentVersion;
-use Illuminate\\Support\\Facades\\Storage;
+use App\Models\Document;
+use App\Models\DocumentQuarantine;
+use App\Models\DocumentVersion;
+use Illuminate\Support\Facades\Storage;
 use Mockery;
 
 class QuarantineRetentionTest extends EnterpriseTestCase
