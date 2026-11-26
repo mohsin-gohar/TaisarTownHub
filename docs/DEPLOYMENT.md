@@ -43,7 +43,7 @@ docker compose up -d --build
 docker compose ps -a
 docker compose logs migrate
 docker compose exec backend php artisan migrate:status
-docker compose exec backend php artisan app:production-check --strict --json
+docker compose exec --user www-data backend php artisan app:production-check --strict --json
 ```
 
 Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `scheduler`, `mysql` (MySQL 8.4), `redis`, `clamav`, one-shot `migrate`. Volumes: `mysql_data`, `redis_data`, `clamav_data`, `private_vault`, `quarantine_storage`, `public_storage`. The private document, quarantine and public-storage volumes are shared by the backend replicas and required workers; the frontend container receives no private volume. `php artisan serve` is not used in production. The root `Dockerfile.prod` is deprecated; use `backend/Dockerfile.prod` / `frontend/Dockerfile.prod` with `docker-compose.yml`.
