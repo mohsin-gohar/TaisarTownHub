@@ -355,4 +355,55 @@ class PaymentGatewayTest extends EnterpriseTestCase
     }
 
 
+
+    public function test_stripe_invoice_events_update_subscription_using_gateway_subscription_id(): void
+    {
+        $secret = 'whsec_invoice_events';
+        config(['services.stripe.webhook' => $secret]);
+
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'past_due',
+            'stripe_subscription_id' => 'sub_invoice_event_1',
+        ]);
+
+        $this->asGuest();
+        foreach ([
+            ['invoice.payment_succeeded', 'active'],
+            ['invoice.payment_failed', 'past_due'],
+        ] as [$eventType, $expectedStatus]) {
+            $payload = json_encode([
+                'id' => 'evt_' . str_replace('.', '_', $eventType),
+                'type' => $eventType,
+                'data' => ['object' => [
+                    'id' => 'in_invoice_event_1',
+                    'subscription' => 'sub_invoice_event_1',
+                ]],
+            ]);
+
+            $this->call(
+                'POST',
+                '/api/payments/webhook/stripe',
+                [],
+                [],
+                [],
+                [
+                    'CONTENT_TYPE' => 'application/json',
+                    'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+                ],
+                $payload
+            )->assertOk()->assertJsonPath('success', true);
+
+            $this->assertDatabaseHas('agency_subscriptions', [
+                'agency_id' => $agency->id,
+                'stripe_subscription_id' => 'sub_invoice_event_1',
+                'status' => $expectedStatus,
+            ]);
+        }
+    }
+
+
 }
