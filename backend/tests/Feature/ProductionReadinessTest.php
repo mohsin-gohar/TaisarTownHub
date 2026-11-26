@@ -24,7 +24,7 @@ class ProductionReadinessTest extends EnterpriseTestCase
         $this->assertSame(0, $report['summary']['fail']);
 
         $keys = array_column($report['checks'], 'key');
-        foreach (['app_debug', 'app_key', 'database', 'migrations', 'storage', 'cors', 'queue', 'cache', 'session'] as $key) {
+        foreach (['app_debug', 'app_key', 'database', 'migrations', 'storage', 'cors', 'queue', 'cache', 'session', 'redis', 'mail', 'malware_scan', 'vault_encryption'] as $key) {
             $this->assertContains($key, $keys, "Missing production check: {$key}");
         }
     }
