@@ -48,7 +48,35 @@ class PlanLimits
             'members' => $agency->activeMembers()->count(),
             'storage_bytes' => $documentBytes + $versionBytes + $mediaBytes,
             'leads' => $agency->inquiries()->count(),
+            'featured_credits' => $agency->properties()
+                ->whereNull('deleted_at')
+                ->where('approval_status', 'approved')
+                ->where('isFeatured', true)
+                ->count(),
         ];
+    }
+
+    /**
+     * Featured credits are concurrent featured-listing slots, not an unlimited
+     * counter: zero means no slots, while null explicitly means unlimited.
+     * This differs from the generic listing/staff convention where zero means
+     * unlimited, so it has its own guard.
+     *
+     * @return array{limit:int,used:int}|null
+     */
+    public static function featuredSlotBlock(Agency $agency): ?array
+    {
+        $limit = $agency->limits()['featured_credits'] ?? 0;
+        if ($limit === null) {
+            return null;
+        }
+
+        $limit = max(0, (int) $limit);
+        $used = self::usage($agency)['featured_credits'];
+
+        return $used + 1 > $limit
+            ? ['limit' => $limit, 'used' => $used]
+            : null;
     }
 
     /**
