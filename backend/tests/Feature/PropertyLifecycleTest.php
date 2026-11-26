@@ -423,11 +423,14 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $second = $this->postJson('/api/properties', $this->basePayload(['title' => 'Featured Slot Two', 'submit' => true]), $headers)
             ->assertStatus(201)->json('id');
 
+        $this->asGuest(); // switch from the agent token to the platform moderator token
         $this->postJson("/api/properties/{$first}/approve", [], $moderatorHeaders)->assertStatus(200);
         $this->postJson("/api/properties/{$second}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->asGuest(); // switch back to the agency member token
         $this->postJson("/api/properties/{$first}/feature", [], $headers)->assertStatus(200);
         $this->postJson("/api/properties/{$second}/feature", [], $headers)->assertStatus(200);
 
+        $this->asGuest(); // switch back to the platform moderator token
         $this->postJson("/api/properties/{$first}/feature", ['status' => 'granted'], $moderatorHeaders)
             ->assertStatus(200)
             ->assertJsonPath('property.isFeatured', true);
@@ -449,13 +452,17 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         // An expired featured listing is no longer publicly active and must
         // release its slot for the next eligible listing.
         Property::whereKey($second)->update(['expires_at' => now()->subDay()]);
+        $this->asGuest(); // switch back to the agency member token
         $this->postJson("/api/properties/{$second}/feature", [], $headers)
             ->assertStatus(422)
             ->assertJsonPath('message', 'Expired listings cannot request featured placement.');
         $third = $this->postJson('/api/properties', $this->basePayload(['title' => 'Featured Slot Three', 'submit' => true]), $headers)
             ->assertStatus(201)->json('id');
+        $this->asGuest(); // switch back to the platform moderator token
         $this->postJson("/api/properties/{$third}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->asGuest(); // switch back to the agency member token
         $this->postJson("/api/properties/{$third}/feature", [], $headers)->assertStatus(200);
+        $this->asGuest(); // switch back to the platform moderator token
         $this->postJson("/api/properties/{$third}/feature", ['status' => 'granted'], $moderatorHeaders)
             ->assertStatus(200)
             ->assertJsonPath('property.isFeatured', true);
@@ -486,9 +493,12 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $moderatorHeaders = $this->authHeaders($this->tokenFor($moderator));
         $id = $this->postJson('/api/properties', $this->basePayload(['title' => 'No Featured Slot', 'submit' => true]), $headers)
             ->assertStatus(201)->json('id');
+        $this->asGuest(); // switch from the agency member to the platform moderator
         $this->postJson("/api/properties/{$id}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->asGuest(); // switch back to the agency member
         $this->postJson("/api/properties/{$id}/feature", [], $headers)->assertStatus(200);
 
+        $this->asGuest(); // switch back to the platform moderator
         $this->postJson("/api/properties/{$id}/feature", ['status' => 'granted'], $moderatorHeaders)
             ->assertStatus(402)
             ->assertJsonPath('limit', 0)
