@@ -189,6 +189,30 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
         }
     }
 
+    public function test_pending_placements_reserve_capacity_until_cancelled_or_expired(): void
+    {
+        SystemSetting::set('promotions.max_slots', 1);
+        [$admin, $headers] = $this->platformAdmin();
+        $agency = $this->makeAgency('Pending Placement Agency');
+        $other = $this->makeAgency('Other Pending Agency');
+
+        $this->postJson('/api/admin/featured-agencies', [
+            'agency_id' => $agency->id,
+            'duration_days' => 30,
+            'status' => 'pending',
+        ], $headers)->assertStatus(201);
+
+        $stats = app(AgencyPromotionService::class)->stats();
+        $this->assertSame(1, $stats['pending']);
+        $this->assertSame(1, $stats['reserved']);
+        $this->assertSame(0, $stats['available_slots']);
+
+        $this->postJson('/api/admin/featured-agencies', [
+            'agency_id' => $other->id,
+            'duration_days' => 30,
+        ], $headers)->assertStatus(422);
+    }
+
     public function test_expiry_removes_homepage_advertisement_without_touching_agency_data(): void
     {
         $agency = $this->makeAgency('Expiring Agency');
