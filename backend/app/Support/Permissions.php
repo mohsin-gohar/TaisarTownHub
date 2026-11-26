@@ -139,7 +139,6 @@ class Permissions
         ],
         'agency_manager' => [
             'agency.view', 'agency.update', 'agency.manage_staff',
-            'dealers.manage',
             'properties.view', 'properties.create', 'properties.update', 'properties.delete',
             'properties.publish', 'properties.assign', 'properties.feature',
             'documents.view', 'documents.upload', 'documents.update', 'documents.download',
