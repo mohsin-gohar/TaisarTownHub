@@ -1,17 +1,33 @@
 # Complete Audit Report — Integrated QA Candidate
 
-**Integrated branch:** `qa/cross-browser-multireplica`  
-**Commit:** `1e43393fc728fb9ce11746869a331f5e852d4b58`  
-**Integration:** PR #11 merged into QA; PR #5 is the release PR to main.
+**Release branch:** `qa/cross-browser-multireplica`  
+**Verified code commit:** `b7920297d5d0f0b97ed5e1a030fd04b24aa83e93`  
+**Release PR:** #5 → `main` (open; mergeable). Main has not yet been changed.
 
-## Verified gates
+## Verified CI gates
 
-- Backend PHP 8.3 + MySQL 8: 547 passed, 4,563 assertions.
-- Frontend: 176 passed; lint, TypeScript, build, prerender and bundle guard passed.
-- Chromium: 46 passed, 2 skipped; Firefox + WebKit: 14 passed.
-- OpenAPI parse passed.
-- Docker CI: production images, nginx config validation, backup/restore, full-stack readiness, two backend replicas, shared private storage, API smoke, role matrix and 10-worker load/concurrency test passed.
-- Load result: 90,801 requests in 10 seconds, 9,080.1 req/s, zero 5xx; 8 concurrent transactions received 8 unique deal numbers.
+- Backend PHP 8.3 + MySQL 8: **547 passed, 4,563 assertions**.
+- Frontend: **176 passed**; TypeScript, production build, prerender and bundle guard passed.
+- Chromium: **46 passed, 2 skipped**; Firefox + WebKit: **14 passed**.
+- OpenAPI specification parsed successfully.
+- SEO prerender generated **29 pages** and a **9-URL sitemap**; public bundle guard found no private ERP data or demo credentials.
+
+## Verified Docker / full-stack gates
+
+- Backend and frontend production images built; CI and production Nginx configurations validated.
+- MySQL backup and isolated restore drill passed.
+- Full stack readiness passed; two backend replicas operated through the gateway.
+- Shared private vault/quarantine storage verified across replicas and worker.
+- Real ClamAV clean-file and threat-signature verdicts passed.
+- API smoke and **13 API-backed role tests** passed.
+- Public interaction audit: **10 links, 0 broken; 234 buttons, 0 no-effect/click/error findings; 11 forms/flows, 0 failures**.
+- Admin interaction audit: Super Admin 11 tabs, Agency Owner 11, Manager 12, Dealer 9, Operator 8; **0 no-effect, 0 click failures, 0 errors**.
+- Ten-worker / ten-second load probe: **42,280 requests (4,228 req/s)**, p95 4 ms, p99 44 ms, **0 5xx and 0 network failures**. Rate limiting returned 40,772 HTTP 429 responses and 114 other 4xx responses.
+- Eight parallel transaction writes received eight unique deal numbers; generated test transactions were voided during cleanup.
+
+Evidence:
+- CI: https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45877162123
+- Docker CI: https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45877162113
 
 ## Major areas hardened
 
@@ -19,8 +35,10 @@ Tenant-scoped workspace writes, finance transaction lifecycle and ledger integri
 
 ## Scope and limitations
 
-Inspection was risk-ranked and targeted, not a line-by-line read of every tracked file. A separate supplemental workflow probe on PR #9 reported 15/20 because its test harness omitted captcha, exceeded the trial staff limit, omitted dealer agency context and shared a document before scan clearance; it is not reported as passing.
+Inspection was risk-ranked and targeted, not a line-by-line read of every tracked file. Generated/vendor/build output and lockfile internals were excluded as described in `FILE_INSPECTION_COVERAGE.md`.
 
-Live DNS/TLS, SMTP/OAuth/payment/monitoring credentials, production ClamAV, off-site backup target, production data migration, staging/rollback, Lighthouse, deep SEO/N+1 profiling and independent penetration testing remain unverified or external.
+A separate supplemental workflow probe on the superseded PR #9 reported 15/20 because its harness omitted captcha, exceeded the trial staff limit, omitted dealer agency context and shared a document before scan clearance. It is not represented as passing; the integrated feature/security suites and the current full-stack gates above are the accepted evidence.
+
+Live DNS/TLS, SMTP/OAuth/payment/monitoring credentials, production ClamAV, off-site backup target, production data migration, staging/rollback, Lighthouse, deep SEO/N+1 profiling and independent penetration testing remain unverified or external. A Vercel deployment preview was also blocked by the account's daily deployment quota; no deployment is claimed.
 
 **Production has not been deployed or modified.**
