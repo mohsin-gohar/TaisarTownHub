@@ -6,6 +6,7 @@ use App\Models\Agency;
 use App\Models\BusinessRecord;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\Permissions;
 
 /**
  * Workspace sync hardening (Phase 3): merge-only default, replace requires
@@ -265,6 +266,50 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
             BusinessRecord::where('collection', 'payments')
                 ->where('record_id', 'whole-rupee-payment')
                 ->firstOrFail()->payload['amountPKR']
+        );
+    }
+
+    public function test_platform_cms_editor_can_persist_allowlisted_public_settings(): void
+    {
+        $admin = $this->makeUser('super_admin');
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['cms' => [
+                'heroHeadline' => 'Verified Scheme 45 Homes',
+                'seoTitle' => 'TaisarTownHub — Verified Listings',
+                'internalNotes' => 'Never publish this value',
+            ]],
+        ], $this->authHeaders($this->tokenFor($admin)))
+            ->assertOk()
+            ->assertJsonPath('written.cms', 1);
+
+        $this->assertDatabaseHas('business_records', [
+            'collection' => 'cms',
+            'record_id' => 'default',
+            'deleted_at' => null,
+        ]);
+
+        $this->getJson('/api/catalog')
+            ->assertOk()
+            ->assertJsonPath('cms.heroHeadline', 'Verified Scheme 45 Homes')
+            ->assertJsonPath('cms.seoTitle', 'TaisarTownHub — Verified Listings')
+            ->assertJsonMissingPath('cms.internalNotes');
+    }
+
+    public function test_agency_owner_cannot_change_platform_wide_cms_settings(): void
+    {
+        [$user] = $this->agencyUser(Permissions::agencyRoleGrants('agency_owner'), 'agency_owner');
+        BusinessRecord::put('cms', 'default', ['heroHeadline' => 'Platform approved headline']);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['cms' => ['heroHeadline' => 'Agency attempted overwrite']],
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()
+            ->assertJsonPath('denied.0', 'cms');
+
+        $this->assertSame(
+            'Platform approved headline',
+            BusinessRecord::where('collection', 'cms')->where('record_id', 'default')->firstOrFail()->payload['heroHeadline']
         );
     }
 
