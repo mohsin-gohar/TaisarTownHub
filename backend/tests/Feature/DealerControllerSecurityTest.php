@@ -88,4 +88,25 @@ class DealerControllerSecurityTest extends EnterpriseTestCase
         $this->assertSame($agencyB->id, $dealer->fresh()->agency_id);
         $this->assertNull($dealer->fresh()->deleted_at);
     }
+    public function test_fixed_dealer_commission_can_exceed_one_hundred_but_percentage_cannot(): void
+    {
+        [$owner, $agency] = $this->agencyUser(['manage_dealers'], 'agency_owner');
+        $dealer = $this->makeDealer($agency, 'dealer_commission_validation');
+        $headers = $this->authHeaders($this->tokenFor($owner));
+
+        $this->patchJson('/api/dealers/' . $dealer->id, [
+            'commissionType' => 'Fixed',
+            'commissionRate' => 250000,
+        ], $headers)->assertOk()
+            ->assertJsonPath('commissionRate', 250000);
+
+        $this->patchJson('/api/dealers/' . $dealer->id, [
+            'commissionType' => 'Percentage',
+            'commissionRate' => 101,
+        ], $headers)->assertStatus(422);
+
+        $this->assertSame(250000, (int) $dealer->fresh()->commissionRate);
+        $this->assertSame('Fixed', $dealer->fresh()->commissionType);
+    }
+
 }
