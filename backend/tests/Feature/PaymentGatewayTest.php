@@ -346,13 +346,13 @@ class PaymentGatewayTest extends EnterpriseTestCase
 
         $this->assertTrue((bool) $subscription->fresh()->auto_renew);
 
-        // Stripe sends the deleted event when the paid period has ended.
-        $subscription->forceFill(['ends_at' => now()->subSecond()])->save();
+        // Stripe sends the deleted event for the exact paid period end;
+        // a stale event for an older period must not cancel a later renewal.
         $handler->invoke($controller, (object) [
             'id' => 'sub-cancel-at-period-end',
             'status' => 'canceled',
             'cancel_at_period_end' => false,
-            'current_period_end' => now()->subSecond()->getTimestamp(),
+            'current_period_end' => $paidEnd->getTimestamp(),
         ]);
 
         $this->assertSame('cancelled', $subscription->fresh()->status);
