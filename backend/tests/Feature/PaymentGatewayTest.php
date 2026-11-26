@@ -398,16 +398,25 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ]);
 
         $this->asGuest();
+        $periodStart = now()->timestamp;
+        $paidPeriodEnd = now()->addMonth()->timestamp;
+        $failedPeriodEnd = now()->addMonths(2)->timestamp;
+
         foreach ([
-            ['invoice.payment_succeeded', 'active'],
-            ['invoice.payment_failed', 'past_due'],
-        ] as [$eventType, $expectedStatus]) {
+            ['invoice.payment_succeeded', 'active', 'in_invoice_paid_1', $paidPeriodEnd],
+            ['invoice.payment_failed', 'past_due', 'in_invoice_failed_2', $failedPeriodEnd],
+        ] as [$eventType, $expectedStatus, $invoiceId, $periodEnd]) {
             $payload = json_encode([
                 'id' => 'evt_' . str_replace('.', '_', $eventType),
                 'type' => $eventType,
                 'data' => ['object' => [
-                    'id' => 'in_invoice_event_1',
+                    'id' => $invoiceId,
                     'subscription' => 'sub_invoice_event_1',
+                    'amount_paid' => 500000,
+                    'currency' => 'pkr',
+                    'lines' => ['data' => [[
+                        'period' => ['start' => $periodStart, 'end' => $periodEnd],
+                    ]]],
                 ]],
             ]);
 
@@ -430,6 +439,17 @@ class PaymentGatewayTest extends EnterpriseTestCase
                 'status' => $expectedStatus,
             ]);
         }
+
+        $this->assertDatabaseHas('subscription_invoices', [
+            'agency_id' => $agency->id,
+            'stripe_invoice_id' => 'in_invoice_paid_1',
+            'status' => 'paid',
+            'total_pkr' => 5000,
+        ]);
+        $this->assertSame(
+            now()->setTimestamp($paidPeriodEnd)->toDateString(),
+            AgencySubscription::where('stripe_subscription_id', 'sub_invoice_event_1')->firstOrFail()->ends_at->toDateString()
+        );
     }
 
 
