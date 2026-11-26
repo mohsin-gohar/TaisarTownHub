@@ -77,10 +77,8 @@ class MediaController extends Controller
             // A property viewer can browse media metadata, but must not see
             // buyer PII or sale/accounting values from the media inventory.
             $canViewSensitive = $this->can($request, 'documents.view_sensitive')
-                || $this->can($request, 'manage_media')
                 || $this->can($request, 'admin.view_reports');
             $canViewFinance = $this->can($request, 'finance.view')
-                || $this->can($request, 'manage_media')
                 || $this->can($request, 'admin.view_reports');
 
             if (!$canViewSensitive) {
@@ -520,7 +518,9 @@ class MediaController extends Controller
     public function file(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);
-        $this->requireAny($request, ['manage_media', 'upload_media', 'properties.view', 'view_properties']);
+        // Private originals are reserved for media managers/uploaders.
+        // Public listing assets use publicFile() and do not need this permission.
+        $this->requireAny($request, ['manage_media', 'upload_media']);
 
         $media = MediaFile::where('agency_id', $agencyId)->findOrFail($id);
         return $this->deliver($media);
