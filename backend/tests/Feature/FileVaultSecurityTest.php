@@ -389,6 +389,37 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertSame('PLAINTEXT-LEGACY-BYTES', SecureFileStore::get('documents', $path));
     }
 
+    public function test_vault_encrypt_dry_run_leaves_plaintext_untouched_and_invalid_disk_is_rejected(): void
+    {
+        [$user, $agency] = $this->agencyUser([
+            'documents.view', 'documents.upload', 'documents.download',
+        ], 'document_manager');
+        $id = 'doc_dry_run_' . bin2hex(random_bytes(6));
+        $path = $agency->id . '/2026/11/' . $id . '.pdf';
+        $plain = 'DRY-RUN-PLAINTEXT';
+        Storage::disk('documents')->put($path, $plain);
+
+        Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Dry Run Document',
+            'original_name' => $id . '.pdf',
+            'stored_name' => $id . '.pdf',
+            'disk_path' => $path,
+            'mime_type' => 'application/pdf',
+            'size_bytes' => strlen($plain),
+            'status' => 'active',
+            'uploaded_by' => $user->id,
+        ]);
+
+        $this->assertSame(0, Artisan::call('vault:encrypt', ['--disk' => 'documents', '--dry-run' => true]));
+        $this->assertSame($plain, Storage::disk('documents')->get($path));
+
+        $this->assertSame(1, Artisan::call('vault:encrypt', ['--disk' => 'unknown']));
+        $this->assertSame($plain, Storage::disk('documents')->get($path));
+    }
+
     public function test_vault_encrypt_rewraps_files_encrypted_with_a_previous_app_key(): void
     {
         [$user, $agency] = $this->uploader();
