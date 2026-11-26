@@ -58,7 +58,7 @@ class AgencyPromotion extends Model
         return $this->belongsTo(User::class, 'approved_by');
     }
 
-    /** Slots that hold/release capacity (scheduled or currently running). */
+    /** Reserved capacity: pending approvals plus scheduled/current active placements. */
     public function scopeCurrent(Builder $query): Builder
     {
         return $query->whereIn('status', ['pending', 'active'])
