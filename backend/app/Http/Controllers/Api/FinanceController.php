@@ -269,10 +269,15 @@ public function store(Request $request)
 public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        $this->requireAny($request, [
-            'finance.update_transaction', 'update_transactions',
-            'manage_deals', 'finance.manage_deals',
-        ]);
+        $requestedStatus = (string) $request->input('dealStatus', $request->input('status', ''));
+        if ($requestedStatus === 'Cancelled') {
+            $this->requireAny($request, ['cancel_transactions', 'legacy.cancel_transactions']);
+        } else {
+            $this->requireAny($request, [
+                'finance.update_transaction', 'update_transactions',
+                'manage_deals', 'finance.manage_deals',
+            ]);
+        }
         $this->findScoped($agencyId, $id, $request->user());
 
         $data = $request->validate([
@@ -286,6 +291,9 @@ public function update(Request $request, string $id)
             'dealStatus' => 'sometimes|string|max:50',
             'status' => 'sometimes|string|max:50',
             'transactionDate' => 'nullable|date',
+            'reason' => 'nullable|string|max:2000',
+            'internalRemarks' => 'nullable|string|max:2000',
+            'notes' => 'nullable|string|max:2000',
         ]);
 
         $result = DB::transaction(function () use ($request, $id, $agencyId, $data): array {
@@ -371,9 +379,44 @@ public function update(Request $request, string $id)
                 }
             }
 
-            $transaction->update($data);
+            $cancelledCommissions = 0;
+            $cancelledSchedules = 0;
+            if ($newStatus === 'Cancelled') {
+                $reason = trim((string) ($data['reason'] ?? $data['internalRemarks'] ?? $data['notes'] ?? ''));
+                if (strlen($reason) < 3 || strlen($reason) > 2000) {
+                    return [
+                        'error' => 'cancel_reason',
+                        'message' => 'A cancellation reason between 3 and 2,000 characters is required.',
+                        'status' => 422,
+                    ];
+                }
 
-            return ['transaction' => $transaction->fresh()->load(['payments', 'commissions'])];
+                unset($data['reason'], $data['notes']);
+                $data['internalRemarks'] = $reason;
+                $data['commissionStatus'] = 'Cancelled';
+
+                $cancelledCommissions = Commission::where('transaction_id', $transaction->id)
+                    ->where('agency_id', $transaction->agency_id)
+                    ->whereIn('status', ['pending', 'accrued'])
+                    ->update(['status' => 'cancelled']);
+                $cancelledSchedules = PaymentSchedule::where('transaction_id', $transaction->id)
+                    ->where('agency_id', $transaction->agency_id)
+                    ->whereIn('status', ['pending', 'overdue'])
+                    ->update(['status' => 'cancelled']);
+            } else {
+                unset($data['reason'], $data['notes']);
+            }
+
+            $transaction->update($data);
+            if ($newStatus === 'Cancelled') {
+                $this->closeLegacyRecords($transaction, $request->user(), (string) $data['internalRemarks'], false);
+            }
+
+            return [
+                'transaction' => $transaction->fresh()->load(['payments', 'commissions']),
+                'cancelled_commissions' => $cancelledCommissions,
+                'cancelled_schedules' => $cancelledSchedules,
+            ];
         }, 3);
 
         if (isset($result['error'])) {
@@ -396,6 +439,8 @@ public function update(Request $request, string $id)
             'success' => true,
             'message' => 'Deal updated.',
             'transaction' => $transaction,
+            'cancelled_commissions' => $result['cancelled_commissions'] ?? 0,
+            'cancelled_schedules' => $result['cancelled_schedules'] ?? 0,
         ]);
     }
 
@@ -406,7 +451,7 @@ public function update(Request $request, string $id)
         $this->findScoped($agencyId, $id, $request->user());
 
         $request->validate([
-            'reason' => 'required|string|min:3|max:500',
+            'reason' => 'required|string|min:3|max:2000',
         ]);
 
         [$transaction, $cancelledCommissions, $cancelledSchedules, $error, $netCollected] = DB::transaction(function () use ($id, $agencyId, $request): array {
@@ -419,16 +464,26 @@ public function update(Request $request, string $id)
                 return [$transaction, 0, 0, 'Transaction is already voided.', (float) $transaction->totalPaid()];
             }
 
-            $netCollected = (float) $transaction->totalPaid();
-            if (abs($netCollected) > 0.00001) {
-                return [$transaction, 0, 0, 'Refund or reconcile all collected payments before voiding this deal.', $netCollected];
+            $dealStatus = strtolower(trim((string) $transaction->dealStatus));
+            if (in_array($dealStatus, ['completed', 'cancelled'], true)) {
+                return [$transaction, 0, 0, 'Completed or cancelled deals cannot be voided again; use an audited reversal workflow.', 0.0];
+            }
+
+            $advance = max(0, (int) $transaction->advancePaymentPKR);
+            $relationalNet = (float) $transaction->totalPaid();
+            $legacyNet = $this->legacyPaymentNet($transaction);
+            $netCollected = (float) max($advance, abs($relationalNet), abs($legacyNet));
+            if ($advance > 0 || abs($relationalNet) > 0.00001 || $legacyNet !== 0) {
+                return [$transaction, 0, 0, 'Refund or reconcile all advance and collected payments before voiding this deal.', $netCollected];
             }
 
             $commissions = Commission::where('transaction_id', $transaction->id)
                 ->lockForUpdate()
                 ->get();
 
-            if ($commissions->contains(fn (Commission $commission) => strtolower((string) $commission->status) === 'paid')) {
+            if ($commissions->contains(fn (Commission $commission) =>
+                strtolower((string) $commission->status) === 'paid' || $commission->paid_at !== null
+            ) || $this->hasLegacyPaidCommission($transaction)) {
                 return [$transaction, 0, 0, 'A deal with paid commissions cannot be voided until the payout is reversed through an audited adjustment.', $netCollected];
             }
 
@@ -441,10 +496,13 @@ public function update(Request $request, string $id)
                 ->update(['status' => 'cancelled']);
 
             $transaction->update([
+                'dealStatus' => 'Cancelled',
+                'commissionStatus' => 'Cancelled',
                 'voided_at' => now(),
                 'void_reason' => $request->reason,
                 'voided_by' => $request->user()->id,
             ]);
+            $this->closeLegacyRecords($transaction, $request->user(), (string) $request->reason, true);
 
             return [
                 $transaction->fresh(),
@@ -504,7 +562,7 @@ public function update(Request $request, string $id)
         $approved = DB::transaction(function () use ($transaction, $request): ?Transaction {
             $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
 
-            if (!$locked || $locked->isVoided()) {
+            if (!$locked || $locked->isVoided() || in_array(strtolower((string) $locked->dealStatus), ['cancelled', 'completed'], true)) {
                 return null;
             }
 
@@ -516,7 +574,7 @@ public function update(Request $request, string $id)
         });
 
         if ($approved === null) {
-            return response()->json(['success' => false, 'message' => 'Voided deals cannot be approved.'], 422);
+            return response()->json(['success' => false, 'message' => 'Cancelled, completed or voided deals cannot be approved.'], 422);
         }
 
         $this->writeAudit($request, 'transaction.approve', $approved->id, "Deal approved: {$approved->dealNumber}", [
@@ -767,6 +825,10 @@ public function update(Request $request, string $id)
             }
 
             $isRefund = $request->get('type', 'advance') === 'refund';
+            if (in_array(strtolower((string) $locked->dealStatus), ['cancelled', 'completed'], true) && ! $isRefund) {
+                return ['error' => 'closed'];
+            }
+
             $amount = (float) $request->amount;
             if ($isRefund) {
                 $amount = -abs($amount);
@@ -811,6 +873,13 @@ public function update(Request $request, string $id)
 
         if (($result['error'] ?? null) === 'voided') {
             return response()->json(['success' => false, 'message' => 'Cannot record payments on a voided deal.'], 409);
+        }
+
+        if (($result['error'] ?? null) === 'closed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only refund payments may be recorded against a cancelled or completed deal.',
+            ], 409);
         }
 
         if (($result['error'] ?? null) === 'refund_exceeds_collected') {
@@ -919,8 +988,8 @@ public function destroyPayment(Request $request, int $id)
 
         $transaction = $this->findScoped($agencyId, $transactionId, $request->user());
 
-        if ($transaction->isVoided()) {
-            return response()->json(['success' => false, 'message' => 'Voided deal cannot have payment schedules.'], 422);
+        if ($transaction->isVoided() || in_array(strtolower((string) $transaction->dealStatus), ['cancelled', 'completed'], true)) {
+            return response()->json(['success' => false, 'message' => 'Cancelled, completed or voided deals cannot receive new payment schedules.'], 422);
         }
 
         $data = $request->validate([
@@ -934,8 +1003,8 @@ public function destroyPayment(Request $request, int $id)
         // Serialize schedule changes with payment writes on the same deal.
         return DB::transaction(function () use ($data, $transaction, $request) {
             $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->firstOrFail();
-            if ($locked->isVoided()) {
-                return response()->json(['success' => false, 'message' => 'Voided deal cannot have payment schedules.'], 422);
+            if ($locked->isVoided() || in_array(strtolower((string) $locked->dealStatus), ['cancelled', 'completed'], true)) {
+                return response()->json(['success' => false, 'message' => 'Cancelled, completed or voided deals cannot receive new payment schedules.'], 422);
             }
 
             $submittedNumbers = array_column($data['schedules'], 'installment_no');
@@ -1111,9 +1180,9 @@ public function destroyPayment(Request $request, int $id)
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($locked->isVoided()) {
+            if ($locked->isVoided() || strtolower((string) $locked->dealStatus) === 'cancelled') {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'transaction' => 'Voided deals cannot receive new commissions.',
+                    'transaction' => 'Cancelled or voided deals cannot receive new commissions.',
                 ]);
             }
 
@@ -1231,6 +1300,102 @@ public function destroyPayment(Request $request, int $id)
     public function createExpense(Request $request)
     {
         return $this->expensesStore($request);
+    }
+
+    /**
+     * Legacy workspace rows are still a supported persistence path. Keep the
+     * relational Finance API closeout mirrored into that store so the two
+     * interfaces cannot disagree about a cancelled/voided deal.
+     */
+    private function legacyRowsForTransaction(string $collection, Transaction $transaction)
+    {
+        $query = BusinessRecord::where('collection', $collection)->whereNull('deleted_at');
+        $transaction->agency_id === null
+            ? $query->whereNull('agency_id')
+            : $query->where('agency_id', $transaction->agency_id);
+
+        return $query->lockForUpdate()->get()->filter(function (BusinessRecord $record) use ($transaction): bool {
+            $payload = $record->payload ?? [];
+            $linkedId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+
+            return $linkedId === (string) $transaction->id;
+        })->values();
+    }
+
+    private function legacyPaymentNet(Transaction $transaction): int
+    {
+        return (int) $this->legacyRowsForTransaction('payments', $transaction)->sum(function (BusinessRecord $record): int {
+            $payload = $record->payload ?? [];
+            $amount = (int) ($payload['amountPKR'] ?? $payload['paymentAmountPKR'] ?? $payload['amount'] ?? 0);
+            $type = strtolower((string) ($payload['type'] ?? $payload['paymentType'] ?? 'payment'));
+
+            return str_contains($type, 'refund') ? -abs($amount) : abs($amount);
+        });
+    }
+
+    private function hasLegacyPaidCommission(Transaction $transaction): bool
+    {
+        return $this->legacyRowsForTransaction('commissions', $transaction)->contains(function (BusinessRecord $record): bool {
+            $payload = $record->payload ?? [];
+            $hasPaidPayout = collect((array) ($payload['payouts'] ?? []))->contains(
+                fn ($payout) => is_array($payout) && (int) ($payout['amountPKR'] ?? $payout['amount'] ?? 0) > 0
+            );
+
+            return strtolower((string) ($payload['status'] ?? '')) === 'paid'
+                || (int) ($payload['paidPKR'] ?? 0) > 0
+                || ! empty($payload['paidAt'])
+                || ! empty($payload['paid_at'])
+                || $hasPaidPayout;
+        });
+    }
+
+    private function closeLegacyRecords(Transaction $transaction, $user, string $reason, bool $isVoid): void
+    {
+        $now = now();
+        $legacyTransactions = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', (string) $transaction->id)
+            ->whereNull('deleted_at');
+        $transaction->agency_id === null
+            ? $legacyTransactions->whereNull('agency_id')
+            : $legacyTransactions->where('agency_id', $transaction->agency_id);
+
+        $legacy = $legacyTransactions->lockForUpdate()->first();
+        if ($legacy !== null) {
+            $payload = $legacy->payload ?? [];
+            $payload['status'] = 'Cancelled';
+            $payload['dealStatus'] = 'Cancelled';
+            $payload['commissionStatus'] = 'Cancelled';
+            $payload['updated_by'] = (string) $user->id;
+            if ($isVoid) {
+                $payload['voided'] = true;
+                $payload['voidedAt'] = $now->toIso8601String();
+                $payload['voidReason'] = $reason;
+                $payload['voidedBy'] = (string) $user->id;
+            } else {
+                $payload['cancelledAt'] = $now->toIso8601String();
+                $payload['cancelReason'] = $reason;
+            }
+            $legacy->payload = $payload;
+            $legacy->save();
+        }
+
+        foreach ($this->legacyRowsForTransaction('commissions', $transaction) as $record) {
+            $payload = $record->payload ?? [];
+            $hasPaidPayout = collect((array) ($payload['payouts'] ?? []))->contains(
+                fn ($payout) => is_array($payout) && (int) ($payout['amountPKR'] ?? $payout['amount'] ?? 0) > 0
+            );
+            if (strtolower((string) ($payload['status'] ?? '')) === 'paid'
+                || (int) ($payload['paidPKR'] ?? 0) > 0
+                || ! empty($payload['paidAt'])
+                || ! empty($payload['paid_at'])
+                || $hasPaidPayout) {
+                continue;
+            }
+            $payload['status'] = 'Cancelled';
+            $payload['cancelledAt'] = $now->toIso8601String();
+            $record->payload = $payload;
+            $record->save();
+        }
     }
 
     private function dealerBelongsToAgency(string $dealerId, string $agencyId): bool
