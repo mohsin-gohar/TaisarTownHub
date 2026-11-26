@@ -31,7 +31,7 @@ cp .env.example .env
 # openssl rand -hex 32
 docker compose config --quiet
 docker compose up -d --build
-docker compose exec backend php artisan app:production-check --strict
+docker compose exec --user www-data backend php artisan app:production-check --strict
 ```
 
 Demo accounts and walkthrough: `docs/DEMO_GUIDE.md`. Deployment/VPS/TLS/env checklist: `docs/DEPLOYMENT.md`.
