@@ -112,9 +112,10 @@ export const AdminTransactions: React.FC = () => {
 
   const openPaymentModal = (txn: Transaction) => {
     const money = dealMoney(txn, paymentsByTxId.get(txn.id) || []);
+    const mode = txn.status === 'Cancelled' && money.collected > 0 ? 'refund' : 'payment';
     setPaymentModalTxn(txn);
-    setPaymentModalMode(txn.status === 'Cancelled' && money.collected > 0 ? 'refund' : 'payment');
-    setPaymentAmount(money.balance > 0 ? money.balance : 0);
+    setPaymentModalMode(mode);
+    setPaymentAmount(mode === 'refund' ? money.collected : money.balance > 0 ? money.balance : 0);
     setPaymentMethod('Bank Transfer');
     setPaymentNote('');
   };
