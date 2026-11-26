@@ -395,7 +395,9 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
 
     public function test_workspace_cannot_void_while_adding_payment_or_paid_commission_in_same_save(): void
     {
-        [$user, $agency] = $this->agencyUser(['void_transactions', 'finance.manage_payments']);
+        [, $agency] = $this->agencyUser(['finance.manage_payments']);
+        $this->seedPlatformRole('super_admin');
+        $user = $this->makeUser('super_admin');
         BusinessRecord::put('transactions', 'same-save-payment-deal', [
             'id' => 'same-save-payment-deal',
             'status' => 'Draft',
@@ -411,6 +413,15 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
             'advancePaymentPKR' => 0,
             'agreementAmountPKR' => 100000,
             'remainingBalancePKR' => 100000,
+        ], $agency->id);
+        BusinessRecord::put('commissions', 'same-save-paid-commission', [
+            'id' => 'same-save-paid-commission',
+            'transactionId' => 'same-save-commission-deal',
+            'amountPKR' => 10000,
+            'paidPKR' => 0,
+            'status' => 'Accrued',
+            'accruedOn' => now()->toDateString(),
+            'payouts' => [],
         ], $agency->id);
 
         $this->putJson('/api/workspace', [
@@ -432,6 +443,14 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
                     'amountPKR' => 10000,
                     'paidPKR' => 10000,
                     'status' => 'Paid',
+                    'accruedOn' => now()->toDateString(),
+                    'payouts' => [[
+                        'id' => 'same-save-final-payout',
+                        'amountPKR' => 10000,
+                        'paidAt' => now()->toDateString(),
+                        'recordedBy' => 'forged-client-value',
+                        'note' => 'Final payout',
+                    ]],
                 ]],
             ],
         ], $this->authHeaders($this->tokenFor($user)))->assertOk();
