@@ -927,6 +927,8 @@ class WorkspaceController extends Controller
 
         $hasBroadFinanceRead = $this->perm($request, $user, 'finance.view', $agencyId)
             || $this->perm($request, $user, 'view_transactions', $agencyId);
+        $hasBroadCommissionRead = $this->perm($request, $user, 'finance.view', $agencyId)
+            || $this->perm($request, $user, 'view_commissions', $agencyId);
 
         if ($collection === 'transactions'
             && $this->perm($request, $user, 'view_my_deals', $agencyId)
@@ -958,7 +960,7 @@ class WorkspaceController extends Controller
 
         if ($collection === 'commissions'
             && $this->perm($request, $user, 'view_my_commission', $agencyId)
-            && ! $hasBroadFinanceRead) {
+            && ! $hasBroadCommissionRead) {
             $dealerId = (string) ($user->dealer_id ?? '');
 
             return $dealerId === '' ? [] : array_values(array_filter($rows, function ($row) use ($dealerId) {
