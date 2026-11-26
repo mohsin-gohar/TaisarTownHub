@@ -120,6 +120,15 @@ describe('ledger: payments', () => {
     assert.equal(collectedForTx(t, []), 1000000);
   });
 
+  test('refund validation permits cancelled deals but blocks voided and over-refund attempts', () => {
+    const t = txn({ dealAmountPKR: 1000000, status: 'Cancelled' });
+    const ledger = [pay('p1', 'tx-1', 500000)];
+    assert.equal(validateRefund(t, ledger, 200000).ok, true);
+    assert.equal(validateRefund(t, ledger, 600000).ok, false);
+    assert.equal(validateRefund({ ...t, voided: true }, ledger, 100000).ok, false);
+    assert.equal(validateRefund(t, ledger, 0.5).ok, false);
+  });
+
   test('refund ledger entries reduce net collections and outstanding balance', () => {
     const t = txn({ dealAmountPKR: 4000000, advancePKR: 4000000 });
     const ledger = [
