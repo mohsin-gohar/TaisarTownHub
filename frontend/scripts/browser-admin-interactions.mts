@@ -1,5 +1,5 @@
 /**
- * Admin interactive audit (one-off, not part of CI gates).
+ * Admin interactive audit against disposable CI personas; destructive and non-observable file/clipboard actions are skipped.
  *
  * Logs into the admin via the /admin-login modal and walks every visible
  * sidebar tab, clicking every content button once (skipping destructive
@@ -25,7 +25,7 @@ const IGNORE_CONSOLE = [
   /preloaded using link preload but not used/i,
 ];
 
-const DESTRUCTIVE = /delete|remove|sign out|log out|logout|deactivate|reject|decline|approve|mark (as )?(paid|resolved|closed)|pay now|refund|suspend|terminate|revoke|purge|archive|publish|unpublish|reset password|clear all|wipe/i;
+const DESTRUCTIVE = /delete|remove|sign out|log out|logout|deactivate|reject|decline|approve|mark (as )?(paid|resolved|closed)|pay now|refund|suspend|terminate|revoke|purge|archive|publish|unpublish|reset password|clear all|wipe|copy|clipboard|download|upload|choose file|browse|select file|print|export/i;
 
 const TAB_LABELS = [
   'Dashboard Overview',
