@@ -1552,6 +1552,7 @@ class WorkspaceController extends Controller
         // Workspace saves collections in a deterministic order (transactions
         // before payments). Include incoming payment rows so a caller cannot
         // void a deal and add its payment in the same multi-collection request.
+        $incomingNet = 0;
         foreach ((array) $request->input('collections.payments', []) as $payment) {
             if (! is_array($payment)) {
                 continue;
@@ -1560,11 +1561,12 @@ class WorkspaceController extends Controller
             if ($linkedId !== $transactionId) {
                 continue;
             }
-            $amount = (int) ($payment['amountPKR'] ?? $payment['paymentAmountPKR'] ?? $payment['amount'] ?? 0);
+            $amount = abs((int) ($payment['amountPKR'] ?? $payment['paymentAmountPKR'] ?? $payment['amount'] ?? 0));
             $type = strtolower((string) ($payment['type'] ?? $payment['paymentType'] ?? 'payment'));
-            if ($amount !== 0 && ! str_contains($type, 'refund')) {
-                return true;
-            }
+            $incomingNet += str_contains($type, 'refund') ? -$amount : $amount;
+        }
+        if ($incomingNet !== 0) {
+            return true;
         }
 
         $query = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
