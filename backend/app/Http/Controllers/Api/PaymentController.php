@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
+use App\Services\SubscriptionActivationService;
+use DomainException;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -70,43 +72,69 @@ class PaymentController extends Controller
         // Serialize checkout creation per agency. The invoice is persisted
         // before calling Stripe, so retries can reuse one stable idempotency key
         // instead of creating duplicate sessions or orphaned remote checkouts.
-        $invoice = DB::transaction(function () use ($agencyId, $plan): SubscriptionInvoice {
-            DB::table('agencies')->where('id', $agencyId)->lockForUpdate()->first();
+        try {
+            $invoice = DB::transaction(function () use ($agencyId, $plan): SubscriptionInvoice {
+                DB::table('agencies')->where('id', $agencyId)->lockForUpdate()->first();
 
-            $pending = SubscriptionInvoice::where('agency_id', $agencyId)
-                ->where('plan_id', $plan->id)
-                ->where('status', 'pending')
-                ->whereNull('flutterwave_tx_ref')
-                ->where('created_at', '>=', now()->subHours(24))
-                ->latest()
-                ->lockForUpdate()
-                ->first();
+                $currentSubscription = AgencySubscription::where('agency_id', $agencyId)
+                    ->lockForUpdate()
+                    ->first();
+                $liveStripeSubscription = $currentSubscription
+                    && $currentSubscription->stripe_subscription_id
+                    && !in_array($currentSubscription->status, ['cancelled', 'expired'], true);
+                $activeManualTerm = $currentSubscription
+                    && in_array($currentSubscription->status, ['active', 'past_due'], true)
+                    && (!$currentSubscription->ends_at || $currentSubscription->ends_at->isFuture());
 
-            if ($pending) {
-                return $pending;
-            }
+                if ($liveStripeSubscription || $activeManualTerm) {
+                    throw new DomainException('An active subscription already exists. Contact support to change or renew your plan.');
+                }
 
-            $amount = (int) round((float) $plan->price);
-            $periodStart = now();
-            $periodEnd = $plan->interval === 'year'
-                ? $periodStart->copy()->addYear()
-                : $periodStart->copy()->addMonth();
+                $pendingInvoices = SubscriptionInvoice::where('agency_id', $agencyId)
+                    ->where('status', 'pending')
+                    ->latest()
+                    ->lockForUpdate()
+                    ->get();
 
-            return SubscriptionInvoice::create([
-                'id' => (string) Str::uuid(),
-                'invoice_number' => SubscriptionInvoice::nextNumber(),
-                'agency_id' => $agencyId,
-                'plan_id' => $plan->id,
-                'amount_pkr' => $amount,
-                'tax_pkr' => 0,
-                'total_pkr' => $amount,
-                'currency' => $plan->currency ?? 'PKR',
-                'period_start' => $periodStart->toDateString(),
-                'period_end' => $periodEnd->toDateString(),
-                'status' => 'pending',
-                'due_at' => now()->addDays(7),
-            ]);
-        }, 3);
+                $pending = $pendingInvoices->first();
+                if ($pendingInvoices->contains(
+                    fn (SubscriptionInvoice $item): bool => (int) $item->plan_id !== (int) $plan->id
+                        || !empty($item->flutterwave_tx_ref)
+                )) {
+                    throw new DomainException('A pending invoice already exists for another plan or payment provider. Pay or void it before starting a new checkout.');
+                }
+
+                if ($pending) {
+                    return $pending;
+                }
+
+                $amount = (int) round((float) $plan->price);
+                $periodStart = now();
+                $periodEnd = $plan->interval === 'year'
+                    ? $periodStart->copy()->addYear()
+                    : $periodStart->copy()->addMonth();
+
+                return SubscriptionInvoice::create([
+                    'id' => (string) Str::uuid(),
+                    'invoice_number' => SubscriptionInvoice::nextNumber(),
+                    'agency_id' => $agencyId,
+                    'plan_id' => $plan->id,
+                    'amount_pkr' => $amount,
+                    'tax_pkr' => 0,
+                    'total_pkr' => $amount,
+                    'currency' => $plan->currency ?? 'PKR',
+                    'period_start' => $periodStart->toDateString(),
+                    'period_end' => $periodEnd->toDateString(),
+                    'status' => 'pending',
+                    'due_at' => now()->addDays(7),
+                ]);
+            }, 3);
+        } catch (DomainException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 409);
+        }
 
         $amount = (int) $invoice->total_pkr;
 
@@ -963,45 +991,28 @@ class PaymentController extends Controller
                     $agencySubscription->ends_at = $eventEnd;
                 }
             }
+
+            // A Stripe subscription may remain active until the paid period
+            // ends while cancel_at_period_end is true. Keep access active but
+            // accurately reflect that no further renewal will be attempted.
+            if ($status === 'active') {
+                $agencySubscription->auto_renew = !((bool) ($subscription->cancel_at_period_end ?? false));
+            } elseif ($status === 'cancelled') {
+                $agencySubscription->auto_renew = false;
+                $agencySubscription->cancelled_at ??= now();
+            }
+
             $agencySubscription->save();
         }, 3);
     }
 
     private function activateSubscriptionFromInvoice(SubscriptionInvoice $invoice): void
     {
-        $agencyId = $invoice->agency_id;
-        $planId = $invoice->plan_id;
-
-        $plan = SubscriptionPlan::findOrFail($planId);
-        if (strtoupper((string) $invoice->currency) !== 'PKR'
-            || strtoupper((string) $plan->currency) !== 'PKR') {
-            throw new \RuntimeException('Only PKR subscription invoices can activate an agency plan.');
-        }
-
-        // Determine interval ends_at
-        $endsAt = match ($plan->interval) {
-            'year' => now()->addYear(),
-            default => now()->addMonth(),
-        };
-
-        AgencySubscription::updateOrCreate(
-            ['agency_id' => $agencyId],
-            [
-                'plan_id' => $planId,
-                'status' => 'active',
-                'starts_at' => now(),
-                'ends_at' => $endsAt,
-                'auto_renew' => true,
-                'stripe_subscription_id' => $invoice->stripe_subscription_id,
-                'provider' => $invoice->stripe_subscription_id ? 'stripe' : 'manual',
-                'cancelled_at' => null,
-                'updated_at' => now(),
-            ]
-        );
+        app(SubscriptionActivationService::class)->activate($invoice);
 
         Log::info('Subscription activated', [
-            'agency_id' => $agencyId,
-            'plan_id' => $planId,
+            'agency_id' => $invoice->agency_id,
+            'plan_id' => $invoice->plan_id,
             'invoice_id' => $invoice->id,
         ]);
     }
