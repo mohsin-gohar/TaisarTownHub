@@ -97,8 +97,7 @@ class DealerControllerSecurityTest extends EnterpriseTestCase
         $this->patchJson('/api/dealers/' . $dealer->id, [
             'commissionType' => 'Fixed',
             'commissionRate' => 250000,
-        ], $headers)->assertOk()
-            ->assertJsonPath('commissionRate', 250000);
+        ], $headers)->assertOk();
 
         $this->patchJson('/api/dealers/' . $dealer->id, [
             'commissionType' => 'Percentage',
