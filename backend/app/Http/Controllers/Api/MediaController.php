@@ -285,7 +285,7 @@ class MediaController extends Controller
         } catch (\Throwable $exception) {
             if ($storedPath !== null) {
                 try {
-                    $storage = Storage::disk($media->storage_disk ?: 'documents');
+                    $storage = Storage::disk('documents');
                     if ($storage->exists($storedPath) && !$storage->delete($storedPath)) {
                         Log::critical('Uncommitted media upload could not be cleaned after database failure', [
                             'agency_id' => $agencyId,
@@ -478,7 +478,7 @@ class MediaController extends Controller
                 }
 
                 if ($media->disk_path) {
-                    $storage = Storage::disk('documents');
+                    $storage = Storage::disk($media->storage_disk ?: 'documents');
                     if ($storage->exists($media->disk_path) && !$storage->delete($media->disk_path)) {
                         throw new \RuntimeException('Private media storage did not confirm file deletion.');
                     }
