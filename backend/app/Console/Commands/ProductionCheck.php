@@ -158,7 +158,7 @@ class ProductionCheck extends Command
                 ? 'Private vault and framework caches are writable.'
                 : 'Make writable by the PHP user: ' . implode(', ', $unwritable));
 
-        $vaultEncryptionEnabled = \\App\\Services\\FileVaultCrypto::enabled();
+        $vaultEncryptionEnabled = \App\Services\FileVaultCrypto::enabled();
         $this->add('vault_encryption', 'Private vault encryption', $vaultEncryptionEnabled ? 'enabled' : 'disabled',
             (!$production || $vaultEncryptionEnabled) ? 'PASS' : 'FAIL',
             'AES-256-GCM encryption must remain enabled for private document and quarantine storage.');
@@ -221,7 +221,7 @@ class ProductionCheck extends Command
                 Redis::connection()->ping();
                 $redisValue = 'reachable';
                 $redisHint = 'Redis connectivity verified for cache, queue and/or sessions.';
-            } catch (\\Throwable $exception) {
+            } catch (\Throwable $exception) {
                 $redisStatus = 'FAIL';
                 $redisValue = 'unreachable';
                 $redisHint = 'Redis must be reachable from the application container: ' . $exception->getMessage();
