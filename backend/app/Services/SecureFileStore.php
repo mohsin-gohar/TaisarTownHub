@@ -74,6 +74,34 @@ class SecureFileStore
         return strlen($plain);
     }
 
+    /**
+     * Copy bytes between private disks without deleting the source. This is
+     * used for database-backed quarantine transitions where the source must
+     * remain authoritative until the metadata transaction commits.
+     */
+    public static function copy(string $fromDisk, string $fromPath, string $toDisk, string $toPath): void
+    {
+        if (!Storage::disk($fromDisk)->exists($fromPath)) {
+            throw new RuntimeException('Vault source file is missing; copy was not performed.');
+        }
+
+        $plain = self::get($fromDisk, $fromPath);
+        self::putBytes($toDisk, $toPath, $plain);
+
+        if (self::checksum($toDisk, $toPath) !== hash('sha256', $plain)) {
+            try {
+                Storage::disk($toDisk)->delete($toPath);
+            } catch (\Throwable $exception) {
+                Log::critical('Failed to clean an unverifiable vault copy', [
+                    'to_disk' => $toDisk,
+                    'to_path_len' => strlen($toPath),
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+            throw new RuntimeException('Vault copy verification failed; source file was preserved.');
+        }
+    }
+
     /** Move bytes between disks (re-encrypting) — used by quarantine promotion. */
     public static function move(string $fromDisk, string $fromPath, string $toDisk, string $toPath): void
     {
