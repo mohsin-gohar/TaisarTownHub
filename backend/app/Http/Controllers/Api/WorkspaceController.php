@@ -1394,7 +1394,7 @@ class WorkspaceController extends Controller
             $allowed = [
                 'pending accrual' => ['Pending Accrual', 'Accrued'],
                 'pending' => ['Pending Accrual', 'Accrued'],
-                'accrued' => ['Accrued', 'Partially Paid'],
+                'accrued' => ['Accrued', 'Partially Paid', 'Paid'],
                 'partially paid' => ['Partially Paid', 'Paid'],
                 'paid' => ['Paid'],
                 'cancelled' => ['Cancelled'],
