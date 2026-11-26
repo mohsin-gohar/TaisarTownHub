@@ -105,7 +105,7 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
@@ -140,7 +140,7 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment}
       APP_URL: https://api.taisartownhub.com
       DB_CONNECTION: mysql
       DB_HOST: mysql
@@ -288,7 +288,17 @@ services:
     restart: unless-stopped
     environment:
       APP_ENV: production
-      APP_KEY: ${APP_KEY}
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment}
+      APP_URL: https://api.taisartownhub.com
+      CACHE_STORE: redis
+      MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@taisartownhub.com}
+      SENTRY_DSN: ${SENTRY_DSN}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
@@ -345,7 +355,7 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment}
       APP_URL: https://api.taisartownhub.com
       DB_CONNECTION: mysql
       DB_HOST: mysql
