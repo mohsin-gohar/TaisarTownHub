@@ -10,10 +10,9 @@ return [
     | encryption.enabled — AES-256-GCM at-rest encryption for every byte the
     |   vault writes to the private disks (`documents`, `quarantine`, media).
     |   The key is derived from APP_KEY (see App\Services\FileVaultCrypto) and
-    |   is never stored next to the files. Legacy plaintext files written
-    |   before this switch was enabled keep streaming transparently — the
-    |   read path auto-detects the envelope — and `php artisan vault:encrypt`
-    |   re-writes them in place.
+    |   is never stored next to the files. Legacy plaintext files keep reading
+    |   transparently. During APP_KEY rotation, configure APP_PREVIOUS_KEYS on
+    |   every replica and run `php artisan vault:encrypt` to rewrap old files.
     |
     | quarantine.retention_days — how long rejected/suspicious uploads stay in
     |   the isolated quarantine disk for administrator visibility before
