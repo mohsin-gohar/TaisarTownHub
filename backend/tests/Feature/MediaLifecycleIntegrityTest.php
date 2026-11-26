@@ -20,7 +20,6 @@ class MediaLifecycleIntegrityTest extends EnterpriseTestCase
             'status' => 'available',
             'url' => 'https://cdn.example.com/fixture.jpg',
             'disk_path' => null,
-            'storage_disk' => null,
             'mime_type' => 'image/jpeg',
             'size_bytes' => 100,
             'scan_status' => 'scanned_clean',
@@ -79,7 +78,6 @@ class MediaLifecycleIntegrityTest extends EnterpriseTestCase
             'type' => 'document',
             'url' => null,
             'disk_path' => $path,
-            'storage_disk' => 'documents',
             'mime_type' => 'application/pdf',
         ]);
 
