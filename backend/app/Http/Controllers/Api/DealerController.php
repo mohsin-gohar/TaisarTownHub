@@ -44,6 +44,8 @@ class DealerController extends Controller
     {
         $this->requireAny($request, ['manage_dealers']);
 
+        $effectiveCommissionType = $request->input('commissionType', 'Fixed');
+
         $data = $request->validate([
             'id' => 'required|string|unique:dealers,id',
             'fullName' => 'required|string|max:255',

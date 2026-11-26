@@ -157,10 +157,13 @@ export function collectedForTx(txn: Transaction, payments: PaymentEntry[] = []):
   const refunds = ledger
     .filter((payment) => String(payment.type ?? '').toLowerCase() === 'refund')
     .reduce((sum, payment) => sum + Math.abs(payment.amountPKR), 0);
-  const hasAdvanceMovement = ledger.some((payment) =>
-    String(payment.note ?? '').toLowerCase().includes('advance recorded at deal creation'),
-  );
-  const sourceGross = grossPayments + (legacyAdvance > 0 && !hasAdvanceMovement ? legacyAdvance : 0);
+
+  // When a payment ledger exists it is authoritative for the payments it
+  // contains. The transaction's recorded advance is added only when the
+  // ledger has not already covered it (legacy rows where the advance was
+  // never imported as a payment row); this avoids double-counting modern
+  // rows while preserving legacy totals and refund handling.
+  const sourceGross = grossPayments + (legacyAdvance > grossPayments ? legacyAdvance : 0);
 
   return Math.max(0, sourceGross - refunds);
 }

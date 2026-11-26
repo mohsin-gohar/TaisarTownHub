@@ -23,6 +23,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'create_transactions', 'finance.update_transaction', 'update_transactions',
             'finance.manage_payments', 'manage_payments', 'finance.view_commissions',
             'view_commissions', 'void_transactions', 'legacy.cancel_transactions', 'manage_deals',
+            'pay_commissions',
         ];
     }
 
@@ -470,11 +471,12 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
             'reason' => 'Buyer withdrew',
         ], $headers)->assertStatus(409)
-            ->assertJsonPath('message', 'Refund or reconcile all collected payments before voiding this deal.');
+            ->assertJsonPath('message', 'Refund or reconcile all advance and collected payments before voiding this deal.');
 
         $refund = $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 2500000,
             'type' => 'refund',
+            'notes' => 'test refund',
         ], $headers)->assertStatus(201)->json('payment');
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
@@ -497,7 +499,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
     public function test_void_is_blocked_when_a_commission_has_already_been_paid(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
-        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 10000000]);
         $headers = $this->authHeaders($this->tokenFor($user));
 
         $commission = $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
@@ -506,8 +508,19 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         ], $headers)->assertStatus(201)->json('commission');
 
         $this->patchJson("/api/agency/commissions/{$commission['id']}", [
+            'status' => 'accrued',
+        ], $headers)->assertOk();
+
+        $this->patchJson("/api/agency/commissions/{$commission['id']}", [
             'status' => 'paid',
         ], $headers)->assertOk();
+
+        // Refund all collected payments so the void reaches the paid-commission guard.
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 10000000,
+            'type' => 'refund',
+            'notes' => 'test refund',
+        ], $headers)->assertStatus(201);
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
             'reason' => 'Attempt to void after payout',
@@ -615,9 +628,11 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'beneficiary_type' => 'agency',
         ], $headers)->assertForbidden();
 
+        // Platform users without an agency context can reach the endpoint, but
+        // a non-existent commission id is still a 404 (not a 403).
         $this->patchJson('/api/agency/commissions/1', [
             'status' => 'accrued',
-        ], $headers)->assertForbidden();
+        ], $headers)->assertStatus(404);
     }
 
     public function test_payments_ledger_updates_collected_and_balance(): void
@@ -672,7 +687,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
 
         // Pay the remaining balance before accruing or paying commission.
         $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
-            'amount' => 2500000,
+            'amount' => 7500000,
             'type' => 'installment',
         ], $headers)->assertStatus(201)->assertJsonPath('totals.balance', 0);
 
@@ -703,6 +718,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 2500001,
             'type' => 'refund',
+            'notes' => 'test refund',
         ], $headers)->assertStatus(422)
             ->assertJsonPath('message', 'Refund cannot exceed the amount already collected.');
 
@@ -712,11 +728,13 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 1500000,
             'type' => 'refund',
+            'notes' => 'test refund',
         ], $headers)->assertStatus(201);
 
         $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
             'amount' => 1000001,
             'type' => 'refund',
+            'notes' => 'test refund',
         ], $headers)->assertStatus(422);
 
         $this->assertSame(1000000.0, (float) Transaction::findOrFail($deal['id'])->totalPaid());

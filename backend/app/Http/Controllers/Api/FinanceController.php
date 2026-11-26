@@ -1237,7 +1237,7 @@ public function destroyPayment(Request $request, int $id)
 
     public function updateCommission(Request $request, string $id)
     {
-        $agencyId = $this->requireAgency($request);
+        $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments', 'pay_commissions']);
 
         $request->validate([

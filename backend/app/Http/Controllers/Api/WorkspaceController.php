@@ -1310,7 +1310,7 @@ class WorkspaceController extends Controller
             'dealers' => ['manage_dealers'],
             'sellers' => ['manage_sellers'],
             'buyers' => ['manage_buyers', 'submit_buyer'],
-            'transactions' => ['create_transactions', 'update_transactions', 'void_transactions', 'finance.create_transaction'],
+            'transactions' => ['create_transactions', 'update_transactions', 'void_transactions', 'cancel_transactions', 'legacy.cancel_transactions', 'finance.create_transaction'],
             'payments' => ['manage_payments', 'finance.manage_payments'],
             'commissions' => ['pay_commissions', 'manage_payments', 'finance.manage_payments'],
             'files' => ['upload_documents', 'verify_documents', 'documents.upload'],
@@ -1341,7 +1341,13 @@ class WorkspaceController extends Controller
         $amount = $this->normalizeWholePkr(
             $payload['amountPKR'] ?? $payload['commissionAmountPKR'] ?? $payload['commissionAmount'] ?? null
         );
-        if ($amount === null || $amount <= 0) {
+
+        // Metadata-only updates (no amount) skip the commission ledger guards.
+        if ($amount === null) {
+            return $payload;
+        }
+
+        if ($amount <= 0) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'collections.commissions.amountPKR' => ['Commission amount must be a positive whole-PKR value.'],
             ]);
@@ -1577,7 +1583,7 @@ class WorkspaceController extends Controller
         $query = BusinessRecord::where('collection', 'transactions')
             ->where('record_id', $transactionId)
             ->whereNull('deleted_at');
-        $agencyId === null ? $query->whereNull('agency_id') : $query->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
         $payload = $query->first()?->payload ?? [];
         $declared = $this->normalizeWholePkr(
             $payload['commissionPKR'] ?? $payload['commissionAmountPKR'] ?? $payload['commissionAmount'] ?? null
@@ -1587,7 +1593,7 @@ class WorkspaceController extends Controller
         }
 
         $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
-        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
 
         return (int) ($transactionQuery->value('commissionAmountPKR') ?? 0);
     }
@@ -1628,7 +1634,7 @@ class WorkspaceController extends Controller
         $legacyQuery = BusinessRecord::where('collection', 'transactions')
             ->where('record_id', $transactionId)
             ->whereNull('deleted_at');
-        $agencyId === null ? $legacyQuery->whereNull('agency_id') : $legacyQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $legacyQuery->where('agency_id', $agencyId); }
         $legacy = $legacyQuery->first()?->payload ?? [];
         $legacyStatus = strtolower(trim((string) ($legacy['status'] ?? $legacy['dealStatus'] ?? '')));
         if (in_array($legacyStatus, ['fully paid', 'completed'], true)
@@ -1642,7 +1648,7 @@ class WorkspaceController extends Controller
         }
 
         $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
-        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
         $transaction = $transactionQuery->first();
         if ($transaction === null) {
             return false;
@@ -1917,7 +1923,7 @@ class WorkspaceController extends Controller
         }
 
         $query = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
-        $agencyId === null ? $query->whereNull('agency_id') : $query->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
         $transaction = $query->first();
 
         return $transaction !== null && abs((float) $transaction->totalPaid()) > 0.00001;
@@ -1953,13 +1959,13 @@ class WorkspaceController extends Controller
             ->where(function ($q) {
                 $q->where('status', 'paid')->orWhereNotNull('paid_at');
             });
-        $agencyId === null ? $query->whereNull('agency_id') : $query->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
         if ($query->exists()) {
             return true;
         }
 
         $legacy = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
-        $agencyId === null ? $legacy->whereNull('agency_id') : $legacy->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $legacy->where('agency_id', $agencyId); }
 
         return $legacy->get()->contains(function (BusinessRecord $record) use ($transactionId): bool {
             $row = $record->payload ?? [];
@@ -1987,7 +1993,7 @@ class WorkspaceController extends Controller
         $legacy = BusinessRecord::where('collection', 'transactions')
             ->where('record_id', $transactionId)
             ->whereNull('deleted_at');
-        $agencyId === null ? $legacy->whereNull('agency_id') : $legacy->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $legacy->where('agency_id', $agencyId); }
         $payload = $legacy->first()?->payload ?? [];
         $status = strtolower((string) ($payload['status'] ?? $payload['dealStatus'] ?? ''));
 
@@ -1996,7 +2002,7 @@ class WorkspaceController extends Controller
         }
 
         $transaction = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
-        $agencyId === null ? $transaction->whereNull('agency_id') : $transaction->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $transaction->where('agency_id', $agencyId); }
         $model = $transaction->first();
 
         return $model !== null && ($model->voided_at !== null || strtolower((string) $model->dealStatus) === 'cancelled');
@@ -2013,7 +2019,7 @@ class WorkspaceController extends Controller
         $reason = $this->transactionCloseoutReason($row) ?? 'Deal cancelled';
 
         $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
-        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
         $transaction = $transactionQuery->lockForUpdate()->first();
         if ($transaction) {
             $transaction->dealStatus = 'Cancelled';
@@ -2028,16 +2034,16 @@ class WorkspaceController extends Controller
 
         $commissionQuery = \App\Models\Commission::where('transaction_id', $transactionId)
             ->whereIn('status', ['pending', 'accrued']);
-        $agencyId === null ? $commissionQuery->whereNull('agency_id') : $commissionQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $commissionQuery->where('agency_id', $agencyId); }
         $commissionQuery->update(['status' => 'cancelled']);
 
         $scheduleQuery = \App\Models\PaymentSchedule::where('transaction_id', $transactionId)
             ->whereIn('status', ['pending', 'overdue']);
-        $agencyId === null ? $scheduleQuery->whereNull('agency_id') : $scheduleQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $scheduleQuery->where('agency_id', $agencyId); }
         $scheduleQuery->update(['status' => 'cancelled']);
 
         $legacy = BusinessRecord::where('collection', 'commissions')->whereNull('deleted_at');
-        $agencyId === null ? $legacy->whereNull('agency_id') : $legacy->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $legacy->where('agency_id', $agencyId); }
         foreach ($legacy->get() as $record) {
             $payload = $record->payload ?? [];
             $linkedId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
@@ -2090,7 +2096,7 @@ class WorkspaceController extends Controller
         }
 
         $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
-        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
         $transaction = $transactionQuery->first();
         if ($transaction !== null) {
             $relationalPaid = (int) $transaction->totalPaid();
@@ -2125,7 +2131,7 @@ class WorkspaceController extends Controller
         $query = BusinessRecord::where('collection', 'transactions')
             ->where('record_id', $transactionId)
             ->whereNull('deleted_at');
-        $agencyId === null ? $query->whereNull('agency_id') : $query->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $query->where('agency_id', $agencyId); }
         $payload = $query->first()?->payload ?? [];
         $advance = $this->normalizeWholePkr($payload['advancePaymentPKR'] ?? $payload['advancePKR'] ?? 0) ?? 0;
         if ($advance > 0) {
@@ -2133,18 +2139,25 @@ class WorkspaceController extends Controller
         }
 
         $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
-        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) { $transactionQuery->where('agency_id', $agencyId); }
         return (int) ($transactionQuery->value('advancePaymentPKR') ?? 0);
     }
 
     private function enforcePaymentMovement(Request $request, array $payload, ?string $agencyId): void
     {
-        $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
         $amount = $this->normalizeWholePkr($payload['amountPKR'] ?? $payload['paymentAmountPKR'] ?? $payload['amount'] ?? null);
+
+        // Metadata-only updates (no amount) are not payment movements and do
+        // not require a linked deal; skip the movement guards entirely.
+        if ($amount === null) {
+            return;
+        }
+
+        $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
         $type = strtolower((string) ($payload['type'] ?? $payload['paymentType'] ?? 'payment'));
         $isRefund = str_contains($type, 'refund');
 
-        if ($transactionId === '' || $amount === null || $amount <= 0) {
+        if ($transactionId === '' || $amount <= 0) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'collections.payments' => ['A payment movement requires a deal id and positive whole-PKR amount.'],
             ]);
@@ -2153,11 +2166,15 @@ class WorkspaceController extends Controller
         $legacyQuery = BusinessRecord::where('collection', 'transactions')
             ->where('record_id', $transactionId)
             ->whereNull('deleted_at');
-        $agencyId === null ? $legacyQuery->whereNull('agency_id') : $legacyQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) {
+            $legacyQuery->where('agency_id', $agencyId);
+        }
         $legacy = $legacyQuery->first()?->payload ?? [];
 
         $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
-        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        if ($agencyId !== null) {
+            $transactionQuery->where('agency_id', $agencyId);
+        }
         $transaction = $transactionQuery->first();
 
         if ($legacy === [] && $transaction === null) {

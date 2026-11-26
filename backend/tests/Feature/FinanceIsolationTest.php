@@ -225,15 +225,16 @@ class FinanceIsolationTest extends EnterpriseTestCase
 
         $this->assertSame(2500.0, (float) Transaction::find($deal['id'])->totalPaid());
 
+        // Recorded payments are immutable financial evidence: a recorded
+        // (received) payment cannot be deleted; a refund reverses it.
         $this->deleteJson("/api/agency/payments/{$paymentId}", ['reason' => 'recorded in error'], $headers())
-            ->assertStatus(200)
-            ->assertJsonPath('success', true);
+            ->assertStatus(409)
+            ->assertJsonPath('success', false);
 
-        // Soft-deleted payments stay in the audit trail but stop counting.
-        $this->assertNull(TransactionPayment::find($paymentId));
-        $this->assertNotNull(TransactionPayment::withTrashed()->find($paymentId)->deleted_at);
-        $this->assertSame(0.0, (float) Transaction::find($deal['id'])->totalPaid());
-        $this->assertSame(100000.0, (float) Transaction::find($deal['id'])->remainingBalancePKR);
+        $this->assertNotNull(TransactionPayment::find($paymentId));
+        $this->assertNull(TransactionPayment::find($paymentId)->deleted_at);
+        $this->assertSame(2500.0, (float) Transaction::find($deal['id'])->totalPaid());
+        $this->assertSame(97500.0, (float) Transaction::find($deal['id'])->remainingBalancePKR);
     }
 
     public function test_agency_cannot_read_or_mutate_another_agencys_commission_or_expense(): void
@@ -326,7 +327,7 @@ class FinanceIsolationTest extends EnterpriseTestCase
     {
         [$user] = $this->agencyUser($this->financePermissions());
         $headers = fn () => $this->authHeaders($this->tokenFor($user));
-        $deal = $this->createDeal($user);
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 10000000]);
 
         $commission = $this->postJson(
             "/api/agency/transactions/{$deal['id']}/commissions",
@@ -462,6 +463,19 @@ class FinanceIsolationTest extends EnterpriseTestCase
         // Regression: updateCommission filtered `agency_id = NULL` for platform
         // users, so commissions() listed every row but every payout was a 404.
         $admin = $this->makeUser('super_admin');
+        // Make the deal fully paid so the accrual milestone is reachable.
+        $this->postJson(
+            "/api/agency/transactions/{$deal['id']}/payments",
+            ['amount' => 10000000, 'type' => 'installment', 'method' => 'cash'],
+            $this->authHeaders($this->tokenFor($agencyUser))
+        )->assertStatus(201);
+
+        $this->putJson(
+            "/api/agency/commissions/{$commission['id']}",
+            ['status' => 'accrued'],
+            $this->authHeaders($this->tokenFor($admin))
+        )->assertStatus(200)->assertJsonPath('commission.status', 'accrued');
+
         $this->putJson(
             "/api/agency/commissions/{$commission['id']}",
             ['status' => 'paid'],

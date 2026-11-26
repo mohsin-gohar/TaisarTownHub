@@ -369,14 +369,20 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
 
     public function test_workspace_financial_sync_normalizes_whole_rupee_decimal_strings_to_integers(): void
     {
-        [$user] = $this->agencyUser([
+        [$user, $agency] = $this->agencyUser([
             'finance.view',
             'finance.manage_payments',
         ]);
 
+        BusinessRecord::put('transactions', 'whole-rupee-deal', [
+            'id' => 'whole-rupee-deal',
+            'agreementAmountPKR' => 1000,
+        ], $agency->id);
+
         $this->putJson('/api/workspace', [
             'collections' => ['payments' => [[
                 'id' => 'whole-rupee-payment',
+                'transactionId' => 'whole-rupee-deal',
                 'amountPKR' => '1000.00',
             ]]],
         ], $this->authHeaders($this->tokenFor($user)))
