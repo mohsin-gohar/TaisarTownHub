@@ -1263,7 +1263,7 @@ public function destroyPayment(Request $request, int $id)
             $from = strtolower((string) $commission->status);
             $to = (string) $request->status;
             $transitions = [
-                'pending' => ['pending', 'accrued', 'paid', 'cancelled'],
+                'pending' => ['pending', 'accrued', 'cancelled'],
                 'accrued' => ['accrued', 'paid', 'cancelled'],
                 'paid' => ['paid'],
                 'cancelled' => ['cancelled'],
@@ -1271,6 +1271,18 @@ public function destroyPayment(Request $request, int $id)
 
             if (!in_array($to, $transitions[$from] ?? [], true)) {
                 return [$commission, $from, 'Commission status cannot move from ' . $from . ' to ' . $to . '.'];
+            }
+
+            if ($to === 'accrued') {
+                $isAccrualMilestoneReached = strtolower((string) $transaction->dealStatus) === 'completed'
+                    || (float) $transaction->totalPaid() >= (float) $transaction->agreementAmountPKR;
+                if (!$isAccrualMilestoneReached) {
+                    return [
+                        $commission,
+                        $from,
+                        'Commission can only accrue after the deal is fully paid or marked completed.',
+                    ];
+                }
             }
 
             $changes = [
