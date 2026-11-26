@@ -80,6 +80,8 @@ class PaymentController extends Controller
             ], 409);
         }
 
+        $amount = (int) round((float) $plan->price);
+
         try {
             $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
 
@@ -93,7 +95,7 @@ class PaymentController extends Controller
                             'name' => $plan->name,
                             'description' => $plan->description ?? 'TaisarTownHub agency subscription',
                         ],
-                        'unit_amount' => (int) ($plan->price * 100),
+                        'unit_amount' => $amount * 100,
                         'recurring' => [
                             'interval' => $plan->interval ?? 'month',
                         ],
@@ -110,7 +112,6 @@ class PaymentController extends Controller
             ]);
 
             // Create a pending invoice using the canonical schema columns.
-            $amount = (int) round((float) $plan->price);
             SubscriptionInvoice::create([
                 'id' => (string) Str::uuid(),
                 'invoice_number' => SubscriptionInvoice::nextNumber(),
