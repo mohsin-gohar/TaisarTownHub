@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Commission;
 use App\Models\Dealer;
+use App\Models\BusinessRecord;
+use App\Models\Commission;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
 use App\Models\PaymentSchedule;
@@ -21,7 +23,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'finance.view', 'view_transactions', 'finance.create_transaction',
             'create_transactions', 'finance.update_transaction', 'update_transactions',
             'finance.manage_payments', 'manage_payments', 'finance.view_commissions',
-            'view_commissions', 'void_transactions', 'manage_deals',
+            'view_commissions', 'void_transactions', 'legacy.cancel_transactions', 'manage_deals',
         ];
     }
 
@@ -44,9 +46,14 @@ class FinanceLifecycleTest extends EnterpriseTestCase
 
     private function patchStatus($user, string $id, string $status)
     {
+        $payload = ['dealStatus' => $status];
+        if ($status === 'Cancelled') {
+            $payload['reason'] = 'Test cancellation reason';
+        }
+
         return $this->patchJson(
             "/api/agency/transactions/{$id}",
-            ['dealStatus' => $status],
+            $payload,
             $this->authHeaders($this->tokenFor($user))
         );
     }
@@ -186,6 +193,130 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             'transaction_id' => $deal['id'],
             'amount' => 1000,
         ]);
+    }
+
+    public function test_cancellation_requires_the_dedicated_permission_and_a_reason(): void
+    {
+        [$updater] = $this->agencyUser([
+            'finance.create_transaction', 'finance.update_transaction',
+        ]);
+        $deal = $this->createDeal($updater, ['advancePaymentPKR' => 0]);
+        $headers = $this->authHeaders($this->tokenFor($updater));
+
+        $this->patchJson("/api/agency/transactions/{$deal['id']}", [
+            'dealStatus' => 'Cancelled',
+            'reason' => 'Duplicate record',
+        ], $headers)->assertStatus(403);
+
+        [$canceller] = $this->agencyUser([
+            'finance.create_transaction', 'legacy.cancel_transactions',
+        ]);
+        $cancelDeal = $this->createDeal($canceller, ['advancePaymentPKR' => 0]);
+        $cancelHeaders = $this->authHeaders($this->tokenFor($canceller));
+
+        $this->patchJson("/api/agency/transactions/{$cancelDeal['id']}", [
+            'dealStatus' => 'Cancelled',
+        ], $cancelHeaders)->assertStatus(422);
+
+        $this->patchJson("/api/agency/transactions/{$cancelDeal['id']}", [
+            'dealStatus' => 'Cancelled',
+            'reason' => 'Duplicate record',
+        ], $cancelHeaders)->assertStatus(200)
+            ->assertJsonPath('transaction.dealStatus', 'Cancelled');
+    }
+
+    public function test_void_rejects_a_nonzero_advance_summary_without_payment_rows(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        Transaction::whereKey($deal['id'])->update(['advancePaymentPKR' => 5000]);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Legacy advance requires reconciliation',
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(409);
+    }
+
+    public function test_void_rejects_completed_deals_even_when_the_payment_ledger_is_empty(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        foreach (['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Completed'] as $stage) {
+            $this->patchStatus($user, $deal['id'], $stage)->assertStatus(200);
+        }
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Attempted completed deal void',
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(409);
+    }
+
+    public function test_void_rejects_paid_at_commissions_even_if_status_is_not_paid(): void
+    {
+        [$user, $agency] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        Commission::create([
+            'agency_id' => $agency->id,
+            'transaction_id' => $deal['id'],
+            'amount' => 1000,
+            'rate' => 1,
+            'status' => 'accrued',
+            'paid_at' => now(),
+        ]);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Paid commission requires reversal',
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(409);
+    }
+
+    public function test_void_checks_legacy_workspace_payment_rows_and_mirrors_successful_closeout(): void
+    {
+        [$user, $agency] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, ['advancePaymentPKR' => 0]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        BusinessRecord::put('payments', 'legacy-payment-' . $deal['id'], [
+            'transactionId' => $deal['id'],
+            'amountPKR' => 2500,
+            'type' => 'payment',
+        ], $agency->id);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Legacy payment exists',
+        ], $headers)->assertStatus(409);
+
+        BusinessRecord::put('payments', 'legacy-payment-' . $deal['id'], [
+            'transactionId' => $deal['id'],
+            'amountPKR' => 0,
+            'type' => 'refund',
+        ], $agency->id);
+
+        BusinessRecord::put('transactions', $deal['id'], [
+            'id' => $deal['id'],
+            'status' => 'Draft',
+            'dealStatus' => 'Draft',
+            'commissionStatus' => 'Pending',
+        ], $agency->id);
+        BusinessRecord::put('commissions', 'legacy-commission-' . $deal['id'], [
+            'transactionId' => $deal['id'],
+            'status' => 'accrued',
+            'paidPKR' => 0,
+        ], $agency->id);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Duplicate deal record',
+        ], $headers)->assertOk();
+
+        $this->assertDatabaseHas('business_records', [
+            'collection' => 'transactions',
+            'record_id' => $deal['id'],
+        ]);
+        $legacyTransaction = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $deal['id'])->firstOrFail();
+        $this->assertSame('Cancelled', $legacyTransaction->payload['dealStatus']);
+        $this->assertTrue($legacyTransaction->payload['voided']);
+
+        $legacyCommission = BusinessRecord::where('collection', 'commissions')
+            ->where('record_id', 'legacy-commission-' . $deal['id'])->firstOrFail();
+        $this->assertSame('Cancelled', $legacyCommission->payload['status']);
     }
 
     public function test_seeded_agency_manager_can_create_and_update_a_deal(): void
