@@ -957,26 +957,32 @@ class DocumentController extends Controller
         $this->requirePermission($request, 'documents.manage_permissions');
 
         $document = $this->findScoped($agencyId, $id);
-
-        if (!in_array($document->scan_status, ['skipped', 'infected'], true)) {
+        if ($document->status !== 'quarantined'
+            || !in_array($document->scan_status, ['skipped', 'infected'], true)) {
             return response()->json([
                 'success' => false,
-                'message' => 'This document has no pending scan verdict.',
+                'message' => 'Only quarantined documents with a pending or infected scan verdict can be rescanned.',
             ], 422);
         }
 
-        $disk = $document->storage_disk ?: 'documents';
-        if (!Storage::disk($disk)->exists($document->disk_path)) {
+        $sourceDisk = $document->storage_disk ?: 'documents';
+        $sourcePath = $document->disk_path;
+        if (!in_array($sourceDisk, ['documents', 'quarantine'], true)
+            || !$sourcePath
+            || !Storage::disk($sourceDisk)->exists($sourcePath)) {
             return response()->json([
                 'success' => false,
-                'message' => 'File is no longer available on storage.',
+                'message' => 'File is no longer available on private storage.',
             ], 410);
         }
 
-        $scan = SecureFileStore::scanStored($disk, $document->disk_path, $scanner);
-
-        if ($scan->skipped) {
-            Log::warning('Rescan skipped: scanner unavailable', ['document_id' => $document->id]);
+        $scan = SecureFileStore::scanStored($sourceDisk, $sourcePath, $scanner);
+        $scannerUnavailable = $scan->skipped || in_array('scan_unavailable', $scan->threats, true);
+        if ($scannerUnavailable) {
+            Log::warning('Rescan skipped: scanner unavailable', [
+                'document_id' => $document->id,
+                'reason' => $scan->skipReason ?? 'scan_unavailable',
+            ]);
 
             return response()->json([
                 'success' => false,
@@ -984,94 +990,171 @@ class DocumentController extends Controller
             ], 422);
         }
 
-        if (!$scan->isClean) {
-            // Infected on rescan: if the bytes sit on the vault disk, move
-            // them to the isolated quarantine disk and record the verdict.
-            if ($disk === 'documents') {
-                $qId = 'qtn_' . bin2hex(random_bytes(8));
-                $qPath = $agencyId . '/' . now()->format('Y/m') . '/' . $qId . '_' . $document->stored_name;
-                SecureFileStore::move('documents', $document->disk_path, 'quarantine', $qPath);
-                $document->disk_path = $qPath;
-                $document->storage_disk = 'quarantine';
-                DocumentQuarantine::create([
-                    'id' => $qId,
-                    'agency_id' => $agencyId,
-                    'document_id' => $document->id,
-                    'original_name' => $document->original_name,
-                    'stored_name' => $document->stored_name,
-                    'disk_path' => $qPath,
-                    'mime_type' => $document->mime_type,
-                    'size_bytes' => $document->size_bytes,
-                    'reason' => 'infected',
-                    'threats' => $scan->threats,
-                    'uploaded_by' => $document->uploaded_by,
-                    'created_at' => now(),
-                ]);
+        $scanClean = $scan->isClean;
+        $sourceChecksum = SecureFileStore::checksum($sourceDisk, $sourcePath);
+        $targetDisk = $sourceDisk;
+        $targetPath = $sourcePath;
+        $quarantineId = null;
+
+        if ($scanClean && $sourceDisk === 'quarantine') {
+            $extension = pathinfo($document->stored_name ?: $document->original_name, PATHINFO_EXTENSION) ?: 'bin';
+            $targetDisk = 'documents';
+            $targetPath = $agencyId . '/' . now()->format('Y/m') . '/'
+                . $document->id . '_rescan_' . bin2hex(random_bytes(6)) . '.' . $extension;
+        } elseif (!$scanClean && $sourceDisk === 'documents') {
+            $quarantineId = 'qtn_' . bin2hex(random_bytes(8));
+            $targetDisk = 'quarantine';
+            $targetPath = $agencyId . '/' . now()->format('Y/m') . '/'
+                . $quarantineId . '_' . ($document->stored_name ?: basename($sourcePath));
+        }
+
+        $copied = $targetDisk !== $sourceDisk || $targetPath !== $sourcePath;
+
+        try {
+            $updated = DB::transaction(function () use (
+                $agencyId,
+                $id,
+                $sourceDisk,
+                $sourcePath,
+                $sourceChecksum,
+                $targetDisk,
+                $targetPath,
+                $quarantineId,
+                $scan,
+                $scanClean,
+                $copied,
+                $request
+            ): Document {
+                $locked = Document::where('agency_id', $agencyId)
+                    ->lockForUpdate()
+                    ->findOrFail($id);
+
+                if ($locked->status !== 'quarantined'
+                    || !in_array($locked->scan_status, ['skipped', 'infected'], true)
+                    || ($locked->storage_disk ?: 'documents') !== $sourceDisk
+                    || $locked->disk_path !== $sourcePath) {
+                    abort(409, 'The document changed while the rescan was running. Refresh and retry.');
+                }
+
+                // Verify the bytes have not changed since the scanner verdict.
+                if (SecureFileStore::checksum($sourceDisk, $sourcePath) !== $sourceChecksum) {
+                    abort(409, 'The document bytes changed during rescan. A new scan is required.');
+                }
+
+                // Keep the source intact until metadata commits. If the DB
+                // transaction fails, the copied target is removed in catch.
+                if ($copied) {
+                    SecureFileStore::copy($sourceDisk, $sourcePath, $targetDisk, $targetPath);
+                }
+
+                if (!$scanClean && $quarantineId !== null) {
+                    DocumentQuarantine::create([
+                        'id' => $quarantineId,
+                        'agency_id' => $agencyId,
+                        'document_id' => $locked->id,
+                        'original_name' => $locked->original_name,
+                        'stored_name' => $locked->stored_name,
+                        'disk_path' => $targetPath,
+                        'mime_type' => $locked->mime_type,
+                        'size_bytes' => $locked->size_bytes,
+                        'reason' => 'infected',
+                        'threats' => $scan->threats,
+                        'uploaded_by' => $locked->uploaded_by,
+                    ]);
+                }
+
+                $locked->disk_path = $targetPath;
+                $locked->storage_disk = $targetDisk;
+                $locked->scan_status = $scanClean ? 'scanned_clean' : 'infected';
+                $locked->scan_threats = $scanClean ? null : $scan->threats;
+                $locked->scan_completed_at = now();
+                $locked->scanner = $scan->scanner;
+                $locked->checksum = SecureFileStore::checksum($targetDisk, $targetPath);
+                $locked->status = $scanClean ? 'active' : 'quarantined';
+                $locked->save();
+
+                // The current version row must follow the same physical bytes;
+                // otherwise history and future vault key rotations point to a
+                // path that was moved or deleted.
+                DocumentVersion::where('document_id', $locked->id)
+                    ->where('version', $locked->version)
+                    ->update([
+                        'disk_path' => $targetPath,
+                        'storage_disk' => $targetDisk,
+                        'checksum' => $locked->checksum,
+                    ]);
+
+                return $locked->fresh();
+            }, 3);
+        } catch (\Throwable $exception) {
+            if ($copied) {
+                try {
+                    if (Storage::disk($targetDisk)->exists($targetPath)
+                        && !Storage::disk($targetDisk)->delete($targetPath)) {
+                        Log::critical('Failed to clean an uncommitted rescan copy', [
+                            'document_id' => $id,
+                            'target_disk' => $targetDisk,
+                            'target_path_len' => strlen($targetPath),
+                        ]);
+                    }
+                } catch (\Throwable $cleanupException) {
+                    Log::critical('Rescan copy cleanup raised an exception', [
+                        'document_id' => $id,
+                        'error' => $cleanupException->getMessage(),
+                    ]);
+                }
             }
 
-            $document->scan_status = 'infected';
-            $document->scan_threats = $scan->threats;
-            $document->scan_completed_at = now();
-            $document->scanner = $scan->scanner;
-            $document->status = 'quarantined';
-            $document->save();
+            throw $exception;
+        }
 
-            $this->writeAudit($request, 'document.rescan', $document->id, "Rescan detected malware: {$document->title}", [
+        if ($copied) {
+            try {
+                if (Storage::disk($sourceDisk)->exists($sourcePath)
+                    && !Storage::disk($sourceDisk)->delete($sourcePath)) {
+                    // The DB now points at the verified target; a failed
+                    // source cleanup is an orphan, not a broken document.
+                    Log::critical('Rescan committed but old private bytes could not be removed', [
+                        'document_id' => $id,
+                        'source_disk' => $sourceDisk,
+                        'source_path_len' => strlen($sourcePath),
+                    ]);
+                }
+            } catch (\Throwable $cleanupException) {
+                Log::critical('Old rescan source cleanup raised an exception', [
+                    'document_id' => $id,
+                    'error' => $cleanupException->getMessage(),
+                ]);
+            }
+        }
+
+        $this->writeAudit(
+            $request,
+            'document.rescan',
+            $updated->id,
+            $scanClean ? "Rescan approved: {$updated->title}" : "Rescan detected malware: {$updated->title}",
+            [
                 'agency_id' => $agencyId,
                 'entity_type' => 'document',
-                'entity_id' => $document->id,
-                'metadata' => ['scan_status' => 'infected', 'threats' => $scan->threats],
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Rescan detected malware; the document stays in quarantine.',
-                'document' => $document,
-            ]);
-        }
-
-        // Clean: promote.
-        if ($disk === 'quarantine') {
-            $newPath = $agencyId . '/' . now()->format('Y/m') . '/' . $document->stored_name;
-            SecureFileStore::move('quarantine', $document->disk_path, 'documents', $newPath);
-            $document->disk_path = $newPath;
-            $document->storage_disk = 'documents';
-        }
-
-        $document->scan_status = 'scanned_clean';
-        $document->scan_threats = null;
-        $document->scan_completed_at = now();
-        $document->scanner = $scan->scanner;
-        $document->checksum = SecureFileStore::checksum('documents', $document->disk_path);
-        $document->status = 'active';
-        $document->save();
-
-        // Keep the newest version row in sync with the promoted bytes.
-        DocumentVersion::where('document_id', $document->id)
-            ->where('version', $document->version)
-            ->update(['disk_path' => $document->disk_path, 'storage_disk' => 'documents']);
-
-        $this->writeAudit($request, 'document.rescan', $document->id, "Rescan approved: {$document->title}", [
-            'agency_id' => $agencyId,
-            'entity_type' => 'document',
-            'entity_id' => $document->id,
-            'metadata' => ['scan_status' => 'scanned_clean'],
-        ]);
+                'entity_id' => $updated->id,
+                'metadata' => [
+                    'scan_status' => $updated->scan_status,
+                    'source_disk' => $sourceDisk,
+                    'target_disk' => $targetDisk,
+                    'threats' => $scanClean ? [] : $scan->threats,
+                ],
+            ]
+        );
 
         return response()->json([
             'success' => true,
-            'message' => 'Rescan clean; document approved for download.',
-            'document' => $document,
+            'message' => $scanClean
+                ? 'Rescan clean; document approved for download.'
+                : 'Rescan detected malware; the document stays in quarantine.',
+            'document' => $updated,
         ]);
     }
 
-    /**
-     * GET /api/agency/documents/storage-usage — read-only byte counters.
-     *
-     * Storage quotas are not enforced in this release; the numbers are kept
-     * for monitoring and audit. Per-file upload limits and malware checks are
-     * applied on the upload endpoints instead.
-     */
     public function usage(Request $request)
     {
         $agencyId = $this->requireAgency($request);
