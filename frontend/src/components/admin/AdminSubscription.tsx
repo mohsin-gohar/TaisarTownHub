@@ -16,12 +16,12 @@ import {
   titleCase,
 } from './AdminEnterpriseUi';
 
-const LIMIT_KEYS = ['listings', 'staff', 'images', 'videos', 'featured_credits', 'listing_days'] as const;
+const LIMIT_KEYS = ['listings', 'staff', 'leads', 'featured_credits', 'listing_days'] as const;
 
-const UsageMeter: React.FC<{ label: string; used: number; limit: number | null; remaining: number | null; suffix?: string }> = ({
-  label, used, limit, remaining, suffix = '',
+const UsageMeter: React.FC<{ label: string; used: number; limit: number | null; remaining: number | null; suffix?: string; zeroIsUnlimited?: boolean }> = ({
+  label, used, limit, remaining, suffix = '', zeroIsUnlimited = true,
 }) => {
-  const unlimited = limit === null || limit <= 0;
+  const unlimited = limit === null || (zeroIsUnlimited && limit <= 0);
   const pct = unlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
   return (
     <div className="space-y-1.5">
@@ -82,7 +82,7 @@ export const AdminSubscription: React.FC = () => {
   return (
     <EnterprisePage
       title="Subscription & Usage"
-      subtitle="Listing, staff and lead limits are enforced by the API. Storage is monitored for reporting only and never blocks an upload."
+      subtitle="Listing, staff, lead and featured-slot limits are enforced by the API. Approved listings use the expiry period assigned to their plan; storage is monitored only."
       actions={
         <EnterpriseButton variant="secondary" onClick={() => void load()}>
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
@@ -137,6 +137,13 @@ export const AdminSubscription: React.FC = () => {
                   limit={limits.leads ?? null}
                   remaining={remaining.leads ?? null}
                 />
+                <UsageMeter
+                  label="Featured slots"
+                  used={Number(usage.featured_credits ?? 0)}
+                  limit={limits.featured_credits ?? 0}
+                  remaining={remaining.featured_credits ?? 0}
+                  zeroIsUnlimited={false}
+                />
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-[11px] text-slate-300">
                     <span>Storage</span>
@@ -149,7 +156,7 @@ export const AdminSubscription: React.FC = () => {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-2 mt-5 pt-4 border-t border-slate-800 text-[11px] text-slate-400">
-                {LIMIT_KEYS.filter((key) => key !== 'listings' && key !== 'staff').map((key) => (
+                {LIMIT_KEYS.filter((key) => !['listings', 'staff', 'leads', 'featured_credits'].includes(key)).map((key) => (
                   <div key={key} className="flex justify-between gap-2">
                     <span>{titleCase(key)}</span>
                     <span className="font-semibold text-slate-200">{limits[key] ?? '—'}</span>
