@@ -10,6 +10,7 @@ use App\Models\Property;
 use App\Support\InquiryCaptcha;
 use App\Support\PlanLimits;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class InquiryController extends Controller
