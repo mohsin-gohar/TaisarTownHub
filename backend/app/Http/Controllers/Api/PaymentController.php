@@ -574,7 +574,7 @@ class PaymentController extends Controller
 
     private function handleStripeInvoicePaid($invoice): void
     {
-        $stripeSubId = $invoice->stripe_subscription_id ?? null;
+        $stripeSubId = $invoice->subscription ?? ($invoice->parent->subscription_details->subscription ?? null);
         if (!$stripeSubId) {
             return;
         }
@@ -587,7 +587,7 @@ class PaymentController extends Controller
 
     private function handleStripeInvoiceFailed($invoice): void
     {
-        $stripeSubId = $invoice->stripe_subscription_id ?? null;
+        $stripeSubId = $invoice->subscription ?? ($invoice->parent->subscription_details->subscription ?? null);
         if (!$stripeSubId) {
             return;
         }
