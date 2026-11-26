@@ -31,10 +31,18 @@ fi
 php artisan config:cache
 php artisan route:cache
 
-# Public disk symlink (maps / public media). The nginx gateway serves the
-# shared volume directly at /storage/..., but the symlink keeps local and
-# single-container deployments working too.
-php artisan storage:link --force || true
+# Public disk symlink (maps / public media). The nginx gateway mounts the
+# shared public_storage volume directly at /storage/..., so a symlink is only
+# needed when the runtime user can safely create it for a single-container
+# deployment. Never emit a production ERROR merely because a read-only app
+# image runs as www-data.
+if [ -L public/storage ]; then
+  echo "[entrypoint] public/storage symlink already exists; leaving it unchanged."
+elif [ -w public ]; then
+  php artisan storage:link --force
+else
+  echo "[entrypoint] Skipping storage:link: public/ is not writable; nginx serves the shared public_storage volume directly."
+fi
 
 # Migrations run ONCE in the compose `migrate` service. Web replicas and queue
 # workers set RUN_MIGRATIONS=false so they can never race on schema changes.
