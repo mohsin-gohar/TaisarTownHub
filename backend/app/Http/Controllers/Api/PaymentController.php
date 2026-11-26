@@ -81,7 +81,7 @@ class PaymentController extends Controller
                     ->first();
                 $liveStripeSubscription = $currentSubscription
                     && $currentSubscription->stripe_subscription_id
-                    && in_array($currentSubscription->status, ['trialing', 'active', 'past_due'], true);
+                    && !in_array($currentSubscription->status, ['cancelled', 'expired'], true);
                 $activeManualTerm = $currentSubscription
                     && in_array($currentSubscription->status, ['active', 'past_due'], true)
                     && (!$currentSubscription->ends_at || $currentSubscription->ends_at->isFuture());
