@@ -35,9 +35,14 @@ class PlanLimits
             ->where('agency_id', $agency->id)
             ->sum('size_bytes');
 
+        // The current version is already represented by documents.size_bytes.
+        // Only archived versions add additional retained bytes; counting every
+        // DocumentVersion row double-counts the current version after each upload.
         $versionBytes = (int) DocumentVersion::query()
-            ->whereIn('document_id', Document::withTrashed()->where('agency_id', $agency->id)->select('id'))
-            ->sum('size_bytes');
+            ->join('documents as vault_documents', 'vault_documents.id', '=', 'document_versions.document_id')
+            ->where('vault_documents.agency_id', $agency->id)
+            ->whereColumn('document_versions.version', '<', 'vault_documents.version')
+            ->sum('document_versions.size_bytes');
 
         $mediaBytes = (int) MediaFile::withTrashed()
             ->where('agency_id', $agency->id)
