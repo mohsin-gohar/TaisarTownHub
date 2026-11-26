@@ -988,10 +988,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdDate: new Date().toISOString().split('T')[0],
     };
     setProperties((prev) => [newProp, ...prev]);
-    if (backendConnected) {
-      showToast('info', `Property "${newProp.title}" added; saving to the server…`);
-    } else {
+    if (IS_DEMO) {
       showToast('info', `Demo-only property "${newProp.title}" added locally; it is not published to the live site.`);
+    } else {
+      showToast('info', `Property "${newProp.title}" added; saving to the server…`);
     }
     return { success: true };
   };
