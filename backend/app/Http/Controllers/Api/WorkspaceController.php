@@ -859,6 +859,9 @@ class WorkspaceController extends Controller
                 continue;
             }
 
+            if ($collection === 'payments') {
+                $this->enforcePaymentMovement($request, $newPayload, $agencyId);
+            }
             if ($collection === 'commissions') {
                 $newPayload = $this->enforceCommissionLedger($request, $newPayload, $oldPayload, $agencyId);
                 $row = $newPayload;
@@ -1572,19 +1575,8 @@ class WorkspaceController extends Controller
         }
 
         $agreement = $this->normalizeWholePkr($legacy['agreementAmountPKR'] ?? $legacy['dealAmountPKR'] ?? null) ?? 0;
-        if ($agreement > 0) {
-            $paymentQuery = BusinessRecord::where('collection', 'payments')->whereNull('deleted_at');
-            $agencyId === null ? $paymentQuery->whereNull('agency_id') : $paymentQuery->where('agency_id', $agencyId);
-            $hasLedger = $paymentQuery->get()->contains(function (BusinessRecord $record) use ($transactionId): bool {
-                $row = $record->payload ?? [];
-                return (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '') === $transactionId;
-            });
-            $collected = $hasLedger
-                ? $this->netCollectedForTransaction($transactionId, $agencyId)
-                : ($this->normalizeWholePkr($legacy['advancePaymentPKR'] ?? $legacy['advancePKR'] ?? 0) ?? 0);
-            if ($collected >= $agreement) {
-                return true;
-            }
+        if ($agreement > 0 && $this->netCollectedForTransaction($transactionId, $agencyId) >= $agreement) {
+            return true;
         }
 
         $transactionQuery = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
@@ -2006,23 +1998,165 @@ class WorkspaceController extends Controller
             return 0;
         }
 
+        $records = $this->businessPaymentRowsForTransaction($transactionId, $agencyId);
+        $grossPayments = 0;
+        $refunds = 0;
+        $hasAdvanceMovement = false;
+
+        foreach ($records as $record) {
+            $row = $record->payload ?? [];
+            $amount = abs((int) ($row['amountPKR'] ?? $row['paymentAmountPKR'] ?? $row['amount'] ?? 0));
+            $type = strtolower((string) ($row['type'] ?? $row['paymentType'] ?? 'payment'));
+            if (str_contains($type, 'refund')) {
+                $refunds += $amount;
+                continue;
+            }
+            $grossPayments += $amount;
+            if ($type === 'advance' || str_contains(strtolower((string) ($row['note'] ?? '')), 'advance recorded at deal creation')) {
+                $hasAdvanceMovement = true;
+            }
+        }
+
+        if ($records !== []) {
+            $legacyAdvance = $this->legacyAdvanceForTransaction($transactionId, $agencyId);
+            // Old deals stored the advance only on the transaction row. When a
+            // later payment/refund is first recorded, preserve that legacy base
+            // unless an explicit advance movement already exists in the ledger.
+            $base = $grossPayments + ($legacyAdvance > 0 && ! $hasAdvanceMovement ? $legacyAdvance : 0);
+
+            return max(0, $base - $refunds);
+        }
+
+        $transactionQuery = \\App\\Models\\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        $transaction = $transactionQuery->first();
+        if ($transaction !== null) {
+            $relationalPaid = (int) $transaction->totalPaid();
+            if ($relationalPaid !== 0) {
+                return max(0, $relationalPaid);
+            }
+            if ((int) $transaction->advancePaymentPKR > 0) {
+                return (int) $transaction->advancePaymentPKR;
+            }
+        }
+
+        return $this->legacyAdvanceForTransaction($transactionId, $agencyId);
+    }
+
+    private function businessPaymentRowsForTransaction(string $transactionId, ?string $agencyId): array
+    {
         $query = BusinessRecord::where('collection', 'payments')->whereNull('deleted_at');
         if ($agencyId !== null) {
             $query->where('agency_id', $agencyId);
         }
 
-        return (int) $query->get()->sum(function (BusinessRecord $record) use ($transactionId): int {
+        return $query->get()->filter(function (BusinessRecord $record) use ($transactionId): bool {
             $row = $record->payload ?? [];
-            $rowTransactionId = (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '');
-            if ($rowTransactionId !== $transactionId) {
-                return 0;
+            return (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '') === $transactionId;
+        })->values()->all();
+    }
+
+    private function legacyAdvanceForTransaction(string $transactionId, ?string $agencyId): int
+    {
+        $query = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        $agencyId === null ? $query->whereNull('agency_id') : $query->where('agency_id', $agencyId);
+        $payload = $query->first()?->payload ?? [];
+        $advance = $this->normalizeWholePkr($payload['advancePaymentPKR'] ?? $payload['advancePKR'] ?? 0) ?? 0;
+        if ($advance > 0) {
+            return $advance;
+        }
+
+        $transactionQuery = \\App\\Models\\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        return (int) ($transactionQuery->value('advancePaymentPKR') ?? 0);
+    }
+
+    private function enforcePaymentMovement(Request $request, array $payload, ?string $agencyId): void
+    {
+        $transactionId = (string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? $payload['dealId'] ?? '');
+        $amount = $this->normalizeWholePkr($payload['amountPKR'] ?? $payload['paymentAmountPKR'] ?? $payload['amount'] ?? null);
+        $type = strtolower((string) ($payload['type'] ?? $payload['paymentType'] ?? 'payment'));
+        $isRefund = str_contains($type, 'refund');
+
+        if ($transactionId === '' || $amount === null || $amount <= 0) {
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'collections.payments' => ['A payment movement requires a deal id and positive whole-PKR amount.'],
+            ]);
+        }
+
+        $legacyQuery = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        $agencyId === null ? $legacyQuery->whereNull('agency_id') : $legacyQuery->where('agency_id', $agencyId);
+        $legacy = $legacyQuery->first()?->payload ?? [];
+
+        $transactionQuery = \\App\\Models\\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $agencyId === null ? $transactionQuery->whereNull('agency_id') : $transactionQuery->where('agency_id', $agencyId);
+        $transaction = $transactionQuery->first();
+
+        if ($legacy === [] && $transaction === null) {
+            abort(404, 'Transaction not found for this agency.');
+        }
+
+        $voided = ! empty($legacy['voided']) || ($transaction !== null && $transaction->isVoided());
+        $status = strtolower((string) ($legacy['status'] ?? $legacy['dealStatus'] ?? $transaction?->dealStatus ?? ''));
+        if ($voided || $status === 'voided') {
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'collections.payments' => ['No payment or refund can be recorded against a voided deal.'],
+            ]);
+        }
+        if (! $isRefund && $status === 'cancelled') {
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'collections.payments' => ['New payments are frozen after a deal is cancelled; record a refund instead.'],
+            ]);
+        }
+
+        $collected = $this->netCollectedForTransaction($transactionId, $agencyId);
+        if ($isRefund) {
+            if (trim((string) ($payload['note'] ?? '')) === '') {
+                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                    'collections.payments.note' => ['A reason/reference note is required for every refund.'],
+                ]);
+            }
+            if ($amount > $collected) {
+                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                    'collections.payments.amountPKR' => ['Refund cannot exceed the deal\'s net collected balance.'],
+                ]);
             }
 
-            $amount = (int) ($row['amountPKR'] ?? $row['paymentAmountPKR'] ?? $row['amount'] ?? 0);
-            $type = strtolower((string) ($row['type'] ?? $row['paymentType'] ?? 'payment'));
+            return;
+        }
 
-            return str_contains($type, 'refund') ? -abs($amount) : abs($amount);
-        });
+        // The initial advance is already represented in the transaction row.
+        // Its first ledger row is a one-time migration of that existing money,
+        // not a second collection.
+        if ($type === 'advance' && ! $this->hasBusinessPaymentLedger($transactionId, $agencyId)) {
+            $advance = $this->legacyAdvanceForTransaction($transactionId, $agencyId);
+            if ($advance > 0 && $amount === $advance) {
+                return;
+            }
+        }
+
+        $agreement = $this->normalizeWholePkr($legacy['agreementAmountPKR'] ?? $legacy['dealAmountPKR'] ?? $transaction?->agreementAmountPKR ?? null) ?? 0;
+        if ($agreement <= 0) {
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'collections.payments' => ['A valid agreed deal amount is required before recording payments.'],
+            ]);
+        }
+
+        $remaining = max(0, $agreement - $collected);
+        if ($amount > $remaining && ! $this->perm($request, $request->user(), 'approve_transactions', $agencyId)) {
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                'collections.payments.amountPKR' => ['Payment exceeds the remaining deal balance; supervisor approval is required.'],
+            ]);
+        }
+    }
+
+    private function hasBusinessPaymentLedger(string $transactionId, ?string $agencyId): bool
+    {
+        return $this->businessPaymentRowsForTransaction($transactionId, $agencyId) !== [];
     }
 
     /** Replace (destructive) mode requires delete-level rights; financial ledgers cannot be bulk-replaced. */
