@@ -296,6 +296,35 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         ], $headers)->assertStatus(422)->assertJsonValidationErrors('commissionAmountPKR');
     }
 
+    public function test_finance_ledger_rejects_fractional_pkr_amounts(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 100.50,
+            'type' => 'advance',
+        ], $headers)->assertStatus(422)->assertJsonValidationErrors('amount');
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/schedules", [
+            'schedules' => [[
+                'installment_no' => 1,
+                'due_date' => now()->addWeek()->toDateString(),
+                'amount' => 100.50,
+            ]],
+        ], $headers)->assertStatus(422)->assertJsonValidationErrors('schedules.0.amount');
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
+            'amount' => 100.50,
+            'rate' => 1.5,
+        ], $headers)->assertStatus(422)->assertJsonValidationErrors('amount');
+
+        $this->assertSame(0, TransactionPayment::where('transaction_id', $deal['id'])->count());
+        $this->assertSame(0, PaymentSchedule::where('transaction_id', $deal['id'])->count());
+        $this->assertSame(0, Commission::where('transaction_id', $deal['id'])->count());
+    }
+
     public function test_payments_ledger_updates_collected_and_balance(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
