@@ -397,7 +397,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     {
         $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
         [$agent, $agency] = $this->agencyUser($agentPerms);
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
+        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
         $plan = SubscriptionPlan::create([
             'key' => 'one-featured-slot-' . bin2hex(random_bytes(4)),
             'name' => 'One Featured Slot',
@@ -449,7 +449,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     {
         $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
         [$agent, $agency] = $this->agencyUser($agentPerms);
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
+        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
         $plan = SubscriptionPlan::create([
             'key' => 'zero-featured-slots-' . bin2hex(random_bytes(4)),
             'name' => 'No Featured Slots',
