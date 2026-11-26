@@ -395,7 +395,11 @@ jobs:
           bash scripts/backup.sh "$backup_dir"
           vault_archive="$(find "$backup_dir" -maxdepth 1 -name 'tth_vault_*.tar.gz' -print -quit)"
           test -n "$vault_archive"
-          tar -tzf "$vault_archive" | grep -q '^private/quarantine/replica-volume-smoke.txt
+          tar -tzf "$vault_archive" | grep -q '^private/quarantine/replica-volume-smoke.txt$'
+          tar -tzf "$vault_archive" | grep -q '^public/'
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T backend rm -f /var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt
+
+      - name: Generate ephemeral demo password for disposable CI data
         run: echo "CI_DEMO_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
 
       - name: Seed disposable enterprise data and demo personas
