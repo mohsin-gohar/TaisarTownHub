@@ -16,6 +16,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Mockery;
 
 /**
  * Secure Document & Media Vault — hardening regressions.
@@ -582,7 +583,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
             ->json('document.id');
         $headers = $this->authHeaders($this->tokenFor($user));
 
-        $this->deleteJson("/api/agency/documents/{$documentId}", $headers)->assertOk();
+        $this->deleteJson("/api/agency/documents/{$documentId}", [], $headers)->assertOk();
 
         $this->postJson("/api/agency/documents/{$documentId}/restore", [], $headers)
             ->assertOk()
