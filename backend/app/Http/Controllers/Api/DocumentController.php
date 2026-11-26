@@ -316,32 +316,49 @@ class DocumentController extends Controller
         // vault disk but the row is quarantined so downloads stay blocked.
         SecureFileStore::storeUpload('documents', $relativePath, $file);
 
-        $document = Document::create([
-            'id' => $documentId,
-            'agency_id' => $agencyId,
-            'folder_id' => $request->folder_id,
-            'property_id' => $request->property_id,
-            'category' => $category,
-            'title' => $request->get('title') ?: $originalName,
-            'original_name' => $originalName,
-            'stored_name' => $storedName,
-            'disk_path' => $relativePath,
-            'storage_disk' => 'documents',
-            'mime_type' => $check['mime'] ?: 'application/octet-stream',
-            'size_bytes' => (int) $file->getSize(),
-            'checksum' => hash_file('sha256', $file->getRealPath()) ?: null,
-            'is_sensitive' => $isSensitive,
-            'version' => 1,
-            'status' => $scanClean ? 'active' : 'quarantined',
-            'scan_status' => $scanClean ? 'scanned_clean' : 'skipped',
-            'scan_threats' => $scanClean ? null : [$scan->skipReason ?? 'scan_unavailable'],
-            'scan_completed_at' => $scanClean ? now() : null,
-            'scanner' => $scanClean ? $scan->scanner : null,
-            'tags' => $request->get('tags'),
-            'uploaded_by' => $request->user()->id,
-        ]);
+        try {
+            $document = Document::create([
+                'id' => $documentId,
+                'agency_id' => $agencyId,
+                'folder_id' => $request->folder_id,
+                'property_id' => $request->property_id,
+                'category' => $category,
+                'title' => $request->get('title') ?: $originalName,
+                'original_name' => $originalName,
+                'stored_name' => $storedName,
+                'disk_path' => $relativePath,
+                'storage_disk' => 'documents',
+                'mime_type' => $check['mime'] ?: 'application/octet-stream',
+                'size_bytes' => (int) $file->getSize(),
+                'checksum' => hash_file('sha256', $file->getRealPath()) ?: null,
+                'is_sensitive' => $isSensitive,
+                'version' => 1,
+                'status' => $scanClean ? 'active' : 'quarantined',
+                'scan_status' => $scanClean ? 'scanned_clean' : 'skipped',
+                'scan_threats' => $scanClean ? null : [$scan->skipReason ?? 'scan_unavailable'],
+                'scan_completed_at' => $scanClean ? now() : null,
+                'scanner' => $scanClean ? $scan->scanner : null,
+                'tags' => $request->get('tags'),
+                'uploaded_by' => $request->user()->id,
+            ]);
+        } catch (\Throwable $exception) {
+            try {
+                $storage = Storage::disk('documents');
+                if ($storage->exists($relativePath) && !$storage->delete($relativePath)) {
+                    Log::critical('Uncommitted document upload could not be cleaned after database failure', [
+                        'document_id' => $documentId,
+                        'path_len' => strlen($relativePath),
+                    ]);
+                }
+            } catch (\Throwable $cleanupException) {
+                Log::critical('Uncommitted document upload cleanup raised an exception', [
+                    'document_id' => $documentId,
+                    'error' => $cleanupException->getMessage(),
+                ]);
+            }
 
-
+            throw $exception;
+        }
 
         $this->logAccess($document, $agencyId, $request, 'upload');
 
