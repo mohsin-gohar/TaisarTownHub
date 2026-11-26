@@ -523,7 +523,7 @@ async function runPublic(browser: Browser): Promise<{
     await gotoRoute(page, '/');
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await delay(600);
-    const email = page.getByPlaceholder('you@email.com').first();
+    const email = page.getByPlaceholder('Enter your email').first();
     if (!(await email.isVisible().catch(() => false))) {
       forms.push({ form: 'newsletter', ok: false, detail: 'email input not found', errors: takeErrors(sink) });
     } else {
@@ -600,7 +600,7 @@ async function runPublic(browser: Browser): Promise<{
     await gotoRoute(page, '/login');
     const form = page.locator('form').filter({ has: page.locator('input[placeholder="Enter password"]') }).first();
     await form.locator('input[type="email"]').fill('superadmin@taisartownhub.com');
-    await form.locator('input[type="password"]').fill('Super@Admin2026!');
+    await form.locator('input[type="password"]').fill(process.env.DEMO_STAFF_PASSWORD || 'Super@Admin2026!');
     await form.locator('button[type="submit"]').click();
     await delay(3000);
     const ok =
@@ -726,7 +726,7 @@ async function runPublic(browser: Browser): Promise<{
     const text = await page.locator('#main-content').innerText();
     const robots = await page.locator('meta[name="robots"]').getAttribute('content').catch(() => '');
     const title = await page.title();
-    const homeButton = page.getByRole('button', { name: /Back to Home/i }).first();
+    const homeButton = page.getByRole('link', { name: /Back to Home/i }).first();
     const has404 = /404|not.*found|off the map/i.test(text);
     let recovered = false;
     if (await homeButton.isVisible().catch(() => false)) {
@@ -760,10 +760,10 @@ async function runPublic(browser: Browser): Promise<{
       await menu.click();
       await delay(600);
     }
-    const drawer = mobilePage.locator('#primary-drawer');
+    const drawer = mobilePage.locator('#mobile-nav-drawer');
     const drawerVisible = await drawer.isVisible().catch(() => false);
     const drawerLinks = drawerVisible ? await drawer.locator('a').count() : 0;
-    const close = mobilePage.getByRole('button', { name: /Close navigation menu/i }).first();
+    const close = mobilePage.getByRole('button', { name: /Close menu/i }).first();
     if (await close.isVisible().catch(() => false)) {
       await close.click();
       await delay(400);
