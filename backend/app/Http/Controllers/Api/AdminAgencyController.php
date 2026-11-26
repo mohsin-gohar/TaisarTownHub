@@ -10,8 +10,8 @@ use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\SubscriptionActivationService;
 use DomainException;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /** Platform agency administration: directory, verification, moderation. */
@@ -398,11 +398,11 @@ class AdminAgencyController extends Controller
                 $invoice = SubscriptionInvoice::query()->whereKey($id)->lockForUpdate()->firstOrFail();
 
                 if ($invoice->status === 'paid') {
-                    throw new \\LogicException('This invoice is already paid — financial history cannot be modified.');
+                    throw new \LogicException('This invoice is already paid — financial history cannot be modified.');
                 }
 
                 if ($invoice->status === 'void') {
-                    throw new \\LogicException('A voided invoice cannot be paid.');
+                    throw new \LogicException('A voided invoice cannot be paid.');
                 }
 
                 $invoice->forceFill([
@@ -419,7 +419,7 @@ class AdminAgencyController extends Controller
 
                 return $invoice->fresh();
             }, 3);
-        } catch (\\LogicException $e) {
+        } catch (\LogicException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (DomainException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
