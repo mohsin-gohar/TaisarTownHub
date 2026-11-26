@@ -4,7 +4,7 @@ Date: 2026-11-26
 Branch: `fix/workspace-transaction-lifecycle-20261126`
 
 ## Code/CI verification still required
-1. Follow-up dealer commission validation fix and regression test (`2ab933c`, `668c83e`) were committed after successful CI run #641; a new CI run is required.
+1. Follow-up dealer commission validation fix and regression test (`2ab933c`, `50cf80e`, `668c83e`, `8b66034`) were committed after successful CI run #641; a new CI run is required.
 2. Authenticated browser role journeys for Super Admin, agency owner and staff require safe seeded demo accounts. Public-route tests do not substitute for role journeys.
 3. Docker image/Compose validation did not run for PR #22 because the PR targets `audit/full-repository-hardening-20261126`; Docker CI is configured for PRs to `main` or `qa/cross-browser-multireplica`. Older main Docker CI is not proof for this branch.
 
