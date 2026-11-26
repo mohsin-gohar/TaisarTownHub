@@ -44,3 +44,36 @@ test('AppContext no longer imports the unused maskCnicForStorage helper', () => 
   const source = read('./AppContext.tsx');
   assert.equal(source.includes('maskCnicForStorage'), false, 'unused import should be removed');
 });
+
+test('CMS changes are reported saved only after the backend acknowledges the CMS collection write', () => {
+  const context = read('./AppContext.tsx');
+  const api = read('../services/api.ts');
+  assert.ok(api.includes("collections: { cms: config }"));
+  assert.ok(api.includes("body?.written?.cms === 1"));
+  assert.ok(context.includes('const saved = await api.saveCmsConfig(nextConfig)'));
+  assert.ok(context.includes("showToast('success', 'Website content saved and published.')"));
+  assert.equal(context.includes('changes persist only in this session until a backend CMS endpoint is implemented'), false);
+});
+
+test('production workspace mutations are blocked when the API is unavailable', () => {
+  const source = read('./AppContext.tsx');
+  assert.ok(source.includes('if (!IS_DEMO && !backendConnected)'));
+  assert.ok(source.includes('This change was not saved'));
+});
+
+test('inquiry status and notes keep server state on failed writes', () => {
+  const source = read('./AppContext.tsx');
+  assert.ok(source.includes('const previous = inquiries.find((inquiry) => inquiry.id === id)'));
+  assert.ok(source.includes("setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, status } : inquiry)))"));
+  assert.ok(source.includes("setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, adminNotes: notes } : inquiry)))"));
+  const statusHandler = source.slice(
+    source.indexOf('const updateInquiryStatus'),
+    source.indexOf('const updateInquiryNotes')
+  );
+  const notesHandler = source.slice(
+    source.indexOf('const updateInquiryNotes'),
+    source.indexOf('const deleteInquiry')
+  );
+  assert.equal(statusHandler.includes("status: 'Pending'"), false);
+  assert.equal(notesHandler.includes("adminNotes: ''"), false);
+});
