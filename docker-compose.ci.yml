@@ -62,6 +62,12 @@ services:
       # Disposable integration stack only: seed demo personas and trust the
       # private Docker bridge so Playwright can use isolated TEST-NET IP buckets.
       APP_ENV: testing
+      # High limits only for disposable browser-audit CI; production defaults remain strict.
+      API_PUBLIC_RATE_LIMIT: "10000"
+      API_AUTH_RATE_LIMIT: "120"
+      API_WRITE_RATE_LIMIT: "1200"
+      API_FALLBACK_RATE_LIMIT: "10000"
+      API_FALLBACK_AUTH_RATE_LIMIT: "1200"
       TRUSTED_PROXIES: 172.16.0.0/12,127.0.0.1,::1
       APP_KEY: base64:FCkLXSSnmmfbGJwJic1ie3qcv8XYDzm78f9Ax91nIGM=
       APP_URL: http://localhost
