@@ -74,7 +74,7 @@ docker compose run --rm --no-deps --user root --entrypoint sh backend -c 'chown 
 # 5. Start services and verify.
 docker compose up -d frontend nginx backend worker scheduler
 docker compose exec backend php artisan migrate:status
-docker compose exec backend php artisan app:production-check --strict --json
+docker compose exec --user www-data backend php artisan app:production-check --strict --json
 ```
 
 Review `failed_jobs` before retrying anything. Do not blindly run `queue:retry all`: jobs that are not idempotent can repeat external side effects. Confirm the `APP_KEY` matches the source environment; changing it makes encrypted columns unreadable.
