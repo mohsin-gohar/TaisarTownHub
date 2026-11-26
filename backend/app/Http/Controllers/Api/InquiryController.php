@@ -82,38 +82,59 @@ class InquiryController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'preferredPropertyOrProject' => 'required|string|max:255',
-            'propertyId' => 'nullable|string|max:256',
+            'fullName' => 'required|string|min:2|max:255',
             'phone' => 'required|string|max:30',
             'email' => 'nullable|email|max:255',
             'message' => 'required|string|max:5000',
+            'propertyId' => 'nullable|string|max:256',
+            'preferredPropertyOrProject' => 'nullable|string|max:255',
+            'budgetRange' => 'nullable|string|max:100',
             'captchaToken' => 'required|string|max:120',
             'captchaAnswer' => 'required|string|max:20',
+            'companyWebsite' => 'nullable|string|max:255',
         ]);
 
+        // Quietly discard automated submissions that fill the hidden field.
+        if (!empty($data['companyWebsite'])) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Your enquiry has been sent. Our team will contact you soon.',
+            ], 201);
+        }
+
         if (!$this->captcha->verify($data['captchaToken'], $data['captchaAnswer'], $request->ip())) {
-            return response()->json(['success' => false, 'message' => 'Verification failed. Please solve the security check again.'], 422);
+            return response()->json([
+                'success' => false,
+                'code' => 'captcha_failed',
+                'message' => 'Verification failed. Please solve the security check again.',
+            ], 422);
         }
 
         $property = !empty($data['propertyId'])
             ? Property::publiclyVisible()->where('id', $data['propertyId'])->first()
             : null;
         $agencyId = $property?->agency_id;
+        $preferred = trim((string) ($data['preferredPropertyOrProject'] ?? $property?->title ?? ''));
         $id = 'inq_' . bin2hex(random_bytes(8));
+
         $record = [
             'id' => $id,
-            'preferredPropertyOrProject' => $data['preferredPropertyOrProject'],
-            'propertyId' => $property?->id,
-            'phone' => $data['phone'],
+            'fullName' => strip_tags($data['fullName']),
             'email' => $data['email'] ?? '',
-            'message' => $data['message'],
+            'phone' => $data['phone'],
+            'subject' => 'Property Consultation',
+            'message' => strip_tags($data['message']),
+            'preferredPropertyOrProject' => $preferred,
+            'budgetRange' => $data['budgetRange'] ?? '',
             'status' => 'Pending',
-            'createdAt' => now()->toIso8601String(),
+            'adminNotes' => '',
             'source' => 'public_website',
+            'propertyId' => $property?->id,
+            'createdAt' => now()->toIso8601String(),
             'ipAddress' => $request->ip(),
         ];
 
-        $result = DB::transaction(function () use ($agencyId, $id, $record, $data, $property, $request): array {
+        $result = DB::transaction(function () use ($agencyId, $id, $record, $data, $property, $request, $preferred): array {
             if ($agencyId !== null) {
                 $agency = Agency::whereKey($agencyId)->lockForUpdate()->first();
                 if (!$agency || $agency->status !== 'active') {
@@ -124,8 +145,6 @@ class InquiryController extends Controller
                     return ['blocked' => $block];
                 }
 
-                // Re-check public visibility while holding the agency lock,
-                // then commit the tenant and legacy records together.
                 $currentProperty = Property::where('agency_id', $agencyId)
                     ->lockForUpdate()
                     ->find($property?->id);
@@ -141,15 +160,17 @@ class InquiryController extends Controller
                 [
                     'agency_id' => $agencyId,
                     'property_id' => $property?->id,
-                    'fullName' => 'Website Visitor',
-                    'subject' => 'Property Consultation',
-                    'preferredPropertyOrProject' => $data['preferredPropertyOrProject'],
-                    'budgetRange' => null,
+                    'fullName' => strip_tags($data['fullName']),
                     'email' => $data['email'] ?? null,
                     'phone' => $data['phone'],
-                    'message' => $data['message'],
+                    'subject' => 'Property Consultation',
+                    'message' => strip_tags($data['message']),
+                    'preferredPropertyOrProject' => $preferred,
+                    'budgetRange' => $data['budgetRange'] ?? null,
                     'status' => 'Pending',
+                    'adminNotes' => null,
                     'source' => 'public_website',
+                    'lead_status' => 'new',
                 ]
             );
 
