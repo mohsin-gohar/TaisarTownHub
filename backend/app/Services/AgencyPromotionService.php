@@ -216,7 +216,7 @@ class AgencyPromotionService
                     ->where('id', '!=', $lockedPromotion->id)
                     ->exists();
                 if ($duplicate) {
-                    throw new \\DomainException('This agency already has a current featured placement. Edit or cancel it first.');
+                    throw new \DomainException('This agency already has a current featured placement. Edit or cancel it first.');
                 }
                 $this->assertSlotAvailable($lockedPromotion->id);
             }
