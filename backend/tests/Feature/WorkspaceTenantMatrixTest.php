@@ -270,47 +270,173 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         $this->assertSame(100000, $this->record('transactions', 'existing-deal')->payload['agreementAmountPKR']);
     }
 
-    public function test_void_permission_can_only_void_unpaid_deals_with_a_reason(): void
+    public function test_void_permission_can_only_void_unpaid_deals_without_paid_commissions(): void
     {
         [$user, $agency] = $this->agencyUser(['void_transactions']);
         BusinessRecord::put('transactions', 'unpaid-deal', [
             'id' => 'unpaid-deal',
-            'status' => 'Active',
+            'status' => 'Draft',
+            'voided' => false,
             'advancePaymentPKR' => 0,
             'agreementAmountPKR' => 100000,
             'remainingBalancePKR' => 100000,
         ], $agency->id);
         BusinessRecord::put('transactions', 'paid-deal', [
             'id' => 'paid-deal',
-            'status' => 'Active',
+            'status' => 'Draft',
+            'voided' => false,
             'advancePaymentPKR' => 5000,
             'agreementAmountPKR' => 100000,
             'remainingBalancePKR' => 95000,
         ], $agency->id);
+        BusinessRecord::put('transactions', 'paid-commission-deal', [
+            'id' => 'paid-commission-deal',
+            'status' => 'Draft',
+            'voided' => false,
+            'advancePaymentPKR' => 0,
+            'agreementAmountPKR' => 100000,
+            'remainingBalancePKR' => 100000,
+        ], $agency->id);
+        BusinessRecord::put('payments', 'collected-payment', [
+            'id' => 'collected-payment',
+            'transactionId' => 'payment-ledger-deal',
+            'amountPKR' => 5000,
+            'type' => 'payment',
+        ], $agency->id);
+        BusinessRecord::put('transactions', 'payment-ledger-deal', [
+            'id' => 'payment-ledger-deal',
+            'status' => 'Draft',
+            'voided' => false,
+            'advancePaymentPKR' => 0,
+            'agreementAmountPKR' => 100000,
+            'remainingBalancePKR' => 100000,
+        ], $agency->id);
+        BusinessRecord::put('commissions', 'unpaid-commission', [
+            'id' => 'unpaid-commission',
+            'transactionId' => 'unpaid-deal',
+            'status' => 'Accrued',
+            'paidPKR' => 0,
+        ], $agency->id);
+        BusinessRecord::put('commissions', 'paid-commission', [
+            'id' => 'paid-commission',
+            'transactionId' => 'paid-commission-deal',
+            'status' => 'Paid',
+            'paidPKR' => 5000,
+        ], $agency->id);
 
+        $headers = $this->authHeaders($this->tokenFor($user));
         $this->putJson('/api/workspace', [
             'collections' => ['transactions' => [
-                [
-                    'id' => 'unpaid-deal',
-                    'status' => 'Voided',
-                    'voidReason' => 'Duplicate booking.',
-                    'advancePaymentPKR' => 0,
-                    'agreementAmountPKR' => 100000,
-                    'remainingBalancePKR' => 100000,
-                ],
-                [
-                    'id' => 'paid-deal',
-                    'status' => 'Voided',
-                    'voidReason' => 'Duplicate booking.',
-                    'advancePaymentPKR' => 5000,
-                    'agreementAmountPKR' => 100000,
-                    'remainingBalancePKR' => 95000,
-                ],
+                ['id' => 'unpaid-deal', 'status' => 'Cancelled', 'voided' => true, 'voidReason' => 'Duplicate booking.', 'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000],
+                ['id' => 'paid-deal', 'status' => 'Cancelled', 'voided' => true, 'voidReason' => 'Duplicate booking.', 'advancePaymentPKR' => 5000, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 95000],
+                ['id' => 'paid-commission-deal', 'status' => 'Cancelled', 'voided' => true, 'voidReason' => 'Duplicate booking.', 'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000],
+                ['id' => 'payment-ledger-deal', 'status' => 'Cancelled', 'voided' => true, 'voidReason' => 'Duplicate booking.', 'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000],
             ]],
-        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+        ], $headers)->assertOk();
 
-        $this->assertSame('Voided', $this->record('transactions', 'unpaid-deal')->payload['status']);
-        $this->assertSame('Active', $this->record('transactions', 'paid-deal')->payload['status']);
+        $voided = $this->record('transactions', 'unpaid-deal')->payload;
+        $this->assertSame('Cancelled', $voided['status']);
+        $this->assertTrue($voided['voided']);
+        $this->assertNotEmpty($voided['voidedAt']);
+        $this->assertSame($user->name, $voided['voidedBy']);
+        $this->assertSame('Cancelled', $voided['commissionStatus']);
+        $this->assertSame('Cancelled', $this->record('commissions', 'unpaid-commission')->payload['status']);
+
+        $this->assertSame('Draft', $this->record('transactions', 'paid-deal')->payload['status']);
+        $this->assertSame('Draft', $this->record('transactions', 'paid-commission-deal')->payload['status']);
+        $this->assertSame('Draft', $this->record('transactions', 'payment-ledger-deal')->payload['status']);
+    }
+
+    public function test_workspace_requires_cancel_permission_and_reason_for_non_void_cancellation(): void
+    {
+        [$updater, $agency] = $this->agencyUser(['update_transactions']);
+        BusinessRecord::put('transactions', 'cancelled-deal', [
+            'id' => 'cancelled-deal',
+            'status' => 'Draft',
+            'advancePaymentPKR' => 0,
+            'agreementAmountPKR' => 100000,
+            'remainingBalancePKR' => 100000,
+        ], $agency->id);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [[
+                'id' => 'cancelled-deal', 'status' => 'Cancelled', 'notes' => 'Duplicate record.',
+                'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000,
+            ]]],
+        ], $this->authHeaders($this->tokenFor($updater)))->assertOk();
+        $this->assertSame('Draft', $this->record('transactions', 'cancelled-deal')->payload['status']);
+
+        [$canceller, $otherAgency] = $this->agencyUser(['cancel_transactions']);
+        BusinessRecord::put('transactions', 'reason-required-deal', [
+            'id' => 'reason-required-deal',
+            'status' => 'Draft',
+            'advancePaymentPKR' => 0,
+            'agreementAmountPKR' => 100000,
+            'remainingBalancePKR' => 100000,
+        ], $otherAgency->id);
+        $headers = $this->authHeaders($this->tokenFor($canceller));
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [[
+                'id' => 'reason-required-deal', 'status' => 'Cancelled',
+                'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000,
+            ]]],
+        ], $headers)->assertOk();
+        $this->assertSame('Draft', $this->record('transactions', 'reason-required-deal')->payload['status']);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [[
+                'id' => 'reason-required-deal', 'status' => 'Cancelled', 'notes' => 'Duplicate record.',
+                'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000,
+            ]]],
+        ], $headers)->assertOk();
+        $this->assertSame('Cancelled', $this->record('transactions', 'reason-required-deal')->payload['status']);
+    }
+
+    public function test_workspace_enforces_deal_status_transition_rules(): void
+    {
+        [$user, $agency] = $this->agencyUser(['update_transactions']);
+        BusinessRecord::put('transactions', 'stage-deal', [
+            'id' => 'stage-deal',
+            'status' => 'Draft',
+            'advancePaymentPKR' => 0,
+            'agreementAmountPKR' => 100000,
+            'remainingBalancePKR' => 100000,
+        ], $agency->id);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [[
+                'id' => 'stage-deal', 'status' => 'Completed',
+                'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000,
+            ]]],
+        ], $headers)->assertOk();
+        $this->assertSame('Draft', $this->record('transactions', 'stage-deal')->payload['status']);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [[
+                'id' => 'stage-deal', 'status' => 'Negotiation',
+                'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000,
+            ]]],
+        ], $headers)->assertOk();
+        $this->assertSame('Negotiation', $this->record('transactions', 'stage-deal')->payload['status']);
+
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [[
+                'id' => 'stage-deal', 'status' => 'Draft',
+                'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000,
+            ]]],
+        ], $headers)->assertOk();
+        $this->assertSame('Draft', $this->record('transactions', 'stage-deal')->payload['status']);
+
+        BusinessRecord::where('collection', 'transactions')->where('record_id', 'stage-deal')
+            ->update(['payload' => array_merge($this->record('transactions', 'stage-deal')->payload, ['status' => 'Fully Paid'])]);
+        $this->putJson('/api/workspace', [
+            'collections' => ['transactions' => [[
+                'id' => 'stage-deal', 'status' => 'Draft',
+                'advancePaymentPKR' => 0, 'agreementAmountPKR' => 100000, 'remainingBalancePKR' => 100000,
+            ]]],
+        ], $headers)->assertOk();
+        $this->assertSame('Fully Paid', $this->record('transactions', 'stage-deal')->payload['status']);
     }
 
     public function test_update_permission_cannot_soft_delete_a_row_without_delete_permission(): void
