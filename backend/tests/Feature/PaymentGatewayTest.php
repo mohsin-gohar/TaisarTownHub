@@ -159,6 +159,18 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ])->assertStatus(422);
         $this->assertSame('pending', $invoice->fresh()->status);
 
+        // Fractional PKR must not round into a successful whole-rupee payment.
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
+            'data' => [
+                'status' => 'successful',
+                'tx_ref' => 'fw-ref-100',
+                'id' => 992,
+                'amount' => 4999.50,
+                'currency' => 'PKR',
+            ],
+        ])->assertStatus(422);
+        $this->assertSame('pending', $invoice->fresh()->status);
+
         // Flutterwave's real webhook shape nests transaction fields under data.
         $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
             'event' => 'charge.completed',
