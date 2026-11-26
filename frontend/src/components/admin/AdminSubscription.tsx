@@ -22,7 +22,7 @@ const UsageMeter: React.FC<{ label: string; used: number; limit: number | null; 
   label, used, limit, remaining, suffix = '', zeroIsUnlimited = true,
 }) => {
   const unlimited = limit === null || (zeroIsUnlimited && limit <= 0);
-  const pct = unlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
+  const pct = unlimited || !limit ? 0 : Math.min(100, Math.round((used / limit) * 100));
   return (
     <div className="space-y-1.5">
       <div className="flex justify-between text-[11px] text-slate-300">
