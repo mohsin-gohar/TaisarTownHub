@@ -269,7 +269,7 @@ class MysqlConcurrencyTest extends TestCase
     {
         $year = (int) now()->year;
         $transactionId = 'txn-sequence-seed-' . Str::random(8);
-        $lastNumber = 7;
+        $lastNumber = 987654;
         $dealNumber = sprintf('TXN-%d-%04d', $year, $lastNumber);
 
         DB::table('transaction_number_sequences')->where('year', $year)->delete();
