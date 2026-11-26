@@ -127,7 +127,7 @@ public function index(Request $request)
 
 public function store(Request $request)
     {
-        $agencyId = $this->agencyId($request);
+        $agencyId = $this->requireAgency($request);
         // Creating a deal is a finance operation. The previous gate used
         // `manage_deals` / `finance.manage_deals`, which exist in no role or
         // permission catalogue, so no real agency role could ever create a
@@ -233,6 +233,31 @@ public function store(Request $request)
 
             return $deal->load(['payments', 'commissions']);
         }, 10);
+
+        $this->writeAudit($request, 'transaction.create', $deal->id, "Deal created: {$deal->dealNumber}", [
+            'agency_id' => $agencyId,
+            'entity_type' => 'transaction',
+            'entity_id' => $deal->id,
+            'metadata' => [
+                'deal_number' => $deal->dealNumber,
+                'agreement_amount_pkr' => $deal->agreementAmountPKR,
+                'advance_amount_pkr' => $deal->advancePaymentPKR,
+            ],
+        ]);
+
+        foreach ($deal->payments as $payment) {
+            $this->writeAudit($request, 'payment.created', (string) $payment->id, "Initial payment recorded for {$deal->dealNumber}", [
+                'agency_id' => $agencyId,
+                'entity_type' => 'transaction_payment',
+                'entity_id' => (string) $payment->id,
+                'metadata' => [
+                    'transaction_id' => $deal->id,
+                    'amount' => $payment->amount,
+                    'type' => $payment->type,
+                    'method' => $payment->method,
+                ],
+            ]);
+        }
 
         return response()->json([
             'success' => true,
