@@ -43,6 +43,7 @@ import {
   validateVoid,
   validateDealPayload,
   validatePayment,
+  validateRefund,
   dealMoney as dealMoneyOf,
   impliedStatusByPayment,
   nextDealNumber,
@@ -160,6 +161,8 @@ interface AppContextType {
   /** Record a payment on a deal (manage_payments gate); updates the ledger,
    *  derived payment status and the accrual milestone. */
   recordPayment: (transactionId: string, amount: number, method: PaymentEntry['method'], note?: string) => boolean;
+  /** Record a refund against previously collected funds; cancellations may be refunded, voided deals may not. */
+  recordRefund: (transactionId: string, amount: number, method: PaymentEntry['method'], note: string) => boolean;
   /** Void a deal with a mandatory reason (void_transactions gate); preserves
    *  the record with an audit trail instead of hard-deleting it. */
   voidTransaction: (id: string, reason: string) => void;
@@ -1496,6 +1499,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method,
       paidAt: today,
       recordedBy: currentUser.name,
+      type: 'payment',
       note: (note || '').trim() || undefined,
     };
     const updatedPayments = [...paymentEntries, entry];
@@ -1540,6 +1544,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `Payment of PKR ${amount.toLocaleString()} recorded${updatedTx.status !== txn.status ? ` — deal moved to "${updatedTx.status}".` : '.'}`
     );
     logAudit({ actor: currentUser.name, role: currentUser.role, action: 'record_payment', target: transactionId, detail: 'PKR ' + amount.toLocaleString() + ' via ' + method });
+    return true;
+  };
+
+  /** Record an audited refund; cancelled deals can be refunded, voided deals stay frozen. */
+  const recordRefund = (transactionId: string, amount: number, method: PaymentEntry['method'], note: string): boolean => {
+    if (!requirePermission('manage_payments')) return false;
+    const txn = transactions.find((t) => t.id === transactionId);
+    if (!txn) {
+      showToast('error', 'Transaction not found.');
+      return false;
+    }
+    if (!note.trim()) {
+      showToast('error', 'A reason/reference note is required for every refund.');
+      return false;
+    }
+
+    const gate = validateRefund(txn, paymentEntries, amount);
+    if (!gate.ok) {
+      showToast('error', gate.error);
+      return false;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const entry: PaymentEntry = {
+      id: genId('refund'),
+      transactionId,
+      amountPKR: Number(amount),
+      method,
+      paidAt: today,
+      recordedBy: currentUser.name,
+      type: 'refund',
+      note: note.trim(),
+    };
+    const updatedPayments = [...paymentEntries, entry];
+    setPaymentEntries(updatedPayments);
+
+    const money = dealMoneyOf(txn, updatedPayments);
+    const updatedTx: Transaction = {
+      ...txn,
+      status: txn.status === 'Fully Paid' && !money.isFullyPaid ? 'Under Transfer' : txn.status,
+      paymentStatus: money.isFullyPaid ? 'Fully Paid' : money.collected > 0 ? 'Partially Paid' : 'Pending',
+      remainingBalancePKR: money.balance,
+      balancePKR: money.balance,
+    };
+    setTransactions((prev) => prev.map((item) => (item.id === transactionId ? updatedTx : item)));
+
+    logAudit({
+      actor: currentUser.name,
+      role: currentUser.role,
+      action: 'record_refund',
+      target: transactionId,
+      detail: 'PKR ' + amount.toLocaleString() + ' refunded via ' + method + ' — ' + note.trim(),
+    });
+    showToast('success', `Refund of PKR ${amount.toLocaleString()} recorded.`);
     return true;
   };
 
@@ -2130,6 +2188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateTransaction,
         deleteTransaction,
         recordPayment,
+        recordRefund,
         voidTransaction,
         propertyFiles,
         addPropertyFile,
