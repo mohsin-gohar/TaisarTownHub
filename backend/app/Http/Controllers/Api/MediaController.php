@@ -270,7 +270,6 @@ class MediaController extends Controller
             'original_name' => $originalName,
             'stored_name' => $storedPath ? basename($storedPath) : null,
             'disk_path' => $storedPath,
-            'storage_disk' => $storedPath ? 'documents' : null,
             'url' => $request->url,
             'mime_type' => $mimeType,
             'size_bytes' => $size,
@@ -478,7 +477,7 @@ class MediaController extends Controller
                 }
 
                 if ($media->disk_path) {
-                    $storage = Storage::disk($media->storage_disk ?: 'documents');
+                    $storage = Storage::disk('documents');
                     if ($storage->exists($media->disk_path) && !$storage->delete($media->disk_path)) {
                         throw new \RuntimeException('Private media storage did not confirm file deletion.');
                     }
@@ -573,7 +572,7 @@ class MediaController extends Controller
             // Authorised streaming through the SecureFileStore (decrypts
             // encrypted-at-rest bytes; header-safe disposition; nosniff).
             return SecureFileStore::response(
-                $media->storage_disk ?: 'documents',
+                'documents',
                 $media->disk_path,
                 $media->original_name ?: basename($media->disk_path),
                 $media->mime_type ?: 'application/octet-stream',
