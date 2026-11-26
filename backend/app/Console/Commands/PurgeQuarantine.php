@@ -45,7 +45,7 @@ class PurgeQuarantine extends Command
 
                     return;
                 }
-            } catch (\\Throwable $e) {
+            } catch (\Throwable $e) {
                 Log::warning('Quarantine purge byte delete failed; metadata retained for retry', [
                     'id' => $row->id,
                     'error' => $e->getMessage(),
@@ -89,7 +89,7 @@ class PurgeQuarantine extends Command
                             return;
                         }
                     }
-                } catch (\\Throwable $e) {
+                } catch (\Throwable $e) {
                     Log::warning('Quarantine hold purge failed; metadata retained for retry', [
                         'id' => $document->id,
                         'error' => $e->getMessage(),
@@ -98,7 +98,7 @@ class PurgeQuarantine extends Command
                     return;
                 }
 
-                \\App\\Models\\AuditLog::create([
+                \App\Models\AuditLog::create([
                     'actor' => 'system',
                     'role' => 'system',
                     'action' => 'document.quarantine_purged',
