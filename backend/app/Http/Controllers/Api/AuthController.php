@@ -420,7 +420,15 @@ class AuthController extends Controller
      */
     public function mfaSetup(Request $request)
     {
+        $data = $request->validate(['password' => 'required|string|max:255']);
         $user = $request->user();
+
+        if (! Hash::check($data['password'], $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The current password is incorrect.',
+            ], 422);
+        }
 
         if ($user->hasMfaEnabled()) {
             return response()->json([
