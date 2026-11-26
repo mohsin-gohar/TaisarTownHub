@@ -117,7 +117,7 @@ export function validateVoid(
       const isRefund = String(entry.type ?? '').toLowerCase().includes('refund');
       return sum + (isRefund ? -Math.abs(entry.amountPKR) : Math.abs(entry.amountPKR));
     }, 0);
-  if (netLedger > 0) {
+  if (netLedger !== 0) {
     return { ok: false, error: 'Refund or reconcile all collected payments before voiding this deal.' };
   }
 
