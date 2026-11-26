@@ -112,7 +112,7 @@ class PaymentController extends Controller
         $amount = (int) $invoice->total_pkr;
 
         try {
-            $stripe = new \\Stripe\\StripeClient(config('services.stripe.secret'));
+            $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
 
             $session = $stripe->checkout->sessions->create([
                 'mode' => 'subscription',
@@ -149,7 +149,7 @@ class PaymentController extends Controller
                 'checkout_url' => $session->url,
                 'session_id' => $session->id,
             ]);
-        } catch (\\Throwable $e) {
+        } catch (\Throwable $e) {
             Log::error('Stripe checkout failed', [
                 'agency_id' => $agencyId,
                 'invoice_id' => $invoice->id,
