@@ -108,6 +108,7 @@ services:
       APP_DEBUG: "false"
       FILE_VAULT_ENCRYPTION: ${FILE_VAULT_ENCRYPTION:-true}
       APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment}
+      APP_PREVIOUS_KEYS: ${APP_PREVIOUS_KEYS:-}
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
       LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
       LOG_LEVEL: ${LOG_LEVEL:-warning}
@@ -149,6 +150,7 @@ services:
       APP_DEBUG: "false"
       FILE_VAULT_ENCRYPTION: ${FILE_VAULT_ENCRYPTION:-true}
       APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment}
+      APP_PREVIOUS_KEYS: ${APP_PREVIOUS_KEYS:-}
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
       LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
       LOG_LEVEL: ${LOG_LEVEL:-warning}
@@ -309,6 +311,7 @@ services:
       APP_DEBUG: "false"
       FILE_VAULT_ENCRYPTION: ${FILE_VAULT_ENCRYPTION:-true}
       APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment}
+      APP_PREVIOUS_KEYS: ${APP_PREVIOUS_KEYS:-}
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
       LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
       LOG_LEVEL: ${LOG_LEVEL:-warning}
@@ -382,6 +385,7 @@ services:
       APP_DEBUG: "false"
       FILE_VAULT_ENCRYPTION: ${FILE_VAULT_ENCRYPTION:-true}
       APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment}
+      APP_PREVIOUS_KEYS: ${APP_PREVIOUS_KEYS:-}
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
       LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
       LOG_LEVEL: ${LOG_LEVEL:-warning}
