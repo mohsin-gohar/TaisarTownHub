@@ -139,6 +139,19 @@ class PaymentController extends Controller
                     DB::table('agencies')->where('id', $agencyId)->lockForUpdate()->first();
                     $locked = SubscriptionInvoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
                     if ($locked->status !== 'pending') {
+                        $replacement = SubscriptionInvoice::where('agency_id', $agencyId)
+                            ->where('plan_id', $plan->id)
+                            ->where('status', 'pending')
+                            ->whereNull('stripe_session_id')
+                            ->whereNull('flutterwave_tx_ref')
+                            ->latest()
+                            ->lockForUpdate()
+                            ->first();
+
+                        if ($replacement) {
+                            return $replacement;
+                        }
+
                         throw new \RuntimeException('The expired checkout invoice is no longer pending.');
                     }
                     $locked->update(['status' => 'failed']);
