@@ -68,14 +68,34 @@ class EncryptVault extends Command
             }
 
             if (FileVaultCrypto::isEncrypted($blob)) {
-                // Verify the stored file still decrypts under the CURRENT key
-                // (surfaces APP_KEY rotations that were not re-encrypted).
                 try {
-                    FileVaultCrypto::decrypt($blob);
-                    $counts['already']++;
+                    $plain = FileVaultCrypto::decrypt($blob);
                 } catch (\Throwable $e) {
                     $counts['errors']++;
                     $this->error("DECRYPT FAILED [{$disk}] id={$row->id}: {$e->getMessage()}");
+                    continue;
+                }
+
+                if (FileVaultCrypto::isEncryptedWithCurrentKey($blob)) {
+                    $counts['already']++;
+                    continue;
+                }
+
+                // The previous APP_KEY authenticated this envelope. Re-encrypt
+                // it with the active key while the previous key remains configured.
+                if ($dry) {
+                    $counts['encrypted']++;
+                    continue;
+                }
+
+                try {
+                    if (!Storage::disk($disk)->put($path, FileVaultCrypto::encrypt($plain))) {
+                        throw new \RuntimeException('Storage adapter returned false.');
+                    }
+                    $counts['encrypted']++;
+                } catch (\Throwable $e) {
+                    $counts['errors']++;
+                    $this->error("WRITE FAILED [{$disk}] id={$row->id}: {$e->getMessage()}");
                 }
 
                 continue;
@@ -83,12 +103,13 @@ class EncryptVault extends Command
 
             if ($dry) {
                 $counts['encrypted']++;
-
                 continue;
             }
 
             try {
-                Storage::disk($disk)->put($path, FileVaultCrypto::encrypt($blob));
+                if (!Storage::disk($disk)->put($path, FileVaultCrypto::encrypt($blob))) {
+                    throw new \RuntimeException('Storage adapter returned false.');
+                }
                 $counts['encrypted']++;
             } catch (\Throwable $e) {
                 $counts['errors']++;
