@@ -880,6 +880,32 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertSame([], Storage::disk('quarantine')->allFiles());
     }
 
+    public function test_quarantine_index_hides_sensitive_rejected_uploads_without_sensitive_clearance(): void
+    {
+        [$owner, $agency] = $this->uploader();
+        $this->bindVerdict(MalwareScanResult::infected('clamav', ['Eicar-Test-Signature FOUND']));
+
+        $this->upload($owner, ['category' => 'cnic'], 'cnic-front.pdf')
+            ->assertStatus(422);
+        $this->upload($owner, ['category' => 'other'], 'general-file.pdf')
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('document_quarantines', [
+            'agency_id' => $agency->id,
+            'original_name' => 'cnic-front.pdf',
+            'is_sensitive' => true,
+        ]);
+
+        [$viewer] = $this->agencyUser(['documents.manage_permissions'], 'quarantine_viewer', $agency);
+        $payload = $this->getJson('/api/agency/documents-quarantine', $this->authHeaders($this->tokenFor($viewer)))
+            ->assertOk()
+            ->json();
+
+        $names = array_column($payload['rejected'], 'title');
+        $this->assertContains('general-file.pdf', $names);
+        $this->assertNotContains('cnic-front.pdf', $names);
+    }
+
     public function test_infected_rescan_moves_bytes_and_current_version_metadata_together(): void
     {
         [$user] = $this->uploader();
