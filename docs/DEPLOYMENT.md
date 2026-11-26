@@ -30,21 +30,29 @@ cd frontend && npm run verify                 # tsc + unit tests + build + prere
 
 ## 3. Docker (recommended)
 
+The repository-root `.env` is the Docker Compose source of truth. Do not copy `backend/.env.example` to `backend/.env` and assume Compose will read it; Compose does not load that file.
+
 ```bash
-cp backend/.env.example backend/.env          # then edit secrets — see §6
-cp frontend/.env.example frontend/.env        # VITE_API_URL=https://taisartownhub.com/api (or same-origin /api)
+cp .env.example .env
+# Replace every CHANGE_ME value before starting the stack.
+# Generate APP_KEY: openssl rand -base64 32, then prefix with "base64:"
+# Generate DB_PASSWORD, DB_ROOT_PASSWORD and REDIS_PASSWORD: openssl rand -hex 32
+docker compose config --quiet
 docker compose up -d --build
-docker compose exec api php artisan migrate --force
-docker compose exec api php artisan app:production-check --strict
+# The one-shot migrate service runs before backend/worker/scheduler start.
+docker compose ps -a
+docker compose logs migrate
+docker compose exec backend php artisan migrate:status
+docker compose exec backend php artisan app:production-check --strict --json
 ```
 
-Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `scheduler`, `mysql` (MySQL 8.4), `redis`, `clamav`, one-shot `migrate`. Volumes: `mysql_data`, `redis_data`, `clamav_data`, `private_vault`, `public_storage`. The vault volume is mounted only on the API container — the web container can never read it. `php artisan serve` is not used in production. The root `Dockerfile.prod` is deprecated; use `backend/Dockerfile.prod` / `frontend/Dockerfile.prod` with `docker-compose.yml`.
+Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `scheduler`, `mysql` (MySQL 8.4), `redis`, `clamav`, one-shot `migrate`. Volumes: `mysql_data`, `redis_data`, `clamav_data`, `private_vault`, `quarantine_storage`, `public_storage`. The private document, quarantine and public-storage volumes are shared by the backend replicas and required workers; the frontend container receives no private volume. `php artisan serve` is not used in production. The root `Dockerfile.prod` is deprecated; use `backend/Dockerfile.prod` / `frontend/Dockerfile.prod` with `docker-compose.yml`.
 
 ## 4. VPS deployment (taisartownhub.com, e.g. Hostinger Ubuntu 22.04/24.04)
 
 1. **DNS:** point `taisartownhub.com` (and `www`, plus the API host if split) A-records at the VPS IP.
 2. **TLS:** obtain real certificates (e.g. `certbot certonly --webroot`) and mount them at `nginx/ssl/fullchain.pem` + `nginx/ssl/privkey.pem`. Nothing ships with the repo; CI uses the HTTP-only `docker/nginx.ci.conf`.
-3. **Deploy:** clone the repo, prepare env files (§6), `docker compose up -d --build`, then migrate once via the one-shot `migrate` service (`RUN_MIGRATIONS=false` on all replicas/workers/scheduler).
+3. **Deploy:** clone the repo, copy root `.env.example` to `.env`, replace every placeholder, run `docker compose config --quiet`, then `docker compose up -d --build`. Compose runs the one-shot `migrate` service before application replicas; never run migrations independently on each replica.
 4. **Post-deploy checks:** `/api/health` → 200 `healthy`; homepage renders over HTTPS; login, agency workspace, a private document download and one queued job all succeed; watch logs for one business day before sign-off.
 5. **Rollback:** keep previous image tags + a verified DB/storage backup; stop traffic at the gateway, restore previous images, restore data only if a schema/data regression is confirmed, re-run the B-gates on the rollback commit.
 
@@ -57,7 +65,7 @@ The live Vercel deployment serves the SPA only, with the bundled public catalog 
 | Key | Requirement |
 |---|---|
 | `APP_ENV=production`, `APP_DEBUG=false` | **Mandatory** — debug pages must never render in production |
-| `APP_KEY` | unique per environment, generated at deploy (`php artisan key:generate`); rotating it invalidates captcha challenges + encrypted columns |
+| `APP_KEY` | unique per environment, generated once (`base64:` + 32 random bytes); keep the same key for restore and all replicas; rotating it invalidates captcha challenges + encrypted columns |
 | `DB_CONNECTION=mysql`, `DB_HOST/DB_PORT/DB_DATABASE/DB_USERNAME/DB_PASSWORD` | MySQL 8; never the CI/test key |
 | `DB_ROOT_PASSWORD` (compose) | initial bootstrap only |
 | `REDIS_HOST/PORT/PASSWORD` | cache, sessions, queues, rate limits |
@@ -65,13 +73,13 @@ The live Vercel deployment serves the SPA only, with the bundled public catalog 
 | `MAIL_MAILER/MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_FROM_ADDRESS` | real SMTP; verify delivery of verification/reset mail |
 | `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` | exact production origin(s) — never `*` |
 | `TRUSTED_PROXIES` | real load-balancer/nginx IPs (X-Forwarded-For spoofing prevention) |
-| `CLAMAV_HOST/PORT`, scan enabled | fail-closed upload scanning |
+| `MALWARE_SCAN_ENABLED=true`, `MALWARE_SCAN_FAIL_CLOSED=true`, `MALWARE_SCANNER=clamav`, `CLAMD_SOCKET=clamav:3310` | fail-closed upload scanning |
 | `STRIPE_*`, `FLUTTERWAVE_*` | live keys + webhook secrets, or explicitly disable payments |
-| `GOOGLE_OAUTH_*` | client id/secret + production redirect URI |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | passed into the backend container; configure the exact API callback URI with Google |
 | `SENTRY / LOGROCKET / GA` | optional monitoring ids |
 | Backup credentials | off-site storage; `APP_KEY` stored separately from data backups |
 
-See `backend/.env.example` for the full commented list. **Never commit real values.**
+See the repository-root `.env.example` for Docker Compose variables and `backend/.env.example` only for local non-container Laravel work. **Never commit real values.**
 
 ## 7. ClamAV (fail-closed)
 
