@@ -33,7 +33,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         ];
     }
 
-    private function platformModerator(): \\App\\Models\\User
+    private function platformModerator()
     {
         $this->seedPlatformRole('moderator');
 
