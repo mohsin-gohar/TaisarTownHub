@@ -271,6 +271,14 @@ class AgencyStaffController extends Controller
                 return ['error' => 'expired'];
             }
 
+            // The pending invitation already occupies one staff slot. Check
+            // the post-acceptance usage (active members + other live invites)
+            // so a valid invite is not blocked merely because it is at quota.
+            $staffUsageAfterAcceptance = max(0, PlanLimits::staffUsed($agency->id) - 1);
+            if ($block = PlanLimits::block($agency, 'staff', fn () => $staffUsageAfterAcceptance)) {
+                return ['blocked' => $block];
+            }
+
             if ($authenticatedUser === null) {
                 $existing = User::whereRaw('LOWER(email) = ?', [strtolower($claim->email)])
                     ->lockForUpdate()
@@ -312,6 +320,10 @@ class AgencyStaffController extends Controller
 
             return ['user' => $user->fresh(), 'membership' => $membership, 'agency' => $agency];
         }, 3);
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Staff limit reached for your subscription plan. Contact the agency owner to upgrade.', $result['blocked']);
+        }
 
         if (isset($result['error'])) {
             $message = match ($result['error']) {
