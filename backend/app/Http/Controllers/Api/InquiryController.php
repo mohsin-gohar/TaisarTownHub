@@ -89,7 +89,7 @@ class InquiryController extends Controller
             'propertyId' => 'nullable|string|max:256',
             'preferredPropertyOrProject' => 'nullable|string|max:255',
             'budgetRange' => 'nullable|string|max:100',
-            'captchaToken' => 'required|string|max:120',
+            'captchaToken' => 'required|string|max:512',
             'captchaAnswer' => 'required|string|max:20',
             'companyWebsite' => 'nullable|string|max:255',
         ]);
