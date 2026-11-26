@@ -365,6 +365,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         $created = $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
             'amount' => 25000,
             'rate' => 1.5,
+            'beneficiary_type' => 'agency',
             'notes' => 'Agency commission',
         ], $headers)->assertStatus(201)->json('commission');
 
