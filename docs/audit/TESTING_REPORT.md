@@ -21,7 +21,7 @@ Firefox and WebKit use the cross-browser smoke suite. These tests do not constit
 ## Follow-up change after run #641
 - Commit `2ab933cd8fe228c3c44b5f36ef365fc02c862b5b`: aligns dealer commission update validation with create validation, allowing Fixed/Custom PKR amounts above 100 while retaining a 100% cap.
 - Commit `668c83edf7c141d332daa908e751e5f39734dfaf`: adds regression coverage for valid fixed amount and rejected percentage above 100.
-- These commits have not yet been run by GitHub Actions. Do not mark them verified until a new run passes.
+- These follow-up commits have not yet been covered by a completed GitHub Actions run. Do not mark them verified until a new run passes.
 
 ## Environment limitations
 Docker image/Compose tests were not triggered for PR #22's audit-branch base. Real ClamAV, TLS, SMTP, DNS, payment-provider credentials, Lighthouse and production deployment were not tested. No production data or service was modified.
