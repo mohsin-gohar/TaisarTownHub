@@ -285,16 +285,9 @@ export TTH_BACKUP_DIR=/secure/backups/taisartownhub
 bash scripts/backup.sh "$TTH_BACKUP_DIR"
 ```
 
-The helper creates a consistent MySQL dump, archives `backend/storage/app/private/documents`, `private/quarantine` (when present), and `public` (when present), verifies the archive and SHA-256 manifest, then applies the daily 7 / weekly 4 / monthly 6 retention policy. The database dump and storage archive are one backup set and must be restored together. Keep `.env` and `APP_KEY` in a separate secrets vault — never in Git or beside the backup data.
+Run the helper while the production Docker Compose `backend` and `mysql` services are healthy. It reads the repository-root Compose `.env` first, dumps MySQL from the live MySQL container, and archives the actual named volumes through the backend container (the host's shadowed `backend/storage` directory is not the Docker volume). It includes the complete `private` storage root (documents + quarantine) and `public` assets, verifies the archive and SHA-256 manifest, then applies the daily 7 / weekly 4 / monthly 6 retention policy. The database dump and storage archive are one backup set and must be restored together. Keep the root `.env` and `APP_KEY` in a separate secrets vault — never in Git or beside the backup data.
 
-Restore only into the intended recovery environment:
-
-```bash
-gunzip -c /secure/backups/taisartownhub/tth_db_<STAMP>.sql.gz | mysql -u "$DB_USERNAME" -p "$DB_DATABASE"
-tar -xzf /secure/backups/taisartownhub/tth_vault_<STAMP>.tar.gz -C backend/storage/app
-php artisan migrate:status
-php artisan app:production-check --strict
-```
+Do not restore by extracting into the host's `backend/storage` directory or by passing DB passwords as `mysql -pPASSWORD` arguments. Follow the Docker-volume-aware restore procedure in `docs/BACKUP_RESTORE.md`, which restores the database inside the MySQL container and the files into the named volumes via a one-off backend container.
 
 Run the isolated restore drill with `scripts/restore-drill.ps1` at least quarterly and before major schema migrations. The drill must verify checksums, table/index/foreign-key/row counts, storage archive extraction and scratch cleanup.
 
