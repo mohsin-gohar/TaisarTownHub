@@ -62,7 +62,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->assertDatabaseHas('properties', [
             'id' => $id,
             'isFeatured' => false,
-            'featured_status' => 'none',
+            'featured_status' => null,
         ]);
     }
 
