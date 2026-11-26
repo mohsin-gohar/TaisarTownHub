@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Settings,
@@ -14,13 +14,25 @@ import {
 } from 'lucide-react';
 
 export const AdminCMS: React.FC = () => {
-  const { cmsConfig, updateCMSConfig, showToast } = useApp();
+  const { cmsConfig, updateCMSConfig } = useApp();
 
   const [formData, setFormData] = useState({ ...cmsConfig });
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    setFormData({ ...cmsConfig });
+  }, [cmsConfig]);
+
+  const handleSave = async (e: React.SyntheticEvent) => {
     e.preventDefault();
-    updateCMSConfig(formData);
+    if (saving) return;
+
+    setSaving(true);
+    try {
+      await updateCMSConfig(formData);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -37,11 +49,13 @@ export const AdminCMS: React.FC = () => {
         </div>
 
         <button
+          type="button"
           onClick={handleSave}
+          disabled={saving}
           className="px-5 py-2.5 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-[#E7C878]/20 self-start sm:self-auto"
         >
           <Save className="w-4 h-4" />
-          <span>Save Live Changes</span>
+          <span>{saving ? 'Saving…' : 'Save Live Changes'}</span>
         </button>
       </div>
 
@@ -241,10 +255,11 @@ export const AdminCMS: React.FC = () => {
         <div className="flex items-center justify-end gap-3 pt-4">
           <button
             type="submit"
+            disabled={saving}
             className="px-8 py-3 rounded-xl bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] font-bold text-sm transition-colors shadow-lg shadow-[#E7C878]/20 cursor-pointer flex items-center gap-2"
           >
             <Save className="w-4 h-4" />
-            <span>Save & Apply to Public Website</span>
+            <span>{saving ? 'Saving…' : 'Save & Apply to Public Website'}</span>
           </button>
         </div>
       </form>
