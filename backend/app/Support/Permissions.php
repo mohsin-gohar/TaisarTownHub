@@ -114,7 +114,7 @@ class Permissions
         'crm.view' => ['view_inquiries'],
         'finance.view' => ['view_transactions', 'view_commissions'],
         'finance.create_transaction' => ['create_transactions'],
-        'finance.update_transaction' => ['update_transactions', 'cancel_transactions', 'void_transactions'],
+        'finance.update_transaction' => ['update_transactions', 'cancel_transactions'],
         'finance.manage_payments' => ['manage_payments'],
         // agency.view is profile/workspace access, not permission to view reports.
         'documents.manage_permissions' => ['verify_documents'],
@@ -132,7 +132,7 @@ class Permissions
             'legacy.view_sensitive_cnic',
             'crm.view', 'crm.create_lead', 'crm.update_lead', 'crm.assign_lead', 'crm.delete_lead', 'crm.export',
             'finance.view', 'finance.create_transaction', 'finance.update_transaction',
-            'finance.manage_payments', 'finance.view_reports',
+            'finance.manage_payments', 'finance.view_reports', 'legacy.void_transactions',
             'legacy.manage_sellers', 'legacy.manage_buyers', 'legacy.submit_buyer',
             'legacy.manage_media', 'legacy.upload_media',
         ],
