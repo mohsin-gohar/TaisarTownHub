@@ -376,6 +376,17 @@ jobs:
           done
           echo "two-replica gateway health requests passed"
 
+      - name: Verify shared private quarantine volume across replicas and worker
+        run: |
+          set -euo pipefail
+          mapfile -t replicas < <(docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -q backend)
+          test "${#replicas[@]}" -eq 2
+          smoke_file=/var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt
+          docker exec "${replicas[0]}" sh -c 'mkdir -p /var/www/html/storage/app/private/quarantine && printf "shared-volume-ok" > /var/www/html/storage/app/private/quarantine/replica-volume-smoke.txt'
+          docker exec "${replicas[1]}" test -f "$smoke_file"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T worker test -f "$smoke_file"
+          docker exec "${replicas[0]}" rm -f "$smoke_file"
+
       - name: Generate ephemeral demo password for disposable CI data
         run: echo "CI_DEMO_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
 
