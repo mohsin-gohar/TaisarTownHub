@@ -706,17 +706,34 @@ class WorkspaceController extends Controller
                 continue;
             }
 
-            BusinessRecord::put($collection, $recordId, $row);
-            $changed[] = $recordId;
+            if ($scoped && $agencyId !== null) {
+                // Persist ownership in the same insert/update statement. A
+                // concurrent agency cannot win a missing-row race and then
+                // have its payload or agency_id overwritten by this writer.
+                if ($existing !== null) {
+                    if ($existing->agency_id !== $agencyId) {
+                        $blocked++;
 
-            // Stamp tenancy COLUMN for new rows and rows already owned by the
-            // writer. Shared legacy rows (NULL) stay NULL — never hijacked.
-            if ($scoped && $agencyId !== null && ($existing === null || ($owner !== null && $owner === $agencyId))) {
-                BusinessRecord::where('collection', $collection)
-                    ->where('record_id', $recordId)
-                    ->update(['agency_id' => $agencyId]);
+                        continue;
+                    }
+                    $existing->payload = $row;
+                    $existing->deleted_at = $deletedAt;
+                    $existing->save();
+                } else {
+                    $newRecord = new BusinessRecord();
+                    $newRecord->collection = $collection;
+                    $newRecord->record_id = $recordId;
+                    $newRecord->payload = $row;
+                    $newRecord->deleted_at = $deletedAt;
+                    $newRecord->agency_id = $agencyId;
+                    $newRecord->save();
+                }
+            } else {
+                // Platform-wide writes retain the current owner column.
+                BusinessRecord::put($collection, $recordId, $row);
             }
-            // platform writer: leave the existing column untouched
+
+            $changed[] = $recordId;
         }
 
         if ($blocked > 0) {
