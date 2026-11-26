@@ -672,6 +672,41 @@ class PaymentGatewayTest extends EnterpriseTestCase
         $this->assertSame(1, SubscriptionInvoice::where('agency_id', $agency->id)->count());
     }
 
+    public function test_stripe_checkout_does_not_reuse_a_pending_flutterwave_invoice(): void
+    {
+        config([
+            'app.url' => 'https://taisartownhub.com',
+            'cors.allowed_origins' => ['https://taisartownhub.com'],
+        ]);
+        [$owner, $agency] = $this->agencyUser(['agency.subscribe'], 'agency_owner');
+        $plan = $this->makePlan();
+        SubscriptionInvoice::create([
+            'id' => (string) Str::uuid(),
+            'invoice_number' => 'TTH-FLW-PENDING-' . strtoupper(substr((string) $agency->id, 0, 8)),
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'amount_pkr' => 5000,
+            'tax_pkr' => 0,
+            'total_pkr' => 5000,
+            'currency' => 'PKR',
+            'period_start' => now()->toDateString(),
+            'period_end' => now()->addMonth()->toDateString(),
+            'status' => 'pending',
+            'flutterwave_tx_ref' => 'FLW-REF-' . Str::random(8),
+            'due_at' => now()->addDays(7),
+        ]);
+
+        $this->postJson('/api/payments/subscription/checkout', [
+            'plan_id' => $plan->id,
+            'success_url' => 'https://taisartownhub.com/agency/billing/success',
+            'cancel_url' => 'https://taisartownhub.com/agency/billing/cancel',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(409)
+            ->assertJsonPath('success', false);
+
+        $this->assertSame(1, SubscriptionInvoice::where('agency_id', $agency->id)->count());
+    }
+
     public function test_stripe_checkout_webhook_rejects_currency_or_amount_mismatch(): void
     {
         $secret = 'whsec_test_secret';
