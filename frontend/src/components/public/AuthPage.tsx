@@ -434,7 +434,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
               </button>
   
               </>
-            )}          </form>
+            )}
+          </form>
         )}
 
         {/* TAB 2: REGISTER AS DEALER */}
