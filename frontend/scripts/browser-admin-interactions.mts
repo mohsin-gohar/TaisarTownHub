@@ -244,7 +244,7 @@ async function mainTabProbe(page: Page, tabLabel: string): Promise<ProbeResult[]
       results.push({ page: `admin / ${tabLabel}`, button: target.name, effect: `CLICK FAILED: ${String(error).slice(0, 160)}`, urlBefore: probeBefore.url, urlAfter: probeBefore.url, errors: takeErrors(sink2) });
       continue;
     }
-    popup = await Promise.race([popupPromise, page.waitForTimeout(180).then(() => null)]);
+    popup = await Promise.race([popupPromise, page.waitForTimeout(350).then(() => null)]);
     if (popup) await popup.close().catch(() => {});
     await page.waitForTimeout(450);
     const after = await snapshot(page);
