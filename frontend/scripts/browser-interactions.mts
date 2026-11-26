@@ -35,6 +35,7 @@ type Sink = {
   pageErrors: string[];
   failedRequests: string[];
   httpErrors: string[];
+  requests: string[];
 };
 
 type ButtonInfo = {
@@ -43,6 +44,8 @@ type ButtonInfo = {
   type: string;
   disabled: boolean;
   expanded: string | null;
+  current: string | null;
+  pressed: boolean;
   visible: boolean;
   inForm: boolean;
 };
@@ -75,13 +78,18 @@ type FormResult = {
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function attachSink(page: Page): Sink {
-  const sink: Sink = { consoleErrors: [], pageErrors: [], failedRequests: [], httpErrors: [] };
+  const sink: Sink = { consoleErrors: [], pageErrors: [], failedRequests: [], httpErrors: [], requests: [] };
   page.on('console', (msg) => {
     if (msg.type() === 'error' && !IGNORE_CONSOLE.some((r) => r.test(msg.text()))) {
       sink.consoleErrors.push(msg.text().slice(0, 300));
     }
   });
   page.on('pageerror', (err) => sink.pageErrors.push(String(err).slice(0, 300)));
+  page.on('request', (req) => {
+    if (req.resourceType() === 'fetch' || req.resourceType() === 'xhr') {
+      sink.requests.push(req.method() + ' ' + req.url().slice(0, 160));
+    }
+  });
   page.on('requestfailed', (req) => {
     sink.failedRequests.push(`${req.method()} ${req.url().slice(0, 160)} — ${req.failure()?.errorText || 'failed'}`);
   });
@@ -131,6 +139,8 @@ async function listButtons(page: Page): Promise<ButtonInfo[]> {
         type: el.getAttribute('type') || 'submit',
         disabled: (el as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true',
         expanded: el.getAttribute('aria-expanded'),
+        current: el.getAttribute('aria-current'),
+        pressed: el.getAttribute('aria-pressed') === 'true',
         visible:
           rect.width > 0 &&
           rect.height > 0 &&
@@ -276,6 +286,9 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
     // Only skip real form submits — most icon/CTA buttons inherit the HTML
     // default type="submit" without living inside a form.
     if (button.type === 'submit' && button.inForm) continue;
+    // Re-clicking the current route or already-selected filter is intentionally
+    // idempotent; it is not a dead control.
+    if (button.current === 'page' || button.pressed) continue;
     if (DESTRUCTIVE.test(button.name)) continue;
     const key = /^save .* to favorites?/i.test(button.name)
       ? 'save to favorites'
@@ -291,6 +304,7 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
     const sink = attachSink(page);
     await gotoRoute(page, route);
     const before = await snapshot(page);
+    sink.requests.length = 0;
 
     // Re-resolve after reload: prefer accessible name, fall back to index.
     let locator = page.getByRole('button', { name: target.name, exact: true }).first();
@@ -324,6 +338,7 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
     if (popup) await popup.close().catch(() => {});
     await delay(950);
     const after = await snapshot(page);
+    const requests = sink.requests.splice(0);
     const errors = takeErrors(sink);
 
     let effect = '';
@@ -336,6 +351,7 @@ async function probeButtons(page: Page, route: string, label: string): Promise<P
     else if (after.bodyOverflow !== before.bodyOverflow) effect = 'body scroll lock changed';
     else if (after.hash !== before.hash) effect = 'DOM changed';
     else if (Math.abs(after.scrollY - before.scrollY) > 20) effect = 'scrolled';
+    else if (requests.length > 0) effect = 'network activity (' + requests.length + ' request(s))';
     else effect = 'NO VISIBLE EFFECT';
 
     results.push({
