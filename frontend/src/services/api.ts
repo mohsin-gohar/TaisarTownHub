@@ -382,7 +382,7 @@ export const api = {
       return res.ok
         && body?.success === true
         && body?.written?.cms === 1
-        && !Array.isArray(body?.denied?.includes?.('cms') ? ['cms'] : []);
+        && !(Array.isArray(body?.denied) && body.denied.includes('cms'));
     } catch {
       return false;
     }
