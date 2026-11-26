@@ -158,7 +158,7 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $this->postJson('/api/agency/transactions/' . $transaction->id . '/payments', [
             'amount' => 50000,
         ], $headers)
-            ->assertStatus(422)
+            ->assertStatus(409)
             ->assertJsonPath('success', false);
     }
 
