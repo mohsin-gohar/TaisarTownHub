@@ -86,6 +86,9 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->postJson("/api/properties/{$id}/approve", [], $moderatorHeaders)->assertStatus(200);
 
         $before = Property::findOrFail($id)->expires_at->toDateTimeString();
+        // The test process reuses Laravel's auth guard between requests;
+        // switch back from the moderator token before this agency-member request.
+        $this->app['auth']->forgetGuards();
         $this->patchJson("/api/properties/{$id}", [
             'expires_at' => now()->addYears(5)->toDateTimeString(),
         ], $agentHeaders)->assertStatus(200);
