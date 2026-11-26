@@ -257,4 +257,53 @@ class DealerFilesAuthorizationTest extends EnterpriseTestCase
 
         $this->assertSame('sold', $file->fresh()->status);
     }
+
+    public function test_file_index_redacts_buyer_pii_for_users_without_sensitive_clearance(): void
+    {
+        $dealer = $this->makeDealer('Index PII Dealer');
+        [$user] = $this->dealerUser(['documents.view'], $dealer);
+        DealerFile::create([
+            'title' => 'Sold Registry File',
+            'type' => 'pdf',
+            'url' => 'https://example.test/registry.pdf',
+            'folder' => 'Documents',
+            'file_size_kb' => 100,
+            'dealer_id' => $dealer->id,
+            'uploaded_by' => $dealer->id,
+            'status' => 'sold',
+            'buyer_name' => 'Private Buyer',
+            'buyer_phone' => '03009990000',
+            'buyer_cnic' => '42101****5671',
+        ]);
+
+        $row = $this->getJson('/api/dealer-files', $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()
+            ->json('data.0');
+
+        $this->assertArrayNotHasKey('buyer_name', $row);
+        $this->assertArrayNotHasKey('buyer_phone', $row);
+        $this->assertSame('42101****5671', $row['buyer_cnic']);
+        $this->assertSame('https://example.test/registry.pdf', $row['url']);
+    }
+
+    public function test_sale_response_does_not_return_buyer_pii_without_sensitive_clearance(): void
+    {
+        $dealer = $this->makeDealer('Sale Response PII Dealer');
+        [$user] = $this->dealerUser(['documents.view', 'finance.create_transaction'], $dealer);
+        $file = $this->makeSellableFile($dealer);
+
+        $payload = $this->postJson("/api/dealer-files/{$file->id}/sell", [
+            'selling_price_kbr' => 9000,
+            'buyer_name' => 'Private Buyer',
+            'buyer_phone' => '03009990000',
+            'buyer_cnic' => '42101-1234567-1',
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertOk()
+            ->json('data');
+
+        $this->assertArrayNotHasKey('buyer_name', $payload);
+        $this->assertArrayNotHasKey('buyer_phone', $payload);
+        $this->assertSame('42101****5671', $payload['buyer_cnic']);
+    }
+
 }
