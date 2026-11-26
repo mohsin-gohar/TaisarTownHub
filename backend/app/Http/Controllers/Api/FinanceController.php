@@ -660,7 +660,7 @@ public function update(Request $request, string $id)
         $request->validate([
             'amount' => [
                 'required',
-                'numeric',
+                'integer',
                 'max:999999999999',
                 function ($attribute, $value, $fail) use ($request) {
                     if ($value < 0 && ($request->type ?? 'advance') !== 'refund') {
@@ -806,7 +806,7 @@ public function update(Request $request, string $id)
             'schedules' => 'required|array|min:1|max:120',
             'schedules.*.installment_no' => 'required|integer|min:1|max:9999|distinct',
             'schedules.*.due_date' => 'required|date',
-            'schedules.*.amount' => 'required|numeric|min:0.01|max:999999999999',
+            'schedules.*.amount' => 'required|integer|min:1|max:999999999999',
             'schedules.*.notes' => 'nullable|string|max:500',
         ]);
 
@@ -957,7 +957,7 @@ public function update(Request $request, string $id)
         $transaction = $this->findScoped($agencyId, $transactionId, $request->user());
 
         $data = $request->validate([
-            'amount' => 'required|numeric|max:999999999999',
+            'amount' => 'required|integer|min:1|max:999999999999',
             'rate' => 'nullable|numeric|min:0|max:100',
             'dealer_id' => 'nullable|string|max:64',
             'user_id' => 'nullable|integer',
