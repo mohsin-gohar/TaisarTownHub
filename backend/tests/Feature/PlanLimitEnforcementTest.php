@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AgencySubscription;
 use App\Models\Document;
 use App\Models\DocumentVersion;
+use App\Models\DocumentQuarantine;
 use App\Models\Role;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
@@ -132,7 +133,19 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
             'created_at' => now(),
         ]);
 
-        $this->assertSame(180, PlanLimits::usage($agency)['storage_bytes']);
+                DocumentQuarantine::create([
+            'id' => 'qtn_' . bin2hex(random_bytes(8)),
+            'agency_id' => $agency->id,
+            'original_name' => 'held.pdf',
+            'stored_name' => 'held.pdf',
+            'disk_path' => $agency->id . '/held.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 10,
+            'reason' => 'scan_unavailable',
+            'created_at' => now(),
+        ]);
+
+        $this->assertSame(190, PlanLimits::usage($agency)['storage_bytes']);
     }
 
     public function test_storage_quota_does_not_block_document_uploads(): void
