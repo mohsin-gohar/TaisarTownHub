@@ -295,6 +295,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
           <button
             type="button"
             onClick={() => setTab('signin')}
+            aria-pressed={tab === 'signin'}
             className={`py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               tab === 'signin'
                 ? 'bg-[#E7C878] text-[#0B1220] shadow-md shadow-[#E7C878]/20'
@@ -306,6 +307,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
           <button
             type="button"
             onClick={() => setTab('register')}
+            aria-pressed={tab === 'register'}
             className={`py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               tab === 'register'
                 ? 'bg-[#E7C878] text-[#0B1220] shadow-md shadow-[#E7C878]/20'
