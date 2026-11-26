@@ -8,6 +8,9 @@ use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Services\SubscriptionActivationService;
+use DomainException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -385,34 +388,42 @@ class AdminAgencyController extends Controller
     {
         $this->requirePermission($request, 'admin.manage_subscriptions');
 
-        $invoice = SubscriptionInvoice::findOrFail($id);
-
         $data = $request->validate([
             'payment_method' => 'required|string|max:40',
             'payment_reference' => 'nullable|string|max:120',
         ]);
 
-        if ($invoice->status === 'paid') {
-            return response()->json([
-                'success' => false,
-                'message' => 'This invoice is already paid — financial history cannot be modified.',
-            ], 422);
-        }
+        try {
+            $invoice = DB::transaction(function () use ($request, $id, $data): SubscriptionInvoice {
+                $invoice = SubscriptionInvoice::query()->whereKey($id)->lockForUpdate()->firstOrFail();
 
-        if ($invoice->status === 'void') {
-            return response()->json([
-                'success' => false,
-                'message' => 'A voided invoice cannot be paid.',
-            ], 422);
-        }
+                if ($invoice->status === 'paid') {
+                    throw new \\LogicException('This invoice is already paid — financial history cannot be modified.');
+                }
 
-        $invoice->forceFill([
-            'status' => 'paid',
-            'paid_at' => now(),
-            'payment_method' => $data['payment_method'],
-            'payment_reference' => $data['payment_reference'] ?? null,
-            'verified_by' => $request->user()->id,
-        ])->save();
+                if ($invoice->status === 'void') {
+                    throw new \\LogicException('A voided invoice cannot be paid.');
+                }
+
+                $invoice->forceFill([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'payment_method' => $data['payment_method'],
+                    'payment_reference' => $data['payment_reference'] ?? null,
+                    'verified_by' => $request->user()->id,
+                ])->save();
+
+                if ($invoice->plan_id) {
+                    app(SubscriptionActivationService::class)->activate($invoice);
+                }
+
+                return $invoice->fresh();
+            }, 3);
+        } catch (\\LogicException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (DomainException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
+        }
 
         $this->writeAudit($request, 'subscription.invoice_paid', $invoice->invoice_number,
             "Invoice {$invoice->invoice_number} marked paid (PKR {$invoice->total_pkr})", [
