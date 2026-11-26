@@ -124,7 +124,7 @@ class MfaEnforcementTest extends EnterpriseTestCase
         foreach (['super_admin', 'admin', 'manager', 'moderator', 'support', 'operator'] as $role) {
             $user = $this->makeUser($role);
             $this->asGuest();
-            $this->getJson('/api/auth/me', $this->authHeaders($this->tokenFor($user)))
+            $this->getJson('/api/agency/members', $this->authHeaders($this->tokenFor($user)))
                 ->assertForbidden()
                 ->assertJsonPath('mfa_required', true);
         }
