@@ -468,6 +468,8 @@ class WorkspaceTenantMatrixTest extends EnterpriseTestCase
         $this->assertSame('Draft', $this->record('transactions', 'cancelled-deal')->payload['status']);
 
         [$canceller, $otherAgency] = $this->agencyUser(['legacy.cancel_transactions']);
+        $this->assertTrue($canceller->hasPermission('legacy.cancel_transactions', $otherAgency->id));
+        $this->assertTrue($canceller->hasPermission('cancel_transactions', $otherAgency->id));
         BusinessRecord::put('transactions', 'reason-required-deal', [
             'id' => 'reason-required-deal',
             'status' => 'Draft',
