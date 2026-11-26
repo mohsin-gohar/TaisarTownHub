@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 /**
  * A billing invoice for one agency/plan period. PAID invoices are immutable
@@ -72,7 +73,7 @@ class SubscriptionInvoice extends Model
                 ->first();
 
             if (!$row) {
-                throw new \\RuntimeException('Invoice number sequence row could not be locked.');
+                throw new \RuntimeException('Invoice number sequence row could not be locked.');
             }
 
             $next = (int) $row->next_number + 1;
