@@ -2,52 +2,55 @@
 
 declare(strict_types=1);
 
-$backend = rtrim($argv[1] ?? '', DIRECTORY_SEPARATOR);
-$defaultsPath = $argv[2] ?? '';
-$metadataPath = $argv[3] ?? '';
+$root = rtrim($argv[1] ?? '', DIRECTORY_SEPARATOR);
+$backend = rtrim($argv[2] ?? '', DIRECTORY_SEPARATOR);
+$defaultsPath = $argv[3] ?? '';
+$metadataPath = $argv[4] ?? '';
 
-if ($backend === '' || $defaultsPath === '' || $metadataPath === '') {
-    fwrite(STDERR, "[backup] ERROR: usage: write-mysql-defaults.php BACKEND MYSQL_DEFAULTS META_FILE\n");
+if ($root === '' || $backend === '' || $defaultsPath === '' || $metadataPath === '') {
+    fwrite(STDERR, "[backup] ERROR: usage: write-mysql-defaults.php ROOT BACKEND MYSQL_DEFAULTS META_FILE\n");
     exit(2);
 }
 
-// Parse the small, single-line subset of Laravel .env needed by mysqldump.
-// This helper deliberately has no Composer/vendor dependency so it also runs
-// on Docker hosts where PHP dependencies exist only inside the application image.
+// Parse the backend .env first, then the root Compose .env so Compose values
+// override local Laravel defaults. Process environment variables still win.
 $parsed = [];
-$envPath = $backend . DIRECTORY_SEPARATOR . '.env';
-if (! is_file($envPath) || ! is_readable($envPath)) {
-    fwrite(STDERR, "[backup] FATAL: backend/.env is missing or unreadable.\n");
-    exit(2);
-}
-
-foreach (file($envPath, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
-    $line = trim($line);
-    if ($line === '' || str_starts_with($line, '#')) {
-        continue;
-    }
-    if (str_starts_with($line, 'export ')) {
-        $line = ltrim(substr($line, 7));
-    }
-    if (! preg_match('/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $line, $matches)) {
-        continue;
+$parseEnv = static function (string $path) use (&$parsed): void {
+    if (! is_file($path) || ! is_readable($path)) {
+        return;
     }
 
-    $key = $matches[1];
-    $raw = trim($matches[2]);
-    if (strlen($raw) >= 2 && $raw[0] === '"' && str_ends_with($raw, '"')) {
-        $value = stripcslashes(substr($raw, 1, -1));
-    } elseif (strlen($raw) >= 2 && $raw[0] === "'" && str_ends_with($raw, "'")) {
-        $value = substr($raw, 1, -1);
-    } else {
-        $comment = strpos($raw, ' #');
-        if ($comment !== false) {
-            $raw = substr($raw, 0, $comment);
+    foreach (file($path, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) {
+            continue;
         }
-        $value = trim($raw);
+        if (str_starts_with($line, 'export ')) {
+            $line = ltrim(substr($line, 7));
+        }
+        if (! preg_match('/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $line, $matches)) {
+            continue;
+        }
+
+        $key = $matches[1];
+        $raw = trim($matches[2]);
+        if (strlen($raw) >= 2 && $raw[0] === '"' && str_ends_with($raw, '"')) {
+            $value = stripcslashes(substr($raw, 1, -1));
+        } elseif (strlen($raw) >= 2 && $raw[0] === "'" && str_ends_with($raw, "'")) {
+            $value = substr($raw, 1, -1);
+        } else {
+            $comment = strpos($raw, ' #');
+            if ($comment !== false) {
+                $raw = substr($raw, 0, $comment);
+            }
+            $value = trim($raw);
+        }
+        $parsed[$key] = $value;
     }
-    $parsed[$key] = $value;
-}
+};
+
+$parseEnv($backend . DIRECTORY_SEPARATOR . '.env');
+$parseEnv($root . DIRECTORY_SEPARATOR . '.env');
 
 $get = static function (string $key, string $default = '') use ($parsed): string {
     $value = getenv($key);
