@@ -189,6 +189,8 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'agency_id' => $agency->id,
             'plan_id' => $plan->id,
             'status' => 'active',
+            'provider' => 'flutterwave',
+            'auto_renew' => false,
         ]);
     }
 
@@ -302,6 +304,58 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'current_period_end' => $paidPeriodEnd,
         ]);
         $this->assertSame('active', $subscription->fresh()->status);
+    }
+
+    public function test_stripe_cancel_at_period_end_disables_auto_renew_without_ending_paid_access(): void
+    {
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $subscription = AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now()->subMonth(),
+            'ends_at' => now()->addMonth(),
+            'auto_renew' => true,
+            'stripe_subscription_id' => 'sub-cancel-at-period-end',
+            'provider' => 'stripe',
+        ]);
+
+        $controller = app(\\App\\Http\\Controllers\\Api\\PaymentController::class);
+        $handler = new \\ReflectionMethod($controller, 'handleStripeSubscriptionChanged');
+        $handler->setAccessible(true);
+        $paidEnd = $subscription->fresh()->ends_at;
+
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-cancel-at-period-end',
+            'status' => 'active',
+            'cancel_at_period_end' => true,
+            'current_period_end' => $paidEnd->getTimestamp(),
+        ]);
+
+        $this->assertSame('active', $subscription->fresh()->status);
+        $this->assertFalse((bool) $subscription->fresh()->auto_renew);
+        $this->assertSame($paidEnd->getTimestamp(), $subscription->fresh()->ends_at->getTimestamp());
+
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-cancel-at-period-end',
+            'status' => 'active',
+            'cancel_at_period_end' => false,
+            'current_period_end' => $paidEnd->copy()->addMonth()->getTimestamp(),
+        ]);
+
+        $this->assertTrue((bool) $subscription->fresh()->auto_renew);
+
+        $handler->invoke($controller, (object) [
+            'id' => 'sub-cancel-at-period-end',
+            'status' => 'canceled',
+            'cancel_at_period_end' => false,
+            'current_period_end' => $paidEnd->copy()->addMonth()->getTimestamp(),
+        ]);
+
+        $this->assertSame('cancelled', $subscription->fresh()->status);
+        $this->assertFalse((bool) $subscription->fresh()->auto_renew);
+        $this->assertNotNull($subscription->fresh()->cancelled_at);
     }
 
     public function test_failed_flutterwave_invoice_can_be_paid_on_a_later_retry(): void
