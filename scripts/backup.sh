@@ -25,46 +25,91 @@ mkdir -p "$DEST" "$WORK"
 trap 'rm -f "$MYSQL_DEFAULTS"; rm -rf "$WORK"' EXIT
 echo "[backup] destination: $DEST"
 
-# Load Laravel's parsed .env values without exposing DB_PASSWORD in process
-# arguments or logs. The temporary MySQL option file is mode 0600 and removed
-# automatically on every exit path.
-php "$ROOT/scripts/write-mysql-defaults.php" "$BACKEND" "$MYSQL_DEFAULTS" "$WORK/db-meta"
-mapfile -t DB_META < "$WORK/db-meta"
-DB_DRIVER="${DB_META[0]:-}"
-DB_NAME="${DB_META[1]:-}"
-DB_HOST="${DB_META[2]:-}"
-DB_PORT="${DB_META[3]:-3306}"
-DB_USER="${DB_META[4]:-}"
+# Load Compose/Laravel DB metadata. Root .env wins for Docker Compose;
+# backend/.env is the fallback for non-container local/CI backup runs.
+php "$ROOT/scripts/write-mysql-defaults.php" "$ROOT" "$BACKEND" "$MYSQL_DEFAULTS" "$WORK/db-meta"
+DB_DRIVER="$(sed -n '1p' "$WORK/db-meta")"
+DB_NAME="$(sed -n '2p' "$WORK/db-meta")"
+DB_HOST="$(sed -n '3p' "$WORK/db-meta")"
+DB_PORT="$(sed -n '4p' "$WORK/db-meta")"
+DB_USER="$(sed -n '5p' "$WORK/db-meta")"
 if [ "$DB_DRIVER" != "mysql" ]; then
     echo "[backup] FATAL: only DB_CONNECTION=mysql is supported (found '$DB_DRIVER')" >&2
     exit 1
 fi
 
-echo "[backup] mysql/mariadb driver → dumping $DB_NAME"
-mysqldump --defaults-extra-file="$MYSQL_DEFAULTS" --single-transaction --routines --triggers "$DB_NAME" | gzip > "$WORK/db.sql.gz"
-DB_ARTEFACT="$WORK/db.sql.gz"
-TABLE_COUNT="$(zcat "$DB_ARTEFACT" | grep -c 'CREATE TABLE' || true)"
+# When the production Compose stack is running, read the named volumes from
+# the actual containers. The host-side backend/storage path is NOT the Docker
+# named-volume data and must never be mistaken for a production backup.
+COMPOSE_SERVICES="$WORK/compose-services.txt"
+USE_COMPOSE_BACKEND=false
+USE_COMPOSE_MYSQL=false
+if command -v docker >/dev/null 2>&1 \
+    && docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" ps --services --status running > "$COMPOSE_SERVICES" 2>/dev/null; then
+    if grep -qx 'backend' "$COMPOSE_SERVICES"; then USE_COMPOSE_BACKEND=true; fi
+    if grep -qx 'mysql' "$COMPOSE_SERVICES"; then USE_COMPOSE_MYSQL=true; fi
+fi
 
-# ---------------------------------------------------------------- app storage
-APP_STORAGE="$BACKEND/storage/app"
-if [ ! -d "$APP_STORAGE/private/documents" ]; then
-    echo "[backup] FATAL: private documents vault is missing at $APP_STORAGE/private/documents" >&2
+if [ "$USE_COMPOSE_MYSQL" = true ] && [ "$USE_COMPOSE_BACKEND" != true ]; then
+    echo "[backup] FATAL: Compose MySQL is running but the backend is not; refusing an incomplete storage backup." >&2
+    exit 1
+fi
+if [ "$DB_HOST" = "mysql" ] && [ "$USE_COMPOSE_MYSQL" != true ]; then
+    echo "[backup] FATAL: DB_HOST=mysql but the Compose MySQL service is not running." >&2
     exit 1
 fi
 
-# Preserve paths relative to storage/app so one archive restores private
-# documents, quarantined uploads, and public map/media assets to their
-# original locations.
-VAULT_PATHS="$WORK/vault-paths.txt"
-printf '%s\n' 'private/documents' > "$VAULT_PATHS"
-if [ -d "$APP_STORAGE/private/quarantine" ]; then
-    printf '%s\n' 'private/quarantine' >> "$VAULT_PATHS"
+# ---------------------------------------------------------------- database
+echo "[backup] dumping database $DB_NAME"
+if [ "$USE_COMPOSE_MYSQL" = true ]; then
+    # The MySQL container has the real root secret in its environment. Write
+    # it to a private temporary option file inside that container; never pass
+    # the password in docker exec arguments or process command lines.
+    docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" exec -T mysql sh -c '
+        set -u
+        : "$MYSQL_ROOT_PASSWORD"
+        defaults="$(mktemp)" || exit 1
+        escaped_password="$(printf "%s" "$MYSQL_ROOT_PASSWORD" | sed '\''s/\\/\\\\/g; s/"/\\"/g'\'')"
+        printf "[client]\nuser=root\npassword=\"%s\"\nhost=127.0.0.1\n" "$escaped_password" > "$defaults"
+        chmod 600 "$defaults" || { rm -f "$defaults"; exit 1; }
+        mysqldump --defaults-extra-file="$defaults" --single-transaction --routines --triggers "$1"
+        status=$?
+        rm -f "$defaults"
+        exit "$status"
+    ' tth-backup "$DB_NAME" | gzip > "$WORK/db.sql.gz"
+else
+    # Host/CI fallback: DB credentials come from the protected mode-0600 file.
+    mysqldump --defaults-extra-file="$MYSQL_DEFAULTS" --single-transaction --routines --triggers "$DB_NAME" | gzip > "$WORK/db.sql.gz"
 fi
-if [ -d "$APP_STORAGE/public" ]; then
-    printf '%s\n' 'public' >> "$VAULT_PATHS"
+DB_ARTEFACT="$WORK/db.sql.gz"
+TABLE_COUNT="$(zcat "$DB_ARTEFACT" | grep -c 'CREATE TABLE' || true)"
+
+# ---------------------------------------------------------------- application storage
+VAULT_PATHS="$WORK/vault-paths.txt"
+APP_STORAGE="$BACKEND/storage/app"
+if [ "$USE_COMPOSE_BACKEND" = true ]; then
+    docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" exec -T backend sh -c '
+        set -e
+        root=/var/www/html/storage/app
+        test -d "$root/private/documents"
+        printf "%s\n" private
+        if [ -d "$root/public" ]; then printf "%s\n" public; fi
+    ' > "$VAULT_PATHS"
+    docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" exec -T backend sh -c \
+        'tar -czf - -C /var/www/html/storage/app -T -' < "$VAULT_PATHS" > "$WORK/vault.tar.gz"
+    echo "[backup] application storage read from live Docker named volumes"
+else
+    if [ ! -d "$APP_STORAGE/private/documents" ]; then
+        echo "[backup] FATAL: private documents vault is missing at $APP_STORAGE/private/documents" >&2
+        exit 1
+    fi
+    # Archive the whole private root so future private disks are not silently
+    # omitted, plus the public volume used for maps and public media.
+    printf '%s\n' private > "$VAULT_PATHS"
+    if [ -d "$APP_STORAGE/public" ]; then printf '%s\n' public >> "$VAULT_PATHS"; fi
+    tar -czf "$WORK/vault.tar.gz" -C "$APP_STORAGE" -T "$VAULT_PATHS"
 fi
 
-tar -czf "$WORK/vault.tar.gz" -C "$APP_STORAGE" -T "$VAULT_PATHS"
 VAULT_ARTEFACT="$WORK/vault.tar.gz"
 VAULT_ENTRIES="$(tar -tzf "$VAULT_ARTEFACT" | wc -l)"
 if [ "$VAULT_ENTRIES" -le 0 ]; then
