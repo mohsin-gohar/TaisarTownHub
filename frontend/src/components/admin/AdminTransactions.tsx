@@ -841,6 +841,7 @@ export const AdminTransactions: React.FC = () => {
                           <input
                             type="number"
                             min={1}
+                            step={1}
                             max={money.balance}
                             value={paymentAmount}
                             onChange={(e) => setPaymentAmount(Number(e.target.value))}
@@ -1051,6 +1052,8 @@ export const AdminTransactions: React.FC = () => {
                   <label className="block text-slate-300 font-semibold mb-1">Agreed Deal Amount (PKR) *</label>
                   <input
                     type="number"
+                    min={1}
+                    step={1}
                     required
                     value={formData.dealAmountPKR}
                     onChange={(e) => setFormData({ ...formData, dealAmountPKR: Number(e.target.value) })}
@@ -1062,6 +1065,8 @@ export const AdminTransactions: React.FC = () => {
                   <label className="block text-slate-300 font-semibold mb-1">Advance / Bayana Deposit (PKR) *</label>
                   <input
                     type="number"
+                    min={0}
+                    step={1}
                     required
                     value={formData.advancePKR}
                     onChange={(e) => setFormData({ ...formData, advancePKR: Number(e.target.value) })}
