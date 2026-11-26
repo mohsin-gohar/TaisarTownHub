@@ -2049,11 +2049,13 @@ class WorkspaceController extends Controller
         if ($agencyId !== null) {
             $query->where('agency_id', $agencyId);
         }
+        $query->where(function ($builder) use ($transactionId): void {
+            $builder->where('payload->transactionId', $transactionId)
+                ->orWhere('payload->transaction_id', $transactionId)
+                ->orWhere('payload->dealId', $transactionId);
+        });
 
-        return $query->get()->filter(function (BusinessRecord $record) use ($transactionId): bool {
-            $row = $record->payload ?? [];
-            return (string) ($row['transactionId'] ?? $row['transaction_id'] ?? $row['dealId'] ?? '') === $transactionId;
-        })->values()->all();
+        return $query->get()->all();
     }
 
     private function legacyAdvanceForTransaction(string $transactionId, ?string $agencyId): int
