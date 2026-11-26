@@ -1284,7 +1284,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         t.status !== 'Cancelled' &&
         t.status !== 'Draft'
     );
-    if (hasActiveTransaction && !hasPermission(currentUser.role, 'approve_transactions')) {
+    if (hasActiveTransaction && !userHasPermission(currentUser, 'approve_transactions')) {
       showToast('error', `An active transaction already exists for property ID "${txData.propertyId}". Complete or cancel it first.`);
       return;
     }
@@ -1365,7 +1365,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('error', 'This deal is voided and read-only.');
       return;
     }
-    if (['Completed', 'Cancelled'].includes(existingTx.status) && !hasPermission(currentUser.role, 'approve_transactions')) {
+    if (['Completed', 'Cancelled'].includes(existingTx.status) && !userHasPermission(currentUser, 'approve_transactions')) {
       showToast('error', 'Completed and cancelled deals are read-only.');
       return;
     }
@@ -1381,7 +1381,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           t.status !== 'Cancelled' &&
           t.status !== 'Draft'
       );
-      if (hasActive && !hasPermission(currentUser.role, 'approve_transactions')) {
+      if (hasActive && !userHasPermission(currentUser, 'approve_transactions')) {
         showToast('error', `An active transaction already exists for property ID "${targetPropertyId}".`);
         return;
       }
@@ -1394,7 +1394,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // (supervisors holding approve_transactions may make corrective moves).
     if (updates.status && updates.status !== existingTx.status) {
       const gate = validateTransition(existingTx.status, updates.status);
-      const isPrivileged = hasPermission(currentUser.role, 'approve_transactions');
+      const isPrivileged = userHasPermission(currentUser, 'approve_transactions');
       if (!gate.ok) {
         if (!isPrivileged) {
           showToast('error', gate.error);
@@ -1479,7 +1479,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
     const gate = validatePayment(txn, paymentEntries, amount, {
-      allowOverpay: hasPermission(currentUser.role, 'approve_transactions'),
+      allowOverpay: userHasPermission(currentUser, 'approve_transactions'),
     });
     if (!gate.ok) {
       showToast('error', gate.error);
