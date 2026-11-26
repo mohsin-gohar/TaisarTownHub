@@ -163,7 +163,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
 
     public function test_only_agency_owner_can_void_seeded_agency_deals(): void
     {
-        $managerGrants = \\App\\Support\\Permissions::agencyRoleGrants('agency_manager');
+        $managerGrants = \App\Support\Permissions::agencyRoleGrants('agency_manager');
         [$manager] = $this->agencyUser($managerGrants, 'agency_manager');
         $managerDeal = $this->createDeal($manager);
 
@@ -173,7 +173,7 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             $this->authHeaders($this->tokenFor($manager))
         )->assertStatus(403);
 
-        $ownerGrants = \\App\\Support\\Permissions::agencyRoleGrants('agency_owner');
+        $ownerGrants = \App\Support\Permissions::agencyRoleGrants('agency_owner');
         [$owner] = $this->agencyUser($ownerGrants, 'agency_owner');
         $ownerDeal = $this->createDeal($owner);
 
