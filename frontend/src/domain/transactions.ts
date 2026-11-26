@@ -122,7 +122,12 @@ export function validateVoid(
   }
 
   const hasPaidCommission = commissions.some((entry) =>
-    entry.transactionId === txn.id && (entry.status === 'Paid' || (entry.paidPKR ?? 0) > 0),
+    entry.transactionId === txn.id
+      && (
+        entry.status === 'Paid'
+        || (entry.paidPKR ?? 0) > 0
+        || (entry.payouts ?? []).some((payout) => payout.amountPKR > 0),
+      ),
   );
   if (hasPaidCommission) {
     return { ok: false, error: 'A deal with a paid commission cannot be voided; use the audited commission reversal process.' };
