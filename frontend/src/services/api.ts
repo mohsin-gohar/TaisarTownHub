@@ -372,6 +372,22 @@ export const api = {
     }
   },
 
+  async saveCmsConfig(config: Record<string, unknown>): Promise<boolean> {
+    try {
+      const res = await apiFetch('/workspace', {
+        method: 'PUT',
+        body: JSON.stringify({ collections: { cms: config } }),
+      });
+      const body = await res.json().catch(() => ({}));
+      return res.ok
+        && body?.success === true
+        && body?.written?.cms === 1
+        && !(Array.isArray(body?.denied) && body.denied.includes('cms'));
+    } catch {
+      return false;
+    }
+  },
+
   async login(email: string, password: string): Promise<{ success: boolean; token?: string; user?: Record<string, unknown>; error?: string; mfa_required?: boolean; challenge?: string; expires_in?: number }> {
     try {
       const res = await apiFetch('/auth/login', {
@@ -519,7 +535,7 @@ export const api = {
   },
 
   /** Starts enrolment: returns the secret, the otpauth URI and recovery codes. */
-  async mfaSetup(password: string): Promise<{
+  async mfaSetup(): Promise<{
     success: boolean;
     secret?: string;
     otpauthUri?: string;
@@ -527,10 +543,7 @@ export const api = {
     error?: string;
   }> {
     try {
-      const res = await apiFetch('/auth/mfa/setup', {
-        method: 'POST',
-        body: JSON.stringify({ password }),
-      });
+      const res = await apiFetch('/auth/mfa/setup', { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         return { success: false, error: body?.message || 'Two-factor enrolment could not be started.' };
