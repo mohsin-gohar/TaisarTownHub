@@ -92,7 +92,6 @@ class PaymentController extends Controller
 
                 $pendingInvoices = SubscriptionInvoice::where('agency_id', $agencyId)
                     ->where('status', 'pending')
-                    ->where('created_at', '>=', now()->subHours(24))
                     ->latest()
                     ->lockForUpdate()
                     ->get();
