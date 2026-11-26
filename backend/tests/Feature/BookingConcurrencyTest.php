@@ -127,7 +127,7 @@ class BookingConcurrencyTest extends EnterpriseTestCase
 
     public function test_void_is_idempotent_and_payments_are_blocked_on_voided_deals(): void
     {
-        [$user, $agency] = $this->agencyUser(['finance.update_transaction', 'finance.manage_payments']);
+        [$user, $agency] = $this->agencyUser(['finance.update_transaction', 'finance.manage_payments', 'void_transactions']);
         $token = $this->tokenFor($user);
 
         $transaction = Transaction::create([
