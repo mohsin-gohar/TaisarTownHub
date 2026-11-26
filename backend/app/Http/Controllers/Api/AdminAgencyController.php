@@ -185,8 +185,8 @@ class AdminAgencyController extends Controller
             'key' => 'required|string|max:60|unique:subscription_plans,key',
             'name' => 'required|string|max:100',
             'description' => 'nullable|string|max:2000',
-            'price' => 'required|numeric|min:0|max:99999999',
-            'currency' => 'nullable|string|size:3',
+            'price' => 'required|integer|min:0|max:99999999',
+            'currency' => 'nullable|in:PKR',
             'interval' => 'nullable|in:month,year',
             'limits' => 'nullable|array',
             'features' => 'nullable|array',
@@ -195,10 +195,13 @@ class AdminAgencyController extends Controller
             'sort_order' => 'nullable|integer|min:0|max:9999',
         ]);
 
-        $plan = SubscriptionPlan::create($request->only([
-            'key', 'name', 'description', 'price', 'currency', 'interval',
+        $planData = $request->only([
+            'key', 'name', 'description', 'price', 'interval',
             'limits', 'features', 'is_active', 'is_default', 'sort_order',
-        ]));
+        ]);
+        // The finance schema and Stripe integration are PKR/whole-rupee based.
+        $planData['currency'] = 'PKR';
+        $plan = SubscriptionPlan::create($planData);
 
         $this->writeAudit($request, 'plan.create', $plan->key, "Plan created: {$plan->name}", [
             'entity_type' => 'subscription_plan',
@@ -218,7 +221,8 @@ class AdminAgencyController extends Controller
         $request->validate([
             'name' => 'sometimes|string|max:100',
             'description' => 'nullable|string|max:2000',
-            'price' => 'sometimes|numeric|min:0|max:99999999',
+            'price' => 'sometimes|integer|min:0|max:99999999',
+            'currency' => 'sometimes|in:PKR',
             'interval' => 'sometimes|in:month,year',
             'limits' => 'nullable|array',
             'features' => 'nullable|array',
@@ -228,7 +232,7 @@ class AdminAgencyController extends Controller
         ]);
 
         $plan->fill($request->only([
-            'name', 'description', 'price', 'interval', 'limits', 'features',
+            'name', 'description', 'price', 'currency', 'interval', 'limits', 'features',
             'is_active', 'is_default', 'sort_order',
         ]));
 
