@@ -502,44 +502,58 @@ class PaymentController extends Controller
             return;
         }
 
-        $invoice = SubscriptionInvoice::where('stripe_session_id', $session->id)->first();
-        if (!$invoice) {
-            Log::warning('Stripe checkout: invoice not found', ['session_id' => $session->id]);
-            return;
-        }
+        $outcome = DB::transaction(function () use ($session, $agencyId, $planId, $stripeSubId): string {
+            $invoice = SubscriptionInvoice::where('stripe_session_id', $session->id)
+                ->lockForUpdate()
+                ->first();
 
-        if ($invoice->status === 'paid') {
-            return; // idempotent
-        }
+            if (!$invoice) {
+                return 'invoice_missing';
+            }
 
-        // A completed Checkout Session is not proof of payment for async
-        // methods. Match the Flutterwave path: require a settled status and,
-        // when Stripe supplies it, the expected amount before activating.
-        $paymentStatus = $session->payment_status ?? null;
-        if ($paymentStatus !== null && !in_array($paymentStatus, ['paid', 'no_payment_required'], true)) {
-            Log::warning('Stripe checkout: session not settled', [
-                'session_id' => $session->id, 'payment_status' => $paymentStatus,
+            if ($invoice->status === 'paid') {
+                return 'already_paid';
+            }
+
+            if ($invoice->status !== 'pending'
+                || (string) $invoice->agency_id !== (string) $agencyId
+                || (string) $invoice->plan_id !== (string) $planId) {
+                return 'invoice_mismatch';
+            }
+
+            $paymentStatus = (string) ($session->payment_status ?? '');
+            if (!in_array($paymentStatus, ['paid', 'no_payment_required'], true)) {
+                return 'not_settled';
+            }
+
+            $sessionCurrency = strtolower((string) ($session->currency ?? ''));
+            $invoiceCurrency = strtolower((string) $invoice->currency);
+            $amountTotal = $session->amount_total ?? null;
+            $expectedAmount = (int) $invoice->total_pkr * 100;
+
+            if ($sessionCurrency === '' || $sessionCurrency !== $invoiceCurrency
+                || !is_numeric($amountTotal) || (int) $amountTotal !== $expectedAmount) {
+                return 'amount_or_currency_mismatch';
+            }
+
+            $invoice->update([
+                'status' => 'paid',
+                'stripe_payment_intent_id' => $session->payment_intent ?? null,
+                'stripe_subscription_id' => $stripeSubId,
+                'paid_at' => now(),
             ]);
-            return;
-        }
-        $amountTotal = $session->amount_total ?? null;
-        $currency = strtolower((string) ($session->currency ?? 'pkr'));
-        if ($amountTotal !== null && $currency === 'pkr'
-            && (int) $amountTotal < (int) round((float) $invoice->total_pkr * 100)) {
-            Log::warning('Stripe checkout: amount below invoice total', [
-                'session_id' => $session->id, 'amount_total' => $amountTotal,
+
+            $this->activateSubscriptionFromInvoice($invoice);
+
+            return 'activated';
+        }, 3);
+
+        if ($outcome !== 'activated' && $outcome !== 'already_paid') {
+            Log::warning('Stripe checkout completion was not applied', [
+                'session_id' => $session->id,
+                'outcome' => $outcome,
             ]);
-            return;
         }
-
-        $invoice->update([
-            'status' => 'paid',
-            'stripe_payment_intent_id' => $session->payment_intent ?? null,
-            'stripe_subscription_id' => $stripeSubId,
-            'paid_at' => now(),
-        ]);
-
-        $this->activateSubscriptionFromInvoice($invoice);
     }
 
     private function handleStripeInvoicePaid($invoice): void
