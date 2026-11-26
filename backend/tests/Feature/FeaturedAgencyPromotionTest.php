@@ -148,6 +148,47 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
         $this->assertSame(2, AgencyPromotion::where('status', 'active')->count());
     }
 
+    public function test_future_scheduled_placements_reserve_capacity_but_are_not_public_yet(): void
+    {
+        SystemSetting::set('promotions.max_slots', 1);
+        [$admin, $headers] = $this->platformAdmin();
+        $scheduledAgency = $this->makeAgency('Scheduled Agency');
+        $otherAgency = $this->makeAgency('Other Agency');
+        Carbon::setTestNow(Carbon::parse('2026-11-26 12:00:00'));
+
+        try {
+            $this->postJson('/api/admin/featured-agencies', [
+                'agency_id' => $scheduledAgency->id,
+                'duration_days' => 30,
+                'starts_at' => Carbon::now()->addDay()->toIso8601String(),
+            ], $headers)->assertStatus(201);
+
+            $service = app(AgencyPromotionService::class);
+            $stats = $service->stats();
+            $this->assertSame(0, $stats['live']);
+            $this->assertSame(1, $stats['scheduled']);
+            $this->assertSame(1, $stats['reserved']);
+            $this->assertSame(0, $stats['available_slots']);
+
+            $this->postJson('/api/admin/featured-agencies', [
+                'agency_id' => $otherAgency->id,
+                'duration_days' => 30,
+            ], $headers)->assertStatus(422);
+
+            $this->postJson('/api/admin/featured-agencies', [
+                'agency_id' => $scheduledAgency->id,
+                'duration_days' => 30,
+            ], $headers)->assertStatus(422);
+
+            $this->asGuest();
+            $this->getJson('/api/agencies/featured')
+                ->assertStatus(200)
+                ->assertJsonPath('featured', false);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_expiry_removes_homepage_advertisement_without_touching_agency_data(): void
     {
         $agency = $this->makeAgency('Expiring Agency');
