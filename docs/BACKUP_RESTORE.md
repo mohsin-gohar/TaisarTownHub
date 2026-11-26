@@ -9,14 +9,15 @@ Backup = **database** + **application storage** (private documents, quarantine a
 | Asset | Path | Why |
 |---|---|---|
 | Database | MySQL data dir (or logical dump) | All tenants, RBAC, finance, audit |
-| Document vault | `backend/storage/app/private/documents` | Agency documents, versions, shares |
-| Media assets | `backend/storage/app/public/media` (if used) | Public media served by the API |
-| Environment | `backend/.env` (stored separately, encrypted) | Keys/credentials — never in the same bucket as the data |
+| Private storage | `backend/storage/app/private` | Documents, versions, encrypted uploads, quarantine and any future private disks |
+| Public storage | `backend/storage/app/public` | Public map images and media assets |
+| Quarantine volume | `private/quarantine` inside the shared private volume | Rejected uploads retained for rescan and audit |
+| Environment | repository-root `.env` for Docker Compose (or `backend/.env` for host-only Laravel) | Keys/credentials — never in the same bucket as the data |
 | Laravel secrets | `APP_KEY` | Without it the encrypted columns (CNIC, MFA secrets) are unreadable |
 
 ## 2. Creating a backup
 
-Run the repository backup helper from the repository root. It reads Laravel's parsed `backend/.env`, writes the MySQL credentials to a mode-`0600` temporary option file (never a process argument), archives the database and application storage, verifies the artefacts, writes a SHA-256 manifest, and applies the daily/weekly/monthly retention policy.
+Run the repository backup helper from the repository root while the production Docker Compose `backend` and `mysql` services are healthy. It reads the root Compose `.env` first (falling back to `backend/.env` for host-only runs), dumps MySQL from the live MySQL container, and archives the actual named volumes through the running backend container. It never treats the host's shadowed `backend/storage` directory as the Docker volume. DB credentials are written to a mode-`0600` temporary option file; the database and storage artefacts are verified, checksummed and retained under the daily/weekly/monthly policy.
 
 ```bash
 cd /var/www/taisartownhub
@@ -24,44 +25,51 @@ export TTH_BACKUP_DIR=/secure/backups/taisartownhub
 bash scripts/backup.sh "$TTH_BACKUP_DIR"
 ```
 
-The storage archive preserves paths relative to `backend/storage/app`: `private/documents`, `private/quarantine` (when present), and `public` (when present). The vault payloads are encrypted at rest by the application; the backup destination must still be an encrypted volume or encrypted bucket because the database dump contains other sensitive operational data.
+The storage archive preserves paths relative to `backend/storage/app`: the complete `private` directory (including the shared documents and quarantine volumes) and `public` when present. The file payloads are encrypted at rest by the application; the backup destination must still be an encrypted volume or encrypted bucket because the database dump contains other sensitive operational data. Do not stop the backend or MySQL services during the backup.
 
 
 ## 3. Verification (mandatory — a backup that was never restored is not a backup)
 
 ```bash
-zcat storage/app/backups/tth_db_${STAMP}.sql.gz | head -n 5              # header readable
-zcat storage/app/backups/tth_db_${STAMP}.sql.gz | grep -c "CREATE TABLE" # table count > 0
-tar -tzf storage/app/backups/tth_vault_${STAMP}.tar.gz | head            # vault listing readable
+zcat "$TTH_BACKUP_DIR/tth_db_${STAMP}.sql.gz" | head -n 5
+zcat "$TTH_BACKUP_DIR/tth_db_${STAMP}.sql.gz" | grep -c "CREATE TABLE"
+tar -tzf "$TTH_BACKUP_DIR/tth_vault_${STAMP}.tar.gz" | head
+sha256sum -c "$TTH_BACKUP_DIR/manifest-${STAMP}.sha256"
 ```
 
 Record dump size and table count in the change log. A 0-byte dump or 0 table count means the backup failed — do **not** proceed to a migration.
 
 ## 4. Restoring
 
+Restore into an isolated recovery environment first. Keep the same `APP_KEY` that encrypted the source data. The database dump and application-storage archive must use the same timestamp.
+
 ```bash
-# 0. stop writers so nothing lands mid-restore
-sudo supervisorctl stop tth-worker
-sudo systemctl stop nginx || true
+# 0. Stop application writers (keep the database available for restore).
+docker compose stop backend worker scheduler
 
-# 1. restore the database
-gunzip -c storage/app/backups/tth_db_<STAMP>.sql.gz | \
-  mysql -u "$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE"
+# 1. Create a protected MySQL option file from the root Compose .env.
+TMP_MYSQL_CNF="$(mktemp)"
+TMP_DB_META="$(mktemp)"
+php scripts/write-mysql-defaults.php "$PWD" "$PWD/backend" "$TMP_MYSQL_CNF" "$TMP_DB_META"
+DB_NAME="$(sed -n '2p' "$TMP_DB_META")"
 
-# 2. restore the vault
-tar -xzf storage/app/backups/tth_vault_<STAMP>.tar.gz -C backend/storage/app
+# 2. Restore the database without exposing the password in process arguments.
+gunzip -c "$TTH_BACKUP_DIR/tth_db_<STAMP>.sql.gz" | mysql --defaults-extra-file="$TMP_MYSQL_CNF" "$DB_NAME"
 
-# 3. permissions
-chown -R www-data:www-data backend/storage/app/private backend/storage/app/public
-chmod -R 750 backend/storage/app/private
+# 3. Restore the complete application storage archive to storage/app.
+tar -xzf "$TTH_BACKUP_DIR/tth_vault_<STAMP>.tar.gz" -C backend/storage/app
 
-# 4. verify + restart
-php artisan migrate:status           # expect: nothing pending
-php artisan app:production-check --strict
-php artisan queue:retry all
-sudo supervisorctl start tth-worker
-sudo systemctl start nginx
+# 4. Remove temporary credentials and restore ownership/permissions.
+rm -f "$TMP_MYSQL_CNF" "$TMP_DB_META"
+docker compose run --rm --no-deps --entrypoint sh backend -c 'chown -R www-data:www-data storage/app/private storage/app/public && chmod -R 750 storage/app/private'
+
+# 5. Start services and verify.
+docker compose up -d backend worker scheduler
+docker compose exec backend php artisan migrate:status
+docker compose exec backend php artisan app:production-check --strict
 ```
+
+Review `failed_jobs` before retrying anything. Do not blindly run `queue:retry all`: jobs that are not idempotent can repeat external side effects. Confirm the `APP_KEY` matches the source environment; changing it makes encrypted columns unreadable.
 
 ### Restore drill checklist
 
