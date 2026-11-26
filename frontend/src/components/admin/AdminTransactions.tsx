@@ -868,7 +868,7 @@ export const AdminTransactions: React.FC = () => {
                         <div key={row.id} className="p-2.5 rounded-lg bg-[#07141E] border border-slate-800 text-xs flex items-start justify-between gap-3">
                           <div>
                             <div className={`font-mono font-bold ${isRefund ? 'text-rose-300' : 'text-[#E7C878]'}`}>
-                              {isRefund ? '− ' : '+ '}{formatPKRCurrency(row.amountPKR)} {isRefund ? '· Refund' : ''}
+                              {isRefund ? '− ' : '+ '}{formatPKRCurrency(Math.abs(row.amountPKR))} {isRefund ? '· Refund' : ''}
                             </div>
                             <div className="text-[10px] text-slate-400">
                               {row.paidAt} · {row.method} · by {row.recordedBy}
