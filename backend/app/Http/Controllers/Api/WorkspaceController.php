@@ -769,6 +769,11 @@ class WorkspaceController extends Controller
             $newPayload = $row;
             $oldPayload = $existing?->payload ?? null;
 
+            if ($collection === 'properties' && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
+                $newPayload = $this->preserveSensitivePropertyFields($oldPayload ?? [], $newPayload);
+                $row = $newPayload;
+            }
+
             if ($collection === 'properties'
                 && $this->sensitivePropertyFieldsChanged($oldPayload ?? [], $newPayload)
                 && !$this->canViewSensitivePropertyData($request, $user, $agencyId)) {
@@ -1156,6 +1161,20 @@ class WorkspaceController extends Controller
     {
         return $this->perm($request, $user, 'documents.view_sensitive', $agencyId)
             || $this->perm($request, $user, 'view_sensitive_cnic', $agencyId);
+    }
+
+    private function preserveSensitivePropertyFields(array $oldPayload, array $newPayload): array
+    {
+        // Workspace reads redact these values. When a normal editor saves the
+        // remaining property fields, preserve the stored confidential values
+        // rather than silently erasing them from the JSON payload.
+        foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes'] as $field) {
+            if (!array_key_exists($field, $newPayload) && array_key_exists($field, $oldPayload)) {
+                $newPayload[$field] = $oldPayload[$field];
+            }
+        }
+
+        return $newPayload;
     }
 
     private function sensitivePropertyFieldsChanged(array $oldPayload, array $newPayload): bool
