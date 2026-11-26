@@ -46,6 +46,8 @@ class SavedSearchController extends Controller
     {
         $user = $request->user();
         $data = $this->validatePayload($request);
+        $data['filters'] = $this->normaliseFilters($data['filters'] ?? []);
+        $this->assertPriceRange($data['filters']);
 
         // Lock the owner row while checking the per-user cap. This prevents
         // concurrent requests from creating more than MAX_PER_USER searches.
@@ -74,7 +76,13 @@ class SavedSearchController extends Controller
             ], 422);
         }
 
-        return response()->json(['success' => true, 'search' => $search], 201);
+        $presented = $this->present($search);
+
+        return response()->json([
+            'success' => true,
+            'saved_search' => $presented,
+            'search' => $presented,
+        ], 201);
     }
 
     public function update(Request $request, string $id)
