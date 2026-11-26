@@ -667,23 +667,40 @@ public function update(Request $request, string $id)
     public function destroy(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        $this->requireAny($request, [
-            'finance.update_transaction', 'update_transactions',
-            'manage_deals', 'finance.manage_deals',
-        ]);
+        $this->requireAny($request, ['finance.delete_transaction', 'delete_transactions', 'manage_deals']);
+        $this->findScoped($agencyId, $id, $request->user());
 
-        $transaction = $this->findScoped($agencyId, $id, $request->user());
+        $result = DB::transaction(function () use ($agencyId, $id): array {
+            $transaction = Transaction::where('id', $id)
+                ->when($agencyId !== null, fn ($query) => $query->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if (!$transaction->isVoided()) {
+            if (!$transaction->isVoided()) {
+                return ['deleted' => false, 'transaction' => $transaction];
+            }
+
+            $transaction->delete();
+
+            return ['deleted' => true, 'transaction' => $transaction];
+        }, 3);
+
+        if (!$result['deleted']) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only voided transactions can be deleted.',
+                'message' => 'Only voided transactions can be deleted. Void the deal first.',
             ], 422);
         }
 
-        $transaction->delete();
+        $transaction = $result['transaction'];
+        $this->writeAudit($request, 'transaction.delete', $transaction->id, "Voided transaction archived: {$transaction->dealNumber}", [
+            'agency_id' => $transaction->agency_id,
+            'entity_type' => 'transaction',
+            'entity_id' => $transaction->id,
+            'metadata' => ['void_reason' => $transaction->void_reason],
+        ]);
 
-        return response()->json(['success' => true, 'message' => 'Transaction deleted.']);
+        return response()->json(['success' => true, 'message' => 'Voided transaction archived.']);
     }
 
     public function storePayment(Request $request, string $transactionId)
