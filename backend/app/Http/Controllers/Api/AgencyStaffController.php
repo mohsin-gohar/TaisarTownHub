@@ -401,7 +401,6 @@ class AgencyStaffController extends Controller
             if ($request->has('role_id')) {
                 $role = $this->resolveAgencyRole($agencyId, $request->role_id);
                 $requesterIsOwner = $this->requesterIsOwner($agencyId, $request->user()->id);
-                $this->assertCanGrantPermissions($request, $agencyId, $role->permissions ?? []);
                 if (($role->id === 'role_agency_owner' || $member->role_id === 'role_agency_owner')
                     && !$requesterIsOwner) {
                     return response()->json([
@@ -409,6 +408,7 @@ class AgencyStaffController extends Controller
                         'message' => 'Only an agency owner may change owner membership.',
                     ], 403);
                 }
+                $this->assertCanGrantPermissions($request, $agencyId, $role->permissions ?? []);
                 if ($member->role_id === 'role_agency_owner' && $role->id !== 'role_agency_owner'
                     && $member->status === 'active' && $this->activeOwnerCount($agencyId) <= 1) {
                     return response()->json([
