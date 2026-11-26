@@ -447,10 +447,10 @@ class AdminAgencyController extends Controller
 
                 return $invoice->fresh();
             }, 3);
-        } catch (\LogicException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (DomainException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
+        } catch (\LogicException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
 
         $this->writeAudit($request, 'subscription.invoice_paid', $invoice->invoice_number,
