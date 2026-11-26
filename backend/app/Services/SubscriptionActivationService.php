@@ -6,8 +6,8 @@ use App\Models\Agency;
 use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
+use DomainException;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 
 /**
  * Activates the agency subscription represented by a paid invoice.
@@ -20,6 +20,10 @@ class SubscriptionActivationService
 {
     public function activate(SubscriptionInvoice $invoice): ?AgencySubscription
     {
+        if (DB::transactionLevel() === 0) {
+            return DB::transaction(fn () => $this->activate($invoice->fresh()), 3);
+        }
+
         if (!$invoice->plan_id) {
             return null;
         }
@@ -28,7 +32,7 @@ class SubscriptionActivationService
         $plan = SubscriptionPlan::query()->whereKey($invoice->plan_id)->firstOrFail();
 
         if (strtoupper((string) $invoice->currency) !== 'PKR' || strtoupper((string) $plan->currency) !== 'PKR') {
-            throw new RuntimeException('Only PKR subscription invoices can activate an agency plan.');
+            throw new DomainException('Only PKR subscription invoices can activate an agency plan.');
         }
 
         $provider = $invoice->stripe_subscription_id
