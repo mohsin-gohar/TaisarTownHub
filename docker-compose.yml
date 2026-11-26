@@ -199,6 +199,7 @@ services:
     volumes:
       # Shared private document vault: every replica must see the same files.
       - private_vault:/var/www/html/storage/app/private/documents
+      - quarantine_storage:/var/www/html/storage/app/private/quarantine
       # Shared public disk (maps, public media) so uploads survive container
       # recreation and every replica serves the same files.
       - public_storage:/var/www/html/storage/app/public
@@ -335,6 +336,7 @@ services:
       MALWARE_SCAN_LOG_SKIPPED: "true"
     volumes:
       - private_vault:/var/www/html/storage/app/private/documents
+      - quarantine_storage:/var/www/html/storage/app/private/quarantine
       - public_storage:/var/www/html/storage/app/public
     depends_on:
       mysql:
@@ -403,6 +405,7 @@ services:
       RUN_MIGRATIONS: "false"
     volumes:
       - private_vault:/var/www/html/storage/app/private/documents
+      - quarantine_storage:/var/www/html/storage/app/private/quarantine
       - public_storage:/var/www/html/storage/app/public
     depends_on:
       mysql:
@@ -434,6 +437,8 @@ volumes:
   # Shared across every backend replica and the queue worker so private
   # document downloads and generated files behave identically on any node.
   private_vault:
+  # Shared quarantine disk: rejected uploads must be visible to every replica and the purge scheduler.
+  quarantine_storage:
   # Shared public disk: map images and public media. Nginx mounts this
   # read-only and serves it at https://api.../storage/....
   public_storage:
