@@ -1,68 +1,79 @@
-# TaisarTownHub — STATUS
+# TaisarTownHub — Release Readiness
 
-**Branch:** `fix/workspace-tenant-isolation-v2` (from `main` @ `2463bfe`) · **Date:** 2026-11-24  
-**Review PR:** [#4 — Security: isolate workspace tenants and protect public catalog data](https://github.com/mohsin-gohar/TaisarTownHub/pull/4) (draft; not merged).
+**Main:** `e780f1f7cf104a04e3855fb61ec2bfd43422ad52` (PR #4 merged)  
+**QA head:** `9807dab71e894367721afd66c06fbf4a96e02801`  
+**Evidence refreshed:** 2026-11-26  
+**QA PR:** [#5 — Firefox/WebKit and multi-replica release gates](https://github.com/mohsin-gohar/TaisarTownHub/pull/5) (not merged; keep separate from main until owner review/approval).
 
-This is the single source of truth for what is verified, what is not, and what is blocked. Status vocabulary: **VERIFIED** (command + real result), **NOT VERIFIED** (exact command/requirement remains), **BLOCKED** (needs owner access, credentials, assets or business decision). No marketing language; no "100%" claims.
+A green CI pipeline is not a production launch. This document separates tested code from real production readiness and owner/environment requirements.
 
-## A. Changes on this review branch
+## 1. Merged into main
 
-| Commit | Change |
-|---|---|
-| `139bee3` | Tenant isolation for subscribers; destructive workspace replace interlocks; public catalog allowlists and visibility checks; tenant/role/privacy regression tests. |
-| `ed397fa` | Exclude soft-deleted `business_records` from workspace dumps. |
-| `fdfff96` | Regression test proving soft-deleted workspace rows are hidden. |
-| `d66f754` | Add Playwright Chromium UI regression suites to pull-request CI. |
+PR #4 — [Security: isolate workspace tenants and protect public catalog data](https://github.com/mohsin-gohar/TaisarTownHub/pull/4) — is merged.
 
-No changes have been made to `main`; no production deployment has been performed.
+- Agency subscriber data is tenant-scoped; platform-owned subscriber rows are hidden from agencies.
+- Workspace replace operations reject empty/all-invalid payloads and require explicit confirmation for platform-wide replacement.
+- Soft-deleted records are excluded from workspace dumps.
+- Public catalog responses use field allowlists and visibility rules.
+- Regression tests cover tenant isolation, role gates, replacement safety, subscription privacy and catalog privacy.
 
-## B. Verified on GitHub Actions for this branch
+## 2. Verified CI evidence on QA head
 
-| Area | Evidence | Result |
+### CI run 144
+
+[GitHub Actions run 144](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45542849480) completed successfully on QA head `9807dab`.
+
+- Backend PHP 8.3 + MySQL 8 suite: successful.
+- Frontend verify chain (lint/typecheck, tests, build/prerender and bundle guard): successful.
+- Chromium UI-only Playwright regression: successful.
+- Firefox + WebKit public-route smoke: successful.
+- OpenAPI YAML parse: successful.
+
+### Docker CI run 86
+
+[GitHub Actions run 86](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45542849505) completed successfully on QA head `9807dab`.
+
+- Backend and frontend production images built and checked.
+- Real ClamAV TCP INSTREAM probe returned the expected clean-file and threat verdicts; job log states: `PASS: real ClamAV clean-file verdict and threat detection verified.`
+- MySQL 8 backup and isolated restore drill passed, including private-vault fixture verification and scratch cleanup.
+- Full-stack integration stack became ready.
+- Two backend replicas were independently healthy; nginx gateway health requests passed after scaling.
+- API-backed Playwright role/permission suite: **13 passed**.
+- Disposable concurrency probe: **8 parallel transactions received 8 unique deal numbers**; all 8 test transactions were voided and the disposable property was deleted successfully (HTTP 200).
+
+The full-stack job log reports p50/p95/p99/max latency of 2/4/6/120 ms during its 10-second, 10-worker probe. This is a disposable CI smoke probe, not a representative capacity benchmark: it recorded 49,857 HTTP 429 responses, 2 other client errors, 0 server errors and 0 network failures. Do not interpret its reported throughput or rounded 0.00% error rate as production capacity evidence.
+
+## 3. Remaining engineering verification
+
+| Area | Current state | Closure evidence |
 |---|---|---|
-| Backend PHP suite | CI run for commit `d66f754`, PHP 8.3 + MySQL 8 | **420 passed / 0 failed (3,694 assertions)** |
-| Frontend verification | `npm run verify` in CI | **PASS** — typecheck, unit tests, build/prerender and bundle privacy guard |
-| Browser UI regression | Playwright Chromium: cross-browser smoke, responsive, maps, interactive elements, WhatsApp and public pages | **46 passed / 2 skipped / 0 failed** |
-| OpenAPI contract syntax | YAML parse job | **PASS** |
-| Backend production image | Docker CI build, compose startup, readiness and PHP healthcheck | **PASS** |
-| Frontend production image | Docker CI build and built `index.html` check | **PASS** |
-| Backup/restore | MySQL 8 backup plus isolated restore drill | **PASS** — data integrity and scratch cleanup verified |
-| Full-stack integration | Docker CI full-stack job | **PASS** — full stack started, required services became ready, enterprise catalog seeded, integration smoke tests passed, cleanup succeeded |
+| Full API/browser business journeys | A 13-test API-backed role/permission suite passed. This does not prove every role can complete every CRUD/business journey across all modules. | Seeded disposable MySQL stack; explicit guest/customer/agency owner/manager/staff/dealer/platform role journeys; create/read/update/delete and negative permission assertions for each module. |
+| Real scanner through upload endpoint | Real ClamAV clean/threat verdicts are verified at the scanner transport. HTTP upload enforcement tests use a deterministic scanner stub. | Send harmless and EICAR test files through the actual authenticated upload API with real ClamAV; prove infected rejection/quarantine and scanner-unavailable fail-closed behaviour. |
+| Multi-replica state behaviour | Both PHP replicas were healthy and nginx gateway health requests passed. | Exercise authenticated requests, queue dispatch and shared cache/session state across replicas; verify no local-disk/session affinity assumptions. |
+| Load/capacity | Only a short disposable 10-worker probe was run; most requests were rate-limited (49,857 HTTP 429). | Approved 10/50/100-user tests against representative disposable staging with rate-limit-aware phases; record p95/p99, 5xx, network failures and DB/Redis saturation. |
+| Financial precision | Deal totals are stored as BIGINT and deal endpoints reject fractional rupees. Payments, schedules and commissions use DECIMAL(14,2); models/controllers convert amounts to PHP floats in several calculations. | Define one documented PKR precision/rounding policy; use exact decimal or integer-minor-unit arithmetic consistently; add fractional, large-value, refund, overpayment, schedule, commission and reconciliation tests before a backwards-compatible migration. |
+| Lighthouse/accessibility | Not verified against a real HTTPS deployment. | Run Lighthouse and accessibility audits against the deployed origin and resolve material findings. |
+| Full source review | Repository inventory is 631 tracked paths. No line-by-line review of every source/config/test file is claimed. | Complete a risk-ranked review of auth, tenant boundaries, finance, uploads, integrations, deployment and remaining modules, with findings and regression evidence. |
 
-CI links:
-- [Latest CI run](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45424876246)
-- [Latest Docker CI run](https://github.com/mohsin-gohar/TaisarTownHub/actions/runs/45424876272)
+## 4. Owner and production-environment blockers
 
-## C. Still not verified
+1. **Production secrets:** unique `APP_KEY`, DB/Redis passwords, SMTP, payment provider keys/webhook secrets, OAuth and monitoring credentials. Supply through the deployment secret manager only; never commit them.
+2. **DNS/TLS and VPS:** domain A/AAAA records, VPS/SSH access, firewall, real TLS certificates, backup destination and rollback owner are not available through repository access.
+3. **Legacy ownership mapping:** run the read-only `platform:legacy-ownership --json` report on a protected copy of the real production database. The owner must approve ambiguous/unresolved record ownership. Only then run `platform:legacy-backfill --apply` with a verified backup and approved mapping.
+4. **Licensed Scheme 45 media:** replace sample/stock references only with assets the owner has rights to publish.
+5. **Platform-wide MFA:** owner decision required on mandatory MFA for Super Admin/platform administrators.
+6. **Production rate limits:** final thresholds require representative staging/real traffic measurements.
+7. **Mail and payments:** confirm whether Stripe/Flutterwave are required; provide live credentials/webhook configuration and verify end-to-end delivery, or explicitly disable unused integrations.
+8. **Data protection/retention:** owner approval required for privacy notice, retention periods, deletion, backups and incident response.
 
-| Area | Required verification |
-|---|---|
-| API-dependent browser workflows | Run the full Playwright suite against a seeded, running API, including login/role workflows and CRUD journeys; the new CI browser job intentionally covers UI-only suites only. |
-| ClamAV upload security | Verify clean upload, EICAR rejection/quarantine, and fail-closed behaviour when ClamAV is unavailable (expected hold/423). |
-| Multi-replica operation | Run `docker compose up -d --scale backend=2`; verify stateless auth/session behaviour and requests across both replicas. |
-| Firefox and WebKit | Install browsers and run cross-browser suites; current CI browser job uses Chromium only. |
-| Lighthouse / accessibility | Run Lighthouse against a real HTTPS deployment; resolve any material accessibility, SEO or performance findings. |
-| Load / capacity | Run 10/50/100-user load tests against a representative API; record p95 latency and error rates. |
-| Full source audit | A line-by-line audit of all repository files has not been completed. The tree contains hundreds of files; inventory and selected high-risk reviews are not equivalent to a full audit. |
+## 5. Safe release sequence
 
-## D. Blocked on owner access, assets or decisions
+1. Review PR #5 and this evidence refresh; merge only after owner approval and all required checks pass.
+2. Complete API-backed business journeys and real upload-endpoint/ClamAV integration checks on disposable staging.
+3. Resolve the financial precision policy and implement/test any required backwards-compatible correction.
+4. Owner supplies licensed media, approved legacy mapping, production secrets, domain and VPS access.
+5. Take and verify database + private-vault backups; deploy with previous image tags and rollback procedure ready.
+6. Run HTTPS, auth, tenant-isolation, upload/download, queue, scheduler, SMTP/payment webhooks, monitoring and restore checks on production.
+7. Only then mark the production launch complete.
 
-1. **Production secrets:** unique `APP_KEY`, database/Redis passwords, SMTP, Stripe/Flutterwave, Google OAuth and monitoring credentials. Supply through the deployment environment only; never commit them.
-2. **DNS + TLS:** configure the production domain and real certificates on the target VPS.
-3. **Legacy data ownership:** unresolved `business_records` rows need a human-approved ownership mapping. Back up first, dry-run `platform:legacy-backfill`, review `platform:legacy-ownership`, then apply only the approved mapping.
-4. **Global MFA policy:** decide whether platform administrators must have MFA enforced.
-5. **Production rate limits:** profile real traffic and approve final thresholds; current values are initial targets.
-6. **Real Scheme 45 media:** replace sample/stock video references with licensed, genuine media assets.
-7. **VPS access and deployment sign-off:** SSH access, production environment values, monitoring and rollback ownership are required before launch.
-
-## E. Release gates
-
-- Keep PR #4 as a draft until the full-stack integration job is green and all review findings are resolved.
-- Do not merge to `main` until the owner approves the reviewed diff and all required CI checks pass.
-- Do not deploy to production until Section D is resolved and Section C's relevant operational checks are completed.
-- Preserve a verified database/storage backup and rollback image tags before any production cutover.
-
-## F. Known cleanup items
-
-- Root `Dockerfile.prod` is deprecated; per-app Dockerfiles are authoritative.
-- Historical audit reports were removed during documentation cleanup because some claimed checks that had not actually been run. Use this file and linked CI evidence instead.
+**Safety:** QA work uses disposable CI infrastructure. No production database, storage, credentials, DNS or deployment has been modified. No owner-dependent task is silently marked complete.
