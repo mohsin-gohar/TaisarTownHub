@@ -30,7 +30,7 @@ class QuarantineRetentionTest extends EnterpriseTestCase
         $disk->shouldReceive('delete')->once()->with('rejected/q-retain-1.bin')->andReturn(false);
         Storage::shouldReceive('disk')->once()->with('quarantine')->andReturn($disk);
 
-        $this->artisan('vault:purge-quarantine', ['--days' => 30])->assertExitCode(0);
+        $this->artisan('vault:purge-quarantine', ['--days' => 30])->assertExitCode(1);
 
         $this->assertDatabaseHas('document_quarantines', ['id' => 'q-retain-1']);
     }
@@ -73,7 +73,7 @@ class QuarantineRetentionTest extends EnterpriseTestCase
         $disk->shouldReceive('delete')->once()->with('quarantine/held-v1.bin')->andReturn(false);
         Storage::shouldReceive('disk')->twice()->with('documents')->andReturn($disk);
 
-        $this->artisan('vault:purge-quarantine', ['--days' => 30])->assertExitCode(0);
+        $this->artisan('vault:purge-quarantine', ['--days' => 30])->assertExitCode(1);
 
         $this->assertNotNull(Document::withTrashed()->find($document->id));
         $this->assertDatabaseHas('document_versions', ['document_id' => $document->id, 'version' => 1]);
