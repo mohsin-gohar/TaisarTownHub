@@ -174,6 +174,28 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_received_payment_cannot_be_deleted_to_bypass_the_void_guard(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+        $paymentId = $deal['payments'][0]['id'];
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->deleteJson("/api/agency/payments/{$paymentId}", [
+            'reason' => 'Attempted payment deletion',
+        ], $headers)->assertStatus(409)
+            ->assertJsonFragment(['message' => 'Recorded payments cannot be deleted. Create a refund entry to reverse collected funds.']);
+
+        $this->assertDatabaseHas('transaction_payments', [
+            'id' => $paymentId,
+            'transaction_id' => $deal['id'],
+        ]);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/void", [
+            'reason' => 'Attempted void after payment deletion',
+        ], $headers)->assertStatus(409);
+    }
+
     public function test_payment_endpoint_rechecks_void_state_before_writing(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
