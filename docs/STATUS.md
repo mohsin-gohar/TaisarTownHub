@@ -1,11 +1,11 @@
 # TaisarTownHub — Release Readiness
 
 **Main baseline:** `e780f1f7cf104a04e3855fb61ec2bfd43422ad52`  
-**QA code snapshot validated:** `9ac3987dabeb08a663f9989e01bacb876eb20893`  
+**QA code snapshot validated:** `0166e8b6f9762471669aac27afd4cf58361a19f5`  
 **QA branch:** `qa/cross-browser-multireplica`  
 **PR #5:** open, Draft, unmerged  
 **PR #8:** merged into QA only (`9ac3987`); not merged into `main`  
-**Audit snapshot inventory:** 561 tracked files; QA is 186 commits ahead of main, 0 behind, with 54 changed files  
+**Audit snapshot inventory:** 561 tracked files; QA is 187 commits ahead of main, 0 behind, with 54 changed files  
 **Date:** 2026-11-26
 
 This document separates verified repository/CI work from production checks that require owner-controlled credentials, data, infrastructure, or decisions. Green CI does not mean a production launch has occurred.
@@ -75,7 +75,7 @@ The previous disposable run had one HTTP 500 during an 8-way finance deal-creati
 
 | Area | Current state | Required closure |
 |---|---|---|
-| Full source review | 561 tracked files inventoried; critical auth, tenant, billing, finance, upload and deployment paths reviewed and tested. A literal line-by-line review of every tracked file is **not claimed**. | Continue a risk-ranked review of lower-risk UI, utility and documentation files before calling the entire repository exhaustively audited. |
+| Full source review | 561 tracked files inventoried; critical auth, tenant, billing, finance, upload and deployment paths reviewed and tested. A literal line-by-line review of every tracked file is **not yet complete**; this audit continues in risk-ranked batches. | Continue a risk-ranked review of lower-risk UI, utility and documentation files before calling the entire repository exhaustively audited. |
 | Legacy financial data | New API writes enforce whole-PKR amounts, but payment/commission/schedule storage columns retain decimal types for compatibility. | Run a read-only audit on a protected production DB copy for fractional amounts, duplicate invoice numbers and sequence drift before any migration or data correction. |
 | Paid commission reversal | Deal void is intentionally blocked if a commission is already paid; no automatic reversal endpoint is provided. | Finance owner must approve the reversal/adjustment ledger and authorization policy before this workflow can be called complete. |
 | Storage quota policy | Current plans use `storage_mb=0` (unlimited); usage is monitored, not quota-blocked. | Confirm unlimited storage is intentional. If quotas are required, define per-plan limits and retention rules, then enforce them atomically. |
