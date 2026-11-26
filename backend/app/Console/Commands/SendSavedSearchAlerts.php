@@ -9,6 +9,7 @@ use App\Support\PropertySearchFilters;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Send email alerts for saved marketplace searches.
@@ -41,56 +42,66 @@ class SendSavedSearchAlerts extends Command
                 foreach ($searches as $search) {
                     $checked++;
 
-                    if (!$this->isDue($search, $now)) {
-                        continue;
-                    }
-
-                    $cutoff = $search->last_run_at ?? $search->created_at ?? $now->copy()->subDay();
-
-                    /** @var \Illuminate\Database\Eloquent\Collection<int, Property> $matches */
-                    $matches = PropertySearchFilters::apply(
-                        Property::query()->publiclyVisible()->where('listing_purpose', 'sale'),
-                        $search->filters ?? []
-                    )
-                        ->where(function ($q) use ($cutoff) {
-                            $q->where('created_at', '>', $cutoff)
-                                ->orWhere('published_at', '>', $cutoff);
-                        })
-                        ->orderByDesc('created_at')
-                        ->orderBy('id')
-                        ->limit(20)
-                        ->get();
-
-                    if ($matches->isEmpty()) {
-                        if (!$dryRun) {
-                            $search->forceFill(['last_run_at' => $now])->save();
-                        }
-                        continue;
-                    }
-
-                    $email = $search->user?->email;
-                    if (!$email) {
-                        // User row vanished between the FK cascade and this run.
-                        if (!$dryRun) {
-                            $search->forceFill(['last_run_at' => $now])->save();
-                        }
+                    // A distributed per-search lock prevents overlapping
+                    // scheduler replicas from emailing the same result window.
+                    $lock = Cache::lock('saved-search-alert:' . $search->id, 900);
+                    if (!$lock->get()) {
                         continue;
                     }
 
                     try {
-                        if (!$dryRun) {
-                            Mail::to($email)->send(new SavedSearchMatchesMail($search, $matches));
-                            $search->forceFill([
-                                'last_run_at' => $now,
-                                'last_notified_at' => $now,
-                            ])->save();
+                        $search = SavedSearch::with('user')->find($search->id);
+                        if (!$search || !$search->alerts_enabled || !$this->isDue($search, $now)) {
+                            continue;
                         }
-                        $sent++;
-                    } catch (\Throwable $e) {
-                        // One bad mailbox must not stop every other alert.
-                        $failed++;
-                        report($e);
-                        $this->error("Alert failed for saved search {$search->id}: {$e->getMessage()}");
+
+                        $cutoff = $search->last_run_at ?? $search->created_at ?? $now->copy()->subDay();
+
+                        /** @var \Illuminate\Database\Eloquent\Collection<int, Property> $matches */
+                        $matches = PropertySearchFilters::apply(
+                            Property::query()->publiclyVisible()->where('listing_purpose', 'sale'),
+                            $search->filters ?? []
+                        )
+                            ->where(function ($q) use ($cutoff) {
+                                $q->where('created_at', '>', $cutoff)
+                                    ->orWhere('published_at', '>', $cutoff);
+                            })
+                            ->orderByDesc('created_at')
+                            ->orderBy('id')
+                            ->limit(20)
+                            ->get();
+
+                        if ($matches->isEmpty()) {
+                            if (!$dryRun) {
+                                $search->forceFill(['last_run_at' => $now])->save();
+                            }
+                            continue;
+                        }
+
+                        $email = $search->user?->email;
+                        if (!$email) {
+                            if (!$dryRun) {
+                                $search->forceFill(['last_run_at' => $now])->save();
+                            }
+                            continue;
+                        }
+
+                        try {
+                            if (!$dryRun) {
+                                Mail::to($email)->send(new SavedSearchMatchesMail($search, $matches));
+                                $search->forceFill([
+                                    'last_run_at' => $now,
+                                    'last_notified_at' => $now,
+                                ])->save();
+                            }
+                            $sent++;
+                        } catch (\Throwable $e) {
+                            $failed++;
+                            report($e);
+                            $this->error("Alert failed for saved search {$search->id}: {$e->getMessage()}");
+                        }
+                    } finally {
+                        $lock->release();
                     }
                 }
             }, 'id');
