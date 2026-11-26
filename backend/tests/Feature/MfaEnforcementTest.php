@@ -157,6 +157,45 @@ class MfaEnforcementTest extends EnterpriseTestCase
         ])->assertStatus(422);
     }
 
+    public function test_platform_user_can_enrol_mfa_when_global_policy_requires_it(): void
+    {
+        \\Illuminate\\Support\\Facades\\DB::table('system_settings')->updateOrInsert(
+            ['key' => 'security.mfa_required_for_admins'],
+            [
+                'value' => json_encode(true),
+                'group' => 'security',
+                'description' => 'test',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        $user = $this->makeUser('super_admin');
+        $token = $this->tokenFor($user);
+        $headers = $this->authHeaders($token);
+
+        $this->getJson('/api/auth/me', $headers)
+            ->assertForbidden()
+            ->assertJsonPath('mfa_required', true);
+
+        $secret = $this->postJson('/api/auth/mfa/setup', [], $headers)
+            ->assertOk()
+            ->json('secret');
+
+        $this->getJson('/api/auth/mfa/status', $headers)
+            ->assertOk()
+            ->assertJsonPath('enabled', false);
+
+        $this->postJson('/api/auth/mfa/enable', [
+            'code' => app(MfaService::class)->currentCode($secret),
+        ], $headers)->assertOk();
+
+        $this->asGuest();
+        $this->getJson('/api/auth/me', $headers)
+            ->assertOk()
+            ->assertJsonPath('success', true);
+    }
+
     public function test_global_mfa_policy_uses_active_agency_role(): void
     {
         \Illuminate\Support\Facades\DB::table('system_settings')->updateOrInsert(
