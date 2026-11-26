@@ -208,8 +208,8 @@ class PaymentGatewayTest extends EnterpriseTestCase
             ]]],
         ]));
 
-        $controller = app(\\App\\Http\\Controllers\\Api\\PaymentController::class);
-        $failedHandler = new \\ReflectionMethod($controller, 'handleStripeInvoiceFailed');
+        $controller = app(\App\Http\Controllers\Api\PaymentController::class);
+        $failedHandler = new \ReflectionMethod($controller, 'handleStripeInvoiceFailed');
         $failedHandler->setAccessible(true);
         $failedHandler->invoke($controller, $invoice);
 
@@ -220,7 +220,7 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'status' => 'failed',
         ]);
 
-        $paidHandler = new \\ReflectionMethod($controller, 'handleStripeInvoicePaid');
+        $paidHandler = new \ReflectionMethod($controller, 'handleStripeInvoicePaid');
         $paidHandler->setAccessible(true);
         $paidHandler->invoke($controller, $invoice);
 
