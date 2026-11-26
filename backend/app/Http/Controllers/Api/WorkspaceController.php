@@ -840,6 +840,12 @@ class WorkspaceController extends Controller
                 }
             }
 
+            if ($collection === 'commissions'
+                && $this->transactionIsClosedForCommission((string) ($newPayload['transactionId'] ?? $newPayload['transaction_id'] ?? $newPayload['dealId'] ?? ''), $agencyId)) {
+                $blocked++;
+                continue;
+            }
+
             if ($existing === null && ! $this->canCreateRow($request, $user, $collection, $agencyId)) {
                 $blocked++;
 
@@ -1399,9 +1405,9 @@ class WorkspaceController extends Controller
 
                 return $this->perm($request, $user, 'void_transactions', $agencyId)
                     && $this->transactionCloseoutReason($newPayload) !== null
-                    && (int) ($oldPayload['advancePaymentPKR'] ?? $oldPayload['advancePKR'] ?? 0) === 0
-                    && ! $this->hasCollectedPaymentsForTransaction((string) ($newPayload['id'] ?? ''), $agencyId)
-                    && ! $this->hasPaidCommissionForTransaction((string) ($newPayload['id'] ?? ''), $agencyId);
+                    && max((int) ($oldPayload['advancePaymentPKR'] ?? 0), (int) ($oldPayload['advancePKR'] ?? 0)) === 0
+                    && ! $this->hasCollectedPaymentsForTransaction((string) ($newPayload['id'] ?? ''), $agencyId, $request)
+                    && ! $this->hasPaidCommissionForTransaction((string) ($newPayload['id'] ?? ''), $agencyId, $request);
             }
 
             if ($newStatus === 'cancelled' && $newStatus !== $oldStatus) {
@@ -1537,10 +1543,28 @@ class WorkspaceController extends Controller
         return $row;
     }
 
-    private function hasCollectedPaymentsForTransaction(string $transactionId, ?string $agencyId): bool
+    private function hasCollectedPaymentsForTransaction(string $transactionId, ?string $agencyId, Request $request): bool
     {
         if ($transactionId === '' || $this->netCollectedForTransaction($transactionId, $agencyId) !== 0) {
             return true;
+        }
+
+        // Workspace saves collections in a deterministic order (transactions
+        // before payments). Include incoming payment rows so a caller cannot
+        // void a deal and add its payment in the same multi-collection request.
+        foreach ((array) $request->input('collections.payments', []) as $payment) {
+            if (! is_array($payment)) {
+                continue;
+            }
+            $linkedId = (string) ($payment['transactionId'] ?? $payment['transaction_id'] ?? $payment['dealId'] ?? '');
+            if ($linkedId !== $transactionId) {
+                continue;
+            }
+            $amount = (int) ($payment['amountPKR'] ?? $payment['paymentAmountPKR'] ?? $payment['amount'] ?? 0);
+            $type = strtolower((string) ($payment['type'] ?? $payment['paymentType'] ?? 'payment'));
+            if ($amount !== 0 && ! str_contains($type, 'refund')) {
+                return true;
+            }
         }
 
         $query = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
@@ -1550,10 +1574,21 @@ class WorkspaceController extends Controller
         return $transaction !== null && abs((float) $transaction->totalPaid()) > 0.00001;
     }
 
-    private function hasPaidCommissionForTransaction(string $transactionId, ?string $agencyId): bool
+    private function hasPaidCommissionForTransaction(string $transactionId, ?string $agencyId, Request $request): bool
     {
         if ($transactionId === '') {
             return false;
+        }
+
+        foreach ((array) $request->input('collections.commissions', []) as $commission) {
+            if (! is_array($commission)) {
+                continue;
+            }
+            $linkedId = (string) ($commission['transactionId'] ?? $commission['transaction_id'] ?? $commission['dealId'] ?? '');
+            if ($linkedId === $transactionId
+                && (strtolower((string) ($commission['status'] ?? '')) === 'paid' || (int) ($commission['paidPKR'] ?? 0) > 0)) {
+                return true;
+            }
         }
 
         $query = \App\Models\Commission::where('transaction_id', $transactionId)
@@ -1574,6 +1609,30 @@ class WorkspaceController extends Controller
             return $linkedId === $transactionId
                 && (strtolower((string) ($row['status'] ?? '')) === 'paid' || (int) ($row['paidPKR'] ?? 0) > 0);
         });
+    }
+
+    private function transactionIsClosedForCommission(string $transactionId, ?string $agencyId): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+
+        $legacy = BusinessRecord::where('collection', 'transactions')
+            ->where('record_id', $transactionId)
+            ->whereNull('deleted_at');
+        $agencyId === null ? $legacy->whereNull('agency_id') : $legacy->where('agency_id', $agencyId);
+        $payload = $legacy->first()?->payload ?? [];
+        $status = strtolower((string) ($payload['status'] ?? $payload['dealStatus'] ?? ''));
+
+        if (! empty($payload['voided']) || in_array($status, ['cancelled', 'voided'], true)) {
+            return true;
+        }
+
+        $transaction = \App\Models\Transaction::whereKey($transactionId)->whereNull('deleted_at');
+        $agencyId === null ? $transaction->whereNull('agency_id') : $transaction->where('agency_id', $agencyId);
+        $model = $transaction->first();
+
+        return $model !== null && ($model->voided_at !== null || strtolower((string) $model->dealStatus) === 'cancelled');
     }
 
     private function applyTransactionCloseout(
