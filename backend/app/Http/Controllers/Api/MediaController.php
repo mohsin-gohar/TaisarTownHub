@@ -13,6 +13,7 @@ use App\Support\PlanLimits;
 use App\Support\UploadSecurity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -63,7 +64,7 @@ class MediaController extends Controller
         }
 
         $page = $query->orderByDesc('created_at')
-            ->paginate(min((int) $request->get('per_page', 24), 100));
+            ->paginate(max(1, min((int) $request->get('per_page', 24), 100)));
 
         $page->through(function (MediaFile $m) use ($request) {
             $payload = $m->toArray();
@@ -72,6 +73,23 @@ class MediaController extends Controller
                 : '/api/agency/media/' . $m->id . '/file';
             $payload['can_edit'] = $this->can($request, 'manage_media')
                 || $this->can($request, 'upload_media');
+
+            // A property viewer can browse media metadata, but must not see
+            // buyer PII or sale/accounting values from the media inventory.
+            $canViewSensitive = $this->can($request, 'documents.view_sensitive')
+                || $this->can($request, 'manage_media')
+                || $this->can($request, 'admin.view_reports');
+            $canViewFinance = $this->can($request, 'finance.view')
+                || $this->can($request, 'manage_media')
+                || $this->can($request, 'admin.view_reports');
+
+            if (!$canViewSensitive) {
+                unset($payload['buyer_name'], $payload['buyer_phone'], $payload['buyer_national_id_masked']);
+            }
+            if (!$canViewFinance) {
+                unset($payload['sold_price_pk'], $payload['cost_price_pk'], $payload['profit_pk'], $payload['sold_by']);
+            }
+
             return $payload;
         });
 
@@ -123,6 +141,13 @@ class MediaController extends Controller
             'tags' => 'nullable|array|max:20',
             'tags.*' => 'string|max:40',
         ]);
+
+        if ($request->hasFile('file') === $request->filled('url')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provide exactly one source: either a file upload or an external URL.',
+            ], 422);
+        }
 
         if (!$request->hasFile('file') && !$request->filled('url')) {
             return response()->json([
@@ -223,7 +248,19 @@ class MediaController extends Controller
             $originalName = Str::slug($request->title);
         }
 
-        $media = MediaFile::create([
+        if ($visibility === 'public' && $type === 'document') {
+            if ($storedPath) {
+                Storage::disk('documents')->delete($storedPath);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Sensitive document media must remain private. Use brochure or floor-plan type for public PDFs.',
+            ], 422);
+        }
+
+        try {
+            $media = MediaFile::create([
             'id' => $mediaId,
             'agency_id' => $agencyId,
             'property_id' => $request->property_id,
@@ -245,6 +282,26 @@ class MediaController extends Controller
             'scan_completed_at' => $scannedAt,
             'uploaded_by' => $request->user()->id,
         ]);
+        } catch (\Throwable $exception) {
+            if ($storedPath !== null) {
+                try {
+                    $storage = Storage::disk('documents');
+                    if ($storage->exists($storedPath) && !$storage->delete($storedPath)) {
+                        Log::critical('Uncommitted media upload could not be cleaned after database failure', [
+                            'agency_id' => $agencyId,
+                            'path_len' => strlen($storedPath),
+                        ]);
+                    }
+                } catch (\Throwable $cleanupException) {
+                    Log::critical('Uncommitted media upload cleanup raised an exception', [
+                        'agency_id' => $agencyId,
+                        'error' => $cleanupException->getMessage(),
+                    ]);
+                }
+            }
+
+            throw $exception;
+        }
 
         $this->writeAudit($request, 'media.upload', $media->id, "Media added: {$media->title}", [
             'agency_id' => $agencyId,
@@ -286,6 +343,14 @@ class MediaController extends Controller
             Property::where('agency_id', $agencyId)->where('id', $request->property_id)->firstOrFail();
         }
 
+        $newVisibility = $request->input('visibility', $media->visibility);
+        if ($newVisibility === 'public' && ($media->type === 'document' || $media->status === 'sold' || ($media->scan_status !== null && $media->scan_status !== 'scanned_clean'))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sensitive, sold or unverified media cannot be made public.',
+            ], 422);
+        }
+
         $media->fill($request->only(['title', 'folder', 'visibility', 'property_id', 'description', 'tags']));
         $media->save();
 
@@ -308,111 +373,144 @@ class MediaController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['manage_media']);
 
-        // Commerce gate: block sales while the subscription is inactive/expired.
         $agency = Agency::find($agencyId);
         if ($agency !== null && !PlanLimits::subscriptionActive($agency)) {
             return PlanLimits::subscriptionDenied();
         }
 
         $request->validate([
-            'selling_price_pk' => 'required|numeric|min:0',
-            'cost_price_pk' => 'nullable|numeric|min:0',
+            'selling_price_pk' => 'required|numeric|decimal:0,2|min:0|max:9999999999999.99',
+            'cost_price_pk' => 'nullable|numeric|decimal:0,2|min:0|max:9999999999999.99',
             'buyer_name' => 'required|string|max:255',
             'buyer_phone' => 'nullable|string|max:30',
-            'buyer_national_id_masked' => 'nullable|string|max:40',
+            'buyer_national_id_masked' => ['nullable', 'string', 'max:40', 'regex:/^[0-9* -]{4,40}$/'],
             'sold_at' => 'nullable|date',
         ]);
 
-        $media = MediaFile::where('agency_id', $agencyId)->findOrFail($id);
+        $sellingMinor = $this->toMinorUnits($request->input('selling_price_pk'));
+        $costMinor = $request->filled('cost_price_pk')
+            ? $this->toMinorUnits($request->input('cost_price_pk'))
+            : null;
+        $soldAt = $request->filled('sold_at') ? now()->parse($request->input('sold_at')) : now();
 
-        if ($media->status === 'sold') {
+        $result = DB::transaction(function () use ($agencyId, $id, $request, $sellingMinor, $costMinor, $soldAt): array {
+            $media = MediaFile::where('agency_id', $agencyId)
+                ->lockForUpdate()
+                ->findOrFail($id);
+
+            if ($media->status === 'sold') {
+                return ['sold' => false, 'media' => $media];
+            }
+
+            $media->status = 'sold';
+            $media->visibility = 'private';
+            $media->sold_at = $soldAt;
+            $media->sold_price_pk = $this->minorUnitsToDecimal($sellingMinor);
+            $media->cost_price_pk = $costMinor !== null ? $this->minorUnitsToDecimal($costMinor) : null;
+            $media->profit_pk = $costMinor !== null
+                ? $this->minorUnitsToDecimal(max(0, $sellingMinor - $costMinor))
+                : '0.00';
+            $media->buyer_name = strip_tags($request->input('buyer_name'));
+            $media->buyer_phone = $request->input('buyer_phone');
+            $media->buyer_national_id_masked = $request->input('buyer_national_id_masked');
+            $media->sold_by = $request->user()->name;
+            $media->save();
+
+            return ['sold' => true, 'media' => $media->fresh()];
+        }, 3);
+
+        if (!$result['sold']) {
             return response()->json([
                 'success' => false,
                 'message' => 'This item is already marked as sold.',
             ], 422);
         }
 
-        $selling = (float) $request->selling_price_pk;
-        $cost = $request->filled('cost_price_pk') ? (float) $request->cost_price_pk : null;
-
-        $media->status = 'sold';
-        $media->sold_at = $request->sold_at ? now()->parse($request->sold_at) : now();
-        $media->sold_price_pk = $selling;
-        $media->cost_price_pk = $cost;
-        $media->profit_pk = $cost !== null ? max(0, $selling - $cost) : 0;
-        $media->buyer_name = $request->buyer_name;
-        $media->buyer_phone = $request->buyer_phone;
-        $media->buyer_national_id_masked = $request->buyer_national_id_masked;
-        $media->sold_by = $request->user()->name;
-        $media->save();
-
+        $media = $result['media'];
         $this->writeAudit($request, 'media.sell', $media->id, "Marked sold: {$media->title}", [
             'agency_id' => $agencyId,
             'entity_type' => 'media_file',
             'entity_id' => $media->id,
             'metadata' => [
-                'selling_price_pk' => $selling,
-                'cost_price_pk' => $cost,
+                'selling_price_pk' => $media->sold_price_pk,
+                'cost_price_pk' => $media->cost_price_pk,
                 'profit_pk' => $media->profit_pk,
-                'buyer' => $request->buyer_name,
+                'buyer' => $media->buyer_name,
             ],
         ]);
 
         return response()->json(['success' => true, 'message' => 'Marked as sold.', 'media' => $media]);
     }
 
-    /** DELETE /api/agency/media/{id} — refuses while referenced by a live listing. */
     public function destroy(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['manage_media']);
 
-        $media = MediaFile::where('agency_id', $agencyId)->findOrFail($id);
+        try {
+            $result = DB::transaction(function () use ($agencyId, $id): array {
+                $media = MediaFile::where('agency_id', $agencyId)
+                    ->lockForUpdate()
+                    ->findOrFail($id);
 
-        // Reference check: does any active listing in this agency use the file?
-        $referenced = Property::where('agency_id', $agencyId)
-            ->whereNull('deleted_at')
-            ->where('images', 'like', '%' . $media->id . '%')
-            ->exists();
+                $referenced = Property::where('agency_id', $agencyId)
+                    ->whereNull('deleted_at')
+                    ->where('images', 'like', '%' . $media->id . '%')
+                    ->exists();
 
-        $fileUrl = $media->disk_path ? basename($media->disk_path) : null;
-        if (!$referenced && $fileUrl) {
-            $referenced = Property::where('agency_id', $agencyId)
-                ->whereNull('deleted_at')
-                ->where('images', 'like', '%' . $fileUrl . '%')
-                ->exists();
+                $fileName = $media->disk_path ? basename($media->disk_path) : null;
+                if (!$referenced && $fileName) {
+                    $referenced = Property::where('agency_id', $agencyId)
+                        ->whereNull('deleted_at')
+                        ->where('images', 'like', '%' . $fileName . '%')
+                        ->exists();
+                }
+
+                if ($referenced) {
+                    return ['deleted' => false, 'reason' => 'in_use', 'media' => $media];
+                }
+
+                if ($media->disk_path) {
+                    $storage = Storage::disk('documents');
+                    if ($storage->exists($media->disk_path) && !$storage->delete($media->disk_path)) {
+                        throw new \RuntimeException('Private media storage did not confirm file deletion.');
+                    }
+                }
+
+                $media->delete();
+
+                return ['deleted' => true, 'reason' => null, 'media' => $media];
+            }, 3);
+        } catch (\Throwable $exception) {
+            Log::warning('Media delete stopped because private storage cleanup failed', [
+                'agency_id' => $agencyId,
+                'media_id' => $id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Private storage could not confirm deletion. The media record was retained; retry after storage is healthy.',
+            ], 503);
         }
 
-        if ($referenced) {
+        if (!$result['deleted']) {
             return response()->json([
                 'success' => false,
                 'message' => 'This media is used by an active listing. Remove it from the listing first.',
             ], 409);
         }
 
-        if ($media->disk_path) {
-            try {
-                Storage::disk('documents')->delete($media->disk_path);
-            } catch (\Throwable $e) {
-                Log::warning('Media file delete failed', ['error' => $e->getMessage()]);
-            }
-        }
-
+        $media = $result['media'];
         $this->writeAudit($request, 'media.delete', $media->id, "Media deleted: {$media->title}", [
             'agency_id' => $agencyId,
             'entity_type' => 'media_file',
             'entity_id' => $media->id,
         ]);
 
-        $media->delete();
-
         return response()->json(['success' => true, 'message' => 'Media deleted.']);
     }
 
-    /**
-     * GET /api/agency/media/{id}/file — authenticated delivery of agency media
-     * (used for visibility=private files).
-     */
     public function file(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);
@@ -429,8 +527,23 @@ class MediaController extends Controller
     {
         $media = MediaFile::where('id', $id)
             ->where('visibility', 'public')
+            ->where('status', 'available')
             ->whereNull('deleted_at')
             ->firstOrFail();
+
+        $agency = Agency::where('id', $media->agency_id)
+            ->where('status', 'active')
+            ->firstOrFail();
+
+        if ($media->property_id !== null) {
+            $property = Property::where('agency_id', $agency->id)
+                ->publiclyVisible()
+                ->findOrFail($media->property_id);
+
+            if (!$property->isPubliclyVisible()) {
+                abort(404);
+            }
+        }
 
         return $this->deliver($media);
     }
@@ -519,5 +632,21 @@ class MediaController extends Controller
             Log::warning('Media quarantine write failed', ['error' => $e->getMessage()]);
         }
     }
+    private function toMinorUnits(string|int|float $amount): int
+    {
+        $value = trim((string) $amount);
+        if (!preg_match('/^\d{1,13}(?:\.\d{1,2})?$/', $value)) {
+            throw new \InvalidArgumentException('Amount must be a non-negative PKR value with at most two decimal places.');
+        }
+
+        [$whole, $fraction] = array_pad(explode('.', $value, 2), 2, '');
+        return ((int) $whole * 100) + (int) str_pad($fraction, 2, '0');
+    }
+
+    private function minorUnitsToDecimal(int $minorUnits): string
+    {
+        return intdiv($minorUnits, 100) . '.' . str_pad((string) ($minorUnits % 100), 2, '0', STR_PAD_LEFT);
+    }
+
 }
 
