@@ -1152,8 +1152,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Only Super Admin executes payouts (P0-4: Admin has visibility, not payment authority).
     if (!requirePermission('pay_commissions')) return;
     // Validation
-    if (!Number.isFinite(amount) || amount <= 0) {
-      showToast('error', 'Payout amount must be a positive number.');
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      showToast('error', 'Payout amount must be a positive whole-rupee PKR amount.');
       return;
     }
     const dealer = dealers.find((d) => d.id === dealerId);
@@ -1177,16 +1177,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     for (const entry of payableEntries) {
       if (remaining <= 0) break;
-      const due = entry.amountPKR - entry.paidPKR;
-      if (due <= 0) continue;
+      const commissionAmount = Number(entry.amountPKR);
+      const alreadyPaid = Number(entry.paidPKR ?? 0);
+      const due = commissionAmount - alreadyPaid;
+      if (!Number.isSafeInteger(commissionAmount) || !Number.isSafeInteger(alreadyPaid) || due <= 0) continue;
       const payNow = Math.min(due, remaining);
-      const newPaid = entry.paidPKR + payNow;
+      const newPaid = alreadyPaid + payNow;
       entryUpdates.push({
         ...entry,
         paidPKR: newPaid,
         status: newPaid >= entry.amountPKR ? 'Paid' : 'Partially Paid',
         payouts: [
-          ...entry.payouts,
+          ...(entry.payouts ?? []),
           { id: genId('payout'), amountPKR: payNow, paidAt: today, recordedBy: currentUser.name, note: transactionId ? 'Payout against specific deal.' : undefined },
         ],
       });
