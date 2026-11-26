@@ -493,6 +493,20 @@ jobs:
           DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
         run: npx playwright test e2e/role-based.spec.ts --workers=1
 
+      - name: Audit public links, buttons, forms and user flows
+        working-directory: frontend
+        env:
+          AUDIT_BASE: http://127.0.0.1
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+        run: npx tsx scripts/browser-interactions.mts
+
+      - name: Audit admin tabs and buttons across agency personas
+        working-directory: frontend
+        env:
+          AUDIT_BASE: http://127.0.0.1
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
+        run: npx tsx scripts/browser-admin-interactions.mts
+
       - name: Run disposable 10-worker API load and transaction integrity probe
         working-directory: frontend
         env:
