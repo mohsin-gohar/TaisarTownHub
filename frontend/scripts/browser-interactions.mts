@@ -356,7 +356,7 @@ async function solveVisibleMathCaptcha(page: Page): Promise<void> {
   const question = page.locator('#inquiry-captcha-question').first();
   if (!(await question.isVisible().catch(() => false))) return;
   const text = await question.innerText();
-  const match = text.match(/(\\d+)\\s*\\+\\s*(\\d+)/);
+  const match = text.match(/(\d+)\s*\+\s*(\d+)/);
   if (!match) throw new Error(`Unsupported inquiry captcha question: ${text}`);
   const answer = page.locator('#inquiry-captcha-answer').first();
   await answer.fill(String(Number(match[1]) + Number(match[2])));
