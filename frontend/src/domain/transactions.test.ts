@@ -120,6 +120,32 @@ describe('ledger: payments', () => {
     assert.equal(collectedForTx(t, []), 1000000);
   });
 
+  test('refund ledger entries reduce net collections and outstanding balance', () => {
+    const t = txn({ dealAmountPKR: 4000000, advancePKR: 4000000 });
+    const ledger = [
+      pay('p1', 'tx-1', 4000000),
+      { ...pay('r1', 'tx-1', -1000000), type: 'refund' as const },
+    ];
+    assert.equal(collectedForTx(t, ledger), 3000000);
+    assert.equal(dealMoney(t, ledger).balance, 1000000);
+    assert.equal(impliedStatusByPayment(t, ledger), 'Partially Paid');
+    assert.equal(shouldAccrueCommission(t, ledger), false);
+  });
+
+  test('positive and negative refund representations both reduce collections', () => {
+    const t = txn({ dealAmountPKR: 1000000 });
+    const negativeRefund = { ...pay('r1', 'tx-1', -250000), type: 'refund' as const };
+    const positiveRefund = { ...pay('r2', 'tx-1', 250000), type: 'refund' as const };
+    assert.equal(collectedForTx(t, [pay('p1', 'tx-1', 1000000), negativeRefund]), 750000);
+    assert.equal(collectedForTx(t, [pay('p1', 'tx-1', 1000000), positiveRefund]), 750000);
+  });
+
+  test('legacy advance is reduced when a refund exists without an imported payment row', () => {
+    const t = txn({ advancePKR: 1000000 });
+    const refund = { ...pay('r1', 'tx-1', -400000), type: 'refund' as const };
+    assert.equal(collectedForTx(t, [refund]), 600000);
+  });
+
   test('dealMoney clamps balance at zero and flags Fully Paid', () => {
     const t = txn({ dealAmountPKR: 4000000 });
     const m1 = dealMoney(t, [pay('p1', 'tx-1', 4000000)]);
