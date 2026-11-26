@@ -380,6 +380,10 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertTrue(FileVaultCrypto::isEncrypted($raw), 'vault:encrypt must encrypt plaintext rows.');
         $this->assertStringNotContainsString('PLAINTEXT-LEGACY-BYTES', $raw);
         $this->assertSame('PLAINTEXT-LEGACY-BYTES', SecureFileStore::get('documents', $path));
+        $this->assertSame([], array_values(array_filter(
+            Storage::disk('documents')->allFiles(),
+            fn (string $file): bool => str_contains($file, '.rotation-')
+        )), 'Staged vault objects must be cleaned after replacement.');
 
         $this->get("/api/agency/documents/{$id}/download", $headers)->assertStatus(200);
 
@@ -449,7 +453,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
                 'uploaded_by' => $user->id,
             ]);
 
-            config(['app.key' => $newKey, 'app.previous_keys' => [$oldKey]]);
+            config(['app.key' => $newKey, 'app.previous_keys' => ['  ' . $oldKey . '  ']]);
             $oldBlob = (string) Storage::disk('documents')->get($path);
             $this->assertFalse(FileVaultCrypto::usesCurrentKey($oldBlob));
             $this->assertSame($plain, SecureFileStore::get('documents', $path));
