@@ -27,8 +27,8 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
         $first = SubscriptionInvoice::nextNumber();
         $second = SubscriptionInvoice::nextNumber();
 
-        $this->assertMatchesRegularExpression('/^INV-\\d{4}-\\d{6}$/', $first);
-        $this->assertMatchesRegularExpression('/^INV-\\d{4}-\\d{6}$/', $second);
+        $this->assertMatchesRegularExpression('/^INV-\d{4}-\d{6}$/', $first);
+        $this->assertMatchesRegularExpression('/^INV-\d{4}-\d{6}$/', $second);
         $this->assertSame(
             (int) substr($first, -6) + 1,
             (int) substr($second, -6)
