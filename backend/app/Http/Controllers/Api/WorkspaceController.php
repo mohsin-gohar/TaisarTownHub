@@ -1020,32 +1020,29 @@ class WorkspaceController extends Controller
         return false;
     }
 
-    /** Read gate per collection (agency-scoped keys checked when scoped). */
+    /** Read gate per collection. Sensitive collections require their own least-privilege permission. */
     private function canRead(Request $request, $user, string $collection, ?string $agencyId): bool
     {
-        // `view_properties` is the legacy universal read gate — kept as the
-        // fallback so existing staff screens keep working; agency scoping
-        // (allRows) is what actually isolates tenants on reads.
         $gates = [
             'projects' => ['view_properties', 'properties.view', 'manage_projects'],
             'properties' => ['view_properties', 'properties.view'],
-            'dealers' => ['view_dealers', 'manage_dealers', 'properties.view', 'view_properties'],
-            'sellers' => ['manage_sellers', 'view_properties'],
-            'buyers' => ['manage_buyers', 'submit_buyer', 'view_properties'],
-            'transactions' => ['view_transactions', 'finance.view', 'view_my_deals', 'view_properties'],
-            'payments' => ['view_transactions', 'finance.view', 'view_my_deals', 'view_properties'],
-            'commissions' => ['view_commissions', 'finance.view', 'view_my_commission', 'view_properties'],
-            'files' => ['upload_documents', 'verify_documents', 'view_private_documents', 'documents.view', 'view_properties'],
+            'dealers' => ['view_dealers', 'manage_dealers'],
+            'sellers' => ['manage_sellers'],
+            'buyers' => ['manage_buyers'],
+            'transactions' => ['view_transactions', 'finance.view', 'view_my_deals'],
+            'payments' => ['view_transactions', 'finance.view', 'view_my_deals'],
+            'commissions' => ['view_commissions', 'finance.view', 'view_my_commission'],
+            'files' => ['upload_documents', 'verify_documents', 'view_private_documents', 'documents.view'],
             'plots' => ['view_properties', 'properties.view'],
-            'media' => ['view_properties', 'properties.view', 'manage_media', 'upload_media'],
-            'videos' => ['view_properties', 'properties.view', 'manage_media', 'upload_media'],
-            'inquiries' => ['view_inquiries', 'crm.view', 'view_properties'],
-            'subscribers' => ['view_inquiries', 'crm.view', 'view_properties'],
-            'testimonials' => ['edit_cms', 'view_reports', 'view_properties'],
-            'cms' => ['edit_cms', 'view_reports', 'view_properties'],
+            'media' => ['manage_media', 'upload_media'],
+            'videos' => ['manage_media', 'upload_media'],
+            'inquiries' => ['view_inquiries', 'crm.view'],
+            'subscribers' => ['view_inquiries', 'crm.view'],
+            'testimonials' => ['edit_cms', 'view_reports', 'view_properties', 'properties.view'],
+            'cms' => ['edit_cms', 'view_reports', 'view_properties', 'properties.view'],
         ];
 
-        foreach ($gates[$collection] ?? ['view_properties'] as $permission) {
+        foreach ($gates[$collection] ?? [] as $permission) {
             if ($this->perm($request, $user, $permission, $agencyId)) {
                 return true;
             }
@@ -1054,18 +1051,22 @@ class WorkspaceController extends Controller
         return false;
     }
 
-    /** Write gate per collection (agency-scoped). */
+    /** Write gate per collection. Platform-global collections are never agency-writable. */
     private function canWrite(Request $request, $user, string $collection, ?string $agencyId = null): bool
     {
+        if (in_array($collection, ['projects', 'testimonials', 'cms'], true) && ! $user->isPlatformUser()) {
+            return false;
+        }
+
         $gates = [
             'projects' => ['manage_projects'],
             'properties' => ['create_properties', 'edit_properties', 'properties.create', 'properties.update'],
-            'dealers' => ['manage_dealers', 'pay_commissions'],
+            'dealers' => ['manage_dealers'],
             'sellers' => ['manage_sellers'],
             'buyers' => ['manage_buyers', 'submit_buyer'],
             'transactions' => ['create_transactions', 'update_transactions', 'void_transactions', 'finance.create_transaction'],
             'payments' => ['manage_payments', 'finance.manage_payments'],
-            'commissions' => ['pay_commissions', 'manage_payments', 'create_transactions', 'finance.manage_payments'],
+            'commissions' => ['pay_commissions', 'manage_payments', 'finance.manage_payments'],
             'files' => ['upload_documents', 'verify_documents', 'documents.upload'],
             'plots' => ['edit_properties', 'properties.update'],
             'media' => ['manage_media', 'upload_media'],
@@ -1085,18 +1086,22 @@ class WorkspaceController extends Controller
         return false;
     }
 
-    /** Replace (destructive) mode requires delete-level rights. */
+    /** Replace (destructive) mode requires delete-level rights; financial ledgers are append-only here. */
     private function canReplace(Request $request, $user, string $collection, ?string $agencyId): bool
     {
+        if (in_array($collection, ['projects', 'testimonials', 'cms'], true) && ! $user->isPlatformUser()) {
+            return false;
+        }
+
         $gates = [
             'properties' => ['delete_properties', 'properties.delete'],
             'dealers' => ['manage_dealers'],
             'sellers' => ['manage_sellers'],
             'buyers' => ['manage_buyers'],
-            'transactions' => ['void_transactions'],
-            'payments' => ['manage_payments', 'finance.manage_payments'],
-            'commissions' => ['pay_commissions'],
-            'files' => ['verify_documents', 'documents.delete'],
+            'transactions' => [],
+            'payments' => [],
+            'commissions' => [],
+            'files' => ['documents.delete'],
             'plots' => ['delete_properties', 'properties.delete'],
             'media' => ['manage_media'],
             'videos' => ['manage_media'],
