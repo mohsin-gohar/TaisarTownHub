@@ -696,6 +696,13 @@ public function update(Request $request, string $id)
             // Overpayment guard: collected + amount must not exceed agreement
             $existingCollected = (float) $locked->totalPaid();
             $agreementAmount = (float) $locked->agreementAmountPKR;
+            if ($isRefund && abs($amount) > $existingCollected) {
+                return [null, [
+                    'refund_exceeds_collected' => true,
+                    'collected' => $existingCollected,
+                    'refund' => abs($amount),
+                ]];
+            }
             if ($existingCollected + $amount > $agreementAmount) {
                 return [null, [
                     'overpayment' => true,
@@ -723,6 +730,15 @@ public function update(Request $request, string $id)
 
             return [$payment, null];
         });
+
+        if (isset($result[1]['refund_exceeds_collected'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Refund cannot exceed the amount already collected.',
+                'collected' => $result[1]['collected'],
+                'refund' => $result[1]['refund'],
+            ], 422);
+        }
 
         if (isset($result[1]['overpayment'])) {
             $over = $result[1];
