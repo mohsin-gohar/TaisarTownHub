@@ -657,6 +657,7 @@ public function reject(Request $request, $id)
                 $property->approval_status = 'approved';
                 $property->save();
                 $this->recordTransition($property, $from, 'approved', 'Rejected re-approval edit: ' . $request->reason);
+                $this->mirrorToLegacyStore($property, 'update');
 
                 return ['property' => $property->fresh(), 'live_copy_kept' => true];
             }
