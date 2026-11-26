@@ -66,6 +66,16 @@ const toLocalInput = (value?: string | null): string => {
   return local.toISOString().slice(0, 16);
 };
 
+const isPlacementLive = (placement: Placement): boolean => {
+  if (placement.status !== 'active') return false;
+  const now = Date.now();
+  const startsAt = placement.starts_at ? Date.parse(placement.starts_at) : Number.NEGATIVE_INFINITY;
+  const endsAt = placement.ends_at ? Date.parse(placement.ends_at) : Number.POSITIVE_INFINITY;
+  return Number.isFinite(startsAt) || startsAt === Number.NEGATIVE_INFINITY
+    ? startsAt <= now && endsAt > now
+    : false;
+};
+
 const statusTone = (status: string): 'green' | 'gold' | 'red' | 'slate' | 'blue' => {
   if (status === 'active') return 'green';
   if (status === 'pending') return 'gold';
@@ -132,7 +142,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
 
   const livePlacements = useMemo(
     () => placements
-      .filter((placement) => placement.status === 'active')
+      .filter(isPlacementLive)
       .sort((a, b) => Number(a.position) - Number(b.position) || Number(a.id) - Number(b.id)),
     [placements],
   );
@@ -355,7 +365,8 @@ export const AdminFeaturedPromotions: React.FC = () => {
             ) : (
               <div className="space-y-2">
                 {placements.map((placement) => {
-                  const isLive = placement.status === 'active';
+                  const isLive = isPlacementLive(placement);
+                  const isScheduled = placement.status === 'active' && !!placement.starts_at && Date.parse(placement.starts_at) > Date.now();
                   const liveIndex = livePlacements.findIndex((row) => row.id === placement.id);
                   return (
                     <div key={placement.id} className="rounded-xl border border-slate-800 bg-[#07141E] p-3">
@@ -364,7 +375,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] font-bold text-[#E7C878]">#{placement.position}</span>
                             <span className="text-sm font-bold text-white truncate">{placement.agency?.name || placement.agency_id}</span>
-                            <EnterpriseBadge tone={statusTone(placement.status)}>{titleCase(placement.status)}</EnterpriseBadge>
+                            <EnterpriseBadge tone={statusTone(isScheduled ? 'pending' : placement.status)}>{isScheduled ? 'Scheduled' : titleCase(placement.status)}</EnterpriseBadge>
                             <EnterpriseBadge tone="gold">Featured</EnterpriseBadge>
                             {placement.package && <EnterpriseBadge tone="slate">{placement.package.name}</EnterpriseBadge>}
                           </div>
