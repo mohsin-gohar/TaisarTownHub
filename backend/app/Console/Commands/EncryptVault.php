@@ -9,6 +9,7 @@ use App\Models\MediaFile;
 use App\Services\FileVaultCrypto;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * One-shot (idempotent) migration command: re-writes every vault file that is
@@ -19,9 +20,10 @@ use Illuminate\Support\Facades\Storage;
  *   php artisan vault:encrypt          # documents + versions + media
  *   php artisan vault:encrypt --disk=documents|quarantine
  *
- * Run it again after an APP_KEY rotation: files still readable under the OLD
- * key are re-encrypted with the new one. Files that fail to decrypt (written
- * under an unknown key) are reported and left untouched — never overwritten.
+ * During APP_KEY rotation, configure the previous key in APP_PREVIOUS_KEYS
+ * on every app/worker/scheduler process, then run this command. Encrypted files
+ * authenticated by a previous key are rewrapped with the current key. Files
+ * that cannot be authenticated by any configured key are left untouched.
  */
 class EncryptVault extends Command
 {
@@ -68,14 +70,47 @@ class EncryptVault extends Command
             }
 
             if (FileVaultCrypto::isEncrypted($blob)) {
-                // Verify the stored file still decrypts under the CURRENT key
-                // (surfaces APP_KEY rotations that were not re-encrypted).
-                try {
-                    FileVaultCrypto::decrypt($blob);
+                if (FileVaultCrypto::usesCurrentKey($blob)) {
                     $counts['already']++;
+                    continue;
+                }
+
+                try {
+                    // decrypt() accepts APP_PREVIOUS_KEYS, while encrypt()
+                    // always uses the current APP_KEY. Verify the staged copy
+                    // before replacing the original object.
+                    $plain = FileVaultCrypto::decrypt($blob);
+                    if ($dry) {
+                        $counts['encrypted']++;
+                        continue;
+                    }
+
+                    $storage = Storage::disk($disk);
+                    $temporaryPath = $path . '.rotation-' . Str::random(16);
+                    try {
+                        if (! $storage->put($temporaryPath, FileVaultCrypto::encrypt($plain))) {
+                            throw new \RuntimeException('Could not write the staged rotated vault object.');
+                        }
+
+                        $staged = (string) $storage->get($temporaryPath);
+                        if (! FileVaultCrypto::usesCurrentKey($staged)
+                            || FileVaultCrypto::decrypt($staged) !== $plain) {
+                            throw new \RuntimeException('Staged vault object failed current-key verification.');
+                        }
+
+                        if (! $storage->move($temporaryPath, $path)) {
+                            throw new \RuntimeException('Could not atomically replace the old vault object.');
+                        }
+                    } finally {
+                        if ($storage->exists($temporaryPath)) {
+                            $storage->delete($temporaryPath);
+                        }
+                    }
+
+                    $counts['encrypted']++;
                 } catch (\Throwable $e) {
                     $counts['errors']++;
-                    $this->error("DECRYPT FAILED [{$disk}] id={$row->id}: {$e->getMessage()}");
+                    $this->error("ROTATION FAILED [{$disk}] id={$row->id}: {$e->getMessage()}");
                 }
 
                 continue;
