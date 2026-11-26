@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
+use App\Services\SubscriptionActivationService;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -980,45 +981,11 @@ class PaymentController extends Controller
 
     private function activateSubscriptionFromInvoice(SubscriptionInvoice $invoice): void
     {
-        $agencyId = $invoice->agency_id;
-        $planId = $invoice->plan_id;
-
-        $plan = SubscriptionPlan::findOrFail($planId);
-        if (strtoupper((string) $invoice->currency) !== 'PKR'
-            || strtoupper((string) $plan->currency) !== 'PKR') {
-            throw new \RuntimeException('Only PKR subscription invoices can activate an agency plan.');
-        }
-
-        // Stripe subscriptions renew automatically; Flutterwave and manual
-        // invoices represent a paid term only and must never be labelled
-        // auto-renewing unless a recurring provider subscription exists.
-        $provider = $invoice->stripe_subscription_id
-            ? 'stripe'
-            : ($invoice->payment_method === 'flutterwave' ? 'flutterwave' : 'manual');
-        $startsAt = $invoice->paid_at ?? now();
-        $endsAt = $plan->interval === 'year'
-            ? $startsAt->copy()->addYear()
-            : $startsAt->copy()->addMonth();
-
-        AgencySubscription::updateOrCreate(
-            ['agency_id' => $agencyId],
-            [
-                'plan_id' => $planId,
-                'status' => 'active',
-                'starts_at' => $startsAt,
-                'ends_at' => $endsAt,
-                'auto_renew' => $provider === 'stripe',
-                'stripe_subscription_id' => $invoice->stripe_subscription_id,
-                'provider' => $provider,
-                'cancelled_at' => null,
-                'updated_at' => now(),
-            ]
-        );
+        app(SubscriptionActivationService::class)->activate($invoice);
 
         Log::info('Subscription activated', [
-            'agency_id' => $agencyId,
-            'plan_id' => $planId,
+            'agency_id' => $invoice->agency_id,
+            'plan_id' => $invoice->plan_id,
             'invoice_id' => $invoice->id,
         ]);
-    }
-}
+    }}
