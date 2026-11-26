@@ -748,6 +748,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('error', 'An approved agency session is required.');
       return false;
     }
+    if (!IS_DEMO && !backendConnected) {
+      showToast('error', 'The API is unavailable. This change was not saved; reconnect before trying again.');
+      return false;
+    }
     const gate = authorize(currentUser, permission, scope);
     if (!gate.ok) {
       showToast('error', gate.error);
@@ -985,9 +989,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setProperties((prev) => [newProp, ...prev]);
     if (backendConnected) {
-      showToast('info', `Property "${newProp.title}" saved locally — backend sync not yet wired for properties.`);
+      showToast('info', `Property "${newProp.title}" added; saving to the server…`);
     } else {
-      showToast('info', `Property "${newProp.title}" saved locally — will sync when backend is available.`);
+      showToast('info', `Demo-only property "${newProp.title}" added locally; it is not published to the live site.`);
     }
     return { success: true };
   };
@@ -1821,6 +1825,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('error', 'Please enter your name and comment.');
       return;
     }
+    if (!backendConnected && !IS_DEMO) {
+      showToast('error', 'The API is unavailable. Your comment was not posted.');
+      return;
+    }
 
     const newComment: VideoComment = {
       id: `comm-${Date.now()}`,
@@ -1863,7 +1871,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showToast('error', 'Could not post the comment. Please try again.');
       });
     } else {
-      showToast('info', 'Comment saved locally — will sync when backend is available.');
+      showToast('info', 'Demo-only comment added locally; it is not published to the live site.');
     }
   };
 
@@ -1966,49 +1974,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateInquiryStatus = (id: string, status: InquiryStatus) => {
     if (!requirePermission(['crm.update_lead', 'crm.delete_lead'])) return;
-    setInquiries((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, status } : i))
-    );
-    if (backendConnected) {
-      api.updateInquiryStatus(id, status).then((result) => {
-        if (!result) {
-          // Rollback optimistic status on API failure.
-          setInquiries((prev) =>
-            prev.map((i) => (i.id === id ? { ...i, status: 'Pending' } : i))
-          );
-          showToast('error', 'Could not change inquiry status. Please try again.');
-        }
-      }).catch(() => {
-        setInquiries((prev) =>
-          prev.map((i) => (i.id === id ? { ...i, status: 'Pending' } : i))
-        );
-        showToast('error', 'Could not change inquiry status. Please try again.');
-      });
-    } else {
-      showToast('info', 'Status change saved locally — will sync when backend is available.');
+    const previous = inquiries.find((inquiry) => inquiry.id === id);
+    if (!previous) {
+      showToast('error', 'Inquiry not found.');
+      return;
     }
+    if (IS_DEMO) {
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, status } : inquiry)));
+      showToast('info', 'Demo-only inquiry status changed locally; it is not saved to the live workspace.');
+      return;
+    }
+
+    api.updateInquiryStatus(id, status).then((result) => {
+      if (!result) {
+        showToast('error', 'Could not change inquiry status. Please try again.');
+        return;
+      }
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, status } : inquiry)));
+      showToast('success', 'Inquiry status updated.');
+    }).catch(() => {
+      showToast('error', 'Could not change inquiry status. Please try again.');
+    });
   };
 
   const updateInquiryNotes = (id: string, notes: string) => {
     if (!requirePermission('crm.update_lead')) return;
-    setInquiries((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, adminNotes: notes } : i))
-    );
-    if (backendConnected) {
-      api.updateInquiryNotes(id, notes).then((result) => {
-        if (!result) {
-          // Rollback local notes on API failure.
-          setInquiries((prev) =>
-            prev.map((i) => (i.id === id ? { ...i, adminNotes: '' } : i))
-          );
-          showToast('error', 'Could not save inquiry notes. Please try again.');
-        }
-      }).catch(() => {
-        showToast('error', 'Could not save inquiry notes. Please try again.');
-      });
-    } else {
-      showToast('info', 'Notes saved locally — will sync when backend is available.');
+    const previous = inquiries.find((inquiry) => inquiry.id === id);
+    if (!previous) {
+      showToast('error', 'Inquiry not found.');
+      return;
     }
+    if (IS_DEMO) {
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, adminNotes: notes } : inquiry)));
+      showToast('info', 'Demo-only inquiry notes changed locally; they are not saved to the live workspace.');
+      return;
+    }
+
+    api.updateInquiryNotes(id, notes).then((result) => {
+      if (!result) {
+        showToast('error', 'Could not save inquiry notes. Please try again.');
+        return;
+      }
+      setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, adminNotes: notes } : inquiry)));
+      showToast('success', 'Inquiry notes saved.');
+    }).catch(() => {
+      showToast('error', 'Could not save inquiry notes. Please try again.');
+    });
   };
 
   const deleteInquiry = (id: string) => {
@@ -2024,8 +2035,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }).catch(() => {
         showToast('error', 'Could not delete the inquiry. Please try again.');
       });
+    } else if (IS_DEMO) {
+      setInquiries((prev) => prev.filter((inquiry) => inquiry.id !== id));
+      showToast('info', 'Demo-only inquiry deleted locally; it is not removed from the live workspace.');
     } else {
-      showToast('info', 'Inquiry marked for deletion — will sync when backend is available.');
+      showToast('error', 'The API is unavailable. The inquiry was not deleted.');
     }
   };
 
