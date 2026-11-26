@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# TaisarTownHub — automated backup (database + private vault + manifest).
+# TaisarTownHub — automated backup (database + application storage + manifest).
 #
 # Usage:  ./scripts/backup.sh [destination-dir]
 # Default destination: /var/backups/taisartownhub (override with TTH_BACKUP_DIR).
 #
 # What it does:
 #   1. logical database dump via mysqldump (MySQL 8 / MariaDB is the only driver)
-#   2. tar archive of the private document vault + quarantine records
+#   2. tar archive of private documents, quarantine records and public assets
 #   3. sha256 manifest for every artefact
 #   4. verification (dump readable, table count > 0, vault listable)
 #   5. retention pruning (daily 7 / weekly 4 / monthly 6 backup sets)
@@ -28,7 +28,8 @@ echo "[backup] destination: $DEST"
 # Load Laravel's parsed .env values without exposing DB_PASSWORD in process
 # arguments or logs. The temporary MySQL option file is mode 0600 and removed
 # automatically on every exit path.
-php "$ROOT/scripts/write-mysql-defaults.php" "$BACKEND" "$MYSQL_DEFAULTS" "$WORK/db-meta"mapfile -t DB_META < "$WORK/db-meta"
+php "$ROOT/scripts/write-mysql-defaults.php" "$BACKEND" "$MYSQL_DEFAULTS" "$WORK/db-meta"
+mapfile -t DB_META < "$WORK/db-meta"
 DB_DRIVER="${DB_META[0]:-}"
 DB_NAME="${DB_META[1]:-}"
 DB_HOST="${DB_META[2]:-}"
