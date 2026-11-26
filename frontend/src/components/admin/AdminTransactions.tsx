@@ -37,6 +37,7 @@ export const AdminTransactions: React.FC = () => {
     paymentEntries,
     commissionEntries,
     recordPayment,
+    recordRefund,
     voidTransaction,
     showToast,
     currentTheme,
@@ -100,6 +101,7 @@ export const AdminTransactions: React.FC = () => {
 
   // Record-payment modal state
   const [paymentModalTxn, setPaymentModalTxn] = useState<Transaction | null>(null);
+  const [paymentModalMode, setPaymentModalMode] = useState<'payment' | 'refund'>('payment');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentEntry['method']>('Bank Transfer');
   const [paymentNote, setPaymentNote] = useState('');
@@ -107,7 +109,17 @@ export const AdminTransactions: React.FC = () => {
   const openPaymentModal = (txn: Transaction) => {
     const money = dealMoney(txn, paymentsByTxId.get(txn.id) || []);
     setPaymentModalTxn(txn);
+    setPaymentModalMode(txn.status === 'Cancelled' && money.collected > 0 ? 'refund' : 'payment');
     setPaymentAmount(money.balance > 0 ? money.balance : 0);
+    setPaymentMethod('Bank Transfer');
+    setPaymentNote('');
+  };
+
+  const openRefundModal = (txn: Transaction) => {
+    const money = dealMoney(txn, paymentsByTxId.get(txn.id) || []);
+    setPaymentModalTxn(txn);
+    setPaymentModalMode('refund');
+    setPaymentAmount(money.collected > 0 ? money.collected : 0);
     setPaymentMethod('Bank Transfer');
     setPaymentNote('');
   };
@@ -115,13 +127,14 @@ export const AdminTransactions: React.FC = () => {
   const handleConfirmPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentModalTxn) return;
-    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
-      showToast('error', 'Payment amount must be a positive number.');
+    if (!Number.isSafeInteger(paymentAmount) || paymentAmount <= 0) {
+      showToast('error', 'Amount must be a positive whole-rupee PKR value.');
       return;
     }
-    // Keep the modal open when the domain gate rejects (e.g. overpay without
-    // approve_transactions) so the user can correct the amount.
-    const accepted = recordPayment(paymentModalTxn.id, paymentAmount, paymentMethod, paymentNote.trim() || undefined);
+
+    const accepted = paymentModalMode === 'refund'
+      ? recordRefund(paymentModalTxn.id, paymentAmount, paymentMethod, paymentNote.trim())
+      : recordPayment(paymentModalTxn.id, paymentAmount, paymentMethod, paymentNote.trim() || undefined);
     if (accepted) setPaymentModalTxn(null);
   };
 
@@ -541,10 +554,20 @@ export const AdminTransactions: React.FC = () => {
                           <button
                             onClick={() => openPaymentModal(txn)}
                             className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#E7C878] hover:text-[#0B1220] text-[#E7C878] text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
-                            title={canRecordPayments ? 'View ledger & record payment' : 'View payment ledger'}
+                            title={canRecordPayments ? 'View ledger & record payment or refund' : 'View payment ledger'}
                           >
                             <Wallet className="w-3.5 h-3.5" />
                             <span>{payRows.length > 0 ? `Payments (${payRows.length})` : 'Payments'}</span>
+                          </button>
+                        )}
+                        {paymentModalTxn === null && canRecordPayments && !txn.voided
+                          && dealMoney(txn, payRows).collected > 0 && (
+                          <button
+                            onClick={() => openRefundModal(txn)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-rose-300 border border-rose-900/50 text-xs font-semibold transition cursor-pointer"
+                            title="Record an audited refund against collected funds"
+                          >
+                            Refund
                           </button>
                         )}
 
