@@ -1538,6 +1538,9 @@ class DocumentController extends Controller
         array $threats,
         ?string $documentId = null
     ): void {
+        $qPath = null;
+        $recordCreated = false;
+
         try {
             $qId = 'qtn_' . bin2hex(random_bytes(8));
             $qPath = $agencyId . '/' . now()->format('Y/m') . '/' . $qId . '.' . $ext;
@@ -1560,6 +1563,7 @@ class DocumentController extends Controller
                 'uploaded_by' => $request->user()?->id,
                 'created_at' => now(),
             ]);
+            $recordCreated = true;
 
             $this->writeAudit($request, 'document.quarantined', $qId,
                 "Upload quarantined ({$reason}): {$originalName}", [
@@ -1569,6 +1573,21 @@ class DocumentController extends Controller
                     'metadata' => ['reason' => $reason, 'threats' => $threats, 'document_id' => $documentId],
                 ]);
         } catch (\Throwable $e) {
+            if (! $recordCreated && is_string($qPath) && $qPath !== '') {
+                try {
+                    if (\Illuminate\Support\Facades\Storage::disk('quarantine')->exists($qPath)
+                        && ! \Illuminate\Support\Facades\Storage::disk('quarantine')->delete($qPath)) {
+                        Log::critical('Rejected document quarantine bytes could not be cleaned after metadata failure', [
+                            'path_len' => strlen($qPath),
+                        ]);
+                    }
+                } catch (\Throwable $cleanupException) {
+                    Log::critical('Rejected document quarantine cleanup raised an exception', [
+                        'path_len' => strlen($qPath),
+                        'error' => $cleanupException->getMessage(),
+                    ]);
+                }
+            }
             Log::warning('Quarantine write failed', ['error' => $e->getMessage()]);
         }
     }
