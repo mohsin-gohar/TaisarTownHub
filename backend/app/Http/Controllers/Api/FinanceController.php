@@ -814,6 +814,12 @@ public function update(Request $request, string $id)
             'notes' => 'nullable|string|max:1000',
         ]);
 
+        if ($request->input('type') === 'refund' && trim((string) $request->input('notes', '')) === '') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'notes' => ['A reason/reference note is required for every refund.'],
+            ]);
+        }
+
         $result = DB::transaction(function () use ($transaction, $agencyId, $request): array {
             $locked = Transaction::where('id', $transaction->id)
                 ->when($agencyId !== null, fn ($query) => $query->where('agency_id', $agencyId))
