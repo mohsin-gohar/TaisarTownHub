@@ -175,86 +175,87 @@ class InquiryController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $this->requireAny($request, ['crm.update_lead', 'crm.delete_lead']);
-
-        $request->validate([
+        $data = $request->validate([
             'status' => 'required|string|in:Pending,Contacted,In Progress,Resolved',
         ]);
 
         $inquiry = $this->findScopedForAgent($request, $id);
         $agencyId = $this->agencyId($request);
 
-        $from = $inquiry->status;
-        $inquiry->update(['status' => $request->status]);
+        [$updated, $from] = DB::transaction(function () use ($inquiry, $data): array {
+            $locked = Inquiry::whereKey($inquiry->id)->lockForUpdate()->firstOrFail();
+            $from = $locked->status;
+            $locked->update(['status' => $data['status']]);
 
-        // Keep the legacy BusinessRecord mirror in sync.
-        \App\Models\BusinessRecord::where('collection', 'inquiries')
-            ->where('record_id', $inquiry->id)
-            ->update(['status' => $request->status]);
+            BusinessRecord::where('collection', 'inquiries')
+                ->where('record_id', $locked->id)
+                ->update(['status' => $data['status']]);
 
-        $this->writeAudit($request, 'inquiry.status', (string) $inquiry->id,
-            "Inquiry {$from} → {$request->status}", [
+            return [$locked->fresh(), $from];
+        }, 3);
+
+        $this->writeAudit($request, 'inquiry.status', (string) $updated->id,
+            "Inquiry {$from} → {$data['status']}", [
                 'agency_id' => $agencyId,
                 'entity_type' => 'inquiry',
-                'entity_id' => (string) $inquiry->id,
-                'metadata' => ['from' => $from, 'to' => $request->status],
+                'entity_id' => (string) $updated->id,
+                'metadata' => ['from' => $from, 'to' => $data['status']],
             ]);
 
-        return response()->json($inquiry);
+        return response()->json($updated);
     }
 
-    /**
-     * PATCH /api/inquiries/{id}/notes — update internal agent notes.
-     * Requires crm.update_lead.
-     */
     public function updateNotes(Request $request, $id)
     {
         $this->requireAny($request, ['crm.update_lead']);
-
-        $request->validate([
+        $data = $request->validate([
             'notes' => 'nullable|string|max:4000',
         ]);
 
         $inquiry = $this->findScopedForAgent($request, $id);
         $agencyId = $this->agencyId($request);
+        $notes = $data['notes'] ?? '';
 
-        $inquiry->update(['adminNotes' => $request->input('notes', '')]);
+        $updated = DB::transaction(function () use ($inquiry, $notes): Inquiry {
+            $locked = Inquiry::whereKey($inquiry->id)->lockForUpdate()->firstOrFail();
+            $locked->update(['adminNotes' => $notes]);
 
-        // Keep the legacy BusinessRecord mirror in sync.
-        \App\Models\BusinessRecord::where('collection', 'inquiries')
-            ->where('record_id', $inquiry->id)
-            ->update(['adminNotes' => $request->input('notes', '')]);
+            BusinessRecord::where('collection', 'inquiries')
+                ->where('record_id', $locked->id)
+                ->update(['adminNotes' => $notes]);
 
-        $this->writeAudit($request, 'inquiry.notes', (string) $inquiry->id,
-            "Inquiry notes updated", [
+            return $locked->fresh();
+        }, 3);
+
+        $this->writeAudit($request, 'inquiry.notes', (string) $updated->id,
+            'Inquiry notes updated', [
                 'agency_id' => $agencyId,
                 'entity_type' => 'inquiry',
-                'entity_id' => (string) $inquiry->id,
+                'entity_id' => (string) $updated->id,
             ]);
 
-        return response()->json($inquiry);
+        return response()->json($updated);
     }
 
-    /**
-     * DELETE /api/inquiries/{id} — delete an inquiry.
-     * Requires crm.delete_lead.
-     */
     public function destroy(Request $request, $id)
     {
         $this->requireAny($request, ['crm.delete_lead']);
-
         $inquiry = $this->findScopedForAgent($request, $id);
         $agencyId = $this->agencyId($request);
+        $fullName = $inquiry->fullName;
 
-        // Keep the legacy BusinessRecord mirror in sync so no orphaned
-        // rows remain after deletion.
-        \App\Models\BusinessRecord::where('collection', 'inquiries')
-            ->where('record_id', $inquiry->id)
-            ->delete();
+        DB::transaction(function () use ($inquiry): void {
+            $locked = Inquiry::whereKey($inquiry->id)->lockForUpdate()->firstOrFail();
 
-        $inquiry->delete();
+            BusinessRecord::where('collection', 'inquiries')
+                ->where('record_id', $locked->id)
+                ->delete();
+
+            $locked->delete();
+        }, 3);
 
         $this->writeAudit($request, 'inquiry.delete', (string) $inquiry->id,
-            "Inquiry deleted: {$inquiry->fullName}", [
+            "Inquiry deleted: {$fullName}", [
                 'agency_id' => $agencyId,
                 'entity_type' => 'inquiry',
                 'entity_id' => (string) $inquiry->id,
