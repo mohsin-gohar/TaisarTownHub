@@ -33,9 +33,11 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         ];
     }
 
-    private function moderatorPermissions(): array
+    private function platformModerator()
     {
-        return ['view_properties', 'properties.view', 'properties.approve', 'properties.feature'];
+        $this->seedPlatformRole('moderator');
+
+        return $this->makeUser('moderator');
     }
 
     public function test_agency_cannot_self_assign_featured_status_when_creating_or_updating_listing(): void
@@ -71,7 +73,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_member_creates_submits_and_moderator_approves_listing(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
+        $moderator = $this->platformModerator();
         $plan = SubscriptionPlan::create([
             'key' => 'listing-days-' . bin2hex(random_bytes(4)),
             'name' => '60 Day Listings',
@@ -222,7 +224,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_editing_an_approved_listing_stages_changes_for_reapproval(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Original Title',
@@ -245,7 +247,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_rejecting_a_reapproval_edit_keeps_the_live_listing_approved(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Live Listing Title',
@@ -275,7 +277,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     public function test_rejecting_a_first_submission_hides_it_and_records_the_reason(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Rejected First Submission',
@@ -308,7 +310,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     {
         $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
         [$agent, $agency] = $this->agencyUser($agentPerms);
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator');
+        $moderator = $this->platformModerator();
         $plan = SubscriptionPlan::create([
             'key' => 'featured-slots-' . bin2hex(random_bytes(4)),
             'name' => 'One Featured Slot',
@@ -397,7 +399,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     {
         $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
         [$agent, $agency] = $this->agencyUser($agentPerms);
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
         $plan = SubscriptionPlan::create([
             'key' => 'one-featured-slot-' . bin2hex(random_bytes(4)),
             'name' => 'One Featured Slot',
@@ -421,11 +423,14 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $second = $this->postJson('/api/properties', $this->basePayload(['title' => 'Featured Slot Two', 'submit' => true]), $headers)
             ->assertStatus(201)->json('id');
 
+        $this->asGuest(); // switch from the agent token to the platform moderator token
         $this->postJson("/api/properties/{$first}/approve", [], $moderatorHeaders)->assertStatus(200);
         $this->postJson("/api/properties/{$second}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->asGuest(); // switch back to the agency member token
         $this->postJson("/api/properties/{$first}/feature", [], $headers)->assertStatus(200);
         $this->postJson("/api/properties/{$second}/feature", [], $headers)->assertStatus(200);
 
+        $this->asGuest(); // switch back to the platform moderator token
         $this->postJson("/api/properties/{$first}/feature", ['status' => 'granted'], $moderatorHeaders)
             ->assertStatus(200)
             ->assertJsonPath('property.isFeatured', true);
@@ -447,13 +452,17 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         // An expired featured listing is no longer publicly active and must
         // release its slot for the next eligible listing.
         Property::whereKey($second)->update(['expires_at' => now()->subDay()]);
+        $this->asGuest(); // switch back to the agency member token
         $this->postJson("/api/properties/{$second}/feature", [], $headers)
             ->assertStatus(422)
             ->assertJsonPath('message', 'Expired listings cannot request featured placement.');
         $third = $this->postJson('/api/properties', $this->basePayload(['title' => 'Featured Slot Three', 'submit' => true]), $headers)
             ->assertStatus(201)->json('id');
+        $this->asGuest(); // switch back to the platform moderator token
         $this->postJson("/api/properties/{$third}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->asGuest(); // switch back to the agency member token
         $this->postJson("/api/properties/{$third}/feature", [], $headers)->assertStatus(200);
+        $this->asGuest(); // switch back to the platform moderator token
         $this->postJson("/api/properties/{$third}/feature", ['status' => 'granted'], $moderatorHeaders)
             ->assertStatus(200)
             ->assertJsonPath('property.isFeatured', true);
@@ -463,7 +472,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
     {
         $agentPerms = array_merge($this->agentPermissions(), ['properties.feature']);
         [$agent, $agency] = $this->agencyUser($agentPerms);
-        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+        $moderator = $this->platformModerator();
         $plan = SubscriptionPlan::create([
             'key' => 'zero-featured-slots-' . bin2hex(random_bytes(4)),
             'name' => 'No Featured Slots',
@@ -484,9 +493,12 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $moderatorHeaders = $this->authHeaders($this->tokenFor($moderator));
         $id = $this->postJson('/api/properties', $this->basePayload(['title' => 'No Featured Slot', 'submit' => true]), $headers)
             ->assertStatus(201)->json('id');
+        $this->asGuest(); // switch from the agency member to the platform moderator
         $this->postJson("/api/properties/{$id}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->asGuest(); // switch back to the agency member
         $this->postJson("/api/properties/{$id}/feature", [], $headers)->assertStatus(200);
 
+        $this->asGuest(); // switch back to the platform moderator
         $this->postJson("/api/properties/{$id}/feature", ['status' => 'granted'], $moderatorHeaders)
             ->assertStatus(402)
             ->assertJsonPath('limit', 0)
