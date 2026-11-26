@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use Tests\Feature\EnterpriseTestCase;
 
@@ -62,11 +63,13 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
     public function test_admin_can_raise_and_verify_an_invoice_exactly_once(): void
     {
         $admin = $this->admin();
-        [$member, $agency] = $this->agencyUser(['agency.view'], 'agent');
+        [, $agency] = $this->agencyUser(['agency.view'], 'agent');
+        $plan = $this->makePlan();
         $h = fn () => $this->authHeaders($this->tokenFor($admin));
 
         $created = $this->postJson('/api/admin/subscription-invoices', [
             'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
             'amount_pkr' => 10000,
             'tax_pkr' => 500,
             'period_start' => '2026-11-01',
@@ -97,6 +100,15 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
         $this->assertSame('TRX-991200', $row->payment_reference);
         $this->assertNotNull($row->paid_at);
         $this->assertSame($admin->id, $row->verified_by);
+
+        // A paid plan invoice must activate the agency subscription atomically.
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+        $this->assertSame($plan->id, $subscription->plan_id);
+        $this->assertSame('active', $subscription->status);
+        $this->assertSame('manual', $subscription->provider);
+        $this->assertFalse((bool) $subscription->auto_renew);
+        $this->assertSame('2026-11-01', $subscription->starts_at->toDateString());
+        $this->assertSame('2026-11-30', $subscription->ends_at->toDateString());
 
         // Paid invoices are financial history — never modifiable again.
         $this->postJson('/api/admin/subscription-invoices/' . $invoiceId . '/verify', [
