@@ -145,6 +145,21 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
             'created_at' => now(),
         ]);
 
+        // An infected document is represented by both the document row and
+        // its quarantine metadata; the same physical path must be counted once.
+        DocumentQuarantine::create([
+            'id' => 'qtn_' . bin2hex(random_bytes(8)),
+            'agency_id' => $agency->id,
+            'document_id' => $documentId,
+            'original_name' => 'versioned-v2.pdf',
+            'stored_name' => 'versioned-v2.pdf',
+            'disk_path' => $agency->id . '/versioned-v2.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 100,
+            'reason' => 'infected',
+            'created_at' => now(),
+        ]);
+
         $this->assertSame(190, PlanLimits::usage($agency)['storage_bytes']);
     }
 
@@ -169,6 +184,34 @@ class PlanLimitEnforcementTest extends EnterpriseTestCase
             2,
             \App\Models\Document::where('agency_id', $agency->id)->count()
         );
+    }
+
+    public function test_trialing_subscription_is_active_only_until_trial_expiry(): void
+    {
+        [$agency] = $this->agencyWithLimits(['dealer_files' => 10]);
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+
+        $subscription->update([
+            'status' => 'trialing',
+            'trial_ends_at' => now()->addDay(),
+            'ends_at' => null,
+        ]);
+        $agency->unsetRelation('subscription');
+        $this->assertTrue(PlanLimits::subscriptionActive($agency));
+        $this->assertFalse($subscription->fresh()->isExpired());
+
+        $subscription->update(['trial_ends_at' => now()->subSecond()]);
+        $agency->unsetRelation('subscription');
+        $this->assertFalse(PlanLimits::subscriptionActive($agency));
+        $this->assertTrue($subscription->fresh()->isExpired());
+
+        $subscription->update([
+            'status' => 'active',
+            'trial_ends_at' => null,
+            'ends_at' => now()->subSecond(),
+        ]);
+        $agency->unsetRelation('subscription');
+        $this->assertFalse(PlanLimits::subscriptionActive($agency));
     }
 
     public function test_staff_invite_counts_pending_invitations_against_the_quota(): void
