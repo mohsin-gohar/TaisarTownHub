@@ -42,7 +42,14 @@ class SecureFileStore
         }
 
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
-        if (!Storage::disk($disk)->put($path, $blob)) {
+        $storage = Storage::disk($disk);
+        if (!$storage->put($path, $blob)) {
+            if ($storage->exists($path) && !$storage->delete($path)) {
+                Log::critical('Partial vault upload could not be cleaned after a failed write', [
+                    'disk' => $disk,
+                    'path_len' => strlen($path),
+                ]);
+            }
             throw new RuntimeException('Vault storage write failed; upload was not committed.');
         }
 
@@ -53,7 +60,14 @@ class SecureFileStore
     public static function putBytes(string $disk, string $path, string $plain): int
     {
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
-        if (!Storage::disk($disk)->put($path, $blob)) {
+        $storage = Storage::disk($disk);
+        if (!$storage->put($path, $blob)) {
+            if ($storage->exists($path) && !$storage->delete($path)) {
+                Log::critical('Partial vault byte write could not be cleaned', [
+                    'disk' => $disk,
+                    'path_len' => strlen($path),
+                ]);
+            }
             throw new RuntimeException('Vault storage write failed; bytes were not committed.');
         }
 
@@ -78,6 +92,12 @@ class SecureFileStore
         $plain = FileVaultCrypto::decrypt($stored);
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
         if (!$target->put($toPath, $blob)) {
+            if ($target->exists($toPath) && !$target->delete($toPath)) {
+                Log::critical('Partial vault move destination could not be cleaned', [
+                    'to_disk' => $toDisk,
+                    'to_path_len' => strlen($toPath),
+                ]);
+            }
             throw new RuntimeException('Vault destination write failed; source file was preserved.');
         }
 
