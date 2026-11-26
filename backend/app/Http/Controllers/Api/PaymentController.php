@@ -988,4 +988,5 @@ class PaymentController extends Controller
             'plan_id' => $invoice->plan_id,
             'invoice_id' => $invoice->id,
         ]);
-    }}
+    }
+}
