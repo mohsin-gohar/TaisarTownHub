@@ -73,6 +73,7 @@ class AgencyStaffController extends Controller
                 'message' => 'Only an agency owner may invite another owner.',
             ], 403);
         }
+        $this->assertCanGrantPermissions($request, $agencyId, $role->permissions ?? []);
 
         $token = Str::random(48);
         $result = DB::transaction(function () use ($agencyId, $email, $role, $request, $token): array {
