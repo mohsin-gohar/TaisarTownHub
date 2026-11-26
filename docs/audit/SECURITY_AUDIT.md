@@ -1,69 +1,33 @@
 # Security Audit
 
-Branch: `fix/workspace-transaction-lifecycle-20261126` (HEAD `5fbf3e0` + local fixes)
+Branch: `fix/workspace-transaction-lifecycle-20261126`
 Date: 2026-11-26
 
 ## Scope
-OWASP-oriented review: tenant isolation, RBAC, auth/MFA, file storage, input validation, security headers, CORS, rate limiting, secrets, error disclosure, dependency/CI.
+Risk-ranked OWASP-oriented review of tenant isolation, RBAC, authentication/MFA, file storage, input validation, security headers, CORS, rate limiting, secrets handling and CI. This is not a third-party penetration test or proof that every tracked file was exhaustively reviewed.
 
-## Findings and fixes
+## Findings addressed
+1. Dealer creation undefined commission-type variable: fixed.
+2. Dealer commission update rate validation inconsistent with create: fixed in follow-up commit `2ab933c`; Percentage is capped at 100 while Fixed/Custom may use whole-PKR values up to the configured validation bound. Regression test added in `668c83e`; CI verification pending.
+3. Platform commission update incorrectly required agency context: nullable platform scope with permission checks.
+4. Workspace platform lookups filtered agency-owned rows as null-agency rows: fixed.
+5. Metadata-only workspace payment/commission edits were rejected: fixed.
+6. Workspace transaction write gates omitted cancellation permissions: fixed.
+7. Frontend transaction ledger calculation double-counted recorded advance: fixed with legacy/refund handling.
 
-### P0 — Critical
-- None newly introduced. Pre-existing tenant-isolation hardening (PR #4) already merged to `main` (`e780f1f`).
+## CI evidence
+Run #641 at `d4ba0e4` passed backend MySQL 8 (540), frontend (173), Chromium (46), Firefox/WebKit (14 combined), and OpenAPI validation. This predates the dealer commission validation follow-up and does not verify it.
 
-### P1 — High
-1. **Undefined variable in DealerController::store** (`backend/app/Http/Controllers/Api/DealerController.php:59`)
-   - Root cause: validation closure referenced `$effectiveCommissionType` which was never defined in `store()` (defined only in `update()`).
-   - Impact: HTTP 500 on every dealer creation (platform/agency), including CNIC-masking and agency-link paths.
-   - Fix: define `$effectiveCommissionType = $request->input('commissionType', 'Fixed');` before validation.
-   - Regression coverage: `DealerAgencyLinkTest`, `DealerControllerSecurityTest`, `EncryptionAtRestTest` (now green).
+## Tenant isolation and RBAC
+- Tenant-isolation regression matrix covers 13 agency-scoped workspace collections.
+- Finance isolation tests cover agency/platform boundaries.
+- Server-side authorization is enforced by backend permission checks; frontend visibility is not treated as a security boundary.
+- Platform cross-agency workflows require explicit platform permissions and agency context where the endpoint contract requires it.
 
-2. **Platform super-admin could not update commissions** (`backend/app/Http/Controllers/Api/FinanceController.php` `updateCommission`)
-   - Root cause: `$this->requireAgency($request)` aborted with 403 for any user without an agency context, including platform super-admins who legitimately need to mark commissions paid.
-   - Fix: use `$this->agencyId($request)` (nullable) and rely on existing `when($agencyId !== null, ...)` scoping; permission check via `can()` still gates access.
-   - Coverage: `FinanceIsolationTest > platform super admin can update a commission without agency context` (now green).
+## File storage and secrets
+- Private document vault, scoped document access, MIME/extension/size checks and malware-scanner fail-closed behavior were reviewed.
+- Real ClamAV service scanning was not available in this environment; fake-scanner tests are not equivalent to a live daemon test.
+- Earlier repository grep reported no committed live secrets. This is not a substitute for GitHub secret scanning and rotation of any exposed credential.
 
-3. **Platform users could not resolve agency-owned transactions in workspace sync** (`backend/app/Http/Controllers/Api/WorkspaceController.php`)
-   - Root cause: agency-scoped lookups used `agency_id IS NULL` when `$agencyId === null`, so platform users (no agency context) could never find agency-owned transaction/commission rows (404 on payment/commission movements and void flows).
-   - Fix: when `$agencyId === null`, do not filter by agency at all (platform scope); keep strict agency filter for tenant users.
-   - Coverage: `WorkspaceTenantMatrixTest > workspace cannot void while adding payment or paid commission in same save` (now green).
-
-### P2 — Medium
-4. **Metadata-only workspace updates blocked by movement guards** (`WorkspaceController::enforcePaymentMovement`, `enforceCommissionLedger`)
-   - Root cause: every payment/commission upsert required a deal id + positive amount, so title/metadata edits on existing rows (and tenant-isolation matrix rows without financial fields) were rejected with 422.
-   - Fix: skip movement guards when no amount is present in the payload (metadata-only update).
-   - Coverage: `WorkspaceHardeningTest`, `WorkspaceTenantMatrixTest` (now green).
-
-5. **Cancel permission not in workspace `canWrite` gates** (`WorkspaceController` `$gates['transactions']`)
-   - Root cause: users holding `cancel_transactions` / `legacy.cancel_transactions` (but not `update_transactions`) could not cancel via workspace sync.
-   - Fix: add both cancel permissions to the transactions gate list.
-   - Coverage: `WorkspaceTenantMatrixTest > workspace requires cancel permission and reason for non void cancellation` (now green).
-
-### P3 — Low / hardening
-6. **Frontend collected-funds double counting** (`frontend/src/domain/transactions.ts` `collectedForTx`)
-   - Root cause: recorded advance was added to ledger gross whenever no "advance recorded at deal creation" note was present, double-counting deals whose advance is already in the ledger.
-   - Fix: add legacy advance only when ledger gross is less than the recorded advance (legacy rows without imported payment rows).
-   - Coverage: frontend domain suite (4 previously-failing cases now green).
-
-## Tenant isolation
-- Strict agency scoping verified via `WorkspaceTenantMatrixTest` (13 collections × read/write/replace) and `FinanceIsolationTest`.
-- Cross-tenant payment/commission/transaction access returns 404/403 as appropriate.
-- Soft-deleted rows excluded from workspace dumps (existing `ed397fa`).
-
-## RBAC
-- Permission checks are server-side via `AuthorizesApi::can/requireAny/requirePermission`; frontend hiding is not treated as security.
-- Platform cross-agency access requires `admin.manage_agencies` and an explicit `X-Agency-Id` header (flagged `agency_cross_agency`).
-
-## File storage
-- Private document vault served via scoped controller; MIME/extension/size validation present; ClamAV integration (fail-closed in production).
-- Local environment cannot run ClamAV (no daemon) — covered by fake-clamd tests only.
-
-## Security headers / transport
-- `SecurityHeaders` middleware applied globally; nginx sets HSTS, CSP, X-Frame-Options, etc.
-- TLS termination at nginx; certificates mounted at runtime (not committed).
-
-## Secrets management
-- `.env` is gitignored; `.env.example` ships empty secrets. No committed live secrets found (grep for `sk_live`, `AIza`, `AKIA`, RSA keys: no matches).
-
-## Unresolved / externally dependent
-- TLS certificates, SMTP credentials, DNS, live hosting, Stripe/Flutterwave keys, Sentry DSN — see REMAINING_BLOCKERS.md.
+## Unresolved
+Authenticated role-journey browser tests, live ClamAV, deep security penetration testing, production secret provisioning, TLS, SMTP, DNS and production operational controls remain unverified.
