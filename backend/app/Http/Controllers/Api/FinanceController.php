@@ -954,6 +954,14 @@ public function destroyPayment(Request $request, int $id)
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            // A received payment is immutable financial evidence. Removing it
+            // would make a collected deal appear unpaid and could bypass void
+            // guards; record a refund instead. Only unreceived placeholders
+            // may be removed.
+            if ($payment->received_at !== null || abs((float) $payment->amount) > 0.00001) {
+                return [null, $transaction, 'Recorded payments cannot be deleted. Create a refund entry to reverse collected funds.'];
+            }
+
             $payment->delete();
             $transaction->recalculateStatus();
 
@@ -971,7 +979,7 @@ public function destroyPayment(Request $request, int $id)
             'metadata' => ['amount' => $payment->amount, 'reason' => $request->reason],
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Payment voided.']);
+        return response()->json(['success' => true, 'message' => 'Unreceived payment placeholder removed.']);
     }
 
     /**
