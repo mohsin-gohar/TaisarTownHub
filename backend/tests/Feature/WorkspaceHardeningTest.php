@@ -203,6 +203,7 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
     public function test_member_without_sensitive_permission_cannot_create_or_change_property_confidential_fields(): void
     {
         [$user, $agency] = $this->memberWithPropertiesWrite();
+        $headers = $this->authHeaders($this->tokenFor($user));
         BusinessRecord::put('properties', 'private-property-row', [
             'id' => 'private-property-row',
             'title' => 'Original title',
@@ -226,7 +227,7 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
                     'purchasePricePKR' => 3,
                 ],
             ]],
-        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+        ], $headers)->assertOk();
 
         $stored = BusinessRecord::where('collection', 'properties')->where('record_id', 'private-property-row')->first();
         $this->assertSame('Original title', $stored->payload['title']);
@@ -237,6 +238,21 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
             'collection' => 'properties',
             'record_id' => 'new-private-property-row',
         ]);
+
+        // A normal editor receives redacted fields; saving the rest of the
+        // row must preserve the confidential values already stored.
+        $this->putJson('/api/workspace', [
+            'collections' => ['properties' => [[
+                'id' => 'private-property-row',
+                'title' => 'Ordinary editor update',
+            ]]],
+        ], $headers)->assertOk();
+
+        $stored->refresh();
+        $this->assertSame('Ordinary editor update', $stored->payload['title']);
+        $this->assertSame(4000000, $stored->payload['purchasePricePKR']);
+        $this->assertSame(5000000, $stored->payload['sellingPricePKR']);
+        $this->assertSame('Private note', $stored->payload['internalNotes']);
     }
 
     public function test_client_supplied_tenancy_fields_are_ignored(): void
