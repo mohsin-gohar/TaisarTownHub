@@ -804,10 +804,10 @@ class PaymentController extends Controller
             if ($agencySubscription->status === 'cancelled' && $status === 'active') {
                 return;
             }
-            if ($status === 'past_due' && $currentEnd) {
-                if (!is_numeric($periodEnd) || (int) $periodEnd <= $currentEnd->getTimestamp()) {
-                    return;
-                }
+            if (in_array($status, ['active', 'past_due'], true)
+                && $agencySubscription->status === 'past_due' && $currentEnd
+                && (!is_numeric($periodEnd) || (int) $periodEnd <= $currentEnd->getTimestamp())) {
+                return;
             }
 
             $agencySubscription->status = $status;
