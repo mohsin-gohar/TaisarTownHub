@@ -79,9 +79,10 @@ class PlanLimits
      */
     public static function featuredSlotBlock(Agency $agency): ?array
     {
-        $limit = $agency->limits()['featured_credits'] ?? 0;
+        $limits = $agency->limits();
+        $limit = array_key_exists('featured_credits', $limits) ? $limits['featured_credits'] : 0;
         if ($limit === null) {
-            return null;
+            return null; // explicit null means unlimited
         }
 
         $limit = max(0, (int) $limit);
@@ -140,6 +141,10 @@ class PlanLimits
 
         if ($subscription === null) {
             return true; // no subscription row — legacy/default access
+        }
+
+        if ($subscription->starts_at !== null && $subscription->starts_at->isFuture()) {
+            return false; // scheduled subscription has not started yet
         }
 
         if ($subscription->status === 'trialing') {
