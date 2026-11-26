@@ -41,32 +41,48 @@ Record dump size and table count in the change log. A 0-byte dump or 0 table cou
 
 ## 4. Restoring
 
-Restore into an isolated recovery environment first. Keep the same `APP_KEY` that encrypted the source data. The database dump and application-storage archive must use the same timestamp.
+Restore into an isolated recovery environment first. Keep the same `APP_KEY` that encrypted the source data. The database dump and application-storage archive must use the same timestamp. These commands restore into the Docker named volumes, not the host's shadowed `backend/storage` directory.
 
 ```bash
-# 0. Stop application writers (keep the database available for restore).
+cd /var/www/taisartownhub
+set -euo pipefail
+export TTH_BACKUP_DIR=/secure/backups/taisartownhub
+
+# 0. Stop application writers; leave MySQL running.
 docker compose stop backend worker scheduler
 
-# 1. Create a protected MySQL option file from the root Compose .env.
+# 1. Read the database name from the root Compose .env (no password printed).
 TMP_MYSQL_CNF="$(mktemp)"
 TMP_DB_META="$(mktemp)"
 php scripts/write-mysql-defaults.php "$PWD" "$PWD/backend" "$TMP_MYSQL_CNF" "$TMP_DB_META"
 DB_NAME="$(sed -n '2p' "$TMP_DB_META")"
-
-# 2. Restore the database without exposing the password in process arguments.
-gunzip -c "$TTH_BACKUP_DIR/tth_db_<STAMP>.sql.gz" | mysql --defaults-extra-file="$TMP_MYSQL_CNF" "$DB_NAME"
-
-# 3. Restore the complete application storage archive to storage/app.
-tar -xzf "$TTH_BACKUP_DIR/tth_vault_<STAMP>.tar.gz" -C backend/storage/app
-
-# 4. Remove temporary credentials and restore ownership/permissions.
 rm -f "$TMP_MYSQL_CNF" "$TMP_DB_META"
-docker compose run --rm --no-deps --entrypoint sh backend -c 'chown -R www-data:www-data storage/app/private storage/app/public && chmod -R 750 storage/app/private'
+
+# 2. Restore the database inside the MySQL container using a protected
+#    temporary option file (the password never appears in process arguments).
+gunzip -c "$TTH_BACKUP_DIR/tth_db_<STAMP>.sql.gz" | docker compose exec -T mysql sh -c '
+  set -u
+  defaults="$(mktemp)"
+  escaped_password="$(printf "%s" "$MYSQL_ROOT_PASSWORD" | sed '''s/\/\\/g; s/"/\"/g''')"
+  printf "[client]\nuser=root\npassword=\"%s\"\nhost=127.0.0.1\n" "$escaped_password" > "$defaults"
+  chmod 600 "$defaults"
+  mysql --defaults-extra-file="$defaults" "$1"
+  status=$?
+  rm -f "$defaults"
+  exit "$status"
+' tth-restore "$DB_NAME"
+
+# 3. Restore the storage archive into the named volumes via a one-off backend
+#    container. This preserves private/documents, private/quarantine and public.
+docker compose run --rm --no-deps -T --entrypoint sh backend -c 'tar -xzf - -C /var/www/html/storage/app' < "$TTH_BACKUP_DIR/tth_vault_<STAMP>.tar.gz"
+
+# 4. Restore ownership/permissions in the same mounted volumes.
+docker compose run --rm --no-deps --entrypoint sh backend -c 'chown -R www-data:www-data /var/www/html/storage/app/private /var/www/html/storage/app/public && chmod -R 750 /var/www/html/storage/app/private'
 
 # 5. Start services and verify.
 docker compose up -d backend worker scheduler
 docker compose exec backend php artisan migrate:status
-docker compose exec backend php artisan app:production-check --strict
+docker compose exec backend php artisan app:production-check --strict --json
 ```
 
 Review `failed_jobs` before retrying anything. Do not blindly run `queue:retry all`: jobs that are not idempotent can repeat external side effects. Confirm the `APP_KEY` matches the source environment; changing it makes encrypted columns unreadable.
