@@ -258,7 +258,7 @@ export interface PaymentEntry {
   method: 'Pay Order' | 'Bank Transfer' | 'Cash / Cheque' | 'Online Transfer';
   paidAt: string;
   recordedBy: string;
-  /** Refund rows are negative in the deal's net collected balance. */
+  /** Refund entries store a positive amount with type=refund and are subtracted from net collections. */
   type?: 'payment' | 'refund';
   note?: string;
 }
