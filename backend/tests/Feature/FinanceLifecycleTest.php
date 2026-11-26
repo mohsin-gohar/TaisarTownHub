@@ -161,6 +161,29 @@ class FinanceLifecycleTest extends EnterpriseTestCase
         )->assertStatus(200)->assertJsonPath('transaction.buyerName', 'Updated Buyer');
     }
 
+    public function test_only_agency_owner_can_void_seeded_agency_deals(): void
+    {
+        $managerGrants = \\App\\Support\\Permissions::agencyRoleGrants('agency_manager');
+        [$manager] = $this->agencyUser($managerGrants, 'agency_manager');
+        $managerDeal = $this->createDeal($manager);
+
+        $this->postJson(
+            "/api/agency/transactions/{$managerDeal['id']}/void",
+            ['reason' => 'Manager attempted irreversible void'],
+            $this->authHeaders($this->tokenFor($manager))
+        )->assertStatus(403);
+
+        $ownerGrants = \\App\\Support\\Permissions::agencyRoleGrants('agency_owner');
+        [$owner] = $this->agencyUser($ownerGrants, 'agency_owner');
+        $ownerDeal = $this->createDeal($owner);
+
+        $this->postJson(
+            "/api/agency/transactions/{$ownerDeal['id']}/void",
+            ['reason' => 'Owner approved bookkeeping correction'],
+            $this->authHeaders($this->tokenFor($owner))
+        )->assertStatus(200)->assertJsonPath('success', true);
+    }
+
     public function test_linked_dealer_without_user_account_can_be_attached_to_a_deal(): void
     {
         [$user, $agency] = $this->agencyUser($this->financePermissions());
