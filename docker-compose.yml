@@ -248,9 +248,9 @@ services:
   # 6. Nginx — Reverse proxy, SSL termination, load balancing
   # ------------------------------------------------------------
   nginx:
-    # Pinned (not `nginx:alpine`): the gateway config is validated against this
+    # Pinned stable patch release (not `nginx:alpine`): the gateway config is
     # exact tag in CI, so a floating tag could ship an untested nginx.
-    image: nginx:1.27-alpine
+    image: nginx:1.30.8-alpine
     container_name: taisartownhub-nginx
     restart: unless-stopped
     ports:
