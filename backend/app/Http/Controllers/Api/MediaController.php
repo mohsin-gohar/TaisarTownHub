@@ -386,8 +386,8 @@ class MediaController extends Controller
         }
 
         $request->validate([
-            'selling_price_pk' => 'required|numeric|decimal:0,2|min:0|max:9999999999999.99',
-            'cost_price_pk' => 'nullable|numeric|decimal:0,2|min:0|max:9999999999999.99',
+            'selling_price_pk' => 'required|numeric|decimal:0,2|min:0|max:999999999999.99',
+            'cost_price_pk' => 'nullable|numeric|decimal:0,2|min:0|max:999999999999.99',
             'buyer_name' => 'required|string|max:255',
             'buyer_phone' => 'nullable|string|max:30',
             'buyer_national_id_masked' => ['nullable', 'string', 'max:40', 'regex:/^\\*{5}-\\*{7}-\\d{1,4}$/'],
@@ -642,7 +642,7 @@ class MediaController extends Controller
     private function toMinorUnits(string|int|float $amount): int
     {
         $value = trim((string) $amount);
-        if (!preg_match('/^\d{1,13}(?:\.\d{1,2})?$/', $value)) {
+        if (!preg_match('/^\d{1,12}(?:\.\d{1,2})?$/', $value)) {
             throw new \InvalidArgumentException('Amount must be a non-negative PKR value with at most two decimal places.');
         }
 
