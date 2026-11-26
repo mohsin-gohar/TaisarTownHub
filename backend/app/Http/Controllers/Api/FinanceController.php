@@ -810,7 +810,7 @@ public function update(Request $request, string $id)
         }, 3);
 
         if (($result['error'] ?? null) === 'voided') {
-            return response()->json(['success' => false, 'message' => 'Cannot record payments on a voided deal.'], 409);
+            return response()->json(['success' => false, 'message' => 'Cannot record payments on a voided deal.'], 422);
         }
 
         if (($result['error'] ?? null) === 'refund_exceeds_collected') {
