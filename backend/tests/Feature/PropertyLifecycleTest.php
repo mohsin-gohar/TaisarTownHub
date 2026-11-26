@@ -375,9 +375,9 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->assertDatabaseHas('properties', ['id' => $id, 'isFeatured' => false]);
     }
 
-    public function test_owner_detail_exposes_confidential_fields_but_never_a_storage_path(): void
+    public function test_member_with_sensitive_permission_can_read_confidential_fields_but_never_a_storage_path(): void
     {
-        [$agent, $agency] = $this->agencyUser($this->agentPermissions());
+        [$agent, $agency] = $this->agencyUser(array_merge($this->agentPermissions(), ['documents.view_sensitive']));
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Owner Confidentiality Plot',
@@ -400,9 +400,51 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->assertStringNotContainsString('"disk_path"', $response->getContent());
     }
 
-    public function test_public_listing_detail_hides_private_internal_fields(): void
+    public function test_agency_member_without_sensitive_permission_cannot_read_or_change_confidential_property_fields(): void
     {
         [$agent] = $this->agencyUser($this->agentPermissions());
+        $headers = $this->authHeaders($this->tokenFor($agent));
+
+        $id = $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Sensitive Fields Stay Private',
+            'submit' => true,
+        ]), $headers)->assertStatus(201)->json('id');
+
+        Property::whereKey($id)->update([
+            'purchasePricePKR' => 4000000,
+            'sellingPricePKR' => 5000000,
+            'internalNotes' => 'Confidential owner note',
+        ]);
+
+        $this->getJson("/api/properties/{$id}", $headers)
+            ->assertOk()
+            ->assertJsonMissingPath('purchasePricePKR')
+            ->assertJsonMissingPath('sellingPricePKR')
+            ->assertJsonMissingPath('internalNotes');
+
+        $this->patchJson("/api/properties/{$id}", ['title' => 'Ordinary title update'], $headers)
+            ->assertOk()
+            ->assertJsonMissingPath('purchasePricePKR')
+            ->assertJsonMissingPath('sellingPricePKR')
+            ->assertJsonMissingPath('internalNotes');
+
+        $this->patchJson("/api/properties/{$id}", ['purchasePricePKR' => 1], $headers)
+            ->assertStatus(403);
+
+        $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Unauthorized Sensitive Create',
+            'purchasePricePKR' => 1,
+        ]), $headers)->assertStatus(403);
+
+        $this->assertSame(4000000, (int) Property::findOrFail($id)->purchasePricePKR);
+        $this->assertSame(5000000, (int) Property::findOrFail($id)->sellingPricePKR);
+        $this->assertSame('Confidential owner note', Property::findOrFail($id)->internalNotes);
+        $this->assertDatabaseMissing('properties', ['title' => 'Unauthorized Sensitive Create']);
+    }
+
+    public function test_public_listing_detail_hides_private_internal_fields(): void
+    {
+        [$agent] = $this->agencyUser(array_merge($this->agentPermissions(), ['documents.view_sensitive']));
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Detail Visibility Plot',
