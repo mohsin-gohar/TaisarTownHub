@@ -529,10 +529,7 @@ class WorkspaceController extends Controller
             }
 
             $valid = match ($target) {
-                'dealer' => Dealer::whereKey((string) $value)
-                    ->where('agency_id', $agencyId)
-                    ->whereRaw('LOWER(status) = ?', ['active'])
-                    ->exists(),
+                'dealer' => $this->dealerReferenceBelongsToAgency((string) $value, $agencyId),
                 'agency_member' => AgencyMember::where('agency_id', $agencyId)
                     ->where('user_id', (string) $value)
                     ->where('status', 'active')
@@ -550,6 +547,24 @@ class WorkspaceController extends Controller
         }
 
         return true;
+    }
+
+    private function dealerReferenceBelongsToAgency(string $dealerId, string $agencyId): bool
+    {
+        $eloquentDealer = Dealer::whereKey($dealerId)->first();
+        if ($eloquentDealer !== null) {
+            return $eloquentDealer->agency_id === $agencyId
+                && strtolower((string) $eloquentDealer->status) === 'active';
+        }
+
+        $workspaceDealer = BusinessRecord::where('collection', 'dealers')
+            ->where('record_id', $dealerId)
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        return $workspaceDealer !== null
+            && strtolower((string) ($workspaceDealer->payload['status'] ?? 'active')) === 'active';
     }
 
     /**
