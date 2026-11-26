@@ -59,6 +59,13 @@ class PaymentController extends Controller
         ]);
 
         $plan = SubscriptionPlan::findOrFail($request->plan_id);
+        if (strtoupper((string) $plan->currency) !== 'PKR'
+            || abs((float) $plan->price - round((float) $plan->price)) > 0.000001) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only whole-rupee PKR subscription plans can be checked out.',
+            ], 422);
+        }
 
         // Serialize checkout creation per agency. The invoice is persisted
         // before calling Stripe, so retries can reuse one stable idempotency key
