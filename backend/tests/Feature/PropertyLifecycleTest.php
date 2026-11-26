@@ -443,6 +443,17 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->postJson("/api/properties/{$second}/feature", ['status' => 'granted'], $moderatorHeaders)
             ->assertStatus(200)
             ->assertJsonPath('property.isFeatured', true);
+
+        // An expired featured listing is no longer publicly active and must
+        // release its slot for the next eligible listing.
+        Property::whereKey($second)->update(['expires_at' => now()->subDay()]);
+        $third = $this->postJson('/api/properties', $this->basePayload(['title' => 'Featured Slot Three', 'submit' => true]), $headers)
+            ->assertStatus(201)->json('id');
+        $this->postJson("/api/properties/{$third}/approve", [], $moderatorHeaders)->assertStatus(200);
+        $this->postJson("/api/properties/{$third}/feature", [], $headers)->assertStatus(200);
+        $this->postJson("/api/properties/{$third}/feature", ['status' => 'granted'], $moderatorHeaders)
+            ->assertStatus(200)
+            ->assertJsonPath('property.isFeatured', true);
     }
 
     public function test_zero_featured_slots_means_no_featured_grants(): void
