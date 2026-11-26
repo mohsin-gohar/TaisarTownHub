@@ -124,4 +124,21 @@ class MediaLifecycleIntegrityTest extends EnterpriseTestCase
         $this->postJson("/api/agency/media/{$media->id}/sell", $payload, $headers)
             ->assertStatus(422);
     }
+
+    public function test_property_viewer_cannot_download_private_media_originals(): void
+    {
+        [$viewer, $agency] = $this->agencyUser(['properties.view'], 'agent');
+        $media = $this->mediaRecord($agency, [
+            'title' => 'Private Contract Scan',
+            'visibility' => 'private',
+            'status' => 'available',
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($viewer));
+
+        $this->getJson('/api/agency/media/' . $media->id . '/file', $headers)
+            ->assertForbidden();
+        $this->getJson('/api/media/' . $media->id . '/file')
+            ->assertNotFound();
+    }
+
 }
