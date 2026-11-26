@@ -198,7 +198,7 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
             'collections' => ['commissions' => [[
                 'id' => 'fractional-payout',
                 'amountPKR' => 1000,
-                'paidPKR' => 100.50,
+                'paidPKR' => 100,
                 'payouts' => [[
                     'id' => 'payout-1',
                     'amountPKR' => 100.50,
@@ -206,7 +206,7 @@ class WorkspaceHardeningTest extends EnterpriseTestCase
             ]]],
         ], $this->authHeaders($this->tokenFor($user)))
             ->assertStatus(422)
-            ->assertJsonValidationErrors('collections.commissions.0.paidPKR');
+            ->assertJsonValidationErrors('collections.commissions.0.payouts.0.amountPKR');
 
         $this->assertDatabaseMissing('business_records', [
             'collection' => 'commissions',
