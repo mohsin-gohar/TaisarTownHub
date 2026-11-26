@@ -608,6 +608,70 @@ class PaymentGatewayTest extends EnterpriseTestCase
         $this->assertDatabaseMissing('subscription_invoices', ['agency_id' => $agency->id]);
     }
 
+    public function test_checkout_is_rejected_while_an_active_subscription_exists(): void
+    {
+        config([
+            'app.url' => 'https://taisartownhub.com',
+            'cors.allowed_origins' => ['https://taisartownhub.com'],
+        ]);
+        [$owner, $agency] = $this->agencyUser(['agency.subscribe'], 'agency_owner');
+        $plan = $this->makePlan();
+        AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addMonth(),
+            'auto_renew' => false,
+            'provider' => 'manual',
+        ]);
+
+        $this->postJson('/api/payments/subscription/checkout', [
+            'plan_id' => $plan->id,
+            'success_url' => 'https://taisartownhub.com/agency/billing/success',
+            'cancel_url' => 'https://taisartownhub.com/agency/billing/cancel',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(409)
+            ->assertJsonPath('success', false);
+
+        $this->assertSame(0, SubscriptionInvoice::where('agency_id', $agency->id)->count());
+    }
+
+    public function test_checkout_rejects_a_pending_invoice_for_a_different_plan(): void
+    {
+        config([
+            'app.url' => 'https://taisartownhub.com',
+            'cors.allowed_origins' => ['https://taisartownhub.com'],
+        ]);
+        [$owner, $agency] = $this->agencyUser(['agency.subscribe'], 'agency_owner');
+        $existingPlan = $this->makePlan();
+        $requestedPlan = $this->makePlan();
+        SubscriptionInvoice::create([
+            'id' => (string) Str::uuid(),
+            'invoice_number' => 'TTH-PENDING-' . strtoupper(substr((string) $agency->id, 0, 8)),
+            'agency_id' => $agency->id,
+            'plan_id' => $existingPlan->id,
+            'amount_pkr' => 10000,
+            'tax_pkr' => 0,
+            'total_pkr' => 10000,
+            'currency' => 'PKR',
+            'period_start' => now()->toDateString(),
+            'period_end' => now()->addMonth()->toDateString(),
+            'status' => 'pending',
+            'due_at' => now()->addDays(7),
+        ]);
+
+        $this->postJson('/api/payments/subscription/checkout', [
+            'plan_id' => $requestedPlan->id,
+            'success_url' => 'https://taisartownhub.com/agency/billing/success',
+            'cancel_url' => 'https://taisartownhub.com/agency/billing/cancel',
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(409)
+            ->assertJsonPath('success', false);
+
+        $this->assertSame(1, SubscriptionInvoice::where('agency_id', $agency->id)->count());
+    }
+
     public function test_stripe_checkout_webhook_rejects_currency_or_amount_mismatch(): void
     {
         $secret = 'whsec_test_secret';
