@@ -2,7 +2,7 @@
 
 (Consolidated from the former root `BACKUP_GUIDE.md`; content preserved. Helper scripts: `scripts/backup.sh`, `scripts/restore-drill.ps1`.)
 
-Backup = **database** + **private document vault** + **queue/session state**. Restoring only the database leaves the vault empty; restoring only the vault leaves the DB referencing missing files. Always take and restore both.
+Backup = **database** + **application storage** (private documents, quarantine and public media). Restoring only the database leaves file rows pointing at missing bytes; restoring only storage leaves files without their database ownership and audit records. Redis queues/sessions are ephemeral and are not included: after a restore, restart workers and require users to sign in again.
 
 ## 1. What must be backed up
 
@@ -16,20 +16,16 @@ Backup = **database** + **private document vault** + **queue/session state**. Re
 
 ## 2. Creating a backup
 
-```bash
-cd /var/www/taisartownhub/backend
-mkdir -p storage/app/backups
-STAMP=$(date +%Y%m%d_%H%M%S)
-mysqldump --single-transaction --routines --triggers \
-  -u "$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE" \
-  | gzip > "storage/app/backups/tth_db_${STAMP}.sql.gz"
-sha256sum "storage/app/backups/tth_db_${STAMP}.sql.gz" > "storage/app/backups/tth_db_${STAMP}.sql.gz.sha256"
+Run the repository backup helper from the repository root. It reads Laravel's parsed `backend/.env`, writes the MySQL credentials to a mode-`0600` temporary option file (never a process argument), archives the database and application storage, verifies the artefacts, writes a SHA-256 manifest, and applies the daily/weekly/monthly retention policy.
 
-tar -czf "storage/app/backups/tth_vault_${STAMP}.tar.gz" -C storage/app/private documents
-sha256sum "storage/app/backups/tth_vault_${STAMP}.tar.gz" > "storage/app/backups/tth_vault_${STAMP}.tar.gz.sha256"
+```bash
+cd /var/www/taisartownhub
+export TTH_BACKUP_DIR=/secure/backups/taisartownhub
+bash scripts/backup.sh "$TTH_BACKUP_DIR"
 ```
 
-`--single-transaction` keeps the dump consistent without locking InnoDB tables.
+The storage archive preserves paths relative to `backend/storage/app`: `private/documents`, `private/quarantine` (when present), and `public` (when present). The vault payloads are encrypted at rest by the application; the backup destination must still be an encrypted volume or encrypted bucket because the database dump contains other sensitive operational data.
+
 
 ## 3. Verification (mandatory — a backup that was never restored is not a backup)
 
@@ -53,11 +49,11 @@ gunzip -c storage/app/backups/tth_db_<STAMP>.sql.gz | \
   mysql -u "$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE"
 
 # 2. restore the vault
-tar -xzf storage/app/backups/tth_vault_<STAMP>.tar.gz -C storage/app/private
+tar -xzf storage/app/backups/tth_vault_<STAMP>.tar.gz -C backend/storage/app
 
 # 3. permissions
-chown -R www-data:www-data storage/app/private/documents
-chmod -R 750 storage/app/private/documents
+chown -R www-data:www-data backend/storage/app/private backend/storage/app/public
+chmod -R 750 backend/storage/app/private
 
 # 4. verify + restart
 php artisan migrate:status           # expect: nothing pending
@@ -92,8 +88,8 @@ sudo systemctl start nginx
 
 | Asset | Retention | Automation |
 |---|---|---|
-| DB dumps | daily 7 / weekly 4 / monthly 6 | cron + `sha256sum` manifest |
-| Vault archives | daily 7 / weekly 4 | cron |
+| DB dumps | daily 7 / weekly 4 / monthly 6 | `scripts/prune-backups.php` + `sha256sum` manifest |
+| Application storage archives | daily 7 / weekly 4 / monthly 6 | `scripts/prune-backups.php` (invoked by `backup.sh`) |
 | `failed_jobs` | 7 days (auto-pruned by the scheduler) | `queue:prune-failed --hours=168` |
 | Sanctum tokens | 24 h expiry (auto-pruned) | `sanctum:prune-expired --hours=48` |
 
