@@ -83,7 +83,7 @@ class SubscriptionInvoice extends Model
                 ->value('invoice_number');
             $lastIssued = 0;
             if (is_string($lastInvoiceNumber)
-                && preg_match('/^INV-\\d{4}-(\\d+)$/', $lastInvoiceNumber, $matches) === 1) {
+                && preg_match('/^INV-\d{4}-(\d+)$/', $lastInvoiceNumber, $matches) === 1) {
                 $lastIssued = (int) $matches[1];
             }
 
