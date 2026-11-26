@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Agency;
 use App\Models\AgencySubscription;
 use App\Models\SubscriptionPlan;
+use App\Models\SystemSetting;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -27,6 +28,21 @@ class AgencyOnboarding
             // The agency row is the per-tenant mutex. It serializes duplicate
             // onboarding calls even when no subscription row exists yet.
             $lockedAgency = Agency::whereKey($agency->id)->lockForUpdate()->firstOrFail();
+
+            // Share the same mutex as admin default-plan changes so a new
+            // workspace cannot race a plan being promoted/demoted as default.
+            SystemSetting::query()->firstOrCreate(
+                ['key' => 'subscriptions.default_plan_lock'],
+                [
+                    'value' => 1,
+                    'group' => 'subscriptions',
+                    'description' => 'Serializes default subscription plan changes.',
+                ]
+            );
+            SystemSetting::query()
+                ->where('key', 'subscriptions.default_plan_lock')
+                ->lockForUpdate()
+                ->firstOrFail();
 
             $existing = AgencySubscription::where('agency_id', $lockedAgency->id)
                 ->lockForUpdate()
