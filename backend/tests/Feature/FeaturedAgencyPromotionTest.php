@@ -251,4 +251,31 @@ class FeaturedAgencyPromotionTest extends EnterpriseTestCase
         $this->putJson('/api/admin/featured-agencies/order', ['ids' => [1]], $headers)->assertStatus(403);
         $this->assertSame(0, AgencyPromotion::count());
     }
+    public function test_future_scheduled_placement_reserves_capacity_before_it_goes_live(): void
+    {
+        SystemSetting::set('promotions.max_slots', 1);
+        [$admin, $headers] = $this->platformAdmin();
+
+        $first = $this->makeAgency('Scheduled Slot Agency');
+        $second = $this->makeAgency('Next Scheduled Slot Agency');
+        $startsAt = Carbon::now()->addDay();
+        $endsAt = $startsAt->copy()->addDays(30);
+
+        $this->postJson('/api/admin/featured-agencies', [
+            'agency_id' => $first->id,
+            'duration_days' => 30,
+            'starts_at' => $startsAt->toDateTimeString(),
+            'ends_at' => $endsAt->toDateTimeString(),
+            'status' => 'active',
+        ], $headers)->assertStatus(201);
+
+        $this->assertSame([], app(AgencyPromotionService::class)->publicFeatured());
+        $this->assertSame(0, app(AgencyPromotionService::class)->stats()['available_slots']);
+
+        $this->postJson('/api/admin/featured-agencies', [
+            'agency_id' => $second->id,
+            'duration_days' => 30,
+        ], $headers)->assertStatus(422);
+    }
+
 }
