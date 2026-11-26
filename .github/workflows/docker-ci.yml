@@ -504,6 +504,7 @@ jobs:
         working-directory: frontend
         env:
           AUDIT_BASE: http://127.0.0.1
+          DEMO_STAFF_PASSWORD: ${{ env.CI_DEMO_PASSWORD }}
         run: npx tsx scripts/browser-interactions.mts
 
       - name: Run admin tab and button interaction audit across five personas
