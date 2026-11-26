@@ -359,7 +359,7 @@ async function solveVisibleMathCaptcha(page: Page): Promise<void> {
   // NFKC normalises full-width operators/digits; remove zero-width marks that
   // can be introduced by rendered text before parsing the visible challenge.
   const normalized = text.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/[−–—]/g, '-');
-  const match = normalized.match(/(-?\d+)\s*([+\\-×x*/÷])\s*(-?\d+)/i);
+  const match = normalized.match(/(-?\d+)\s*([+×x*/÷-])\s*(-?\d+)/i);
   if (!match) throw new Error(`Unsupported inquiry captcha question: ${JSON.stringify(text)}`);
   const left = Number(match[1]);
   const right = Number(match[3]);
