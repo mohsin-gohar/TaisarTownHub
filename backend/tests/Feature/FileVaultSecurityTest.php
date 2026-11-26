@@ -71,7 +71,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
     {
         return $this->agencyUser([
             'documents.view', 'documents.upload', 'documents.download',
-            'documents.update', 'documents.delete', 'documents.manage_permissions',
+            'documents.update', 'documents.delete', 'documents.restore', 'documents.manage_permissions',
             'documents.view_sensitive', 'manage_media', 'upload_media',
         ], 'document_manager');
     }
@@ -568,6 +568,75 @@ class FileVaultSecurityTest extends EnterpriseTestCase
 
         $this->assertDatabaseHas('documents', ['id' => $liveId]);
         $this->get("/api/agency/documents/{$liveId}/download", $headers)->assertStatus(200);
+    }
+
+    public function test_restoring_a_document_that_did_not_clear_malware_scan_keeps_it_quarantined(): void
+    {
+        [$user] = $this->uploader();
+        $this->bindVerdict(MalwareScanResult::skipped('clamav', 'clamav_not_available'));
+        config(['malware.fail_closed' => false]);
+
+        $documentId = $this->upload($user)
+            ->assertStatus(201)
+            ->assertJsonPath('document.status', 'quarantined')
+            ->json('document.id');
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->deleteJson("/api/agency/documents/{$documentId}", $headers)->assertOk();
+
+        $this->postJson("/api/agency/documents/{$documentId}/restore", [], $headers)
+            ->assertOk()
+            ->assertJsonPath('status', 'quarantined')
+            ->assertJsonPath('scan_status', 'skipped');
+
+        $this->assertDatabaseHas('documents', [
+            'id' => $documentId,
+            'status' => 'quarantined',
+            'scan_status' => 'skipped',
+            'deleted_at' => null,
+        ]);
+
+        $this->get("/api/agency/documents/{$documentId}/download", $headers)->assertStatus(422);
+    }
+
+    public function test_permanent_delete_retains_document_metadata_when_private_storage_delete_fails(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $documentId = 'doc_' . bin2hex(random_bytes(8));
+        $path = $agency->id . '/2026/11/' . $documentId . '.pdf';
+
+        $document = Document::create([
+            'id' => $documentId,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Delete failure fixture',
+            'original_name' => 'fixture.pdf',
+            'stored_name' => $documentId . '.pdf',
+            'disk_path' => $path,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 16,
+            'version' => 1,
+            'status' => 'trashed',
+            'scan_status' => 'scanned_clean',
+            'uploaded_by' => $user->id,
+        ]);
+        $document->delete();
+
+        $disk = Mockery::mock();
+        $disk->shouldReceive('exists')->once()->with($path)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($path)->andReturn(false);
+        Storage::shouldReceive('disk')->once()->with('documents')->andReturn($disk);
+
+        $this->deleteJson("/api/agency/documents/{$documentId}/permanent", [], $headers)
+            ->assertStatus(503);
+
+        $this->assertNotNull(Document::withTrashed()->find($documentId));
+        $this->assertDatabaseHas('documents', [
+            'id' => $documentId,
+            'status' => 'trashed',
+        ]);
     }
 
     /* ============ Configuration guardrails ============ */
