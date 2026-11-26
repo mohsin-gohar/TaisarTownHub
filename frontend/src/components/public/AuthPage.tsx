@@ -30,13 +30,13 @@ const GOOGLE_OAUTH_ENABLED = import.meta.env.VITE_GOOGLE_OAUTH_ENABLED === 'true
  * this value into its one-time state and echoes the hash back on the callback;
  * a callback started in another browser will not match this tab's value.
  */
-const createGoogleNonce = (): string => {
-  const bytes = new Uint8Array(24);
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+const createGoogleNonce = (): string | null => {
+  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') {
+    return null;
   }
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 };
 
 const googleErrorMessage = (code: string): string => {
@@ -155,7 +155,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
         .then((result: any) => {
           if (result.success && result.token) {
             setAuthToken(result.token);
-            setCurrentView('admin');
+            // Reboot AppContext so it loads the authenticated user and agency workspace.
+            window.location.assign('/admin');
           } else {
             setFormError(result.error || 'Google sign-in failed. Please try again.');
           }
@@ -400,6 +401,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialTab = 'signin' }) => 
                   setFormError('');
                   setBusy(true);
                   const nonce = createGoogleNonce();
+                  if (!nonce) {
+                    setFormError('Google sign-in requires a secure browser connection (HTTPS).');
+                    setBusy(false);
+                    return;
+                  }
                   void api.getGoogleRedirectUrl(nonce)
                     .then((result: any) => {
                       if (result.success && result.url && result.nonce_hash) {
