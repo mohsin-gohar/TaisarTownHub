@@ -347,4 +347,5 @@ async function runRole(
     )
   );
   if (hasInteractionFailures) process.exitCode = 1;
+  await browser.close();
 })();
