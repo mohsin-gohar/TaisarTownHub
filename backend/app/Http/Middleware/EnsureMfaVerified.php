@@ -36,8 +36,28 @@ class EnsureMfaVerified
             return $next($request);
         }
 
-        // MFA verification endpoint itself is always allowed.
-        if ($request->route() && str_ends_with($request->route()->uri, 'auth/mfa/verify')) {
+        $routeUri = $request->route()?->uri ?? '';
+
+        // Verification and read-only MFA status/history endpoints must remain
+        // reachable while a token is challenged.
+        if (
+            str_ends_with($routeUri, 'auth/mfa/verify')
+            || str_ends_with($routeUri, 'auth/mfa/status')
+            || str_ends_with($routeUri, 'auth/login-history')
+        ) {
+            return $next($request);
+        }
+
+        // A privileged user with no enrolled authenticator must be able to
+        // start and confirm enrolment when the global MFA policy is enabled.
+        // Once enabled, these endpoints are protected like every other route.
+        if (
+            !$user->hasMfaEnabled()
+            && (
+                str_ends_with($routeUri, 'auth/mfa/setup')
+                || str_ends_with($routeUri, 'auth/mfa/enable')
+            )
+        ) {
             return $next($request);
         }
 
