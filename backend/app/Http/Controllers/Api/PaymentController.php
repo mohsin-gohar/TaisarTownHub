@@ -88,37 +88,40 @@ class PaymentController extends Controller
                 }
 
                 $pending = SubscriptionInvoice::where('agency_id', $agencyId)
-                ->where('plan_id', $plan->id)
-                ->where('status', 'pending')
-                ->whereNull('flutterwave_tx_ref')
-                ->where('created_at', '>=', now()->subHours(24))
-                ->latest()
-                ->lockForUpdate()
-                ->first();
+                    ->where('status', 'pending')
+                    ->whereNull('flutterwave_tx_ref')
+                    ->where('created_at', '>=', now()->subHours(24))
+                    ->latest()
+                    ->lockForUpdate()
+                    ->first();
 
-            if ($pending) {
-                return $pending;
-            }
+                if ($pending && (int) $pending->plan_id !== (int) $plan->id) {
+                    throw new DomainException('A pending invoice already exists for another plan. Pay or void it before starting a new checkout.');
+                }
 
-            $amount = (int) round((float) $plan->price);
-            $periodStart = now();
-            $periodEnd = $plan->interval === 'year'
-                ? $periodStart->copy()->addYear()
-                : $periodStart->copy()->addMonth();
+                if ($pending) {
+                    return $pending;
+                }
 
-            return SubscriptionInvoice::create([
-                'id' => (string) Str::uuid(),
-                'invoice_number' => SubscriptionInvoice::nextNumber(),
-                'agency_id' => $agencyId,
-                'plan_id' => $plan->id,
-                'amount_pkr' => $amount,
-                'tax_pkr' => 0,
-                'total_pkr' => $amount,
-                'currency' => $plan->currency ?? 'PKR',
-                'period_start' => $periodStart->toDateString(),
-                'period_end' => $periodEnd->toDateString(),
-                'status' => 'pending',
-                'due_at' => now()->addDays(7),
+                $amount = (int) round((float) $plan->price);
+                $periodStart = now();
+                $periodEnd = $plan->interval === 'year'
+                    ? $periodStart->copy()->addYear()
+                    : $periodStart->copy()->addMonth();
+
+                return SubscriptionInvoice::create([
+                    'id' => (string) Str::uuid(),
+                    'invoice_number' => SubscriptionInvoice::nextNumber(),
+                    'agency_id' => $agencyId,
+                    'plan_id' => $plan->id,
+                    'amount_pkr' => $amount,
+                    'tax_pkr' => 0,
+                    'total_pkr' => $amount,
+                    'currency' => $plan->currency ?? 'PKR',
+                    'period_start' => $periodStart->toDateString(),
+                    'period_end' => $periodEnd->toDateString(),
+                    'status' => 'pending',
+                    'due_at' => now()->addDays(7),
                 ]);
             }, 3);
         } catch (DomainException $e) {
