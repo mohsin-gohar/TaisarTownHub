@@ -41,20 +41,20 @@ class MediaLifecycleIntegrityTest extends EnterpriseTestCase
 
         $this->getJson('/api/agency/media', $viewerHeaders)
             ->assertOk()
-            ->assertJsonMissingPath('media.data.0.buyer_name')
-            ->assertJsonMissingPath('media.data.0.buyer_phone')
-            ->assertJsonMissingPath('media.data.0.sold_price_pk')
-            ->assertJsonMissingPath('media.data.0.cost_price_pk')
-            ->assertJsonMissingPath('media.data.0.profit_pk');
+            ->assertJsonMissingPath('media.0.buyer_name')
+            ->assertJsonMissingPath('media.0.buyer_phone')
+            ->assertJsonMissingPath('media.0.sold_price_pk')
+            ->assertJsonMissingPath('media.0.cost_price_pk')
+            ->assertJsonMissingPath('media.0.profit_pk');
 
         [$manager] = $this->agencyUser(['manage_media', 'finance.view', 'documents.view_sensitive'], 'agency_manager', $agency);
         $managerHeaders = $this->authHeaders($this->tokenFor($manager));
 
         $this->getJson('/api/agency/media', $managerHeaders)
             ->assertOk()
-            ->assertJsonPath('media.data.0.id', $media->id)
-            ->assertJsonPath('media.data.0.buyer_name', 'Buyer Private Name')
-            ->assertJsonPath('media.data.0.sold_price_pk', 100);
+            ->assertJsonPath('media.0.id', $media->id)
+            ->assertJsonPath('media.0.buyer_name', 'Buyer Private Name')
+            ->assertJsonPath('media.0.sold_price_pk', 100.0);
     }
 
     public function test_public_media_requires_an_active_agency_and_available_status(): void
