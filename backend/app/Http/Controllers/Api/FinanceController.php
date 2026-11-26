@@ -788,7 +788,7 @@ public function update(Request $request, string $id)
 
     public function storePayment(Request $request, string $transactionId)
     {
-        $agencyId = $this->agencyId($request);
+        $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments']);
         $transaction = $this->findScoped($agencyId, $transactionId, $request->user());
 
@@ -930,7 +930,7 @@ public function update(Request $request, string $id)
 
 public function destroyPayment(Request $request, int $id)
     {
-        $agencyId = $this->agencyId($request);
+        $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments']);
         $request->validate(['reason' => 'required|string|min:3|max:500']);
 
@@ -991,7 +991,7 @@ public function destroyPayment(Request $request, int $id)
      */
     public function storeSchedules(Request $request, string $transactionId)
     {
-        $agencyId = $this->agencyId($request);
+        $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments']);
 
         $transaction = $this->findScoped($agencyId, $transactionId, $request->user());
@@ -1149,7 +1149,7 @@ public function destroyPayment(Request $request, int $id)
      */
     public function storeCommission(Request $request, string $transactionId)
     {
-        $agencyId = $this->agencyId($request);
+        $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments', 'pay_commissions']);
 
         $transaction = $this->findScoped($agencyId, $transactionId, $request->user());
@@ -1231,7 +1231,7 @@ public function destroyPayment(Request $request, int $id)
 
     public function updateCommission(Request $request, string $id)
     {
-        $agencyId = $this->agencyId($request);
+        $agencyId = $this->requireAgency($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments', 'pay_commissions']);
 
         $request->validate([
