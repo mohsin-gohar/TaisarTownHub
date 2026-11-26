@@ -7,7 +7,6 @@ use App\Models\AgencySubscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use DomainException;
-use RuntimeException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -53,7 +52,7 @@ class SubscriptionActivationService
             && $current->ends_at
             && $current->ends_at->isFuture()
         ) {
-            throw new RuntimeException('An active Stripe subscription must be cancelled before switching billing providers.');
+            throw new DomainException('An active Stripe subscription must be cancelled before switching billing providers.');
         }
 
         $startsAt = $invoice->period_start
@@ -67,7 +66,7 @@ class SubscriptionActivationService
                 : $startsAt->copy()->addMonth());
 
         if ($endsAt->lessThanOrEqualTo($startsAt)) {
-            throw new RuntimeException('The subscription invoice has an invalid billing period.');
+            throw new DomainException('The subscription invoice has an invalid billing period.');
         }
 
         return AgencySubscription::query()->updateOrCreate(
