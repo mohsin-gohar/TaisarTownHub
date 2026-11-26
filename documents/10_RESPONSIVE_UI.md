@@ -2,6 +2,9 @@
 
 **Version:** 2.0.0 · **Last updated:** 2026-11-08
 
+> **Historical UI design snapshot:** responsive behavior must be verified against current components and Playwright results; this file is not proof of current browser behavior.
+
+
 ## 1. Design System
 
 - **Palette:** Navy `#0B1220` / `#101C2C`, Gold `#C5A46D` / `#D4AF37`, Ivory `#F9E7BA`. No off-brand colors.
