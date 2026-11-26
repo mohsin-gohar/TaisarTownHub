@@ -75,32 +75,41 @@ class DealerFilesController extends Controller
             'dimensions' => 'nullable|string|max:50',
         ]);
 
-        // Legacy dealer files are URL registrations. Enforce the plan's file
-        // count only; storage quotas are not part of this release.
+        // Serialize the count-and-create operation on the agency row so
+        // two replicas cannot both consume the last dealer-file slot.
         $agencyId = $this->agencyId($request);
-        if ($agencyId !== null) {
-            $agency = Agency::findOrFail($agencyId);
-            $used = fn () => DealerFile::whereIn(
-                'dealer_id',
-                User::whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
-                    ->whereNotNull('dealer_id')->pluck('dealer_id')
-            )->count();
-            if ($block = PlanLimits::block($agency, 'dealer_files', $used)) {
-                return PlanLimits::deny('Dealer file limit reached for your subscription plan.', $block);
+        $result = DB::transaction(function () use ($agencyId, $dealerId, $validated): array {
+            if ($agencyId !== null) {
+                $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+                $used = fn () => DealerFile::whereIn(
+                    'dealer_id',
+                    User::whereHas('memberships', fn ($q) => $q->where('agency_id', $agencyId)->where('status', 'active'))
+                        ->whereNotNull('dealer_id')->pluck('dealer_id')
+                )->count();
+
+                if ($block = PlanLimits::block($agency, 'dealer_files', $used)) {
+                    return ['blocked' => $block];
+                }
             }
+
+            return ['file' => DealerFile::create([
+                'title' => strip_tags($validated['title']),
+                'type' => $validated['type'],
+                'url' => $validated['url'],
+                'folder' => $validated['folder'],
+                'file_size_kb' => $validated['file_size_kb'],
+                'dimensions' => $validated['dimensions'] ?? null,
+                'dealer_id' => $dealerId,
+                'uploaded_by' => $dealerId,
+                'status' => 'available',
+            ])];
+        }, 3);
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Dealer file limit reached for your subscription plan.', $result['blocked']);
         }
 
-        $file = DealerFile::create([
-            'title' => strip_tags($validated['title']),
-            'type' => $validated['type'],
-            'url' => $validated['url'],
-            'folder' => $validated['folder'],
-            'file_size_kb' => $validated['file_size_kb'],
-            'dimensions' => $validated['dimensions'] ?? null,
-            'dealer_id' => $dealerId,
-            'uploaded_by' => $dealerId,
-            'status' => 'available',
-        ]);
+        $file = $result['file'];
 
         $this->writeAudit($request, 'dealer_file.upload', (string) $file->id,
             "File {$file->title} uploaded to dealer {$dealer->fullName}", [
