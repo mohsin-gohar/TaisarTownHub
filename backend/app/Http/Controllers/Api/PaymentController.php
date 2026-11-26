@@ -582,6 +582,7 @@ class PaymentController extends Controller
                 'status' => 'paid',
                 'stripe_payment_intent_id' => $session->payment_intent ?? null,
                 'stripe_subscription_id' => $stripeSubId,
+                'stripe_invoice_id' => $session->invoice ?? null,
                 'paid_at' => now(),
             ]);
 
@@ -601,14 +602,97 @@ class PaymentController extends Controller
     private function handleStripeInvoicePaid($invoice): void
     {
         $stripeSubId = $invoice->subscription ?? ($invoice->parent->subscription_details->subscription ?? null);
-        if (!$stripeSubId) {
+        $stripeInvoiceId = $invoice->id ?? null;
+        if (!$stripeSubId || !$stripeInvoiceId) {
             return;
         }
 
-        $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)->first();
-        if ($agencySubscription) {
-            $agencySubscription->update(['status' => 'active']);
-        }
+        DB::transaction(function () use ($invoice, $stripeSubId, $stripeInvoiceId): void {
+            $subscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$subscription) {
+                return;
+            }
+
+            $subscription->loadMissing('plan');
+            $plan = $subscription->plan;
+            if (!$plan) {
+                throw new \RuntimeException('Stripe renewal references a subscription without a plan.');
+            }
+
+            $line = $invoice->lines->data[0] ?? null;
+            $periodStart = $line->period->start ?? null;
+            $periodEnd = $line->period->end ?? null;
+            $amountMinor = $invoice->amount_paid ?? $invoice->total ?? null;
+            $currency = strtoupper((string) ($invoice->currency ?? ''));
+
+            if (!is_numeric($periodStart) || !is_numeric($periodEnd) || (int) $periodEnd <= (int) $periodStart
+                || !is_numeric($amountMinor) || (float) $amountMinor < 0
+                || $currency === '' || $currency !== strtoupper((string) $plan->currency)) {
+                throw new \RuntimeException('Stripe renewal invoice is missing a valid period, amount or plan currency.');
+            }
+
+            $periodStartAt = now()->setTimestamp((int) $periodStart);
+            $periodEndAt = now()->setTimestamp((int) $periodEnd);
+            $localInvoice = SubscriptionInvoice::where('stripe_invoice_id', $stripeInvoiceId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($localInvoice && !in_array($localInvoice->status, ['pending', 'paid'], true)) {
+                Log::warning('Stripe paid invoice references a non-payable local invoice', [
+                    'stripe_invoice_id' => $stripeInvoiceId,
+                    'local_status' => $localInvoice->status,
+                ]);
+
+                return;
+            }
+
+            if (!$localInvoice) {
+                $amountPkr = (int) round(((float) $amountMinor) / 100);
+                $localInvoice = SubscriptionInvoice::create([
+                    'id' => (string) Str::uuid(),
+                    'invoice_number' => SubscriptionInvoice::nextNumber(),
+                    'agency_id' => $subscription->agency_id,
+                    'plan_id' => $subscription->plan_id,
+                    'amount_pkr' => $amountPkr,
+                    'tax_pkr' => 0,
+                    'total_pkr' => $amountPkr,
+                    'currency' => $currency,
+                    'period_start' => $periodStartAt->toDateString(),
+                    'period_end' => $periodEndAt->toDateString(),
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'payment_method' => 'stripe',
+                    'payment_reference' => $stripeInvoiceId,
+                    'stripe_subscription_id' => $stripeSubId,
+                    'stripe_invoice_id' => $stripeInvoiceId,
+                ]);
+            } elseif ($localInvoice->status === 'pending') {
+                $localInvoice->update([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'payment_method' => 'stripe',
+                    'payment_reference' => $stripeInvoiceId,
+                    'stripe_subscription_id' => $stripeSubId,
+                ]);
+            }
+
+            // Stripe period.end is the authoritative renewal boundary. Never
+            // shorten an already-extended term when webhooks arrive out of order.
+            $currentEnd = $subscription->ends_at;
+            if (!$currentEnd || $periodEndAt->greaterThan($currentEnd)) {
+                $subscription->ends_at = $periodEndAt;
+                if ($subscription->status !== 'cancelled') {
+                    $subscription->status = 'active';
+                }
+                $subscription->save();
+            } elseif ($subscription->status === 'past_due' && $currentEnd->isFuture()) {
+                $subscription->status = 'active';
+                $subscription->save();
+            }
+        }, 3);
     }
 
     private function handleStripeInvoiceFailed($invoice): void
@@ -618,10 +702,30 @@ class PaymentController extends Controller
             return;
         }
 
-        $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)->first();
-        if ($agencySubscription) {
-            $agencySubscription->update(['status' => 'past_due']);
-        }
+        DB::transaction(function () use ($invoice, $stripeSubId): void {
+            $subscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$subscription) {
+                return;
+            }
+
+            $line = $invoice->lines->data[0] ?? null;
+            $periodEnd = $line->period->end ?? null;
+            $currentEnd = $subscription->ends_at;
+
+            // Ignore a delayed failure from an older period after a later
+            // renewal has already extended access.
+            if (is_numeric($periodEnd) && $currentEnd
+                && (int) $periodEnd <= $currentEnd->getTimestamp()) {
+                return;
+            }
+
+            if ($subscription->status !== 'cancelled') {
+                $subscription->update(['status' => 'past_due']);
+            }
+        }, 3);
     }
 
     private function handleStripeSubscriptionChanged($subscription): void
