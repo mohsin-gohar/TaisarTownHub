@@ -19,6 +19,7 @@
  */
 const API = process.env.PROBE_API || 'http://127.0.0.1:8090/api';
 const stamp = Date.now();
+const sharedDemoPassword = process.env.DEMO_STAFF_PASSWORD;
 
 type Row = { workflow: string; step: string; ok: boolean; evidence: string };
 const rows: Row[] = [];
@@ -66,9 +67,9 @@ async function login(email: string, password: string) {
 
 (async () => {
   // Shared personas (real accounts, throttled sign-ins).
-  const owner = await login('admin@taisartownhub.com', 'Admin@Taisar2026');
+  const owner = await login('admin@taisartownhub.com', sharedDemoPassword || 'Admin@Taisar2026');
   const ownerToken = owner.token;
-  const sa = await login('superadmin@taisartownhub.com', 'Super@Admin2026!');
+  const sa = await login('superadmin@taisartownhub.com', sharedDemoPassword || 'Super@Admin2026!');
   record('setup', 'personas signed in', Boolean(ownerToken) && Boolean(sa.token), `owner=${owner.status} superadmin=${sa.status}`);
 
   // ===================== W2: property lifecycle (first — W1 uses its listing)
@@ -103,7 +104,7 @@ async function login(email: string, password: string) {
       record('W2 property', 'approved listing is publicly visible', detail.status === 200, `status=${detail.status}`);
 
       // manager@ must NOT be able to moderate (no properties.approve/reject)
-      const mgr = await login('manager@taisartownhub.com', 'Manager@2026');
+      const mgr = await login('manager@taisartownhub.com', sharedDemoPassword || 'Manager@2026');
       if (mgr.token) {
         const reject = await call(`/properties/${w2PropertyId}/reject`, { method: 'POST', token: mgr.token, agency: 'agency-demo' });
         record('W2 property', 'agency manager cannot moderate (403)', reject.status === 403, `status=${reject.status}`);
@@ -221,7 +222,7 @@ async function login(email: string, password: string) {
     }
   }
 
-  const dealer = await login('dealer@taisartownhub.com', 'Dealer@2026');
+  const dealer = await login('dealer@taisartownhub.com', sharedDemoPassword || 'Dealer@2026');
   if (dealer.token) {
     const file = await call('/dealer-files', {
       method: 'POST',
