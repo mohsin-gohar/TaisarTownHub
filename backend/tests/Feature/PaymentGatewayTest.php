@@ -159,13 +159,16 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ])->assertStatus(422);
         $this->assertSame('pending', $invoice->fresh()->status);
 
-        // Correct payload activates it.
+        // Flutterwave's real webhook shape nests transaction fields under data.
         $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
-            'status' => 'successful',
-            'tx_ref' => 'fw-ref-100',
-            'id' => 991,
-            'amount' => 5000,
-            'currency' => 'PKR',
+            'event' => 'charge.completed',
+            'data' => [
+                'status' => 'successful',
+                'tx_ref' => 'fw-ref-100',
+                'id' => 991,
+                'amount' => 5000,
+                'currency' => 'PKR',
+            ],
         ])->assertOk()->assertJsonPath('success', true);
 
         $this->assertSame('paid', $invoice->fresh()->status);
@@ -175,6 +178,30 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'plan_id' => $plan->id,
             'status' => 'active',
         ]);
+    }
+
+    public function test_flutterwave_webhook_requires_amount_and_currency_before_activation(): void
+    {
+        config(['services.flutterwave.webhook_secret' => 'fw_test_hash']);
+
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['flutterwave_tx_ref' => 'fw-ref-missing-fields']);
+
+        $this->asGuest();
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])
+            ->postJson('/api/payments/webhook/flutterwave', [
+                'data' => [
+                    'status' => 'successful',
+                    'tx_ref' => 'fw-ref-missing-fields',
+                    'id' => 992,
+                ],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
+
+        $this->assertSame('pending', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', ['agency_id' => $agency->id]);
     }
 
     public function test_flutterwave_verification_requires_auth_and_billing_permission(): void
