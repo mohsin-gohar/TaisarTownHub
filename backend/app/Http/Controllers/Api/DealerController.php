@@ -121,7 +121,7 @@ class DealerController extends Controller
             'commissionType' => 'nullable|string|in:Fixed,Percentage,Custom',
             'commissionRate' => [
                 'nullable', 'numeric', 'min:0', 'max:999999999999',
-                function (string $attribute, mixed $value, \\Closure $fail) use ($effectiveCommissionType): void {
+                function (string $attribute, mixed $value, \Closure $fail) use ($effectiveCommissionType): void {
                     if ($effectiveCommissionType === 'Percentage' && (float) $value > 100) {
                         $fail('Percentage commission rate cannot exceed 100.');
                     }
