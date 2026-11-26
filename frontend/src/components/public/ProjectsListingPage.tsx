@@ -87,6 +87,7 @@ export const ProjectsListingPage: React.FC = () => {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
+                  aria-pressed={isActive}
                   className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                     isActive
                       ? 'bg-[#E7C878] text-[#0B1220] shadow'
