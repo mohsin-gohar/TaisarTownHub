@@ -803,7 +803,7 @@ export const AdminTransactions: React.FC = () => {
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">Payment Ledger</h3>
+            <h3 className="font-serif-luxury text-xl font-bold text-white mb-1">Payment & Refund Ledger</h3>
             <p className="text-xs text-slate-400 mb-4">
               {paymentModalTxn.dealNumber || paymentModalTxn.id} · Plot {paymentModalTxn.plotNumber} {paymentModalTxn.sector}
             </p>
@@ -811,12 +811,13 @@ export const AdminTransactions: React.FC = () => {
             {(() => {
               const rows = paymentsByTxId.get(paymentModalTxn.id) || [];
               const money = dealMoney(paymentModalTxn, rows);
-              const frozen = paymentModalTxn.voided || paymentModalTxn.status === 'Cancelled';
+              const paymentFrozen = paymentModalTxn.voided || paymentModalTxn.status === 'Cancelled';
+              const refundFrozen = paymentModalTxn.voided || money.collected <= 0;
               return (
                 <>
                   <div className="grid grid-cols-3 gap-3 mb-5">
                     <div className="p-3 rounded-xl bg-[#07141E] border border-[#E7C878]/30">
-                      <span className="text-[10px] text-slate-400 block">Paid</span>
+                      <span className="text-[10px] text-slate-400 block">Net collected</span>
                       <strong className="text-sm font-mono text-[#E7C878]">{formatPKRCurrency(money.collected)}</strong>
                     </div>
                     <div className="p-3 rounded-xl bg-[#07141E] border border-slate-700">
@@ -829,22 +830,26 @@ export const AdminTransactions: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* History */}
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#E7C878] block mb-2">
                     Recorded movements ({rows.length})
                   </span>
                   <div className="space-y-2 mb-5 max-h-40 overflow-y-auto pr-1">
-                    {rows.map((row) => (
-                      <div key={row.id} className="p-2.5 rounded-lg bg-[#07141E] border border-slate-800 text-xs flex items-start justify-between gap-3">
-                        <div>
-                          <div className="font-mono font-bold text-[#E7C878]">+ {formatPKRCurrency(row.amountPKR)}</div>
-                          <div className="text-[10px] text-slate-400">
-                            {row.paidAt} · {row.method} · by {row.recordedBy}
+                    {rows.map((row) => {
+                      const isRefund = row.type === 'refund';
+                      return (
+                        <div key={row.id} className="p-2.5 rounded-lg bg-[#07141E] border border-slate-800 text-xs flex items-start justify-between gap-3">
+                          <div>
+                            <div className={`font-mono font-bold ${isRefund ? 'text-rose-300' : 'text-[#E7C878]'}`}>
+                              {isRefund ? '− ' : '+ '}{formatPKRCurrency(row.amountPKR)} {isRefund ? '· Refund' : ''}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              {row.paidAt} · {row.method} · by {row.recordedBy}
+                            </div>
+                            {row.note && <div className="text-[10px] text-slate-500 italic mt-0.5">{row.note}</div>}
                           </div>
-                          {row.note && <div className="text-[10px] text-slate-500 italic mt-0.5">{row.note}</div>}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {rows.length === 0 && (
                       <div className="text-[11px] text-slate-500 italic p-2">
                         No ledger movements yet — the recorded advance of this legacy deal appears in totals until the first entry is acknowledged.
@@ -852,11 +857,39 @@ export const AdminTransactions: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Record new payment — hidden without manage_payments or when frozen */}
-                  {canRecordPayments && !frozen && money.balance > 0 && (
-                    <form onSubmit={handleConfirmPayment} className="pt-4 border-t border-slate-800 space-y-3">
+                  {canRecordPayments && (
+                    <div className="flex gap-2 border-t border-slate-800 pt-4 mb-3">
+                      <button
+                        type="button"
+                        disabled={paymentFrozen || money.balance <= 0}
+                        onClick={() => {
+                          setPaymentModalMode('payment');
+                          setPaymentAmount(money.balance > 0 ? money.balance : 0);
+                          setPaymentNote('');
+                        }}
+                        className="px-3 py-2 rounded-lg bg-slate-800 text-xs font-semibold text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700"
+                      >
+                        Record Payment
+                      </button>
+                      <button
+                        type="button"
+                        disabled={refundFrozen}
+                        onClick={() => {
+                          setPaymentModalMode('refund');
+                          setPaymentAmount(money.collected > 0 ? money.collected : 0);
+                          setPaymentNote('');
+                        }}
+                        className="px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-900/50 text-xs font-semibold text-rose-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-rose-500/20"
+                      >
+                        Record Refund
+                      </button>
+                    </div>
+                  )}
+
+                  {canRecordPayments && paymentModalMode === 'payment' && !paymentFrozen && money.balance > 0 && (
+                    <form onSubmit={handleConfirmPayment} className="space-y-3">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-[#E7C878] block">
-                        Record payment
+                        New payment
                       </span>
                       <div className="grid grid-cols-2 gap-3">
                         <label className="block">
@@ -895,14 +928,7 @@ export const AdminTransactions: React.FC = () => {
                           className="w-full bg-[#07141E] text-white p-2 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none text-xs"
                         />
                       </label>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setPaymentModalTxn(null)}
-                          className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer hover:bg-slate-700"
-                        >
-                          Close
-                        </button>
+                      <div className="flex justify-end">
                         <button
                           type="submit"
                           className="px-4 py-2 rounded-lg bg-[#E7C878] hover:bg-[#F3C464] text-[#0B1220] text-xs font-bold cursor-pointer transition shadow"
@@ -912,14 +938,69 @@ export const AdminTransactions: React.FC = () => {
                       </div>
                     </form>
                   )}
-                  {canRecordPayments && frozen && (
+
+                  {canRecordPayments && paymentModalMode === 'refund' && !refundFrozen && (
+                    <form onSubmit={handleConfirmPayment} className="space-y-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-300 block">
+                        Refund collected funds
+                      </span>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block">
+                          <span className="text-[10px] text-slate-400 block mb-1">Refund amount (PKR)</span>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            max={money.collected}
+                            value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                            className="w-full bg-[#07141E] text-white p-2 rounded-lg border border-rose-900/50 focus:border-rose-400 focus:outline-none text-xs font-mono"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-[10px] text-slate-400 block mb-1">Method</span>
+                          <select
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value as PaymentEntry['method'])}
+                            className="w-full bg-[#07141E] text-white p-2 rounded-lg border border-slate-700 focus:border-[#E7C878] focus:outline-none text-xs cursor-pointer"
+                          >
+                            <option>Bank Transfer</option>
+                            <option>Pay Order</option>
+                            <option>Cash / Cheque</option>
+                            <option>Online Transfer</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="block">
+                        <span className="text-[10px] text-slate-400 block mb-1">Refund reason/reference (required)</span>
+                        <input
+                          type="text"
+                          required
+                          value={paymentNote}
+                          onChange={(e) => setPaymentNote(e.target.value)}
+                          placeholder="e.g. Cancellation refund approved, bank reference..."
+                          className="w-full bg-[#07141E] text-white p-2 rounded-lg border border-rose-900/50 focus:border-rose-400 focus:outline-none text-xs"
+                        />
+                      </label>
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          className="px-4 py-2 rounded-lg bg-rose-500/20 border border-rose-900/50 text-rose-100 text-xs font-bold cursor-pointer transition hover:bg-rose-500/30"
+                        >
+                          Record Refund
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {canRecordPayments && paymentModalMode === 'payment' && paymentFrozen && (
                     <div className="p-2.5 rounded-lg bg-[#07141E] border border-slate-700 text-[11px] text-slate-300">
-                      This deal is {paymentModalTxn.voided ? 'voided' : 'cancelled'} — payments are frozen.
+                      This deal is {paymentModalTxn.voided ? 'voided' : 'cancelled'} — new payments are frozen. Previously collected funds can still be refunded.
                     </div>
                   )}
-                  {canRecordPayments && !frozen && money.balance <= 0 && (
-                    <div className="p-2.5 rounded-lg bg-[#07141E] border border-[#E7C878]/40 text-[11px] text-[#F6E3B4]">
-                      Deal money fully banked — no outstanding balance.
+                  {canRecordPayments && paymentModalMode === 'refund' && refundFrozen && (
+                    <div className="p-2.5 rounded-lg bg-[#07141E] border border-slate-700 text-[11px] text-slate-300">
+                      {paymentModalTxn.voided ? 'Voided deals cannot be refunded.' : 'No net collected funds are available to refund.'}
                     </div>
                   )}
                   {!canRecordPayments && (
