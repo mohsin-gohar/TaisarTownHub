@@ -1365,6 +1365,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('error', 'This deal is voided and read-only.');
       return;
     }
+    if (['Completed', 'Cancelled'].includes(existingTx.status) && !hasPermission(currentUser.role, 'approve_transactions')) {
+      showToast('error', 'Completed and cancelled deals are read-only.');
+      return;
+    }
 
     // Prevent duplicate active sale deals per property unless supervisor-approved.
     const targetPropertyId = updates.propertyId || existingTx.propertyId;
@@ -1403,16 +1407,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // On Cancel: confirm a reason (updates note), cancel unpaid accruals and
       // release the property back to inventory.
       if (updates.status === 'Cancelled') {
-        if (!(existingTx.internalRemarks || existingTx.notes || updates.internalRemarks || updates.notes)) {
-          showToast('error', 'A cancellation reason is required. Add it to the deal notes.');
+        const cancellationReason = (existingTx.internalRemarks || existingTx.notes || updates.internalRemarks || updates.notes || '').trim();
+        if (cancellationReason.length < 3) {
+          showToast('error', 'A cancellation reason of at least 3 characters is required.');
           return;
         }
         const cancelledTx = { ...updatedTx, commissionStatus: 'Cancelled' as const };
         setCommissionEntries((prev) =>
-          prev.map((e) => {
-            if (e.transactionId !== id) return e;
-            const r = accrueCommission(e, cancelledTx, paymentEntries);
-            return r.changed ? r.entry : e;
+          prev.map((entry) => {
+            if (entry.transactionId !== id || entry.status === 'Paid' || entry.paidPKR > 0) return entry;
+            return { ...entry, status: 'Cancelled' };
           })
         );
         updatedTx = cancelledTx;
