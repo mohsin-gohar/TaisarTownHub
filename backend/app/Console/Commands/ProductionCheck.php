@@ -249,7 +249,7 @@ class ProductionCheck extends Command
         $googleClientId = trim((string) config('services.google.client_id', ''));
         $googleClientSecret = trim((string) config('services.google.client_secret', ''));
         $googleRedirect = (string) config('services.google.redirect', '');
-        $googlePartial = ($googleClientId === '') xor ($googleClientSecret === '');
+        $googlePartial = (($googleClientId === '') xor ($googleClientSecret === ''));
         $googleRedirectValid = ($googleClientId === '' && $googleClientSecret === '')
             || str_starts_with(strtolower($googleRedirect), 'https://');
         $googleStatus = ($googlePartial || !$googleRedirectValid) ? 'FAIL' : 'PASS';
