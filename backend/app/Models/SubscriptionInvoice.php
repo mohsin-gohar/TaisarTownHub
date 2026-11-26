@@ -76,7 +76,18 @@ class SubscriptionInvoice extends Model
                 throw new \RuntimeException('Invoice number sequence row could not be locked.');
             }
 
-            $next = (int) $row->next_number + 1;
+            // Reconcile against imported/manual invoice rows as well as the
+            // sequence counter so historical data can never cause reuse.
+            $lastInvoiceNumber = self::where('invoice_number', 'like', "INV-{$year}-%")
+                ->orderByDesc('invoice_number')
+                ->value('invoice_number');
+            $lastIssued = 0;
+            if (is_string($lastInvoiceNumber)
+                && preg_match('/^INV-\\d{4}-(\\d+)$/', $lastInvoiceNumber, $matches) === 1) {
+                $lastIssued = (int) $matches[1];
+            }
+
+            $next = max((int) $row->next_number, $lastIssued) + 1;
             DB::table('subscription_invoice_number_sequences')
                 ->where('year', $year)
                 ->update(['next_number' => $next, 'updated_at' => now()]);
