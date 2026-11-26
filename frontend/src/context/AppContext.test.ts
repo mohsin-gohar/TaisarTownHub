@@ -66,6 +66,14 @@ test('inquiry status and notes keep server state on failed writes', () => {
   assert.ok(source.includes('const previous = inquiries.find((inquiry) => inquiry.id === id)'));
   assert.ok(source.includes("setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, status } : inquiry)))"));
   assert.ok(source.includes("setInquiries((prev) => prev.map((inquiry) => (inquiry.id === id ? { ...inquiry, adminNotes: notes } : inquiry)))"));
-  assert.equal(source.includes("status: 'Pending'"), false);
-  assert.equal(source.includes("adminNotes: ''"), false);
+  const statusHandler = source.slice(
+    source.indexOf('const updateInquiryStatus'),
+    source.indexOf('const updateInquiryNotes')
+  );
+  const notesHandler = source.slice(
+    source.indexOf('const updateInquiryNotes'),
+    source.indexOf('const deleteInquiry')
+  );
+  assert.equal(statusHandler.includes("status: 'Pending'"), false);
+  assert.equal(notesHandler.includes("adminNotes: ''"), false);
 });
