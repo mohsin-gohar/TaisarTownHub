@@ -268,28 +268,56 @@ class AdminAgencyController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        $agency = Agency::findOrFail($id);
+        $result = DB::transaction(function () use ($request, $id): array {
+            $agency = Agency::whereKey($id)->lockForUpdate()->firstOrFail();
+            $current = AgencySubscription::where('agency_id', $agency->id)->lockForUpdate()->first();
 
-        $subscription = AgencySubscription::updateOrCreate(
-            ['agency_id' => $agency->id],
-            [
-                'plan_id' => $request->plan_id,
-                'status' => $request->get('status', 'active'),
-                'starts_at' => $request->starts_at ?: now(),
-                'ends_at' => $request->ends_at,
-                'trial_ends_at' => $request->trial_ends_at,
-                'limits_override' => $request->limits_override,
-                'notes' => $request->notes,
-                'created_by' => $request->user()->id,
-            ]
-        );
+            // Never overwrite the local link to a live Stripe subscription:
+            // doing so would orphan an external recurring charge.
+            if ($current && $current->stripe_subscription_id
+                && in_array($current->status, ['active', 'past_due'], true)) {
+                return ['conflict' => true];
+            }
+
+            $subscription = AgencySubscription::updateOrCreate(
+                ['agency_id' => $agency->id],
+                [
+                    'plan_id' => $request->plan_id,
+                    'status' => $request->get('status', 'active'),
+                    'starts_at' => $request->starts_at ?: now(),
+                    'ends_at' => $request->ends_at,
+                    'trial_ends_at' => $request->trial_ends_at,
+                    'limits_override' => $request->limits_override,
+                    'notes' => $request->notes,
+                    'auto_renew' => false,
+                    'stripe_subscription_id' => null,
+                    'provider' => 'manual',
+                    'cancelled_at' => null,
+                    'created_by' => $request->user()->id,
+                ]
+            );
+
+            return ['agency' => $agency, 'subscription' => $subscription];
+        }, 3);
+
+        if (($result['conflict'] ?? false) === true) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cancel the active Stripe subscription before applying a manual plan assignment.',
+            ], 409);
+        }
+
+        /** @var Agency $agency */
+        $agency = $result['agency'];
+        /** @var AgencySubscription $subscription */
+        $subscription = $result['subscription'];
 
         $this->writeAudit($request, 'subscription.assign', $agency->id, "Subscription assigned to {$agency->name}", [
             'agency_id' => $agency->id,
             'entity_type' => 'agency_subscription',
             'entity_id' => (string) $subscription->id,
             'cross_agency' => true,
-            'metadata' => ['plan_id' => $request->plan_id, 'status' => $subscription->status],
+            'metadata' => ['plan_id' => $request->plan_id, 'status' => $subscription->status, 'provider' => 'manual'],
         ]);
 
         return response()->json([
