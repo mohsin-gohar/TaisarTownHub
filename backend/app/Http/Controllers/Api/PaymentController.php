@@ -285,7 +285,7 @@ class PaymentController extends Controller
                 if ($invoice->status === 'paid') {
                     return 'already_paid';
                 }
-                if ($invoice->status !== 'pending') {
+                if (!in_array($invoice->status, ['pending', 'failed'], true)) {
                     Log::warning('Flutterwave webhook ignored for non-pending invoice', [
                         'tx_ref' => $txRef,
                         'status' => $invoice->status,
@@ -437,7 +437,7 @@ class PaymentController extends Controller
                 if ($lockedInvoice->status === 'paid') {
                     return 'already_paid';
                 }
-                if ($lockedInvoice->status !== 'pending') {
+                if (!in_array($lockedInvoice->status, ['pending', 'failed'], true)) {
                     return 'not_pending';
                 }
 
