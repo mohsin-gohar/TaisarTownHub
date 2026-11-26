@@ -60,37 +60,66 @@ class PaymentController extends Controller
 
         $plan = SubscriptionPlan::findOrFail($request->plan_id);
 
-        // Every agency already has a starter subscription (5 GB workspace), so
-        // an existing row must never block an upgrade. Payment is optional
-        // during the free launch; platform admins can also assign plans
-        // directly from the dashboard.
-        $existingPending = SubscriptionInvoice::where('agency_id', $agencyId)
-            ->where('plan_id', $plan->id)
-            ->where('status', 'pending')
-            ->whereNotNull('stripe_session_id')
-            ->where('created_at', '>=', now()->subHours(24))
-            ->latest()
-            ->first();
+        // Serialize checkout creation per agency. The invoice is persisted
+        // before calling Stripe, so retries can reuse one stable idempotency key
+        // instead of creating duplicate sessions or orphaned remote checkouts.
+        $invoice = DB::transaction(function () use ($agencyId, $plan): SubscriptionInvoice {
+            DB::table('agencies')->where('id', $agencyId)->lockForUpdate()->first();
 
-        if ($existingPending) {
+            $pending = SubscriptionInvoice::where('agency_id', $agencyId)
+                ->where('plan_id', $plan->id)
+                ->where('status', 'pending')
+                ->whereNull('flutterwave_tx_ref')
+                ->where('created_at', '>=', now()->subHours(24))
+                ->latest()
+                ->lockForUpdate()
+                ->first();
+
+            if ($pending) {
+                return $pending;
+            }
+
+            $amount = (int) round((float) $plan->price);
+            $periodStart = now();
+            $periodEnd = $plan->interval === 'year'
+                ? $periodStart->copy()->addYear()
+                : $periodStart->copy()->addMonth();
+
+            return SubscriptionInvoice::create([
+                'id' => (string) Str::uuid(),
+                'invoice_number' => SubscriptionInvoice::nextNumber(),
+                'agency_id' => $agencyId,
+                'plan_id' => $plan->id,
+                'amount_pkr' => $amount,
+                'tax_pkr' => 0,
+                'total_pkr' => $amount,
+                'currency' => $plan->currency ?? 'PKR',
+                'period_start' => $periodStart->toDateString(),
+                'period_end' => $periodEnd->toDateString(),
+                'status' => 'pending',
+                'due_at' => now()->addDays(7),
+            ]);
+        }, 3);
+
+        if ($invoice->stripe_session_id) {
             return response()->json([
                 'success' => true,
                 'message' => 'A recent checkout session already exists for this plan. Complete it or wait for it to expire before retrying.',
-                'session_id' => $existingPending->stripe_session_id,
+                'session_id' => $invoice->stripe_session_id,
             ], 409);
         }
 
-        $amount = (int) round((float) $plan->price);
+        $amount = (int) $invoice->total_pkr;
 
         try {
-            $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
+            $stripe = new \\Stripe\\StripeClient(config('services.stripe.secret'));
 
             $session = $stripe->checkout->sessions->create([
                 'mode' => 'subscription',
                 'payment_method_types' => ['card'],
                 'line_items' => [[
                     'price_data' => [
-                        'currency' => strtolower($plan->currency ?? 'pkr'),
+                        'currency' => strtolower($invoice->currency),
                         'product_data' => [
                             'name' => $plan->name,
                             'description' => $plan->description ?? 'TaisarTownHub agency subscription',
@@ -109,35 +138,21 @@ class PaymentController extends Controller
                     'agency_id' => $agencyId,
                     'plan_id' => $plan->id,
                 ],
+            ], [
+                'idempotency_key' => 'subscription-checkout-' . $invoice->id,
             ]);
 
-            // Create a pending invoice using the canonical schema columns.
-            SubscriptionInvoice::create([
-                'id' => (string) Str::uuid(),
-                'invoice_number' => SubscriptionInvoice::nextNumber(),
-                'agency_id' => $agencyId,
-                'plan_id' => $plan->id,
-                'amount_pkr' => $amount,
-                'tax_pkr' => 0,
-                'total_pkr' => $amount,
-                'currency' => $plan->currency ?? 'PKR',
-                'period_start' => now()->toDateString(),
-                'period_end' => $plan->interval === 'year'
-                    ? now()->addYear()->toDateString()
-                    : now()->addMonth()->toDateString(),
-                'status' => 'pending',
-                'stripe_session_id' => $session->id,
-                'due_at' => now()->addDays(7),
-            ]);
+            $invoice->update(['stripe_session_id' => $session->id]);
 
             return response()->json([
                 'success' => true,
                 'checkout_url' => $session->url,
                 'session_id' => $session->id,
             ]);
-        } catch (\Throwable $e) {
+        } catch (\\Throwable $e) {
             Log::error('Stripe checkout failed', [
                 'agency_id' => $agencyId,
+                'invoice_id' => $invoice->id,
                 'error' => $e->getMessage(),
             ]);
 
