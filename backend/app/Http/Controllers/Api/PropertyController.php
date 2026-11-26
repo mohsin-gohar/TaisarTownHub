@@ -301,10 +301,11 @@ class PropertyController extends Controller
         $payload['isFeatured'] = false;
 
         $result = DB::transaction(function () use ($agencyId, $payload, $request): array {
-            $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
-
-            if ($block = PlanLimits::block($agency, 'listings')) {
-                return ['blocked' => $block];
+            if ($agencyId !== null) {
+                $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+                if ($block = PlanLimits::block($agency, 'listings')) {
+                    return ['blocked' => $block];
+                }
             }
 
             $property = Property::create($payload);
