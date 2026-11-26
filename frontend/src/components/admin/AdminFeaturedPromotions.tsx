@@ -71,9 +71,14 @@ const isPlacementLive = (placement: Placement): boolean => {
   const now = Date.now();
   const startsAt = placement.starts_at ? Date.parse(placement.starts_at) : Number.NEGATIVE_INFINITY;
   const endsAt = placement.ends_at ? Date.parse(placement.ends_at) : Number.POSITIVE_INFINITY;
-  return Number.isFinite(startsAt) || startsAt === Number.NEGATIVE_INFINITY
-    ? startsAt <= now && endsAt > now
-    : false;
+  return (Number.isFinite(startsAt) || startsAt === Number.NEGATIVE_INFINITY)
+    && startsAt <= now && endsAt > now;
+};
+
+const isPlacementCurrent = (placement: Placement): boolean => {
+  if (!['pending', 'active'].includes(placement.status)) return false;
+  const endsAt = placement.ends_at ? Date.parse(placement.ends_at) : Number.POSITIVE_INFINITY;
+  return endsAt > Date.now();
 };
 
 const statusTone = (status: string): 'green' | 'gold' | 'red' | 'slate' | 'blue' => {
@@ -140,9 +145,9 @@ export const AdminFeaturedPromotions: React.FC = () => {
     void load();
   }, [load]);
 
-  const livePlacements = useMemo(
+  const currentPlacements = useMemo(
     () => placements
-      .filter(isPlacementLive)
+      .filter(isPlacementCurrent)
       .sort((a, b) => Number(a.position) - Number(b.position) || Number(a.id) - Number(b.id)),
     [placements],
   );
@@ -222,8 +227,8 @@ export const AdminFeaturedPromotions: React.FC = () => {
 
   const move = async (index: number, direction: -1 | 1) => {
     const target = index + direction;
-    if (target < 0 || target >= livePlacements.length) return;
-    const reordered = [...livePlacements];
+    if (target < 0 || target >= currentPlacements.length) return;
+    const reordered = [...currentPlacements];
     const [moved] = reordered.splice(index, 1);
     reordered.splice(target, 0, moved);
     setBusy('reorder');
@@ -358,7 +363,7 @@ export const AdminFeaturedPromotions: React.FC = () => {
         <div className="xl:col-span-8 space-y-6">
           <EnterpriseCard
             title="Homepage roster"
-            subtitle={`${livePlacements.length} live placement(s) · drag-free ordered priority (top slot first)`}
+            subtitle={`${currentPlacements.length} reserved placement(s) · live and scheduled priority (top slot first)`}
           >
             {placements.length === 0 ? (
               <EnterpriseEmpty title="No placements yet" hint="Choose an eligible agency on the right to create the first homepage placement." />
@@ -367,7 +372,8 @@ export const AdminFeaturedPromotions: React.FC = () => {
                 {placements.map((placement) => {
                   const isLive = isPlacementLive(placement);
                   const isScheduled = placement.status === 'active' && !!placement.starts_at && Date.parse(placement.starts_at) > Date.now();
-                  const liveIndex = livePlacements.findIndex((row) => row.id === placement.id);
+                  const currentIndex = currentPlacements.findIndex((row) => row.id === placement.id);
+                  const isCurrent = isPlacementCurrent(placement);
                   return (
                     <div key={placement.id} className="rounded-xl border border-slate-800 bg-[#07141E] p-3">
                       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -387,21 +393,21 @@ export const AdminFeaturedPromotions: React.FC = () => {
                           {placement.notes && <div className="mt-1 text-[10px] text-slate-500 line-clamp-2">{placement.notes}</div>}
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {isLive && (
+                          {isCurrent && (
                             <>
                               <EnterpriseButton
                                 variant="secondary"
                                 title="Move up"
-                                disabled={busy === 'reorder' || liveIndex <= 0}
-                                onClick={() => void move(liveIndex, -1)}
+                                disabled={busy === 'reorder' || currentIndex <= 0}
+                                onClick={() => void move(currentIndex, -1)}
                               >
                                 <ArrowUp className="w-3.5 h-3.5" />
                               </EnterpriseButton>
                               <EnterpriseButton
                                 variant="secondary"
                                 title="Move down"
-                                disabled={busy === 'reorder' || liveIndex === livePlacements.length - 1}
-                                onClick={() => void move(liveIndex, 1)}
+                                disabled={busy === 'reorder' || currentIndex === currentPlacements.length - 1}
+                                onClick={() => void move(currentIndex, 1)}
                               >
                                 <ArrowDown className="w-3.5 h-3.5" />
                               </EnterpriseButton>
