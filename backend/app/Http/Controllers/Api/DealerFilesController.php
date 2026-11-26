@@ -37,10 +37,12 @@ class DealerFilesController extends Controller
         }
 
         $files = $query->orderByDesc('created_at')->orderBy('id')->get();
+        $withPii = $this->can($request, 'documents.view_sensitive')
+            || $this->can($request, 'admin.view_reports');
 
         return response()->json([
             'success' => true,
-            'data' => $files,
+            'data' => $files->map(fn (DealerFile $file) => $this->presentFile($file, $withPii)),
             'count' => $files->count(),
         ]);
     }
@@ -195,9 +197,12 @@ class DealerFilesController extends Controller
                 'entity_id' => (string) $soldFile->id,
             ]);
 
+        $withPii = $this->can($request, 'documents.view_sensitive')
+            || $this->can($request, 'admin.view_reports');
+
         return response()->json([
             'success' => true,
-            'data' => $soldFile,
+            'data' => $this->presentFile($soldFile, $withPii),
             'message' => 'File marked as sold. Commission calculated and updated.',
             'profit' => $profit,
         ]);
@@ -317,6 +322,9 @@ class DealerFilesController extends Controller
             'id' => $file->id,
             'title' => $file->title,
             'type' => $file->type,
+            'url' => $file->url,
+            'file_size_kb' => $file->file_size_kb,
+            'dimensions' => $file->dimensions,
             'status' => $file->status,
             'folder' => $file->folder,
             'dealer_id' => $file->dealer_id,
