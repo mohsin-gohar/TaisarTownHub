@@ -269,5 +269,18 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $this->assertSame('Partially Paid', $transaction->paymentStatus);
         $this->assertSame(200000, (int) $transaction->advancePaymentPKR);
         $this->assertSame(300000, (int) $transaction->remainingBalancePKR);
+
+        $paymentId = DB::table('transaction_payments')
+            ->where('transaction_id', $transaction->id)
+            ->value('id');
+        $this->deleteJson('/api/agency/payments/' . $paymentId, [
+            'reason' => 'Duplicate payment correction.',
+        ], $this->authHeaders($token))->assertOk();
+
+        $transaction->refresh();
+        $this->assertSame(0, $transaction->totalPaidCents());
+        $this->assertSame('Pending', $transaction->paymentStatus);
+        $this->assertSame(0, (int) $transaction->advancePaymentPKR);
+        $this->assertSame(500000, (int) $transaction->remainingBalancePKR);
     }
 }
