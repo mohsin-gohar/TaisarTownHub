@@ -238,6 +238,17 @@
 
 **Status:** code and regression tests committed.
 
+### P1 — Agency profile disclosed internal platform verification notes
+
+**Affected:** `backend/app/Http/Controllers/Api/AgencyController.php`, `backend/tests/Feature/WorkspaceApprovalTest.php`.
+
+- The agency-scoped `GET /api/agency/profile` response included `verification_notes`, which is populated by platform reviewers and can contain internal compliance/risk context.
+- Any active agency member with `agency.view` could read those notes.
+- Fix: remove internal verification notes from the agency-facing profile payload. Platform review surfaces retain their own access-controlled notes.
+- Regression test writes a private review note and asserts it is absent from the agency profile response.
+
+**Status:** code and regression test committed.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
