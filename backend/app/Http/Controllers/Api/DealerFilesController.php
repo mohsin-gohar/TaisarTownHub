@@ -166,7 +166,7 @@ class DealerFilesController extends Controller
             $costCents = $rawCostPrice !== null
                 ? $this->toCents($rawCostPrice)
                 : intdiv(($sellingCents * 7) + 5, 10); // exact 70% fallback, rounded to cents
-            $profitCents = max(0, $sellingCents - $costCents);
+            $profitCents = $sellingCents - $costCents;
             $costPrice = $this->fromCents($costCents);
             $profit = $this->fromCents($profitCents);
 
@@ -184,7 +184,8 @@ class DealerFilesController extends Controller
             ]);
 
             // Existing dealer commission counters are whole-PKR integer fields.
-            $this->updateDealerCommission($dealerId, intdiv($profitCents + 50, 100));
+            $commissionRupees = $profitCents > 0 ? intdiv($profitCents + 50, 100) : 0;
+            $this->updateDealerCommission($dealerId, $commissionRupees);
 
             return $file;
         });
@@ -310,7 +311,9 @@ class DealerFilesController extends Controller
 
     private function fromCents(int $amount): string
     {
-        return intdiv($amount, 100) . '.' . str_pad((string) ($amount % 100), 2, '0', STR_PAD_LEFT);
+        $sign = $amount < 0 ? '-' : '';
+        $absolute = abs($amount);
+        return $sign . intdiv($absolute, 100) . '.' . str_pad((string) ($absolute % 100), 2, '0', STR_PAD_LEFT);
     }
 
     /** Resolve the acting dealer strictly from the authenticated account. */
