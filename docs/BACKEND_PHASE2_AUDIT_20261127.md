@@ -484,3 +484,9 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Invoice numbering previously used `COUNT(*) + 1` followed by an existence check. Two concurrent requests could both reserve the same `INV-YYYY-NNNNNN` value and one would fail on the unique constraint.
 - Added a yearly sequence table and a transactional, row-locked counter. First use backfills the counter from the latest legacy invoice number for that year.
 - Regression coverage verifies legacy sequence continuation and unique sequential reservations.
+
+
+### P1 — Different subscription activation paths could race on the same agency
+
+- Stripe/Flutterwave activation and direct admin plan assignment updated the agency's unique subscription row without sharing a per-agency serialization lock.
+- Provider activation, manual invoice verification and direct admin assignment now lock the owning agency row before updating its subscription, preventing concurrent billing paths from overwriting one another's selected plan.
