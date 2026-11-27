@@ -282,6 +282,16 @@
 
 **Status:** code and regression tests committed.
 
+### P1 — Concurrent listing creation could exceed an agency plan limit
+
+**Affected:** `backend/app/Http/Controllers/Api/PropertyController.php`, `backend/tests/Feature/PlanLimitEnforcementTest.php`.
+
+- Listing quota was checked before the property insert and without serializing requests. Concurrent creates could all observe the same remaining capacity and exceed the plan's listing limit.
+- Fix: move the quota recheck and property insert into a transaction that locks the owning agency row. Concurrent creates for the same agency now serialize against the updated usage count.
+- Existing plan-limit tests cover first allowed listing, over-limit rejection, and quota override behavior. A true parallel-request stress test remains a follow-up.
+
+**Status:** code committed; CI intentionally not run/polled.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
