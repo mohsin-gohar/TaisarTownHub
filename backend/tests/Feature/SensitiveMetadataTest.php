@@ -59,6 +59,59 @@ class SensitiveMetadataTest extends EnterpriseTestCase
     }
 
 
+
+    public function test_plain_listing_editor_cannot_change_sensitive_financial_fields(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.view', 'properties.update'], 'agent');
+        $property = $this->makePublicProperty($agency, [
+            'purchasePricePKR' => 5000000,
+            'sellingPricePKR' => 7000000,
+            'internalNotes' => 'original confidential note',
+        ]);
+
+        $token = $this->tokenFor($user);
+        $this->actingAs($user, 'sanctum');
+        $this->putJson(
+            "/api/properties/{$property->id}",
+            [
+                'purchasePricePKR' => 1,
+                'sellingPricePKR' => 2,
+                'internalNotes' => 'attacker overwrite',
+            ],
+            $this->authHeaders($token) + ['X-Agency-Id' => $agency->id]
+        )->assertForbidden();
+
+        $this->assertDatabaseHas('properties', [
+            'id' => $property->id,
+            'purchasePricePKR' => 5000000,
+            'sellingPricePKR' => 7000000,
+            'internalNotes' => 'original confidential note',
+        ]);
+    }
+
+    public function test_finance_permission_can_update_sensitive_fields_without_receiving_staged_changes(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.view', 'properties.update', 'finance.view'], 'manager');
+        $property = $this->makePublicProperty($agency, [
+            'purchasePricePKR' => 5000000,
+            'sellingPricePKR' => 7000000,
+            'internalNotes' => 'original confidential note',
+            'pending_changes' => ['title' => 'Staged title'],
+        ]);
+
+        $token = $this->tokenFor($user);
+        $this->actingAs($user, 'sanctum');
+        $response = $this->putJson(
+            "/api/properties/{$property->id}",
+            ['purchasePricePKR' => 5100000, 'internalNotes' => 'Updated finance note'],
+            $this->authHeaders($token) + ['X-Agency-Id' => $agency->id]
+        )->assertOk();
+
+        $this->assertSame(5100000.0, (float) $response->json('purchasePricePKR'));
+        $this->assertSame('Updated finance note', $response->json('internalNotes'));
+        $this->assertArrayNotHasKey('pending_changes', $response->json());
+    }
+
     public function test_visibility_mutation_response_does_not_leak_sensitive_property_fields(): void
     {
         [$user, $agency] = $this->agencyUser(['properties.view', 'properties.update'], 'agent');
