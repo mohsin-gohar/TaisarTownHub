@@ -67,7 +67,7 @@ A successful Vercel frontend build is not proof that the Laravel API is availabl
 | `MAIL_MAILER/MAIL_SCHEME/MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_FROM_ADDRESS` | real SMTP; verify delivery of verification/reset mail |
 | `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` | exact SPA origin(s), including `taisartownhub.vercel.app` until custom-domain DNS is live — never `*` |
 | `TRUSTED_PROXIES` | real load-balancer/nginx IPs (X-Forwarded-For spoofing prevention) |
-| `CLAMAV_HOST/PORT`, scan enabled | fail-closed upload scanning |
+| `MALWARE_SCAN_ENABLED=true`, `MALWARE_SCAN_FAIL_CLOSED=true`, `CLAMD_SOCKET`, `CLAMD_TIMEOUT` | reachable ClamAV daemon with current signatures; uploads fail closed when scanning is unavailable |
 | `STRIPE_*`, `FLUTTERWAVE_*` | live keys + webhook secrets, or explicitly disable payments |
 | `FRONTEND_URL` | SPA origin used by OAuth callbacks, password reset, and verification emails; set to the registered custom domain after DNS is live |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Google OAuth credentials + API callback URI, or leave unset to disable Google Sign-In |
