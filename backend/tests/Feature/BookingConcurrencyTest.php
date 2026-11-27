@@ -51,6 +51,29 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_whole_rupee_deal_columns_reject_fractional_input_instead_of_truncating(): void
+    {
+        [$user] = $this->agencyUser(['finance.create_transaction']);
+        $this->postJson('/api/agency/transactions', [
+            'propertyTitle' => 'Precision Validation Plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agreementAmountPKR' => '100000.50',
+            'advancePaymentPKR' => '1000.25',
+            'commissionAmountPKR' => '250.50',
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors([
+                'agreementAmountPKR',
+                'advancePaymentPKR',
+                'commissionAmountPKR',
+            ]);
+
+        $this->assertDatabaseMissing('transactions', [
+            'propertyTitle' => 'Precision Validation Plot',
+        ]);
+    }
+
     public function test_file_can_be_sold_exactly_once(): void
     {
         [$user, $dealer] = $this->dealerUser();
