@@ -56,6 +56,19 @@
 
 **Status:** code and regression test committed on the Phase 2 branch; CI result pending.
 
+### P1 — Flutterwave webhook accepted incomplete or rounded payment values
+**Affected:** `backend/app/Http/Controllers/Api/PaymentController.php`, `backend/tests/Feature/PaymentGatewayTest.php`.
+
+- The webhook previously treated amount and currency as optional: if either was absent, it skipped that comparison and could mark a pending invoice paid.
+- Both webhook and authenticated verify flows compared integer-rounded amounts, allowing a slightly underpaid value (for example PKR 4,999.60) to round to PKR 5,000.
+- The authenticated verification path also defaulted a missing amount to zero instead of requiring a numeric value.
+
+**Fix applied:** require numeric amount and non-empty currency on the webhook; require numeric amount and non-empty currency from the provider verification response; compare amounts with a small floating-point tolerance rather than rounding to whole integers.
+
+**Regression tests added:** reject webhook payloads missing amount or currency; reject a rounded underpayment; reject provider verification responses missing the amount. Existing successful and mismatched-amount tests remain.
+
+**Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
+
 ## 4. Open review risks — not yet classified as defects
 1. **Best-effort audit persistence:** `AuthorizesApi::writeAudit()` logs a warning and continues if `AuditLog::create()` fails. Confirm which actions require durable audit records and whether those operations need a transactional outbox/fail-closed policy.
 2. **Legacy workspace sync atomicity:** `WorkspaceController::save()` processes collections sequentially and writes rows one at a time. Tenant ownership and destructive replace guards exist, but a mid-request database failure can leave a partially applied multi-collection sync. Confirm the frontend contract and whether per-collection or whole-request atomicity is required.
