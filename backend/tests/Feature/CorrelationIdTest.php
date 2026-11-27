@@ -55,8 +55,8 @@ class CorrelationIdTest extends EnterpriseTestCase
 
     public function test_model_not_found_keeps_a_safe_404_api_response(): void
     {
-        \\Illuminate\\Support\\Facades\\Route::get('/api/__test/model-not-found', function () {
-            \\App\\Models\\User::query()->findOrFail(-987654321);
+        \Illuminate\Support\Facades\Route::get('/api/__test/model-not-found', function () {
+            \App\Models\User::query()->findOrFail(-987654321);
         });
 
         $response = $this->getJson('/api/__test/model-not-found')
@@ -69,8 +69,8 @@ class CorrelationIdTest extends EnterpriseTestCase
 
     public function test_authorization_exception_keeps_a_safe_403_api_response(): void
     {
-        \\Illuminate\\Support\\Facades\\Route::get('/api/__test/forbidden', function () {
-            throw new \\Illuminate\\Auth\\Access\\AuthorizationException('private permission detail');
+        \Illuminate\Support\Facades\Route::get('/api/__test/forbidden', function () {
+            throw new \Illuminate\Auth\Access\AuthorizationException('private permission detail');
         });
 
         $response = $this->getJson('/api/__test/forbidden')
@@ -84,8 +84,8 @@ class CorrelationIdTest extends EnterpriseTestCase
 
     public function test_unhandled_api_exception_returns_generic_500_without_leaking_details(): void
     {
-        \\Illuminate\\Support\\Facades\\Route::get('/api/__test/server-error', function () {
-            throw new \\RuntimeException('private database connection detail');
+        \Illuminate\Support\Facades\Route::get('/api/__test/server-error', function () {
+            throw new \RuntimeException('private database connection detail');
         });
 
         $response = $this->getJson('/api/__test/server-error')
