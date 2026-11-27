@@ -9,7 +9,7 @@ use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;\nuse Illuminate\Support\Facades\Log;
 
 /** Platform agency administration: directory, verification, moderation. */
 class AdminAgencyController extends Controller
@@ -381,34 +381,47 @@ class AdminAgencyController extends Controller
     {
         $this->requirePermission($request, 'admin.manage_subscriptions');
 
-        $invoice = SubscriptionInvoice::findOrFail($id);
-
         $data = $request->validate([
             'payment_method' => 'required|string|max:40',
             'payment_reference' => 'nullable|string|max:120',
         ]);
 
-        if ($invoice->status === 'paid') {
-            return response()->json([
-                'success' => false,
-                'message' => 'This invoice is already paid — financial history cannot be modified.',
-            ], 422);
+        // Lock and re-check inside the transaction. Two concurrent staff
+        // requests must not both verify the same pending invoice or overwrite
+        // payment metadata after the first request has made it immutable.
+        $result = DB::transaction(function () use ($id, $data, $request) {
+            $invoice = SubscriptionInvoice::whereKey($id)->lockForUpdate()->firstOrFail();
+
+            if ($invoice->status === 'paid') {
+                return ['response' => response()->json([
+                    'success' => false,
+                    'message' => 'This invoice is already paid — financial history cannot be modified.',
+                ], 422)];
+            }
+
+            if ($invoice->status === 'void') {
+                return ['response' => response()->json([
+                    'success' => false,
+                    'message' => 'A voided invoice cannot be paid.',
+                ], 422)];
+            }
+
+            $invoice->forceFill([
+                'status' => 'paid',
+                'paid_at' => now(),
+                'payment_method' => $data['payment_method'],
+                'payment_reference' => $data['payment_reference'] ?? null,
+                'verified_by' => $request->user()->id,
+            ])->save();
+
+            return ['invoice' => $invoice];
+        });
+
+        if (isset($result['response'])) {
+            return $result['response'];
         }
 
-        if ($invoice->status === 'void') {
-            return response()->json([
-                'success' => false,
-                'message' => 'A voided invoice cannot be paid.',
-            ], 422);
-        }
-
-        $invoice->forceFill([
-            'status' => 'paid',
-            'paid_at' => now(),
-            'payment_method' => $data['payment_method'],
-            'payment_reference' => $data['payment_reference'] ?? null,
-            'verified_by' => $request->user()->id,
-        ])->save();
+        $invoice = $result['invoice'];
 
         $this->writeAudit($request, 'subscription.invoice_paid', $invoice->invoice_number,
             "Invoice {$invoice->invoice_number} marked paid (PKR {$invoice->total_pkr})", [
@@ -424,5 +437,4 @@ class AdminAgencyController extends Controller
             'message' => 'Invoice marked as paid.',
             'invoice' => $invoice->load(['agency:id,name', 'verifier:id,name']),
         ]);
-    }
-}
+    }}
