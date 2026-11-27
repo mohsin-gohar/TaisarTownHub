@@ -46,7 +46,7 @@ class PaymentController extends Controller
 
         // Invoice amounts are integer PKR. Reject legacy/inconsistent plan rows
         // rather than silently rounding a fractional or foreign-currency price.
-        $planPrice = (string) $plan->price;
+        $planPrice = (string) $plan->getRawOriginal('price');
         if (strtoupper((string) $plan->currency) !== 'PKR'
             || ! preg_match('/^\\d+(?:\\.00)?$/', $planPrice)) {
             return response()->json([
