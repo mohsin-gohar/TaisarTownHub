@@ -724,12 +724,21 @@ class PropertyController extends Controller
             'metadata' => ['visibility' => $target, 'approval_status' => $property->approval_status],
         ]);
 
-        $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes']);
+        $canSeeSensitive = $this->can($request, 'finance.view')
+            || $this->can($request, 'view_sensitive_cnic');
+        $canModerate = $this->can($request, 'properties.approve');
+        $propertyPayload = $this->serializeForScope(
+            $property,
+            $request->user(),
+            $agencyId,
+            $canSeeSensitive,
+            $canModerate
+        );
 
         return response()->json([
             'success' => true,
             'message' => $target === 'public' ? 'Listing is now visible on your public profile.' : 'Listing is now hidden from the public marketplace.',
-            'property' => $property,
+            'property' => $propertyPayload,
         ]);
     }
 
