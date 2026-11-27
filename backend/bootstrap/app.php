@@ -57,9 +57,9 @@ return Application::configure(basePath: dirname(__DIR__))
                 // Preserve Laravel's expected HTTP semantics for common
                 // framework exceptions instead of flattening them into 500s.
                 $status = match (true) {
-                    $e instanceof \\Illuminate\\Database\\Eloquent\\ModelNotFoundException => 404,
-                    $e instanceof \\Illuminate\\Auth\\Access\\AuthorizationException => 403,
-                    $e instanceof \\Symfony\\Component\\HttpKernel\\Exception\\HttpExceptionInterface => $e->getStatusCode(),
+                    $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException => 404,
+                    $e instanceof \Illuminate\Auth\Access\AuthorizationException => 403,
+                    $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface => $e->getStatusCode(),
                     default => 500,
                 };
 
