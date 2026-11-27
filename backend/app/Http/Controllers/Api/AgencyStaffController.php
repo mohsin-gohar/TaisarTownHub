@@ -83,14 +83,26 @@ class AgencyStaffController extends Controller
             // same remaining-seat count and exceed the subscription limit.
             $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
 
+            // Re-resolve the role after the agency lock: a concurrent role
+            // deletion may have completed after the initial request lookup.
+            $lockedRole = Role::whereKey($role->id)
+                ->where('scope', 'agency')
+                ->where(function ($q) use ($agencyId) {
+                    $q->whereNull('agency_id')->orWhere('agency_id', $agencyId);
+                })
+                ->first();
+            if (!$lockedRole) {
+                return ['error' => 422, 'message' => 'The selected role is no longer available.'];
+            }
+
             // Recheck the owner-only grant after acquiring the same agency
             // lock used by concurrent membership role/status changes.
-            if ($role->id === 'role_agency_owner'
+            if ($lockedRole->id === 'role_agency_owner'
                 && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
                 return ['error' => 403, 'message' => 'Only an agency owner may invite another owner.'];
             }
 
-            if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId)))
+            if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId))) {
                 return ['blocked' => $block];
             }
 
@@ -115,7 +127,7 @@ class AgencyStaffController extends Controller
             $invitation = AgencyInvitation::create([
                 'agency_id' => $agencyId,
                 'email' => $request->email,
-                'role_id' => $role->id,
+                'role_id' => $lockedRole->id,
                 'token_hash' => hash('sha256', $token),
                 'invited_by' => $request->user()->id,
                 'status' => 'pending',
