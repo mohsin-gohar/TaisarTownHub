@@ -304,7 +304,20 @@ class LeadController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'crm.export');
 
-        $leads = Inquiry::where('agency_id', $agencyId)
+        $user = $request->user();
+        $query = Inquiry::where('agency_id', $agencyId);
+
+        // Export permission is independent from lead-assignment permission.
+        // Agents granted export access must still receive only their own and
+        // unassigned leads, matching the CRM list and record-level policy.
+        if (!$this->can($request, 'crm.assign_lead')) {
+            $query->where(function ($q) use ($user) {
+                $q->where('assigned_agent_id', $user->id)
+                    ->orWhereNull('assigned_agent_id');
+            });
+        }
+
+        $leads = $query
             ->orderByDesc('created_at')
             ->limit(10000)
             ->get();
