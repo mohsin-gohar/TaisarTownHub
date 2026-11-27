@@ -37,8 +37,8 @@ class MapController extends Controller
         if (!empty($filters['phase'])) {
             $query->where('phase', $filters['phase']);
         }
-        if ($request->filled('search')) {
-            $s = addcslashes((string) $request->search, '%_\\');
+        if (!empty($filters['search'])) {
+            $s = addcslashes($filters['search'], '%_\\');
             $query->where(function ($q) use ($s) {
                 $q->where('title', 'like', "%{$s}%")
                   ->orWhere('sector', 'like', "%{$s}%")
