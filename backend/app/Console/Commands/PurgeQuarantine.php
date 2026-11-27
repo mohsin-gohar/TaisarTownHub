@@ -50,6 +50,7 @@ class PurgeQuarantine extends Command
             // Otherwise a failed disk operation would orphan sensitive bytes
             // with no database row, audit trail, or retry candidate.
             if ($deleteFailed) {
+                Log::warning('Quarantine purge skipped: physical delete did not complete', ['id' => $row->id]);
                 $failed++;
                 continue;
             }
