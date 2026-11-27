@@ -92,6 +92,7 @@ class PurgeQuarantine extends Command
                 // version before metadata is removed. Missing bytes are safe
                 // on retries; failed deletes keep the row for the next run.
                 if ($deleteFailed) {
+                    Log::warning('Quarantine hold purge skipped: physical delete did not complete', ['id' => $document->id]);
                     $failed++;
                     return;
                 }
