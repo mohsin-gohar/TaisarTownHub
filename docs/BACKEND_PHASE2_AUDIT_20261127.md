@@ -207,6 +207,37 @@
 
 **Status:** code and regression test committed; latest CI/Docker rerun pending.
 
+### P1 — Staff quota counted deactivated members and expired invitations
+
+**Affected:** `backend/app/Support/PlanLimits.php`, `backend/tests/Feature/AdminStaffSubscriptionTest.php`.
+
+- `staffUsed()` counted every membership row, including deactivated users, and counted pending invitations even after their expiry timestamp.
+- This could block legitimate replacement staff invitations despite free seats.
+- Fix: count only active memberships and pending invitations that have not expired.
+- Regression test creates a deactivated membership and verifies a replacement invitation is still accepted under the plan's remaining active-seat limit.
+
+**Status:** code and regression test committed.
+
+### P1 — Concurrent invitation requests could exceed the staff quota
+
+**Affected:** `backend/app/Http/Controllers/Api/AgencyStaffController.php`.
+
+- The quota check and invitation insert previously ran outside a transaction/agency lock. Two simultaneous requests could both observe the same available seat and both create invitations.
+- Fix: lock the agency row and perform quota recheck, duplicate-member/pending-invitation checks, and invitation creation in one transaction.
+- Email input is normalized to lowercase/trimmed before use; duplicate active membership and duplicate unexpired pending invitations are rejected.
+
+**Status:** code committed; quota lock behavior still needs a true parallel-request stress test.
+
+### P2 — Invitation revocation could race with acceptance or overwrite accepted state
+
+**Affected:** `backend/app/Http/Controllers/Api/AgencyStaffController.php`, `backend/tests/Feature/AdminStaffSubscriptionTest.php`.
+
+- Revocation previously updated invitation status without locking or checking the current state. It could race with acceptance or overwrite an already accepted invitation as revoked.
+- Fix: lock the agency and invitation rows in a transaction; only pending invitations can be revoked. Acceptance and revocation now serialize on the invitation row.
+- Regression coverage verifies accepted invitations cannot subsequently be revoked, and duplicate unexpired pending invitations for the same normalized email are rejected.
+
+**Status:** code and regression tests committed.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
