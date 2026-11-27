@@ -119,6 +119,7 @@ class PaymentController extends Controller
                 'session_id' => $session->id,
             ]);
         } catch (\Throwable $e) {
+            report($e);
             Log::error('Stripe checkout failed', [
                 'agency_id' => $agencyId,
                 'exception' => get_class($e),
@@ -183,6 +184,7 @@ class PaymentController extends Controller
 
             return response()->json(['success' => true]);
         } catch (\Throwable $e) {
+            report($e);
             Log::error('Stripe webhook handling failed', [
                 'event' => $eventType,
                 'exception' => get_class($e),
@@ -457,6 +459,7 @@ class PaymentController extends Controller
                 ],
             ]);
         } catch (\Throwable $e) {
+            report($e);
             Log::error('Flutterwave verification failed', ['tx_ref' => $txRef, 'exception' => get_class($e)]);
 
             return response()->json([
