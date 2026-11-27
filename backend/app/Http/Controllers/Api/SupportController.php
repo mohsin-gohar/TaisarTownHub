@@ -285,10 +285,25 @@ class SupportController extends Controller
         $ticket = SupportTicket::findOrFail($id);
 
         $data = $request->validate([
-            'assigned_to' => 'required|integer|exists:users,id',
+            'assigned_to' => 'required|integer',
         ]);
 
-        $ticket->forceFill(['assigned_to' => $data['assigned_to']])->save();
+        // Keep assignment consistent with the assignable-staff directory:
+        // only active platform staff accounts may own support tickets.
+        $assignee = User::query()
+            ->whereKey($data['assigned_to'])
+            ->where('status', 'active')
+            ->whereIn('role', ['super_admin', 'admin', 'support', 'operator', 'manager'])
+            ->first();
+
+        if (!$assignee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The assignee must be an active platform support staff member.',
+            ], 422);
+        }
+
+        $ticket->forceFill(['assigned_to' => $assignee->id])->save();
 
         $this->writeAudit($request, 'support.ticket_assigned', $ticket->id,
             "Ticket assigned to user #{$data['assigned_to']}", [
@@ -323,10 +338,20 @@ class SupportController extends Controller
         }
 
         $agencyId = $this->agencyId($request);
-        $sameAgency = $agencyId !== null && $ticket->agency_id === $agencyId;
-        $own = $ticket->user_id === $user->id;
 
-        if (!$sameAgency && !$own) {
+        // A creator's historical ticket must not bypass the active tenant
+        // boundary after their agency membership changes. Agency-linked
+        // tickets are visible only from that same active agency context.
+        if ($ticket->agency_id !== null) {
+            if ($agencyId === null || $ticket->agency_id !== $agencyId) {
+                abort(404, 'Ticket not found.'); // enumeration-safe
+            }
+
+            return $ticket;
+        }
+
+        // Platform-side tickets (no agency) are private to their creator.
+        if ((int) $ticket->user_id !== (int) $user->id) {
             abort(404, 'Ticket not found.'); // enumeration-safe
         }
 
