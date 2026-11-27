@@ -553,3 +553,11 @@ The fixes and regression coverage are detailed in the follow-up findings below. 
 - Permanent document deletion also ignored false delete results for the original file and archived versions, then force-deleted all metadata even when one or more physical files remained.
 - Both paths now treat a missing file as already erased, but return an error and retain the database record(s) if an existing file cannot be deleted. This preserves a retry/reconciliation candidate rather than silently orphaning private data.
 - Regression tests cover media delete returning false and a document-version delete failing after the original file was erased; all relevant metadata remains available for retry.
+
+
+### P1 — Deal voiding could race payment/schedule/commission writes
+
+- Deal voiding previously wrote its terminal state without the parent-row lock used by payment creation. A payment could pass its state check and commit while a concurrent void was being recorded.
+- Voiding now locks the deal row and rechecks the state inside a transaction. Payment creation, schedule replacement and commission creation share that parent-row lock and recheck the voided state before writing.
+- Schedule writes are now atomic and reject duplicate installment numbers in one request; voided deals cannot receive new schedules or commissions.
+- Regression coverage checks duplicate schedule rejection with no partial writes and commission rejection for a voided deal. Runtime execution remains paused with CI.
