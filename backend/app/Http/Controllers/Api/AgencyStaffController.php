@@ -193,7 +193,7 @@ class AgencyStaffController extends Controller
         if ($request->bearerToken()) {
             try {
                 $user = auth('sanctum')->user();
-            } catch (\\Throwable $e) {
+            } catch (\Throwable $e) {
                 $user = null;
             }
         }
@@ -322,7 +322,7 @@ class AgencyStaffController extends Controller
                 'email' => $fresh->email,
                 'role' => $fresh->role,
                 'dealer_id' => $fresh->dealer_id,
-                'permissions' => \\App\\Support\\RolePermissions::forRole($fresh->role),
+                'permissions' => \App\Support\RolePermissions::forRole($fresh->role),
                 'enterprise_permissions' => $fresh->permissionsFor($acceptedInvitation->agency_id),
                 'agencies' => $fresh->memberAgencies(),
                 'is_platform' => $fresh->isPlatformUser(),
