@@ -21,6 +21,11 @@ class DealerFile extends Model
         // DECIMAL values remain exact strings; do not coerce PKR amounts to binary floats.
     ];
 
+    /** Numeric JSON compatibility; write-side calculations use raw DECIMAL values. */
+    public function getSellingPriceKbrAttribute($value): ?float { return $value === null ? null : (float) $value; }
+    public function getCostPriceKbrAttribute($value): ?float { return $value === null ? null : (float) $value; }
+    public function getProfitKbrAttribute($value): float { return (float) $value; }
+
     public function dealer()
     {
         return $this->belongsTo(Dealer::class, 'dealer_id', 'id');
