@@ -270,21 +270,10 @@ public function store(Request $request)
 public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        // Same catalogue gap as store(): use the real update-transaction
-        // grants, plus the legacy keys for custom integrations.
         $this->requireAny($request, [
             'finance.update_transaction', 'update_transactions',
             'manage_deals', 'finance.manage_deals',
         ]);
-
-        $transaction = $this->findScoped($agencyId, $id, $request->user());
-
-        if ($transaction->isVoided()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Voided deals are read-only.',
-            ], 409);
-        }
 
         $data = $request->validate([
             'propertyTitle' => 'sometimes|string|max:255',
@@ -299,48 +288,57 @@ public function update(Request $request, string $id)
             'transactionDate' => 'nullable|date',
         ]);
 
-        // Reject a dealer from another agency. Prefer dealers.agency_id and
-        // fall back to active memberships for legacy unlinked rows.
         if (!empty($data['dealerId']) && $agencyId !== null
             && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
                 'dealerId' => ['Dealer does not belong to the acting agency.'],
             ]);
         }
 
-        // Handle dealStatus transition with state machine validation
-        $newStatus = $data['dealStatus'] ?? $data['status'] ?? null;
-        if ($newStatus !== null) {
-            $currentStatus = $transaction->dealStatus;
-
-            // Terminal states: Completed and Cancelled are read-only once reached
-            if (in_array($currentStatus, ['Completed', 'Cancelled'], true)) {
-                $message = $currentStatus === 'Cancelled'
-                    ? 'Deal is cancelled — the record is read-only for bookkeeping.'
-                    : 'Completed deals are read-only.';
-                return response()->json([
-                    'success' => false,
-                    'message' => $message,
-                ], 422);
+        // Re-read and lock the tenant-scoped row before checking its state.
+        // Payment, void, approval and update operations serialize on this row.
+        $result = DB::transaction(function () use ($agencyId, $id, $request, $data): array {
+            $query = Transaction::query()->whereKey($id);
+            if ($agencyId !== null) {
+                $query->where('agency_id', $agencyId);
+            } elseif (!$request->user()->hasPermission('admin.view_reports')) {
+                abort(404, 'Transaction not found.');
             }
 
-            // Validate forward transitions
-            $validForward = [
-                'Draft' => ['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Negotiation' => ['Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Agreement Signed' => ['Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Token Paid' => ['Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Advance Received' => ['Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Payment Pending' => ['Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Partially Paid' => ['Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Fully Paid' => ['Under Transfer', 'Cancelled'],
-                'Under Transfer' => ['Completed', 'Cancelled'],
-            ];
+            $transaction = $query->lockForUpdate()->firstOrFail();
 
-            // Check if this is a valid forward transition
-            $allowedNext = $validForward[$currentStatus] ?? [];
-            if (!in_array($newStatus, $allowedNext, true)) {
-                // Check if it's a backward transition (one step back is allowed)
+            if ($transaction->isVoided()) {
+                return ['error' => response()->json([
+                    'success' => false,
+                    'message' => 'Voided deals are read-only.',
+                ], 409)];
+            }
+
+            $newStatus = $data['dealStatus'] ?? $data['status'] ?? null;
+            if ($newStatus !== null) {
+                $currentStatus = $transaction->dealStatus;
+
+                if (in_array($currentStatus, ['Completed', 'Cancelled'], true)) {
+                    $message = $currentStatus === 'Cancelled'
+                        ? 'Deal is cancelled — the record is read-only for bookkeeping.'
+                        : 'Completed deals are read-only.';
+                    return ['error' => response()->json([
+                        'success' => false,
+                        'message' => $message,
+                    ], 422)];
+                }
+
+                $validForward = [
+                    'Draft' => ['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Negotiation' => ['Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Agreement Signed' => ['Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Token Paid' => ['Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Advance Received' => ['Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Payment Pending' => ['Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Partially Paid' => ['Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Fully Paid' => ['Under Transfer', 'Cancelled'],
+                    'Under Transfer' => ['Completed', 'Cancelled'],
+                ];
                 $backwardMap = [
                     'Negotiation' => 'Draft',
                     'Agreement Signed' => 'Negotiation',
@@ -352,35 +350,36 @@ public function update(Request $request, string $id)
                     'Under Transfer' => 'Fully Paid',
                 ];
 
-                $expectedPrev = $backwardMap[$currentStatus] ?? null;
-                if ($newStatus !== $expectedPrev) {
-                    // Special case for Completed: requires Under Transfer
-                    if ($newStatus === 'Completed' && $currentStatus !== 'Under Transfer') {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'A deal can only be marked Completed after it is Under Transfer at MDA.',
-                        ], 422);
-                    }
-
-                    return response()->json([
+                $allowedNext = $validForward[$currentStatus] ?? [];
+                if (!in_array($newStatus, $allowedNext, true)
+                    && $newStatus !== ($backwardMap[$currentStatus] ?? null)) {
+                    $message = $newStatus === 'Completed' && $currentStatus !== 'Under Transfer'
+                        ? 'A deal can only be marked Completed after it is Under Transfer at MDA.'
+                        : 'Invalid status transition.';
+                    return ['error' => response()->json([
                         'success' => false,
-                        'message' => 'Invalid status transition.',
-                    ], 422);
+                        'message' => $message,
+                    ], 422)];
+                }
+
+                if ($newStatus === 'Cancelled') {
+                    $data['dealStatus'] = 'Cancelled';
                 }
             }
 
-            // Handle Cancelled - allowed from any non-terminal state
-            if ($newStatus === 'Cancelled') {
-                $data['dealStatus'] = 'Cancelled';
-            }
-        }
+            $transaction->update($data);
 
-        $transaction->update($data);
+            return ['transaction' => $transaction->fresh()->load(['payments', 'commissions'])];
+        }, 3);
+
+        if (isset($result['error'])) {
+            return $result['error'];
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'Deal updated.',
-            'transaction' => $transaction->fresh()->load(['payments', 'commissions']),
+            'transaction' => $result['transaction'],
         ]);
     }
 
@@ -391,34 +390,47 @@ public function update(Request $request, string $id)
     public function void(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        // Voiding is irreversible for bookkeeping. It must require an explicit
-        // permission; previously any workspace member could void any deal.
         $this->requireAny($request, ['void_transactions', 'finance.update_transaction', 'update_transactions']);
+        $data = $request->validate([
+            'reason' => 'required|string|min:3|max:500',
+        ]);
 
-        $transaction = $this->findScoped($agencyId, $id, $request->user());
+        // Use the same transaction-row lock as payment/update/approval to
+        // prevent a payment from racing with an irreversible void operation.
+        $transaction = DB::transaction(function () use ($agencyId, $id, $request, $data): ?Transaction {
+            $query = Transaction::query()->whereKey($id);
+            if ($agencyId !== null) {
+                $query->where('agency_id', $agencyId);
+            } elseif (!$request->user()->hasPermission('admin.view_reports')) {
+                abort(404, 'Transaction not found.');
+            }
 
-        if ($transaction->isVoided()) {
+            $locked = $query->lockForUpdate()->firstOrFail();
+            if ($locked->isVoided()) {
+                return null;
+            }
+
+            $locked->update([
+                'voided_at' => now(),
+                'void_reason' => $data['reason'],
+                'voided_by' => $request->user()->id,
+            ]);
+
+            return $locked->fresh();
+        }, 3);
+
+        if ($transaction === null) {
             return response()->json([
                 'success' => false,
                 'message' => 'Transaction is already voided.',
             ], 422);
         }
 
-        $request->validate([
-            'reason' => 'required|string|min:3|max:500',
-        ]);
-
-        $transaction->update([
-            'voided_at' => now(),
-            'void_reason' => $request->reason,
-            'voided_by' => $request->user()->id,
-        ]);
-
-        $this->writeAudit($request, 'transaction.void', $transaction->id, "Transaction voided: {$request->reason}", [
+        $this->writeAudit($request, 'transaction.void', $transaction->id, "Transaction voided: {$data['reason']}", [
             'agency_id' => $transaction->agency_id,
             'entity_type' => 'transaction',
             'entity_id' => $transaction->id,
-            'metadata' => ['reason' => $request->reason],
+            'metadata' => ['reason' => $data['reason']],
         ]);
 
         return response()->json([
@@ -714,6 +726,14 @@ public function update(Request $request, string $id)
                 ]];
             }
 
+            if ($isRefund && $existingCollected + $amount < 0) {
+                return [null, [
+                    'invalid_refund' => true,
+                    'collected' => $existingCollected,
+                    'amount' => $amount,
+                ]];
+            }
+
             $payment = TransactionPayment::create([
                 'agency_id' => $locked->agency_id,
                 'transaction_id' => $locked->id,
@@ -739,6 +759,20 @@ public function update(Request $request, string $id)
                 'success' => false,
                 'message' => 'Overpayment: collected (' . number_format($over['collected'], 2) . ') plus amount (' . number_format($over['amount'], 2) . ') exceeds agreement (' . number_format($over['agreement'], 2) . ').',
             ], 422);
+        }
+
+        if (isset($result[1]['invalid_refund'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Refund exceeds the amount previously collected.',
+            ], 422);
+        }
+
+        if ($result[0] === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The transaction is no longer available for payment.',
+            ], 409);
         }
 
         $payment = $result[0];
