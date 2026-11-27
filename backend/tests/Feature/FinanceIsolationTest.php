@@ -490,6 +490,10 @@ class FinanceIsolationTest extends EnterpriseTestCase
         ], $headers())->assertStatus(422);
         $this->assertDatabaseMissing('commissions', ['transaction_id' => $deal['id']]);
 
+        $this->patchJson("/api/agency/transactions/{$deal['id']}", [
+            'propertyTitle' => 'Must not mutate a voided deal',
+        ], $headers())->assertStatus(409);
+
         // A voided deal cannot be approved either.
         $this->postJson("/api/agency/transactions/{$deal['id']}/approve", [], $headers())->assertStatus(422);
     }
