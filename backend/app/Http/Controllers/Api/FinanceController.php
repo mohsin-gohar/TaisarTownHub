@@ -1019,40 +1019,61 @@ public function update(Request $request, string $id)
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments', 'pay_commissions']);
 
-        // Agency users are confined to their own ledger. A platform user (no
-        // agency context) may act on any commission: `commissions()` already
-        // lists platform-wide rows for them, and filtering by `agency_id IS
-        // NULL` here made every platform payout a 404.
-        $commission = Commission::where('id', $id)
-            ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
-            ->firstOrFail();
-
         $request->validate([
             'status' => 'required|in:pending,accrued,paid,cancelled',
             'notes' => 'nullable|string|max:1000',
         ]);
 
-        $allowed = ['pending', 'accrued', 'paid', 'cancelled'];
-        if (!in_array($request->status, $allowed, true)) {
-            return response()->json(['success' => false, 'message' => 'Invalid commission status.'], 422);
+        $result = DB::transaction(function () use ($agencyId, $id, $request): array {
+            $query = Commission::where('id', $id)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId));
+            $commission = $query->lockForUpdate()->firstOrFail();
+            $from = $commission->status;
+            $to = $request->status;
+
+            // Payouts and cancellations are terminal ledger states. A pending
+            // commission must first be accrued before it can be paid.
+            if (in_array($from, ['paid', 'cancelled'], true) && $to !== $from) {
+                return [null, $from, 'A paid or cancelled commission cannot be changed.'];
+            }
+            if ($to === 'paid' && $from !== 'accrued' && $from !== 'paid') {
+                return [null, $from, 'Only an accrued commission can be paid.'];
+            }
+            if ($from === 'accrued' && $to === 'pending') {
+                return [null, $from, 'An accrued commission cannot return to pending.'];
+            }
+
+            $updates = ['notes' => $request->notes ?? $commission->notes];
+            if ($to !== $from) {
+                $updates['status'] = $to;
+            }
+            if ($to === 'paid' && $from !== 'paid') {
+                $updates['paid_at'] = now();
+                $updates['paid_by'] = $request->user()->id;
+            }
+
+            $commission->update($updates);
+            return [$commission->fresh(), $from, null];
+        });
+
+        if ($result[2] !== null) {
+            return response()->json(['success' => false, 'message' => $result[2]], 422);
         }
 
-        $from = $commission->status;
-        $commission->update([
-            'status' => $request->status,
-            'notes' => $request->notes ?? $commission->notes,
-        ]);
-
-        $this->writeAudit($request, 'commission.status_change', $commission->id, "Commission status changed from {$from} to {$request->status}", [
-            'agency_id' => $commission->agency_id,
-            'entity_type' => 'commission',
-            'entity_id' => $commission->id,
-            'metadata' => ['from' => $from, 'to' => $request->status],
-        ]);
+        $commission = $result[0];
+        $from = $result[1];
+        if ($from !== $commission->status) {
+            $this->writeAudit($request, 'commission.status_change', $commission->id, "Commission status changed from {$from} to {$commission->status}", [
+                'agency_id' => $commission->agency_id,
+                'entity_type' => 'commission',
+                'entity_id' => $commission->id,
+                'metadata' => ['from' => $from, 'to' => $commission->status],
+            ]);
+        }
 
         return response()->json([
             'success' => true,
-            'commission' => $commission->fresh(),
+            'commission' => $commission,
         ]);
     }
 
