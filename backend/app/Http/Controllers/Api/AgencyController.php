@@ -363,9 +363,6 @@ class AgencyController extends Controller
 
     private function publicAgencyPayload(Agency $agency): array
     {
-        $publicListings = $agency->properties()->publiclyVisible()
-            ->where('listing_purpose', 'sale');
-
         return [
             'id' => $agency->id,
             'name' => $agency->name,
