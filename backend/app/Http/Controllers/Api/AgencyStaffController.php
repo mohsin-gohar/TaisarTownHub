@@ -338,8 +338,6 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
-        $member = AgencyMember::where('agency_id', $agencyId)->findOrFail($id);
-
         $request->validate([
             'role_id' => 'sometimes|string|max:64',
             'status' => 'sometimes|in:active,deactivated',
@@ -347,55 +345,70 @@ class AgencyStaffController extends Controller
             'permissions.*' => 'string|max:100',
         ]);
 
-        $payload = [];
+        // Serialize owner-role and membership-state changes per agency. A
+        // count check outside a lock lets two concurrent requests demote or
+        // deactivate both remaining owners based on the same stale count.
+        $result = DB::transaction(function () use ($request, $agencyId, $id): array {
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+            $member = AgencyMember::where('agency_id', $agencyId)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        if ($request->has('role_id')) {
-            $role = $this->resolveAgencyRole($agencyId, $request->role_id);
-            // Privilege escalation guard: only an existing owner may promote to
-            // or demote from the owner role.
-            $requesterIsOwner = $this->requesterIsOwner($agencyId, $request->user()->id);
-            if (($role->id === 'role_agency_owner' || $member->role_id === 'role_agency_owner')
-                && !$requesterIsOwner) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Only an agency owner may change owner membership.',
-                ], 403);
+            $payload = [];
+
+            if ($request->has('role_id')) {
+                $role = $this->resolveAgencyRole($agencyId, $request->role_id);
+                $requesterIsOwner = $this->requesterIsOwner($agencyId, $request->user()->id);
+                if (($role->id === 'role_agency_owner' || $member->role_id === 'role_agency_owner')
+                    && !$requesterIsOwner) {
+                    return ['error' => 403, 'message' => 'Only an agency owner may change owner membership.'];
+                }
+
+                if ($member->status === 'active'
+                    && $member->role_id === 'role_agency_owner'
+                    && $role->id !== 'role_agency_owner'
+                    && $this->activeOwnerCount($agencyId) <= 1) {
+                    return ['error' => 422, 'message' => 'An agency must keep at least one active owner.'];
+                }
+                $payload['role_id'] = $role->id;
             }
-            // Never demote the last active owner
-            if ($member->role_id === 'role_agency_owner' && $role->id !== 'role_agency_owner'
-                && $this->activeOwnerCount($agencyId) <= 1) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An agency must keep at least one active owner.',
-                ], 422);
+
+            if ($request->has('status')) {
+                if ($member->status === 'active'
+                    && $member->role_id === 'role_agency_owner'
+                    && $request->status === 'deactivated'
+                    && $this->activeOwnerCount($agencyId) <= 1) {
+                    return ['error' => 422, 'message' => 'An agency must keep at least one active owner.'];
+                }
+                $payload['status'] = $request->status;
+                $payload['deactivated_at'] = $request->status === 'deactivated' ? now() : null;
             }
-            $payload['role_id'] = $role->id;
+
+            if ($request->has('permissions')) {
+                $invalid = array_diff($request->permissions, Permissions::agencyAssignable());
+                if ($invalid) {
+                    return [
+                        'error' => 422,
+                        'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
+                    ];
+                }
+                $payload['permissions'] = array_values($request->permissions);
+            }
+
+            $member->update($payload);
+
+            return ['member' => $member, 'payload' => $payload];
+        });
+
+        if (isset($result['error'])) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], $result['error']);
         }
 
-        if ($request->has('status')) {
-            if ($member->role_id === 'role_agency_owner' && $request->status === 'deactivated'
-                && $this->activeOwnerCount($agencyId) <= 1) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An agency must keep at least one active owner.',
-                ], 422);
-            }
-            $payload['status'] = $request->status;
-            $payload['deactivated_at'] = $request->status === 'deactivated' ? now() : null;
-        }
-
-        if ($request->has('permissions')) {
-            $invalid = array_diff($request->permissions, Permissions::agencyAssignable());
-            if ($invalid) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
-                ], 422);
-            }
-            $payload['permissions'] = array_values($request->permissions);
-        }
-
-        $member->update($payload);
+        $member = $result['member'];
+        $payload = $result['payload'];
 
         $this->writeAudit($request, 'agency.member.update', 'member:' . $member->id, 'Member updated', [
             'agency_id' => $agencyId,
