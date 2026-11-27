@@ -536,3 +536,10 @@ The fixes and regression coverage are detailed in the follow-up findings below. 
 - The same permission resolver now filters persisted per-member extras and role grants against the agency-assignable catalog plus its explicit legacy aliases. A corrupt extra-permission array cannot inject a platform permission or unknown key into the effective agency grant set.
 
 - The pending → accrued transition also stamps `accrued_at`; the accrued → paid transition stamps `paid_at` and `paid_by`.
+
+
+### P1 — Global MFA policy locked privileged users out of MFA enrollment
+
+- The MFA middleware enforced the global policy on every authenticated route except the verification endpoint. A privileged user without MFA was therefore blocked from the status, setup and enable endpoints needed to enroll in the first place.
+- Users who have not yet enabled MFA may now access only the MFA status/setup/enable enrollment routes; once enabled, those routes are protected by the normal token-scoped verification requirement. The sign-in verification endpoint remains available.
+- Regression coverage verifies an agency owner subject to the global policy can enroll, confirm the first TOTP code and then access protected routes with the same verified token.
