@@ -420,3 +420,10 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Added a regression test proving a fractional payment is persisted exactly and an attempted one-paisa overpayment is rejected.
 
 **Validation:** committed files re-fetched and source assertions reviewed. Runtime test execution and CI remain paused.
+
+
+### P1 — Refunds could drive a deal's collected ledger below zero
+
+- Payment overpayment checks were converted to exact integer-paise comparisons, but the negative boundary was not guarded: a refund larger than the amount collected could create a negative net payment balance.
+- Added a lower-bound check inside the same locked transaction; refunds that exceed collected payments are rejected before a ledger row is written.
+- Regression coverage now checks fractional payment persistence, one-paisa overpayment rejection, and refunds exceeding the collected balance.
