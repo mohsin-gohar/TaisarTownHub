@@ -19,7 +19,7 @@ class TransactionPayment extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'float',
+            // DECIMAL(14,2) must remain an exact decimal string.
             'received_at' => 'datetime',
         ];
     }
