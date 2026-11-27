@@ -185,6 +185,12 @@ class AuthFlowsTest extends EnterpriseTestCase
         $user->refresh();
         $this->assertNotNull($user->email_verified_at);
         $this->assertNull(EmailVerificationToken::where('email', 'verifyflow@example.test')->first());
+
+        // The same verification token is single-use and cannot be replayed.
+        $this->asGuest();
+        $this->getJson('/api/auth/email/verify?email=verifyflow@example.test&token=' . $notification->plainToken)
+            ->assertStatus(400)
+            ->assertJsonPath('success', false);
     }
 
     public function test_verification_rejects_wrong_and_expired_tokens(): void
