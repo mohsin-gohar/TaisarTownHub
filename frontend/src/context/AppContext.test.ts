@@ -44,3 +44,11 @@ test('AppContext no longer imports the unused maskCnicForStorage helper', () => 
   const source = read('./AppContext.tsx');
   assert.equal(source.includes('maskCnicForStorage'), false, 'unused import should be removed');
 });
+
+test('CMS settings persist in demo mode and sync through the authenticated workspace', () => {
+  const source = read('./AppContext.tsx');
+  assert.match(source, /localStorage\\.setItem\\(.*STORAGE_KEY_PREFIX.*cms/);
+  assert.match(source, /cms: cmsConfig/);
+  assert.match(source, /Saving to MySQL/);
+  assert.doesNotMatch(source, /until a backend CMS endpoint is implemented/);
+});
