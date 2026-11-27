@@ -980,36 +980,52 @@ public function update(Request $request, string $id)
             'notes' => 'nullable|string|max:1000',
         ]);
 
-        // Beneficiary identifiers are references, not free text: validate that
-        // they belong to the deal's tenant before writing to the ledger.
-        if (!empty($data['dealer_id']) && !$this->dealerBelongsToAgency((string) $data['dealer_id'], $transaction->agency_id)) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'dealer_id' => 'The selected dealer does not belong to this agency.',
-            ]);
-        }
-        if (!empty($data['user_id'])) {
-            $member = AgencyMember::where('agency_id', $transaction->agency_id)
-                ->where('user_id', (int) $data['user_id'])
-                ->where('status', 'active')
-                ->exists();
-            if (!$member) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'user_id' => 'The selected user is not an active member of this agency.',
+        // Lock the parent deal and re-check its state before creating a ledger
+        // entry. The void endpoint takes this same lock, so a commission can
+        // never be attached after a concurrent deal cancellation.
+        $commission = DB::transaction(function () use ($transaction, $data): ?Commission {
+            $locked = Transaction::whereKey($transaction->id)->lockForUpdate()->firstOrFail();
+            if ($locked->isVoided()) {
+                return null;
+            }
+
+            if (!empty($data['dealer_id']) && !$this->dealerBelongsToAgency((string) $data['dealer_id'], $locked->agency_id)) {
+                throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                    'dealer_id' => 'The selected dealer does not belong to this agency.',
                 ]);
             }
-        }
+            if (!empty($data['user_id'])) {
+                $member = AgencyMember::where('agency_id', $locked->agency_id)
+                    ->where('user_id', (int) $data['user_id'])
+                    ->where('status', 'active')
+                    ->lockForUpdate()
+                    ->exists();
+                if (!$member) {
+                    throw \\Illuminate\\Validation\\ValidationException::withMessages([
+                        'user_id' => 'The selected user is not an active member of this agency.',
+                    ]);
+                }
+            }
 
-        $commission = Commission::create([
-            'agency_id' => $transaction->agency_id,
-            'transaction_id' => $transaction->id,
-            'amount' => $data['amount'],
-            'rate' => $data['rate'] ?? null,
-            'dealer_id' => $data['dealer_id'] ?? null,
-            'user_id' => $data['user_id'] ?? null,
-            'beneficiary_type' => $data['beneficiary_type'] ?? 'dealer',
-            'status' => 'pending',
-            'notes' => $data['notes'] ?? null,
-        ]);
+            return Commission::create([
+                'agency_id' => $locked->agency_id,
+                'transaction_id' => $locked->id,
+                'amount' => $data['amount'],
+                'rate' => $data['rate'] ?? null,
+                'dealer_id' => $data['dealer_id'] ?? null,
+                'user_id' => $data['user_id'] ?? null,
+                'beneficiary_type' => $data['beneficiary_type'] ?? 'dealer',
+                'status' => 'pending',
+                'notes' => $data['notes'] ?? null,
+            ]);
+        });
+
+        if ($commission === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Voided deals cannot receive new commission entries.',
+            ], 422);
+        }
 
         $this->writeAudit($request, 'commission.create', $commission->id, "Commission accrued on {$transaction->dealNumber}", [
             'agency_id' => $transaction->agency_id,
