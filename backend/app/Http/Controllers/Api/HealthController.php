@@ -21,6 +21,7 @@ class HealthController
         try {
             DB::select('select 1');
         } catch (\Throwable $e) {
+            report($e);
             Log::error('Health check database failure', ['exception' => get_class($e)]);
             $database = 'unavailable';
             $status = 'degraded';
