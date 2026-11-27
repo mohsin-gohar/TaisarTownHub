@@ -495,7 +495,7 @@ class MediaController extends Controller
 
             SecureFileStore::storeUpload('quarantine', $qPath, $file);
 
-            \\App\\Models\\DocumentQuarantine::create([
+            \App\\Models\\DocumentQuarantine::create([
                 'id' => $qId,
                 'agency_id' => $agencyId,
                 'document_id' => null,
@@ -518,15 +518,15 @@ class MediaController extends Controller
                     'entity_id' => $qId,
                     'metadata' => ['reason' => $reason, 'threats' => $threats],
                 ]);
-        } catch (\\Throwable $e) {
+        } catch (\Throwable $e) {
             // Keep quarantine bytes discoverable by the retention purge: if
             // metadata was not committed, remove the just-written bytes. If
             // DB state is unknown, preserve them and log for reconciliation.
             $metadataExists = false;
             $metadataCheckFailed = false;
             try {
-                $metadataExists = $qId !== null && \\App\\Models\\DocumentQuarantine::whereKey($qId)->exists();
-            } catch (\\Throwable $metadataError) {
+                $metadataExists = $qId !== null && \App\\Models\\DocumentQuarantine::whereKey($qId)->exists();
+            } catch (\Throwable $metadataError) {
                 $metadataCheckFailed = true;
             }
 
@@ -539,7 +539,7 @@ class MediaController extends Controller
                             'disk_path' => $qPath,
                         ]);
                     }
-                } catch (\\Throwable $cleanupError) {
+                } catch (\Throwable $cleanupError) {
                     Log::critical('Media quarantine cleanup failed after metadata failure', [
                         'quarantine_id' => $qId,
                         'disk_path' => $qPath,
