@@ -117,6 +117,32 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
         $this->assertSame('2026-11-30', $subscription->ends_at->toDateString());
     }
 
+    public function test_invoice_sequence_resumes_after_legacy_numbers_and_reserves_unique_values(): void
+    {
+        [, $agency] = $this->agencyUser(['agency.view'], 'agent');
+        $year = (int) now()->format('Y');
+        SubscriptionInvoice::create([
+            'id' => 'legacy-inv-' . Str::random(8),
+            'invoice_number' => sprintf('INV-%d-%06d', $year, 9),
+            'agency_id' => $agency->id,
+            'amount_pkr' => 1000,
+            'tax_pkr' => 0,
+            'total_pkr' => 1000,
+            'currency' => 'PKR',
+            'status' => 'pending',
+        ]);
+
+        $first = SubscriptionInvoice::nextNumber();
+        $second = SubscriptionInvoice::nextNumber();
+
+        $this->assertSame(sprintf('INV-%d-%06d', $year, 10), $first);
+        $this->assertSame(sprintf('INV-%d-%06d', $year, 11), $second);
+        $this->assertDatabaseHas('invoice_sequences', [
+            'year' => $year,
+            'next_number' => 12,
+        ]);
+    }
+
     public function test_void_invoices_cannot_be_paid_and_numbers_stay_unique(): void
     {
         $admin = $this->admin();
