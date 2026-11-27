@@ -121,7 +121,7 @@ class PaymentController extends Controller
         } catch (\Throwable $e) {
             Log::error('Stripe checkout failed', [
                 'agency_id' => $agencyId,
-                'error' => $e->getMessage(),
+                'exception' => get_class($e),
             ]);
 
             return response()->json([
@@ -148,7 +148,7 @@ class PaymentController extends Controller
         try {
             $event = \Stripe\Webhook::constructEvent($payload, $sigHeader, $webhookSecret);
         } catch (\Throwable $e) {
-            Log::warning('Stripe webhook signature verification failed', ['error' => $e->getMessage()]);
+            Log::warning('Stripe webhook signature verification failed', ['exception' => get_class($e)]);
             return response()->json(['success' => false, 'message' => 'Invalid signature.'], 400);
         }
 
@@ -185,7 +185,7 @@ class PaymentController extends Controller
         } catch (\Throwable $e) {
             Log::error('Stripe webhook handling failed', [
                 'event' => $eventType,
-                'error' => $e->getMessage(),
+                'exception' => get_class($e),
             ]);
             return response()->json(['success' => false, 'message' => 'Webhook handling failed.'], 500);
         }
@@ -457,7 +457,7 @@ class PaymentController extends Controller
                 ],
             ]);
         } catch (\Throwable $e) {
-            Log::error('Flutterwave verification failed', ['tx_ref' => $txRef, 'error' => $e->getMessage()]);
+            Log::error('Flutterwave verification failed', ['tx_ref' => $txRef, 'exception' => get_class($e)]);
 
             return response()->json([
                 'success' => false,
