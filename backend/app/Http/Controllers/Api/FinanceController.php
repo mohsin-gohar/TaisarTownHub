@@ -670,6 +670,7 @@ public function update(Request $request, string $id)
             'amount' => [
                 'required',
                 'numeric',
+                'decimal:0,2',
                 'max:999999999999',
                 function ($attribute, $value, $fail) use ($request) {
                     if ($value < 0 && ($request->type ?? 'advance') !== 'refund') {
@@ -697,22 +698,23 @@ public function update(Request $request, string $id)
 
             // Refunds are stored as negative amounts so they reduce collected totals.
             $isRefund = $request->get('type', 'advance') === 'refund';
-            $amount = (float) $request->amount;
+            $amountCents = $this->toMoneyCents((string) $request->amount);
             if ($isRefund) {
-                $amount = -abs($amount);
+                $amountCents = -abs($amountCents);
             }
 
-            // Overpayment guard: collected + amount must not exceed agreement
-            $existingCollected = (float) $locked->totalPaid();
-            $agreementAmount = (float) $locked->agreementAmountPKR;
-            if ($existingCollected + $amount > $agreementAmount) {
+            // Integer-paise comparison prevents floating-point overpayment drift.
+            $existingCollectedCents = $locked->totalPaidCents();
+            $agreementCents = ((int) $locked->agreementAmountPKR) * 100;
+            if ($existingCollectedCents + $amountCents > $agreementCents) {
                 return [null, [
                     'overpayment' => true,
-                    'collected' => $existingCollected,
-                    'agreement' => $agreementAmount,
-                    'amount' => $amount,
+                    'collected' => $existingCollectedCents / 100,
+                    'agreement' => $agreementCents / 100,
+                    'amount' => $amountCents / 100,
                 ]];
             }
+            $amount = $this->moneyFromCents($amountCents);
 
             $payment = TransactionPayment::create([
                 'agency_id' => $locked->agency_id,
@@ -815,7 +817,7 @@ public function update(Request $request, string $id)
             'schedules' => 'required|array|min:1|max:120',
             'schedules.*.installment_no' => 'required|integer|min:1|max:9999',
             'schedules.*.due_date' => 'required|date',
-            'schedules.*.amount' => 'required|numeric|min:0.01|max:999999999999',
+            'schedules.*.amount' => 'required|numeric|decimal:0,2|min:0.01|max:999999999999',
             'schedules.*.notes' => 'nullable|string|max:500',
         ]);
 
@@ -931,7 +933,7 @@ public function update(Request $request, string $id)
         $transaction = $this->findScoped($agencyId, $transactionId, $request->user());
 
         $data = $request->validate([
-            'amount' => 'required|numeric|max:999999999999',
+            'amount' => 'required|numeric|decimal:0,2|max:999999999999',
             'rate' => 'nullable|numeric|min:0|max:100',
             'dealer_id' => 'nullable|string|max:64',
             'user_id' => 'nullable|integer',
@@ -961,7 +963,7 @@ public function update(Request $request, string $id)
         $commission = Commission::create([
             'agency_id' => $transaction->agency_id,
             'transaction_id' => $transaction->id,
-            'amount' => (float) $data['amount'],
+            'amount' => $data['amount'],
             'rate' => $data['rate'] ?? null,
             'dealer_id' => $data['dealer_id'] ?? null,
             'user_id' => $data['user_id'] ?? null,
@@ -1046,6 +1048,23 @@ public function update(Request $request, string $id)
     public function createExpense(Request $request)
     {
         return $this->expensesStore($request);
+    }
+
+    private function toMoneyCents(string $amount): int
+    {
+        if (! preg_match('/^(-?)(\\d+)(?:\\.(\\d{1,2}))?$/', $amount, $matches)) {
+            throw new \\InvalidArgumentException('Invalid decimal PKR amount.');
+        }
+
+        $cents = ((int) $matches[2] * 100) + (int) str_pad($matches[3] ?? '', 2, '0');
+        return ($matches[1] ?? '') === '-' ? -$cents : $cents;
+    }
+
+    private function moneyFromCents(int $amount): string
+    {
+        $sign = $amount < 0 ? '-' : '';
+        $absolute = abs($amount);
+        return $sign . intdiv($absolute, 100) . '.' . str_pad((string) ($absolute % 100), 2, '0', STR_PAD_LEFT);
     }
 
     private function dealerBelongsToAgency(string $dealerId, string $agencyId): bool
