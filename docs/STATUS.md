@@ -1,7 +1,7 @@
 # TaisarTownHub — Current Project Status
 
 **Review date:** 2026-11-27  
-**Current main:** `5f15402973908886c9e2ef09962b28cad80e78ff`  
+**Current main:** `c006c2bb6b4a210a8db7139aa30d5bad9ab693a1`  
 **Production frontend:** [taisartownhub.vercel.app](https://taisartownhub.vercel.app)
 
 ## Release verdict
@@ -14,6 +14,7 @@ Do not interpret successful CI or a Vercel frontend deployment as proof that liv
 
 - **PR #24** — tenant privacy, property financial-field authorization, moderation-field privacy, CRM export row scoping, public video-comment privacy, gallery/agency UI fixes, and Vercel API proxy.
 - **PR #25** — permanent Vercel redirect from `/video-walkthroughs` to the canonical `/gallery` route, with a regression test for both Vercel config roots.
+- **PR #26** — documentation-only refresh of the current production-readiness status, independent review, and release checklist.
 
 ## Verified automated checks
 
@@ -32,7 +33,7 @@ These are CI/test-environment results, not production-host results.
 
 ## Live deployment observations
 
-- Vercel production deployment for main commit `5f15402` reached **READY**.
+- Vercel production deployment for main commit `c006c2b` reached **READY**.
 - `/video-walkthroughs` was verified to redirect to `/gallery`.
 - The production `/api/health` proxy request returns **502** because the configured API origin is unavailable.
 - `https://taisartownhubbackend.infinityfree.io/` served the InfinityFree default welcome page during the check; `/api/health` returned 404. Laravel is not being served there.

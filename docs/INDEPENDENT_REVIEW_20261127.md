@@ -2,8 +2,8 @@
 
 **Date:** 2026-11-27  
 **Repository:** `mohsin-gohar/TaisarTownHub`  
-**Main commit:** `5f15402973908886c9e2ef09962b28cad80e78ff`  
-**Merged PRs:** [#24 — tenant privacy and public marketplace fixes](https://github.com/mohsin-gohar/TaisarTownHub/pull/24), [#25 — Vercel legacy gallery redirect](https://github.com/mohsin-gohar/TaisarTownHub/pull/25)
+**Main commit:** `c006c2bb6b4a210a8db7139aa30d5bad9ab693a1`  
+**Merged PRs:** [#24 — tenant privacy and public marketplace fixes](https://github.com/mohsin-gohar/TaisarTownHub/pull/24), [#25 — Vercel legacy gallery redirect](https://github.com/mohsin-gohar/TaisarTownHub/pull/25), [#26 — documentation status refresh](https://github.com/mohsin-gohar/TaisarTownHub/pull/26)
 
 ## Executive verdict
 
@@ -57,7 +57,7 @@ All required checks passed before merge: frontend verification, backend suite, P
 
 | Check | Result |
 |---|---|
-| Vercel deployment for main `5f15402` | READY |
+| Vercel deployment for main `c006c2b` | READY |
 | `/video-walkthroughs` | Redirects to `/gallery` |
 | Vercel `/api/health` proxy | 502 |
 | InfinityFree backend homepage | Default InfinityFree welcome page |
