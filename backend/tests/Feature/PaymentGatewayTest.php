@@ -380,6 +380,44 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_flutterwave_verification_does_not_settle_invoice_voided_during_provider_request(): void
+    {
+        config(['services.flutterwave.secret_key' => 'FLWSECK_TEST-123']);
+
+        $plan = $this->makePlan();
+        [$owner, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['flutterwave_tx_ref' => 'fw-ref-void-race']);
+
+        Http::fake([
+            'api.flutterwave.com/*' => function ($request) use ($invoice) {
+                // Simulate a concurrent staff action while the external
+                // provider request is in flight.
+                $invoice->update(['status' => 'void']);
+
+                return Http::response([
+                    'status' => 'success',
+                    'data' => [
+                        'id' => 4244,
+                        'status' => 'successful',
+                        'amount' => 5000,
+                        'currency' => 'PKR',
+                    ],
+                ], 200);
+            },
+        ]);
+
+        $this->getJson(
+            '/api/payments/flutterwave/verify/fw-ref-void-race',
+            $this->authHeaders($this->tokenFor($owner))
+        )->assertStatus(422)->assertJsonPath('message', 'This invoice is no longer payable.');
+
+        $this->assertSame('void', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', [
+            'agency_id' => $agency->id,
+            'status' => 'active',
+        ]);
+    }
+
     public function test_flutterwave_verification_rejects_amount_mismatch(): void
     {
         config(['services.flutterwave.secret_key' => 'FLWSECK_TEST-123']);
