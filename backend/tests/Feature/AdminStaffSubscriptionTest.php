@@ -95,6 +95,34 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->assertSame('6000.00', number_format((float) $plan->fresh()->getRawOriginal('price'), 2, '.', ''));
     }
 
+    public function test_agency_membership_cannot_inherit_platform_or_foreign_agency_role_grants(): void
+    {
+        $this->seedPlatformRole('super_admin');
+        [$user, $agency] = $this->agencyUser(['agency.view'], 'agent');
+        $membership = $user->memberships()->where('agency_id', $agency->id)->firstOrFail();
+        $platformRole = Role::where('scope', 'platform')->where('key', 'super_admin')->firstOrFail();
+
+        // Simulate a stale/corrupt membership role_id pointing at a platform role.
+        $membership->update(['role_id' => $platformRole->id]);
+        $this->assertFalse($user->fresh()->hasPermission('admin.manage_users', $agency->id));
+
+        // A custom role owned by a different tenant must also grant nothing.
+        $foreignAgency = $this->makeAgency('Foreign Role Owner');
+        $foreignRole = Role::create([
+            'id' => 'rol_' . bin2hex(random_bytes(8)),
+            'scope' => 'agency',
+            'agency_id' => $foreignAgency->id,
+            'key' => 'foreign_manager_' . bin2hex(random_bytes(3)),
+            'name' => 'Foreign Manager',
+            'is_system' => false,
+            'permissions' => ['agency.manage_staff'],
+        ]);
+        $membership->update(['role_id' => $foreignRole->id]);
+
+        $this->assertFalse($user->fresh()->hasPermission('agency.manage_staff', $agency->id));
+        $this->assertFalse($user->fresh()->hasPermission('admin.manage_users', $agency->id));
+    }
+
     public function test_platform_admin_can_manage_users_with_self_protection(): void
     {
         $this->seedPlatformRole('super_admin');
