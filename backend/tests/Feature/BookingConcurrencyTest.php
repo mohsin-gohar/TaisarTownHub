@@ -316,6 +316,7 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $this->patchJson($url, ['status' => 'accrued'], $headers)
             ->assertOk()
             ->assertJsonPath('commission.status', 'accrued');
+        $this->assertNotNull($commission->fresh()->accrued_at);
         $this->patchJson($url, ['status' => 'paid'], $headers)
             ->assertOk()
             ->assertJsonPath('commission.status', 'paid');
