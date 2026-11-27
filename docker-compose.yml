@@ -173,6 +173,7 @@ services:
       SENTRY_DSN: ${SENTRY_DSN}
       LOGROCKET_APP_ID: ${LOGROCKET_APP_ID}
       MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_SCHEME: ${MAIL_SCHEME:-tls}
       MAIL_HOST: ${MAIL_HOST}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME}
@@ -305,6 +306,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
       QUEUE_CONNECTION: redis
       MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_SCHEME: ${MAIL_SCHEME:-tls}
       MAIL_HOST: ${MAIL_HOST}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME}
@@ -377,6 +379,7 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
       MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_SCHEME: ${MAIL_SCHEME:-tls}
       MAIL_HOST: ${MAIL_HOST}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME}
