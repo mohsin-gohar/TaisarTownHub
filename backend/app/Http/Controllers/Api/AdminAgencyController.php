@@ -186,8 +186,11 @@ class AdminAgencyController extends Controller
             'key' => 'required|string|max:60|unique:subscription_plans,key',
             'name' => 'required|string|max:100',
             'description' => 'nullable|string|max:2000',
-            'price' => 'required|numeric|min:0|max:99999999',
-            'currency' => 'nullable|string|size:3',
+            'price' => 'required|numeric|min:0|max:99999999|multiple_of:1',
+            // Invoice amounts are stored as integer PKR; accepting another
+            // currency or fractional rupees would make gateway settlement
+            // compare incompatible monetary units.
+            'currency' => 'nullable|in:PKR',
             'interval' => 'nullable|in:month,year',
             'limits' => 'nullable|array',
             'features' => 'nullable|array',
