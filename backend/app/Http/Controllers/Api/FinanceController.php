@@ -302,16 +302,16 @@ public function store(Request $request)
                 return ['error' => 409, 'message' => 'Voided deals are read-only.'];
             }
 
+            $currentStatus = $locked->dealStatus;
+            if (in_array($currentStatus, ['Completed', 'Cancelled'], true)) {
+                $message = $currentStatus === 'Cancelled'
+                    ? 'Deal is cancelled — the record is read-only for bookkeeping.'
+                    : 'Completed deals are read-only.';
+                return ['error' => 422, 'message' => $message];
+            }
+
             $newStatus = $data['dealStatus'] ?? $data['status'] ?? null;
             if ($newStatus !== null) {
-                $currentStatus = $locked->dealStatus;
-                if (in_array($currentStatus, ['Completed', 'Cancelled'], true)) {
-                    $message = $currentStatus === 'Cancelled'
-                        ? 'Deal is cancelled — the record is read-only for bookkeeping.'
-                        : 'Completed deals are read-only.';
-                    return ['error' => 422, 'message' => $message];
-                }
-
                 $validForward = [
                     'Draft' => ['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
                     'Negotiation' => ['Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
