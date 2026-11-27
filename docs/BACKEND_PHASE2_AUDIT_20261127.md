@@ -187,6 +187,16 @@
 - **Audit persistence:** best-effort audit writes are explicitly documented in the existing error-handling contract. This pass has not yet established which individual mutation endpoints require fail-closed or transactional audit guarantees; keep as an open governance/security decision, not a confirmed defect.
 - **Scheduler lock:** the purge overlap gap is now addressed in code; production correctness still requires a shared cache lock store if more than one scheduler replica is deployed.
 
+### P2 — Stale invitation acceptance could leave an orphan user account
+
+**Affected:** `backend/app/Http/Controllers/Api/AgencyStaffController.php`, `backend/tests/Feature/AdminStaffSubscriptionTest.php`.
+
+- The handler previously created a new user before its transaction re-read and locked the invitation. If the invitation was revoked/consumed between the initial lookup and the claim, membership creation returned 422 but the newly created user remained in the database without a membership.
+- Fix: perform the locked invitation claim first, then create the invited account and membership inside the same transaction. Expired, already-used, and email-conflict outcomes return without creating an account.
+- Regression test simulates an invitation being revoked after the initial read and verifies that no user account is left behind.
+
+**Status:** code and regression test committed; latest CI/Docker rerun pending.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
