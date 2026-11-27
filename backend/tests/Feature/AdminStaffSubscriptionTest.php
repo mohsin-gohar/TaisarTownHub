@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AgencyInvitation;
 use App\Models\AgencySubscription;
 use App\Models\Role;
 use App\Models\Transaction;
@@ -329,6 +330,45 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             ->where('email', 'single-use@example.test')
             ->where('status', 'accepted')
             ->count());
+    }
+
+
+    public function test_stale_invitation_does_not_create_an_uninvited_user_account(): void
+    {
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $role = $this->makeRole('agency', 'stale_invite', ['properties.view']);
+
+        $invite = $this->postJson('/api/agency/members/invite', [
+            'email' => 'stale-invite@example.test',
+            'role_id' => $role->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(201)
+            ->json('invitation');
+
+        // Simulate another request revoking the invite after the initial
+        // lookup but before the acceptance transaction claims it.
+        $firstRead = true;
+        AgencyInvitation::retrieved(function (AgencyInvitation $model) use (&$firstRead): void {
+            if ($firstRead) {
+                $firstRead = false;
+                DB::table('agency_invitations')
+                    ->where('id', $model->id)
+                    ->update(['status' => 'revoked']);
+            }
+        });
+
+        $this->asGuest();
+        $this->postJson('/api/agency/invitations/accept', [
+            'token' => $invite['invite_token'],
+            'name' => 'Stale Invite',
+            'password' => 'StalePass123!',
+        ])->assertStatus(422)->assertJsonPath('success', false);
+
+        $this->assertDatabaseMissing('users', ['email' => 'stale-invite@example.test']);
+        $this->assertDatabaseHas('agency_invitations', [
+            'email' => 'stale-invite@example.test',
+            'status' => 'revoked',
+        ]);
     }
 
     public function test_invitations_respect_the_subscription_staff_limit(): void
