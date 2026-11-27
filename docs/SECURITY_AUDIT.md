@@ -63,7 +63,7 @@ The TaisarTownHub platform demonstrates a strong security foundation with defens
 4. A member granted `crm.export` without `crm.assign_lead` could export leads assigned to another agent in the same agency.
 
 **Fix prepared on `fix/public-video-walkthrough-route-20261127`:**
-- Sensitive property economics now require `view_sensitive_cnic` in the owning agency or an intentional platform scope.
+- Sensitive property economics now require `finance.view` in the owning agency (or a legacy platform sensitive-data grant) or an intentional platform scope.
 - `pending_changes` is hidden by default and exposed only to users with `properties.approve`.
 - CRM CSV export now applies the same own/unassigned record scope as the CRM list for users without `crm.assign_lead`.
 - Regression tests cover agency detail, cross-agency access, moderation visibility, and CRM export isolation.
