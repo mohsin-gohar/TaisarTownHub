@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\SubscriptionInvoice;
+use App\Models\AgencySubscription;
+use App\Models\SubscriptionPlan;
 use Tests\Feature\EnterpriseTestCase;
 
 /**
@@ -67,6 +69,51 @@ class SubscriptionInvoicesTest extends EnterpriseTestCase
         ], $h())
             ->assertStatus(422)
             ->assertJsonPath('success', false);
+    }
+
+    public function test_verifying_a_plan_invoice_activates_manual_subscription_atomically(): void
+    {
+        $admin = $this->admin();
+        [, $agency] = $this->agencyUser(['agency.view'], 'agent');
+        $plan = SubscriptionPlan::create([
+            'key' => 'manual-invoice-' . Str::random(8),
+            'name' => 'Manual Invoice Plan',
+            'price' => 15000,
+            'currency' => 'PKR',
+            'interval' => 'month',
+            'limits' => ['listings' => 25],
+            'features' => [],
+            'is_active' => true,
+            'is_default' => false,
+            'sort_order' => 10,
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($admin));
+
+        $created = $this->postJson('/api/admin/subscription-invoices', [
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'amount_pkr' => 15000,
+            'period_start' => '2026-11-01',
+            'period_end' => '2026-11-30',
+        ], $headers)->assertCreated();
+
+        $this->assertDatabaseMissing('agency_subscriptions', [
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+        ]);
+
+        $this->postJson('/api/admin/subscription-invoices/' . $created->json('invoice.id') . '/verify', [
+            'payment_method' => 'bank_transfer',
+            'payment_reference' => 'MANUAL-PLAN-15000',
+        ], $headers)->assertOk();
+
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+        $this->assertSame($plan->id, $subscription->plan_id);
+        $this->assertSame('active', $subscription->status);
+        $this->assertSame('manual', $subscription->provider);
+        $this->assertFalse($subscription->auto_renew);
+        $this->assertSame('2026-11-01', $subscription->starts_at->toDateString());
+        $this->assertSame('2026-11-30', $subscription->ends_at->toDateString());
     }
 
     public function test_void_invoices_cannot_be_paid_and_numbers_stay_unique(): void
