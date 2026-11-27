@@ -690,10 +690,10 @@ public function update(Request $request, string $id)
         // are one transaction on the locked deal row — concurrent payments
         // cannot overshoot the agreement amount silently.
         $result = DB::transaction(function () use ($transaction, $request): array {
-            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
+            $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->firstOrFail();
 
             if ($locked->isVoided()) {
-                return [null, null];
+                return [null, ['voided' => true]];
             }
 
             // Refunds are stored as negative amounts so they reduce collected totals.
@@ -741,6 +741,13 @@ public function update(Request $request, string $id)
 
             return [$payment, null];
         });
+
+        if (isset($result[1]['voided'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot record payments on a voided deal.',
+            ], 422);
+        }
 
         if (isset($result[1]['overpayment'])) {
             $over = $result[1];
