@@ -162,14 +162,14 @@
 
 ### P1 — Quarantine storage could be orphaned when metadata persistence failed
 
-**Affected:** `backend/app/Http/Controllers/Api/DocumentController.php`, `backend/tests/Feature/MalwareUploadEnforcementTest.php`.
+**Affected:** `backend/app/Http/Controllers/Api/DocumentController.php`, `backend/app/Http/Controllers/Api/MediaController.php`, `backend/tests/Feature/MalwareUploadEnforcementTest.php`, `backend/tests/Feature/StorageSecurityTest.php`.
 
 - The rejected-upload path wrote encrypted bytes to the quarantine disk and then inserted the `DocumentQuarantine` row inside one broad `try` block.
 - If the database insert failed, the catch only logged the exception. The bytes remained on disk without a row for the retention purge to find.
 - Fix: after a failure, check whether the quarantine metadata row exists. If it does not, attempt to delete the just-written bytes and log a critical reconciliation event if deletion fails. If the database cannot establish whether the row committed, preserve the bytes and log the exact path for manual recovery rather than risk deleting a file with valid metadata.
-- Regression test simulates a metadata-create failure and asserts no quarantine bytes or metadata remain.
+- Regression tests simulate metadata-create failures for both vault-document and media uploads and assert no quarantine bytes or metadata remain.
 
-**Status:** fix and regression test committed; CI rerun in progress on the latest branch head.
+**Status:** both vault and media fixes plus regression tests committed; CI rerun in progress on the latest branch head.
 
 ### P2 — Quarantine purge scheduler could overlap
 
