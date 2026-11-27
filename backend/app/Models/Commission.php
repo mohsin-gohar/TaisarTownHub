@@ -22,6 +22,12 @@ class Commission extends Model
         ];
     }
 
+    /** Numeric JSON compatibility; persisted DECIMAL remains exact. */
+    public function getAmountAttribute($value): float
+    {
+        return (float) $value;
+    }
+
     public function transaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class, 'transaction_id');
