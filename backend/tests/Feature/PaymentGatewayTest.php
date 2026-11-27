@@ -75,6 +75,55 @@ class PaymentGatewayTest extends EnterpriseTestCase
         }
     }
 
+    public function test_stripe_checkout_webhook_does_not_activate_unsettled_or_incomplete_sessions(): void
+    {
+        $secret = 'whsec_test_secret';
+        config(['services.stripe.webhook' => $secret]);
+
+        $plan = $this->makePlan();
+        [$user, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['stripe_session_id' => 'cs_test_pending']);
+
+        $payload = json_encode([
+            'id' => 'evt_test_pending',
+            'type' => 'checkout.session.completed',
+            'data' => ['object' => [
+                'id' => 'cs_test_pending',
+                'client_reference_id' => $agency->id,
+                'metadata' => ['agency_id' => $agency->id, 'plan_id' => (string) $plan->id],
+                'payment_status' => 'unpaid',
+                'amount_total' => 500000,
+                'currency' => 'pkr',
+            ]],
+        ]);
+
+        $this->asGuest();
+        $this->call('POST', '/api/payments/webhook/stripe', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+        ], $payload)->assertOk();
+        $this->assertSame('pending', $invoice->fresh()->status);
+
+        $payload = json_encode([
+            'id' => 'evt_test_missing_amount',
+            'type' => 'checkout.session.completed',
+            'data' => ['object' => [
+                'id' => 'cs_test_pending',
+                'client_reference_id' => $agency->id,
+                'metadata' => ['agency_id' => $agency->id, 'plan_id' => (string) $plan->id],
+                'payment_status' => 'paid',
+                'currency' => 'pkr',
+            ]],
+        ]);
+
+        $this->call('POST', '/api/payments/webhook/stripe', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+        ], $payload)->assertOk();
+        $this->assertSame('pending', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', ['agency_id' => $agency->id, 'status' => 'active']);
+    }
+
     public function test_flutterwave_webhook_rejects_everything_when_no_secret_is_configured(): void
     {
         // Regression: null header vs null config previously compared equal,
@@ -109,6 +158,9 @@ class PaymentGatewayTest extends EnterpriseTestCase
                 ],
                 'payment_intent' => 'pi_test_123',
                 'subscription' => 'sub_test_123',
+                'payment_status' => 'paid',
+                'amount_total' => 500000,
+                'currency' => 'pkr',
             ]],
         ]);
 
