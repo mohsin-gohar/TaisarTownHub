@@ -618,6 +618,9 @@ class PaymentController extends Controller
         $agencyId = $invoice->agency_id;
         $planId = $invoice->plan_id;
 
+        // Serialize all plan activations for one tenant, including different
+        // invoices/providers, so the final subscription row cannot be raced.
+        Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
         $plan = SubscriptionPlan::findOrFail($planId);
 
         // Determine interval ends_at
