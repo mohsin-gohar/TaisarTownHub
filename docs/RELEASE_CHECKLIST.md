@@ -22,7 +22,7 @@
 | Full-stack integration smoke | PASS | nginx, migrations, MySQL/Redis/ClamAV, auth gateway flows |
 | Vercel frontend deployment | PASS | Main application baseline deployment READY |
 | Vercel custom-domain attachment | PASS | Apex and www attached; www redirects to apex with 308 |
-| Custom-domain DNS/TLS | **BLOCKED** | Apex/www DNS lookups return NXDOMAIN; Vercel reports misconfigured |
+| Custom-domain registration/DNS/TLS | **BLOCKED** | `taisartownhub.com` is available to register (not purchased); apex/www DNS return NXDOMAIN |
 | Production Laravel API | **FAIL / BLOCKED** | `api.taisartownhub.com` DNS does not exist; Vercel API proxy returns 502 |
 | Production secrets | NOT CONFIGURED / NOT VERIFIED | No production secrets were read or changed |
 | Full file-by-file audit | IN PROGRESS | 565 tracked blobs; historical 706-file ledger unreconciled |
@@ -41,7 +41,7 @@
 - [ ] Configure SMTP, OAuth/payment secrets (or explicitly disable unused integrations), monitoring, and alerting.
 
 ### Domains and frontend
-- [ ] At registrar, set apex A records to Vercel's current recommended values: `216.198.79.1` and `64.29.17.1`.
+- [ ] Register/purchase `taisartownhub.com` (read-only registry lookup currently reports it available; no purchase has been made).\n- [ ] After registration, set apex A records to Vercel's current recommended values: `216.198.79.1` and `64.29.17.1`.
 - [ ] Set `www` CNAME to `fbb47a846f572c5c.vercel-dns-017.com` (or the current Vercel-provided target).
 - [ ] Verify HTTPS/TLS and canonical redirect for apex/www.
 - [ ] Select and deploy the API host, then point `api.taisartownhub.com` to the host-provided DNS target.
