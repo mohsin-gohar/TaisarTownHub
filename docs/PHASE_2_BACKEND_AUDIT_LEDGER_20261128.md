@@ -140,6 +140,90 @@
 - CI: intentionally not triggered.
 - Phase 2 backend audit remains in progress; this task completes controller review only.
 
+
+---
+
+## Phase 2.3 — All Laravel models and relationships review
+
+<badge>Reviewed — static</badge>
+
+**Report:** [Phase 2.3 Laravel Models and Relationships Review](PHASE_2_3_LARAVEL_MODELS_RELATIONSHIPS_REVIEW_20261128.md)
+
+**Reviewed snapshot:** `55b48709b29e073c4fb645145db4831d14a65868`  
+**Coverage:** 47/47 tracked files under `backend/app/Models/`; model relationship definitions were cross-checked against relevant migrations.
+
+### Exact files reviewed
+
+| Status | Current path |
+|---|---|
+| READ | `backend/app/Models/Agency.php` |
+| READ | `backend/app/Models/AgencyInvitation.php` |
+| READ | `backend/app/Models/AgencyMember.php` |
+| READ | `backend/app/Models/AgencyPromotion.php` |
+| READ | `backend/app/Models/AgencySubscription.php` |
+| READ | `backend/app/Models/AgencyVideo.php` |
+| READ | `backend/app/Models/AuditLog.php` |
+| READ | `backend/app/Models/Block.php` |
+| READ | `backend/app/Models/BusinessRecord.php` |
+| READ | `backend/app/Models/Commission.php` |
+| READ | `backend/app/Models/Dealer.php` |
+| READ | `backend/app/Models/DealerFile.php` |
+| READ | `backend/app/Models/Document.php` |
+| READ | `backend/app/Models/DocumentAccessLog.php` |
+| READ | `backend/app/Models/DocumentFolder.php` |
+| READ | `backend/app/Models/DocumentQuarantine.php` |
+| READ | `backend/app/Models/DocumentShare.php` |
+| READ | `backend/app/Models/DocumentVersion.php` |
+| READ | `backend/app/Models/EmailVerificationToken.php` |
+| READ | `backend/app/Models/Expense.php` |
+| READ | `backend/app/Models/Inquiry.php` |
+| READ | `backend/app/Models/LeadActivity.php` |
+| READ | `backend/app/Models/LoginHistory.php` |
+| READ | `backend/app/Models/Map.php` |
+| READ | `backend/app/Models/MediaFile.php` |
+| READ | `backend/app/Models/PaymentSchedule.php` |
+| READ | `backend/app/Models/Permission.php` |
+| READ | `backend/app/Models/Project.php` |
+| READ | `backend/app/Models/PromotionPackage.php` |
+| READ | `backend/app/Models/Property.php` |
+| READ | `backend/app/Models/PropertyCategory.php` |
+| READ | `backend/app/Models/PropertyFavorite.php` |
+| READ | `backend/app/Models/PropertyStatusHistory.php` |
+| READ | `backend/app/Models/PropertyView.php` |
+| READ | `backend/app/Models/Role.php` |
+| READ | `backend/app/Models/SavedSearch.php` |
+| READ | `backend/app/Models/Sector.php` |
+| READ | `backend/app/Models/SubscriptionInvoice.php` |
+| READ | `backend/app/Models/SubscriptionPlan.php` |
+| READ | `backend/app/Models/SupportMessage.php` |
+| READ | `backend/app/Models/SupportTicket.php` |
+| READ | `backend/app/Models/SystemSetting.php` |
+| READ | `backend/app/Models/Transaction.php` |
+| READ | `backend/app/Models/TransactionPayment.php` |
+| READ | `backend/app/Models/User.php` |
+| READ | `backend/app/Models/VideoComment.php` |
+| READ | `backend/app/Models/VideoLike.php` |
+
+### Main findings
+
+1. **P1:** `Role`, `Sector` and `Block` migrations have `deleted_at`, but their models do not use `SoftDeletes`; trashed rows remain in normal Eloquent queries/relations.
+2. **P1:** Multiple tenant-owned child/parent relationships have independent foreign keys but no database-level same-agency guarantee; mismatched agency references must be audited and blocked in transactional services.
+3. **P2:** Video comment/like tables lack foreign keys to their video/user parents, allowing orphaned engagement rows.
+4. **P2:** Several models omit useful relations for existing foreign-key columns (for example, share/quarantine/access-log agency/document links and property-view/video-comment user links).
+5. **P2:** Agency membership role assignment is not database-constrained to an agency-compatible role scope.
+6. **P2:** `Project.subtitle` exists in the migration but is omitted from the model's fillable attributes; current ProjectController is read-only, so no active API write failure was confirmed.
+7. **P3:** `AgencyPromotion::isPaid()` always returns false despite payment state fields; this is consistent with the current free-launch comment but must change before paid placements are enabled.
+8. **P3:** Financial numeric casts/precision handling are inconsistent across models.
+
+### Verification state
+
+- Static model source review: complete for all 47 current model files.
+- Relevant schema migrations cross-checked for FKs, unique constraints, indexes and soft-delete columns.
+- No model or migration source files changed.
+- No database migration execution, live schema inspection, orphan scan, tenant-mismatch scan, PHPUnit or static analysis run.
+- CI: intentionally not triggered.
+- Phase 2 backend audit remains in progress; this task completes model/relationship review only.
+
 ## Phase 2 remaining
 
-Continue with Phase 2.3 and later. Keep exact paths and evidence; do not infer READ/TESTED status from inventory, historical reports, or another file's references.
+Continue with Phase 2.4 and later. Keep exact paths and evidence; do not infer READ/TESTED status from inventory, historical reports, or another file's references.
