@@ -16,6 +16,10 @@ class VideoComment extends Model
         'id', 'agency_video_id', 'userName', 'comment', 'isDealer', 'user_id'
     ];
 
+    // Internal account identifiers are used for server-side attribution only.
+    // Public gallery responses should never expose them.
+    protected $hidden = ['user_id'];
+
     protected $casts = [
         'isDealer' => 'boolean',
     ];
