@@ -1,12 +1,14 @@
 # TaisarTownHub - Complete File Audit Ledger
 
-> **PARTIAL INVENTORY — NOT A COMPLETED FILE AUDIT.** This ledger is historical to commit `6c92d52`, explicitly marked `Audit Coverage: In progress`, and contains unchecked `READ` entries. Its 706-file count is not reconciled with the current baseline tree (564 tracked file blobs). It does not prove every repository file was read. See [the independent verification update](INDEPENDENT_REVIEW_20261127.md).
+> **HISTORICAL CHECKLIST — NOT A COMPLETED FILE AUDIT.** Reconciled on 2026-11-28 in [Phase 1.10 reconciliation](PHASE_1_HISTORICAL_706_FILE_LEDGER_RECONCILIATION_20261128.md). The stated **706 tracked files** is verified for the parent baseline commit `ed401f504dd70180ad40fda37ed2e9250a5a335a`. This ledger was added in commit `6c92d524ce598279948533a8f5b4154b04017797`, whose tree had 713 blobs after seven additional files were added. Current main snapshot `ae306f81a08d781be3ef9c1f1a490b24b3010b78` has 566 tracked blobs. This document contains 207 unchecked checklist entries (197 explicit path entries and 10 aggregate/directory/task entries); all remain unverified. It does not prove that every historical or current repository file was read.
+
 
 ## Audit Metadata
 - **Audit Date:** 2026-11-23
 - **Auditor:** Independent Enterprise Software Audit Team
 - **Repository:** https://github.com/mohsin-gohar/TaisarTownHub
-- **Commit:** 6c92d52audit: add enterprise audit reports and file ledger
+- **Ledger Commit:** 6c92d524ce598279948533a8f5b4154b04017797
+- **File-count Baseline Commit:** ed401f504dd70180ad40fda37ed2e9250a5a335a
 - **Total Tracked Files:** 706
 - **Audit Coverage:** In progress
 
