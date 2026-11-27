@@ -10,7 +10,8 @@ const configs = [
 
 test('both Vercel project roots redirect the legacy video walkthrough URL', () => {
   for (const path of configs) {
-    const config = JSON.parse(readFileSync(path, 'utf8'));
+    const config: { redirects?: Array<{ source: string; destination: string; permanent: boolean }> } =
+      JSON.parse(readFileSync(path, 'utf8'));
     assert.ok(
       config.redirects?.some((rule) =>
         rule.source === '/video-walkthroughs' &&
