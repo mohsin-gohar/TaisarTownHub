@@ -1,7 +1,7 @@
 # TaisarTownHub — Production Release Checklist
 
 **Updated:** 2026-11-27  
-**Main:** `5f15402973908886c9e2ef09962b28cad80e78ff`  
+**Main:** `c006c2bb6b4a210a8db7139aa30d5bad9ab693a1`  
 **Verdict:** **Frontend deployed; full production release BLOCKED by unavailable Laravel API.**
 
 ## Verified gates
