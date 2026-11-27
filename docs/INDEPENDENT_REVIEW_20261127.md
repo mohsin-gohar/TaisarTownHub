@@ -31,6 +31,7 @@ Fixes on PR #24:
 - Cross-agency property requests receive only the public payload.
 - `pending_changes` is hidden by default and exposed only to users with `properties.approve`.
 - CRM CSV export applies the own/unassigned lead scope unless the user has `crm.assign_lead`.
+- Public video comments no longer serialize internal `user_id` account identifiers; server-side attribution remains stored and verified.
 
 Regression tests cover the owning-agency detail permission, cross-agency privacy, moderator-only staged changes, and CRM export isolation.
 
@@ -48,13 +49,13 @@ Regression tests cover the owning-agency detail permission, cross-agency privacy
 
 ### Passing runs (earlier branch heads)
 
-- **CI at `9ebff378`:** backend suite passed **425 tests / 3,716 assertions** against MySQL 8; frontend verification and OpenAPI parsing passed; Playwright Chromium passed **52 tests**.
-- **Docker CI at `9ebff378`:** backend and frontend images built; migrations and backend health check passed; MySQL backup and isolated restore drill passed; full-stack integration smoke tests passed.
-- **CI at `1b4701c`:** frontend verification and Playwright Chromium passed, including the mobile navigation/no-horizontal-overflow and desktop search-filter-width tests.
+- **CI at `ab9a3eb`:** backend suite passed **425 tests / 3,728 assertions** against MySQL 8; frontend verification and OpenAPI parsing passed; Playwright Chromium passed **53 tests**.
+- **Docker CI at `ab9a3eb`:** backend and frontend images built; migrations and backend health check passed; MySQL backup and isolated restore drill passed. The full-stack integration job was still running at the last check.
+- **Responsive browser coverage at `ab9a3eb`:** Playwright passed mobile widths 320, 360, 375, 390, 414, 430px; tablet 768, 1024px; and desktop 1280, 1440, 1920px, including navigation/no-overflow and desktop search-filter widths.
 
 ### Latest head still pending
 
-PR #24 includes the final `finance.view` permission alignment, Vercel API rewrite, responsive search-filter layout, and placeholder-video filtering; later PR commits also correct the historical audit/release documentation. CI, Docker CI, and Vercel checks on the current PR head remain authoritative and must finish before merge. Results from earlier commits are not represented as verification of the latest code head.
+PR #24 includes the final `finance.view` permission alignment, Vercel API rewrite, responsive search-filter layout, and placeholder-video filtering; later PR commits also correct the historical audit/release documentation. The latest code-changing commit tested by CI is `ab9a3ebd7e5b53d86248a681dca07f9963812f66`; later PR commits update documentation only. CI passed on that code commit. Docker full-stack integration was still running at the last check. The latest Vercel build was rate-limited, so the preview deployment is not currently verified.
 
 ## Live website observations
 
@@ -64,7 +65,7 @@ Read-only browser checks of `https://taisartownhub.vercel.app/` found:
 - The public maps page cannot load its map data.
 - The video gallery has no verified real video tours; bundled `/sample-video.mp4` entries are placeholders and are correctly filtered from public display.
 - Hero filter labels were clipped on desktop; addressed on PR #24.
-- The navbar source contains a responsive mobile drawer and the footer grid uses responsive breakpoints. The browser automation environment could not resize its viewport; actual 390px checks are instead covered by the Playwright CI test.
+- The navbar source contains a responsive mobile drawer and the footer grid uses responsive breakpoints. Playwright CI independently verified 320–1920px widths across all public pages.
 
 A direct read-only browser check of `https://api.taisartownhub.com/api/health` returned `ERR_EMPTY_RESPONSE`. The live agency and map failures therefore remain a backend/API availability blocker. Vercel's branch preview is protected by Deployment Protection and could not be inspected without the Vercel connection.
 
