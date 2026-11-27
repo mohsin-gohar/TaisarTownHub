@@ -24,6 +24,12 @@ class TransactionPayment extends Model
         ];
     }
 
+    /** Numeric JSON compatibility; ledger calculations use SQL decimal sums. */
+    public function getAmountAttribute($value): float
+    {
+        return (float) $value;
+    }
+
     public function transaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class, 'transaction_id');
