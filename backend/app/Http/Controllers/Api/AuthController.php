@@ -298,42 +298,64 @@ class AuthController extends Controller
             'token' => 'required|string|min:20|max:120',
         ]);
 
-        $row = EmailVerificationToken::where('email', strtolower($data['email']))->first();
+        // Consume the token under a row lock. Without this lock, two requests
+        // can both read the same valid token before either deletes it.
+        $result = DB::transaction(function () use ($data): array {
+            $email = strtolower($data['email']);
+            $row = EmailVerificationToken::where('email', $email)->lockForUpdate()->first();
 
-        if (!$row || !hash_equals($row->token_hash, hash('sha256', $data['token']))) {
+            if (!$row || !hash_equals($row->token_hash, hash('sha256', $data['token']))) {
+                return ['error' => 'invalid'];
+            }
+
+            if ($row->created_at !== null && $row->created_at->lt(now()->subMinutes(60))) {
+                $row->delete();
+
+                return ['error' => 'expired'];
+            }
+
+            $user = User::where('email', $email)->lockForUpdate()->first();
+            if (!$user) {
+                return ['error' => 'not_found'];
+            }
+
+            $alreadyVerified = $user->email_verified_at !== null;
+            if (!$alreadyVerified) {
+                $user->markEmailVerified();
+            }
+
+            // Delete only after a valid token and account have been confirmed.
+            $row->delete();
+
+            return [
+                'user_id' => $user->id,
+                'already_verified' => $alreadyVerified,
+            ];
+        });
+
+        if (($result['error'] ?? null) === 'invalid') {
             return response()->json([
                 'success' => false,
                 'message' => 'This verification link is invalid.',
             ], 400);
         }
 
-        if ($row->created_at !== null && $row->created_at->lt(now()->subMinutes(60))) {
-            $row->delete();
-
+        if (($result['error'] ?? null) === 'expired') {
             return response()->json([
                 'success' => false,
                 'message' => 'This verification link has expired. Request a new one after signing in.',
             ], 400);
         }
 
-        $user = User::where('email', strtolower($data['email']))->first();
-        if (!$user) {
+        if (($result['error'] ?? null) === 'not_found') {
             return response()->json(['success' => false, 'message' => 'Account not found.'], 404);
         }
 
-        $alreadyVerified = $user->email_verified_at !== null;
-
-        DB::transaction(function () use ($user, $row, $alreadyVerified): void {
-            if (!$alreadyVerified) {
-                $user->markEmailVerified();
-            }
-            $row->delete();
-        });
-
+        $alreadyVerified = $result['already_verified'];
         if (!$alreadyVerified) {
-            $this->writeAudit($request, 'auth.email_verified', (string) $user->id, 'Email address verified.', [
+            $this->writeAudit($request, 'auth.email_verified', (string) $result['user_id'], 'Email address verified.', [
                 'entity_type' => 'user',
-                'entity_id' => (string) $user->id,
+                'entity_id' => (string) $result['user_id'],
             ]);
         }
 
