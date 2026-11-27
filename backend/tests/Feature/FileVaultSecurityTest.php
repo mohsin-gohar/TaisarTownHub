@@ -624,6 +624,49 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertDatabaseHas('documents', ['id' => $id]);
     }
 
+    public function test_quarantined_document_metadata_is_retained_when_version_delete_fails(): void
+    {
+        [, $agency] = $this->uploader();
+        $id = 'doc_' . bin2hex(random_bytes(8));
+        $documentPath = 'expired/' . $id . '.pdf';
+        $versionPath = 'expired/' . $id . '-v1.pdf';
+        $document = Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Expired Hold With Version',
+            'disk_path' => $documentPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 20,
+            'status' => 'quarantined',
+        ]);
+        $document->created_at = now()->subDays(45);
+        $document->save();
+        DocumentVersion::create([
+            'document_id' => $id,
+            'version' => 1,
+            'disk_path' => $versionPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 10,
+            'created_at' => now()->subDays(45),
+        ]);
+
+        $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('exists')->once()->with($versionPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($versionPath)->andReturn(false);
+        Storage::shouldReceive('disk')->twice()->with('documents')->andReturn($disk);
+
+        $exitCode = Artisan::call('vault:purge-quarantine');
+
+        $this->assertSame(1, $exitCode);
+        $this->assertDatabaseHas('documents', ['id' => $id]);
+        $this->assertDatabaseHas('document_versions', ['document_id' => $id, 'version' => 1]);
+    }
+
     /* ============ Configuration guardrails ============ */
 
     public function test_vault_disks_stay_configured_outside_the_web_root(): void
