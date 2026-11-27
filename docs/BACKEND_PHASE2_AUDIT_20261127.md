@@ -302,6 +302,16 @@
 
 **Status:** code and regression test committed; CI intentionally paused.
 
+### P1 — Public marketplace listings remained visible after agency suspension or failed verification
+
+**Affected:** `backend/app/Models/Property.php`, `backend/tests/Feature/WorkspaceApprovalTest.php`.
+
+- The public listing scope checked listing approval, visibility, deletion, and expiry, but did not check the owning agency's status/verification. A suspended or unverified agency's listings could therefore remain visible through public search and direct detail URLs.
+- Fix: agency-owned listings now require the agency to be both `active` and `verified` in the database scope and the model's public-visibility predicate. Platform/legacy listings without an agency retain their existing behavior.
+- Regression test suspends an agency and then marks it unverified, asserting its listing disappears from public search and direct detail returns 404.
+
+**Status:** code and regression test committed.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
