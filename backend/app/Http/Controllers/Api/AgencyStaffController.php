@@ -58,23 +58,17 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
+        $request->merge(['email' => mb_strtolower(trim((string) $request->email))]);
         $request->validate([
             'email' => 'required|email|max:255',
             'role_id' => 'required|string|max:64',
         ]);
 
-        $agency = Agency::findOrFail($agencyId);
-
-        // G-8: staff quota (active members + pending invitations) enforced server-side.
-        if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId))) {
-            return PlanLimits::deny('Staff limit reached for your subscription plan. Upgrade to invite more members.', $block);
-        }
-
         $role = $this->resolveAgencyRole($agencyId, $request->role_id);
 
         // Only an existing owner may mint another owner invitation. Without
-        // this guard any agency.manage_staff holder could invite themselves
-        // (or an accomplice) into full agency ownership.
+        // this guard any agency.manage_staff holder could invite an accomplice
+        // into full agency ownership.
         if ($role->id === 'role_agency_owner' && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
             return response()->json([
                 'success' => false,
@@ -82,27 +76,60 @@ class AgencyStaffController extends Controller
             ], 403);
         }
 
-        if (User::where('email', $request->email)->exists()
-            && AgencyMember::where('agency_id', $agencyId)
-                ->whereHas('user', fn ($q) => $q->where('email', $request->email))
-                ->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This user is already a member of your agency.',
-            ], 422);
+        $token = Str::random(48);
+        $result = DB::transaction(function () use ($agencyId, $request, $role, $token): array {
+            // Serialize invitation quota checks for this agency. Without the
+            // parent-row lock two simultaneous invites can both pass the
+            // same remaining-seat count and exceed the subscription limit.
+            $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+
+            if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId))) {
+                return ['blocked' => $block];
+            }
+
+            $alreadyMember = AgencyMember::where('agency_id', $agencyId)
+                ->whereHas('user', fn ($query) => $query->whereRaw('LOWER(email) = ?', [$request->email]))
+                ->exists();
+            if ($alreadyMember) {
+                return ['error' => 422, 'message' => 'This user is already a member of your agency.'];
+            }
+
+            $pendingInvite = AgencyInvitation::where('agency_id', $agencyId)
+                ->whereRaw('LOWER(email) = ?', [$request->email])
+                ->where('status', 'pending')
+                ->where(function ($query) {
+                    $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+                })
+                ->exists();
+            if ($pendingInvite) {
+                return ['error' => 422, 'message' => 'A pending invitation already exists for this email address.'];
+            }
+
+            $invitation = AgencyInvitation::create([
+                'agency_id' => $agencyId,
+                'email' => $request->email,
+                'role_id' => $role->id,
+                'token_hash' => hash('sha256', $token),
+                'invited_by' => $request->user()->id,
+                'status' => 'pending',
+                'expires_at' => now()->addDays(7),
+            ]);
+
+            return ['invitation' => $invitation];
+        });
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Staff limit reached for your subscription plan. Upgrade to invite more members.', $result['blocked']);
         }
 
-        $token = Str::random(48);
-        $invitation = AgencyInvitation::create([
-            'agency_id' => $agencyId,
-            'email' => $request->email,
-            'role_id' => $role->id,
-            'token_hash' => hash('sha256', $token),
-            'invited_by' => $request->user()->id,
-            'status' => 'pending',
-            'expires_at' => now()->addDays(7),
-        ]);
+        if (isset($result['error'])) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], $result['error']);
+        }
 
+        $invitation = $result['invitation'];
         $this->writeAudit($request, 'agency.invite', 'invitation:' . $invitation->id, 'Invited ' . $request->email . ' as ' . $role->name, [
             'agency_id' => $agencyId,
             'entity_type' => 'agency_invitation',
