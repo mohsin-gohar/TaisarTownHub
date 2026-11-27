@@ -48,6 +48,17 @@ Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `sch
 4. **Post-deploy checks:** `/api/health` → 200 `healthy`; homepage renders over HTTPS; login, agency workspace, a private document download and one queued job all succeed; watch logs for one business day before sign-off.
 5. **Rollback:** keep previous image tags + a verified DB/storage backup; stop traffic at the gateway, restore previous images, restore data only if a schema/data regression is confirmed, re-run the B-gates on the rollback commit.
 
+## 4b. Hostinger: which product can run this app
+
+This application is not a shared-hosting PHP site. It needs PHP 8.2+, MySQL 8, a private file volume outside the web root, a long-running queue worker, a scheduler, Redis (cache, sessions, queues, rate limits), and a reachable ClamAV daemon with fail-closed upload scanning.
+
+| Hostinger product | Fit |
+|---|---|
+| Shared, Premium, and hPanel website hosting | **Cannot host the full app.** No Docker Compose, no Redis/queue worker/scheduler processes, no ClamAV sidecar, and the document root cannot safely hold the private vault. Do not "make it fit" by turning off malware scanning, queues, or tenant checks. |
+| KVM VPS (Ubuntu 22.04 or 24.04) | **Supported architecture.** Install Docker, copy the root `.env.example` to `.env`, replace every secret, then follow section 4. A small KVM plan must still have enough RAM for MySQL, Redis, PHP-FPM, the worker, and ClamAV signature updates; size the VPS up if the ClamAV container is killed for memory. |
+
+DNS, TLS certificates, SMTP, and payment-provider keys stay owner-controlled. Nothing in this repository deploys itself to Hostinger.
+
 ## 5. Vercel (frontend-only preview — NOT the production deployment)
 
 The live Vercel deployment serves the SPA only, with the bundled public catalog and no API. It is a preview, not the required full-stack production deployment; set `VITE_API_URL` there if you want it to talk to the API origin.

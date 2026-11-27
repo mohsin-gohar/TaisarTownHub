@@ -34,7 +34,7 @@ for (const route of ROUTES) {
   const expectNoindex = route === 'login' || route === 'admin';
   check(res.ok, `${file} served (${res.status})`);
   check(title.length > 10, `${file} has a title`, `-> "${title}"`);
-  check(canonical.startsWith('https://taisartownhub.vercel.app/'), `${file} canonical`, `-> ${canonical}`);
+  check(canonical.startsWith('https://taisartownhub.com/'), `${file} canonical`, `-> ${canonical}`);
   check(robots.includes(expectNoindex ? 'noindex' : 'index'), `${file} robots=${robots}`);
   check(ogImage.endsWith('/og-image.jpg'), `${file} og:image`, `-> ${ogImage}`);
 
@@ -71,8 +71,8 @@ const head = () =>
 await page.goto(`${BASE}/`, { waitUntil: 'load' });
 await new Promise((r) => setTimeout(r, 900));
 let h = await head();
-check(h.title.includes('Taiser Town Scheme 45 Plots'), 'home title', `-> ${h.title}`);
-check(h.canonical === 'https://taisartownhub.vercel.app/', 'home canonical', `-> ${h.canonical}`);
+check(h.title.includes('Taiser Town Scheme 45'), 'home title', `-> ${h.title}`);
+check(h.canonical === 'https://taisartownhub.com/', 'home canonical', `-> ${h.canonical}`);
 
 // Click the semantic "About" nav anchor
 const clicked = await page.evaluate(() => {
@@ -87,7 +87,7 @@ check(clicked, 'about nav anchor present + clicked');
 await new Promise((r) => setTimeout(r, 1100));
 h = await head();
 check(h.title.startsWith('About TaisarTownHub'), 'about title after SPA nav', `-> ${h.title}`);
-check(h.canonical === 'https://taisartownhub.vercel.app/about', 'about canonical', `-> ${h.canonical}`);
+check(h.canonical === 'https://taisartownhub.com/about', 'about canonical', `-> ${h.canonical}`);
 check(h.ogUrl === h.canonical, 'about og:url matches canonical');
 check(h.breadcrumb.includes('BreadcrumbList'), 'about breadcrumb JSON-LD injected');
 check(h.breadcrumb.includes('"name":"About Us"'), 'about breadcrumb names About Us');
@@ -97,7 +97,7 @@ await page.goto(`${BASE}/properties?property=prop-1`, { waitUntil: 'load' });
 await new Promise((r) => setTimeout(r, 1400));
 h = await head();
 check(!h.title.startsWith('Plots for Sale in'), 'property detail title is record-specific', `-> ${h.title}`);
-check(h.canonical === 'https://taisartownhub.vercel.app/properties?property=prop-1', 'property detail canonical keeps id', `-> ${h.canonical}`);
+check(h.canonical === 'https://taisartownhub.com/properties?property=prop-1', 'property detail canonical keeps id', `-> ${h.canonical}`);
 check(h.desc.length > 40, 'property detail description present');
 console.log(`       title: ${h.title}`);
 console.log(`       desc : ${h.desc.slice(0, 120)}...`);
