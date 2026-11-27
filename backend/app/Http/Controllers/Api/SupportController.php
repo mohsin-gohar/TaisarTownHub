@@ -136,43 +136,51 @@ class SupportController extends Controller
     public function storeMessage(Request $request, string $id)
     {
         $user = $request->user();
-        $ticket = $this->findVisible($request, $id);
-
         $isStaff = $this->can($request, 'admin.support_tickets');
 
         $data = $request->validate([
             'body' => 'required|string|min:2|max:5000',
         ]);
 
-        if ($ticket->status === 'closed' && !$isStaff) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This ticket is closed. Raise a new ticket if the issue persists.',
-            ], 422);
-        }
+        // Serialize message insertion with ticket status transitions so a
+        // reply cannot race a close/reopen operation using stale status.
+        [$ticket, $message] = DB::transaction(function () use ($request, $id, $user, $isStaff, $data) {
+            $locked = SupportTicket::where('id', $id)->lockForUpdate()->first();
+            if (! $locked) {
+                abort(404, 'Ticket not found.');
+            }
 
-        $message = SupportMessage::create([
-            'ticket_id' => $ticket->id,
-            'user_id' => $user->id,
-            'is_staff' => $isStaff,
-            'body' => strip_tags($data['body']),
-            'created_at' => now(),
-        ]);
+            $ticket = $this->findVisible($request, $id);
 
-        // First staff reply stamps the response-time metric; a user reply on a
-        // resolved ticket re-opens it for staff attention.
-        if ($isStaff) {
-            $ticket->first_response_at = $ticket->first_response_at ?? now();
-            if ($ticket->status === 'resolved') {
+            if ($ticket->status === 'closed' && ! $isStaff) {
+                abort(422, 'This ticket is closed. Raise a new ticket if the issue persists.');
+            }
+
+            $message = SupportMessage::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $user->id,
+                'is_staff' => $isStaff,
+                'body' => strip_tags($data['body']),
+                'created_at' => now(),
+            ]);
+
+            // First staff reply stamps the response-time metric; a user reply
+            // on a resolved ticket re-opens it for staff attention.
+            if ($isStaff) {
+                $ticket->first_response_at = $ticket->first_response_at ?? now();
+                if ($ticket->status === 'resolved') {
+                    $ticket->status = 'open';
+                    $ticket->resolved_at = null;
+                }
+                $ticket->save();
+            } elseif ($ticket->status === 'resolved') {
                 $ticket->status = 'open';
                 $ticket->resolved_at = null;
+                $ticket->save();
             }
-            $ticket->save();
-        } elseif (in_array($ticket->status, ['resolved'], true)) {
-            $ticket->status = 'open';
-            $ticket->resolved_at = null;
-            $ticket->save();
-        }
+
+            return [$ticket, $message];
+        });
 
         return response()->json([
             'success' => true,
