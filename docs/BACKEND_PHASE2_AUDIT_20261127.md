@@ -470,3 +470,10 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - When a verified invoice has a `plan_id`, invoice settlement now locks the agency and activates/updates its subscription in the same database transaction, using the invoice period where supplied and disabling automatic renewal for the manual payment.
 - Invoices without a plan remain simple manual receivables and do not change the subscription.
 - Added regression coverage for the plan-linked manual invoice activation and period boundaries.
+
+
+### P2 — Loss-making sales were reported as zero profit
+
+- Dealer-file and media-sale calculations previously clamped negative profit to zero, hiding the actual loss.
+- Sale records now retain signed integer-paise profit/loss values. Dealer commission accrual remains zero for loss-making sales and cannot reduce previously earned commission balances.
+- Regression coverage checks negative dealer-file and media-sale profit while ensuring no negative commission is accrued.
