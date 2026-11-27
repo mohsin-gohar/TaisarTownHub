@@ -68,7 +68,7 @@ class InquiryCaptchaTest extends EnterpriseTestCase
         $this->asGuest();
 
         Inquiry::creating(function (): void {
-            throw new \\RuntimeException('Simulated inquiry persistence failure.');
+            throw new \RuntimeException('Simulated inquiry persistence failure.');
         });
 
         $this->postJson('/api/inquiries', $this->basePayload() + $this->solveCaptcha())
