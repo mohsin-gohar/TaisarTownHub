@@ -442,3 +442,10 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Dealer create/update validation applied the percentage ceiling to every commission type, rejecting legitimate fixed PKR commissions such as the seeded PKR 20,000 rate.
 - Validation now permits fixed/custom rates within the database-safe numeric ceiling and enforces the 100 maximum only when the effective commission type is Percentage (including updates that omit the type).
 - Regression tests cover a PKR 20,000 fixed commission, a valid 2.5% rate, and rejection of 101%.
+
+
+### P1 — Payment deletion could race with concurrent payment creation
+
+- Payment removal previously soft-deleted the ledger row and recalculated transaction summary fields outside a single locked transaction.
+- It now resolves the parent deal, locks the transaction first (same lock order as payment creation), locks the agency-scoped payment row, soft-deletes it and recalculates summary fields atomically.
+- Regression coverage now checks that deleting the sole payment restores the deal's collected amount, remaining balance and Pending status.
