@@ -147,6 +147,17 @@ class AuthFlowsTest extends EnterpriseTestCase
         // G-9: mail dispatch must never block request handling.
         $this->assertInstanceOf(\Illuminate\Contracts\Queue\ShouldQueue::class, new VerifyEmailLink());
         $this->assertInstanceOf(\Illuminate\Contracts\Queue\ShouldQueue::class, new ResetPasswordLink('token'));
+
+        foreach ([
+            new VerifyEmailLink(),
+            new ResetPasswordLink('token'),
+            new \\App\\Notifications\\PasswordChangedNotification(),
+            new \\App\\Notifications\\SuspiciousLoginDetected('new_device'),
+        ] as $notification) {
+            $this->assertSame(3, $notification->tries);
+            $this->assertSame(60, $notification->timeout);
+            $this->assertSame([30, 120, 300], $notification->backoff);
+        }
     }
 
     public function test_registration_issues_a_verification_link_that_verifies(): void
