@@ -219,11 +219,11 @@ class StorageSecurityTest extends EnterpriseTestCase
         [$user] = $this->agencyUser($this->documentPermissions());
 
         $this->app->instance(
-            \\App\\Services\\MalwareScanner::class,
-            new class implements \\App\\Services\\MalwareScanner {
-                public function scan(string $filePath): \\App\\Support\\MalwareScanResult
+            \App\Services\MalwareScanner::class,
+            new class implements \App\Services\MalwareScanner {
+                public function scan(string $filePath): \App\Support\MalwareScanResult
                 {
-                    return \\App\\Support\\MalwareScanResult::infected('clamav', ['Eicar-Test-Signature FOUND']);
+                    return \App\Support\MalwareScanResult::infected('clamav', ['Eicar-Test-Signature FOUND']);
                 }
 
                 public function isAvailable(): bool
@@ -234,7 +234,7 @@ class StorageSecurityTest extends EnterpriseTestCase
         );
 
         DocumentQuarantine::creating(function (): void {
-            throw new \\RuntimeException('Simulated quarantine metadata failure.');
+            throw new \RuntimeException('Simulated quarantine metadata failure.');
         });
 
         $this->post('/api/agency/media', [
