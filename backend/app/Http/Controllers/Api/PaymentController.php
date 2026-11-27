@@ -544,13 +544,19 @@ class PaymentController extends Controller
         // state transition. Stripe may retry/deliver the same event in
         // parallel; lock and re-check the invoice inside the transaction so
         // a paid invoice can never be committed without its subscription.
-        DB::transaction(function () use ($invoice, $session, $stripeSubId): void {
+        $outcome = DB::transaction(function () use ($invoice, $session, $stripeSubId): string {
             $lockedInvoice = SubscriptionInvoice::whereKey($invoice->getKey())
                 ->lockForUpdate()
                 ->first();
 
-            if (!$lockedInvoice || $lockedInvoice->status === 'paid') {
-                return;
+            if (!$lockedInvoice) {
+                return 'not_found';
+            }
+            if ($lockedInvoice->status === 'paid') {
+                return 'already_paid';
+            }
+            if ($lockedInvoice->status !== 'pending') {
+                return 'not_pending';
             }
 
             $lockedInvoice->update([
@@ -561,7 +567,16 @@ class PaymentController extends Controller
             ]);
 
             $this->activateSubscriptionFromInvoice($lockedInvoice);
+            return 'activated';
         });
+
+        if ($outcome === 'not_pending') {
+            Log::warning('Stripe checkout: invoice is no longer payable', [
+                'session_id' => $session->id,
+                'invoice_id' => $invoice->id,
+                'status' => $invoice->fresh()?->status,
+            ]);
+        }
     }
 
     private function handleStripeInvoicePaid($invoice): void
