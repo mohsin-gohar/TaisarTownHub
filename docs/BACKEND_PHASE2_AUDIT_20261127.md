@@ -41,7 +41,7 @@
 - Failed quarantined-document deletion retains the document row.
 - Failed version deletion retains document and version metadata.
 
-**Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
+**Status:** code and regression tests committed; latest MySQL 8 backend suite passed with 435 tests and 3,789 assertions.
 
 ### P1 — Production preflight did not enforce malware-scan configuration
 **Affected:** `backend/app/Console/Commands/ProductionCheck.php`, `backend/config/malware.php`, `backend/tests/Feature/ProductionReadinessTest.php`.
@@ -67,7 +67,7 @@
 
 **Regression tests added:** reject webhook payloads missing amount or currency; reject a rounded underpayment; reject provider verification responses missing the amount. Existing successful and mismatched-amount tests remain.
 
-**Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
+**Status:** code and regression tests committed; latest MySQL 8 backend suite passed with 435 tests and 3,789 assertions.
 
 ### P1 — Stripe Checkout webhook activated sessions without proving settlement or invoice match
 **Affected:** `backend/app/Http/Controllers/Api/PaymentController.php`, `backend/tests/Feature/PaymentGatewayTest.php`.
@@ -80,7 +80,7 @@
 
 **Regression tests added:** successful webhook fixture now includes settled payment fields; unpaid and missing-amount sessions remain pending and do not activate a subscription.
 
-**Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
+**Status:** code and regression tests committed; latest MySQL 8 backend suite passed with 435 tests and 3,789 assertions.
 
 ### P1 — MFA challenge and recovery-code consumption were not concurrency-safe
 **Affected:** `backend/app/Http/Controllers/Api/AuthController.php`, `backend/app/Support/MfaService.php`, `backend/tests/Feature/MfaEnforcementTest.php`.
@@ -92,7 +92,7 @@
 
 **Regression tests added:** a successful challenge cannot be reused; a recovery code consumed through one challenge is rejected on a second challenge.
 
-**Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
+**Status:** code and regression tests committed; latest MySQL 8 backend suite passed with 435 tests and 3,789 assertions.
 
 ### P1 — Stripe invoice settlement and subscription activation were not atomic
 **Affected:** `backend/app/Http/Controllers/Api/PaymentController.php`, `backend/tests/Feature/PaymentGatewayTest.php`.
@@ -107,6 +107,52 @@
 
 **Status:** code and regression test committed on the Phase 2 branch; CI result pending.
 
+### P1 — Support ticket ownership bypassed an agency tenant boundary
+**Affected:** `backend/app/Http/Controllers/Api/SupportController.php`, `backend/tests/Feature/SupportTicketsTest.php`.
+
+- The visibility check accepted either same-agency context OR creator ownership.
+- A creator whose active agency context changed could therefore still read a ticket attached to a different agency.
+- Fix: agency-linked tickets now require the exact active agency context; unlinked platform tickets remain private to their creator; platform support staff retain their explicit global access.
+- Regression test: a creator cannot use ownership to read a ticket attached to another agency.
+
+**Status:** fixed; covered by the passing MySQL 8 backend suite.
+
+### P1 — Support ticket assignment accepted non-staff accounts
+**Affected:** `SupportController.php`, `SupportTicketsTest.php`.
+
+- The assignable-staff directory listed only active platform staff, but the assignment mutation previously validated only that the target user existed.
+- Fix: assignment now independently enforces an active platform staff role, matching the directory contract.
+- Regression test: assigning an agency member returns 422; an active platform operator remains assignable.
+
+**Status:** fixed; covered by the passing MySQL 8 backend suite.
+
+### P1 — General report permission exposed the platform-wide audit log
+**Affected:** `backend/app/Http/Controllers/Api/AdminSystemController.php`, `backend/tests/Feature/AdminStaffSubscriptionTest.php`.
+
+- With no active agency context, the endpoint accepted broad legacy `view_reports` / `admin.view_reports` permissions and returned unscoped audit records.
+- Fix: agency users retain only their active agency's audit trail; unscoped platform access now requires the dedicated `admin.view_audit_logs` permission.
+- Regression test: a legacy platform operator with general report access is denied global audit-log access.
+
+**Status:** fixed; covered by the passing MySQL 8 backend suite.
+
+### P2 — Dashboard collection totals included soft-deleted payments
+**Affected:** `backend/app/Http/Controllers/Api/AdminDashboardController.php`, `backend/tests/Feature/AdminStaffSubscriptionTest.php`.
+
+- The dashboard's main collection aggregates used the query builder without filtering `deleted_at`, while its time series and report endpoint already excluded deleted receipts.
+- Fix: dashboard collection totals now exclude soft-deleted payment rows consistently.
+- Regression test: a soft-deleted receipt does not contribute to platform collection totals.
+
+**Status:** fixed; covered by the passing MySQL 8 backend suite.
+
+### P1 — Manual subscription invoice verification was not concurrency-safe
+**Affected:** `backend/app/Http/Controllers/Api/AdminAgencyController.php`, `backend/tests/Feature/SubscriptionInvoicesTest.php`.
+
+- The endpoint checked the invoice status before writing it, without a transaction or row lock. Two concurrent staff requests could both read pending and overwrite payment metadata after one request had already paid the invoice.
+- Fix: verification now locks and re-checks the invoice inside a database transaction; audit logging occurs after the transaction commits.
+- Existing regression coverage confirms paid and void invoices cannot be verified again. True simultaneous-request stress coverage remains a separate concurrency-test item.
+
+**Status:** fixed; MySQL 8 suite passes. Concurrency behavior is protected by the row lock but still merits a dedicated parallel-request stress test.
+
 ## 4. Open review risks — not yet classified as defects
 1. **Best-effort audit persistence:** `AuthorizesApi::writeAudit()` logs a warning and continues if `AuditLog::create()` fails. Confirm which actions require durable audit records and whether those operations need a transactional outbox/fail-closed policy.
 2. **Legacy workspace sync atomicity:** `WorkspaceController::save()` processes collections sequentially and writes rows one at a time. Tenant ownership and destructive replace guards exist, but a mid-request database failure can leave a partially applied multi-collection sync. Confirm the frontend contract and whether per-collection or whole-request atomicity is required.
@@ -117,12 +163,12 @@
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
-- `AuthController`, `PropertyController`, `WorkspaceController`, `AgencyStaffController`, `TransactionController`, `FinanceController`, `DealerFilesController`, `DocumentController`, `MediaController`, `PaymentController`
+- `AuthController`, `PropertyController`, `WorkspaceController`, `AgencyStaffController`, `TransactionController`, `FinanceController`, `DealerFilesController`, `DocumentController`, `MediaController`, `PaymentController`, `SupportController`, `AdminSystemController`, `AdminDashboardController`, `AdminAgencyController`
 - `AgencyContext`, `EnsureMfaVerified`, `AuthorizesApi`
 - `User`, `Agency`, `Property`, `Transaction`
 - `ClamAVScanner`, `SecureFileStore`, `FileVaultCrypto`, `UploadSecurity`, `LegacyTenancyResolver`
 - `routes/console.php`, `SendSavedSearchAlerts`, `PurgeQuarantine`, `ProductionCheck`
-- Existing tests: `WorkspaceTenantMatrixTest`, `AuthSecurityTest`, `MfaEnforcementTest`, `DealerFilesAuthorizationTest`, `FinanceIsolationTest`, `MalwareUploadEnforcementTest`, `FileVaultSecurityTest`, `ProductionReadinessTest`
+- Existing tests: `WorkspaceTenantMatrixTest`, `AuthSecurityTest`, `MfaEnforcementTest`, `DealerFilesAuthorizationTest`, `FinanceIsolationTest`, `MalwareUploadEnforcementTest`, `FileVaultSecurityTest`, `ProductionReadinessTest`, `SupportTicketsTest`, `AdminStaffSubscriptionTest`, `SubscriptionInvoicesTest`
 
 ## 6. Not yet completed
 - Full line-by-line audit of all backend files (312 tracked backend blobs).
@@ -130,7 +176,7 @@
 - Full model/relationship/cast/serialization review.
 - Jobs/notifications/queue failure and retry behavior beyond the sampled commands.
 - Full migration/index/foreign-key/data-integrity review.
-- Running backend tests on the latest working branch and confirming all CI jobs. The corrected latest MySQL CI run passed: **434 tests, 3,784 assertions** (19.99 seconds). The preceding run had 431 passed and 3 failures caused by newly added vault-purge test fixture/mock expectations; those were corrected. Earlier CI also caught and we corrected a PHP `continue` inside an `each()` callback and an over-escaped model name in a Stripe test. Frontend verification and OpenAPI parsing pass on the latest head; Playwright Chromium and Docker backend-image jobs are still running at the time of this report update.
+- Latest full MySQL 8 backend suite passed: **435 tests, 3,789 assertions** (32.51 seconds). Frontend verification, OpenAPI parsing, and Playwright Chromium also passed on the same tested code head. Docker frontend image and MySQL backup/restore drill passed; the Docker backend-image build/integration job is still running at the time of this report update.
 - Fixing any further confirmed defects discovered by the remaining audit.
 
 No production database, files, credentials, DNS, payment configuration, or hosting settings were accessed or modified. No changes were made directly to `main`.
