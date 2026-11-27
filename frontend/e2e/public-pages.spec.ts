@@ -78,6 +78,39 @@ test.describe('Public Pages', () => {
     }
   });
 
+  test('mobile navigation works without horizontal page overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+
+    const menuButton = page.getByRole('button', { name: 'Open navigation menu' });
+    await expect(menuButton).toBeVisible();
+    await menuButton.click();
+
+    const drawer = page.getByRole('dialog', { name: 'Navigation menu' });
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole('button', { name: 'Properties' }).click();
+    await expect(page).toHaveURL(/\\/properties$/);
+    await expect(page.getByRole('dialog', { name: 'Navigation menu' })).toHaveCount(0);
+
+    const widths = await page.evaluate(() => ({
+      viewport: window.innerWidth,
+      document: document.documentElement.scrollWidth,
+      body: document.body.scrollWidth,
+    }));
+    expect(widths.document).toBeLessThanOrEqual(widths.viewport);
+    expect(widths.body).toBeLessThanOrEqual(widths.viewport);
+  });
+
+  test('desktop hero search filters have readable widths', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    const phaseWidth = (await page.getByLabel('Taiser Town phase').boundingBox())?.width ?? 0;
+    const budgetWidth = (await page.getByLabel('Budget in PKR').boundingBox())?.width ?? 0;
+    expect(phaseWidth).toBeGreaterThanOrEqual(220);
+    expect(budgetWidth).toBeGreaterThanOrEqual(220);
+  });
+
   test('Services page loads', async ({ page }) => {
     await page.goto('/services');
     await expect(page.locator('main')).toBeVisible();
