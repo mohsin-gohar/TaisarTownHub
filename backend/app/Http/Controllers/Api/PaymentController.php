@@ -244,8 +244,20 @@ class PaymentController extends Controller
                 }
 
                 $amount = $payload['amount'] ?? null;
-                $currency = strtoupper((string) ($payload['currency'] ?? ''));
-                if ($amount !== null && (int) round((float) $amount) !== (int) $invoice->total_pkr) {
+                $currency = strtoupper(trim((string) ($payload['currency'] ?? '')));
+                // A valid shared-secret header authenticates the sender, but
+                // a payment event without the invoice amount/currency cannot
+                // prove that the expected amount was settled. Never treat
+                // missing financial fields as an implicit match.
+                if ($amount === null || !is_numeric($amount)) {
+                    Log::error('Flutterwave webhook amount missing or invalid', ['tx_ref' => $txRef]);
+                    return 'amount_mismatch';
+                }
+                if ($currency === '') {
+                    Log::error('Flutterwave webhook currency missing', ['tx_ref' => $txRef]);
+                    return 'currency_mismatch';
+                }
+                if ((int) round((float) $amount) !== (int) $invoice->total_pkr) {
                     Log::error('Flutterwave webhook amount mismatch', [
                         'tx_ref' => $txRef,
                         'expected' => (int) $invoice->total_pkr,
