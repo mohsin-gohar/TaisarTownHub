@@ -317,7 +317,7 @@ jobs:
 
       - name: Verify private vault persistence and isolation
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml config --format json | python3 -c '
+          docker compose -f docker-compose.yml config --format json | python3 -c '
           import json, sys
           config = json.load(sys.stdin)
           expected_target = "/var/www/html/storage/app/private"
