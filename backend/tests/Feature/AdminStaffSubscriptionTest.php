@@ -45,6 +45,36 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         ], $attrs));
     }
 
+    public function test_subscription_plan_creation_rejects_currency_and_precision_invoice_cannot_represent(): void
+    {
+        $this->seedPlatformRole('super_admin');
+        $admin = $this->makeUser('super_admin');
+        $headers = $this->authHeaders($this->tokenFor($admin));
+
+        $base = [
+            'key' => 'billing-plan-' . substr(md5(uniqid('', true)), 0, 8),
+            'name' => 'Billing Plan',
+            'price' => 5000,
+            'currency' => 'PKR',
+            'interval' => 'month',
+        ];
+
+        $this->postJson('/api/admin/plans', array_merge($base, [
+            'key' => 'billing-usd-' . substr(md5(uniqid('', true)), 0, 8),
+            'currency' => 'USD',
+        ]), $headers)->assertStatus(422)->assertJsonValidationErrors('currency');
+
+        $this->postJson('/api/admin/plans', array_merge($base, [
+            'key' => 'billing-fractional-' . substr(md5(uniqid('', true)), 0, 8),
+            'price' => 5000.50,
+        ]), $headers)->assertStatus(422)->assertJsonValidationErrors('price');
+
+        $this->postJson('/api/admin/plans', $base, $headers)
+            ->assertStatus(201)
+            ->assertJsonPath('plan.currency', 'PKR')
+            ->assertJsonPath('plan.price', 5000);
+    }
+
     public function test_platform_admin_can_manage_users_with_self_protection(): void
     {
         $this->seedPlatformRole('super_admin');
