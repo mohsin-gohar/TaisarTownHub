@@ -82,6 +82,18 @@
 
 **Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
 
+### P1 — MFA challenge and recovery-code consumption were not concurrency-safe
+**Affected:** `backend/app/Http/Controllers/Api/AuthController.php`, `backend/app/Support/MfaService.php`, `backend/tests/Feature/MfaEnforcementTest.php`.
+
+- The MFA endpoint previously read a challenge with `Cache::get()` and only deleted it after successful verification. Parallel requests could both read the same challenge before either deleted it and mint multiple tokens.
+- Recovery-code consumption loaded and saved the hashed code list without a database row lock. Two distinct MFA challenges could concurrently verify the same one-time recovery code.
+
+**Fix applied:** serialize each challenge verification with a cache lock and consume recovery codes inside a database transaction with `lockForUpdate()` on the user row.
+
+**Regression tests added:** a successful challenge cannot be reused; a recovery code consumed through one challenge is rejected on a second challenge.
+
+**Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
+
 ## 4. Open review risks — not yet classified as defects
 1. **Best-effort audit persistence:** `AuthorizesApi::writeAudit()` logs a warning and continues if `AuditLog::create()` fails. Confirm which actions require durable audit records and whether those operations need a transactional outbox/fail-closed policy.
 2. **Legacy workspace sync atomicity:** `WorkspaceController::save()` processes collections sequentially and writes rows one at a time. Tenant ownership and destructive replace guards exist, but a mid-request database failure can leave a partially applied multi-collection sync. Confirm the frontend contract and whether per-collection or whole-request atomicity is required.
