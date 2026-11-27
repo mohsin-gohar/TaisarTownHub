@@ -427,3 +427,11 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Payment overpayment checks were converted to exact integer-paise comparisons, but the negative boundary was not guarded: a refund larger than the amount collected could create a negative net payment balance.
 - Added a lower-bound check inside the same locked transaction; refunds that exceed collected payments are rejected before a ledger row is written.
 - Regression coverage now checks fractional payment persistence, one-paisa overpayment rejection, and refunds exceeding the collected balance.
+
+
+### P1 — Whole-rupee deal columns silently truncated fractional input
+
+- The `transactions` schema stores agreement, advance and commission summary amounts as BIGINT PKR, but create/update validation previously accepted arbitrary numeric decimals before integer casts truncated them.
+- Create and update validation now explicitly require integer PKR for those BIGINT fields.
+- Regression coverage rejects fractional agreement, advance and commission values instead of allowing silent truncation.
+- Numeric API compatibility is retained for plan, payment, commission, installment, media-sale and dealer-file sale response amounts through read-only accessors; raw DECIMAL values remain available for server-side financial calculations.
