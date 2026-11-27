@@ -363,3 +363,14 @@ No production database, files, credentials, DNS, payment configuration, or hosti
 - Regression test simulates the invoice being voided during the provider request and verifies that it stays void and no subscription is activated.
 
 **Validation:** regression coverage added; test execution and CI remain paused per instruction.
+
+
+### P1 — Subscription plan currency/precision exceeded the invoice schema
+
+**Affected:** `backend/app/Http/Controllers/Api/AdminAgencyController.php`, `backend/tests/Feature/AdminStaffSubscriptionTest.php`.
+
+- Plan creation accepted arbitrary three-letter currencies and decimal prices, while subscription invoices store integer `amount_pkr/total_pkr` values. Stripe checkout charged `price × 100` minor units but the invoice rounded the plan price to whole PKR; non-PKR plans and fractional rupee prices could therefore never reconcile correctly at webhook settlement.
+- Fix: new plans are constrained to PKR and whole-rupee prices, matching the existing invoice schema and settlement arithmetic. Plan updates do not expose currency mutation.
+- Regression coverage rejects USD and fractional prices and accepts an integer PKR plan.
+
+**Validation:** regression test added; runtime test execution and CI remain paused per instruction.
