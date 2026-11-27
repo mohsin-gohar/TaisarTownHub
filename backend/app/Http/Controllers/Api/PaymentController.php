@@ -581,28 +581,57 @@ class PaymentController extends Controller
 
     private function handleStripeInvoicePaid($invoice): void
     {
-        $stripeSubId = $invoice->stripe_subscription_id ?? null;
+        // Stripe Invoice uses the subscription field (or parent.subscription_details
+        // on newer API versions), not stripe_subscription_id.
+        $stripeSubId = $invoice->subscription
+            ?? $invoice->parent?->subscription_details?->subscription
+            ?? $invoice->stripe_subscription_id
+            ?? null;
         if (!$stripeSubId) {
             return;
         }
 
-        $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)->first();
-        if ($agencySubscription) {
-            $agencySubscription->update(['status' => 'active']);
-        }
+        $periodEnd = $invoice->lines?->data[0]?->period?->end ?? null;
+        $periodStart = $invoice->lines?->data[0]?->period?->start ?? null;
+
+        DB::transaction(function () use ($stripeSubId, $periodEnd, $periodStart): void {
+            $subscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
+                ->lockForUpdate()
+                ->first();
+            if (!$subscription) {
+                return;
+            }
+
+            $updates = ['status' => 'active', 'cancelled_at' => null];
+            if (is_numeric($periodEnd)) {
+                $newEnd = \\Illuminate\\Support\\Carbon::createFromTimestamp((int) $periodEnd);
+                if ($subscription->ends_at === null || $newEnd->greaterThan($subscription->ends_at)) {
+                    $updates['ends_at'] = $newEnd;
+                }
+            }
+            if (is_numeric($periodStart) && $subscription->starts_at === null) {
+                $updates['starts_at'] = \\Illuminate\\Support\\Carbon::createFromTimestamp((int) $periodStart);
+            }
+            $subscription->update($updates);
+        });
     }
 
     private function handleStripeInvoiceFailed($invoice): void
     {
-        $stripeSubId = $invoice->stripe_subscription_id ?? null;
+        $stripeSubId = $invoice->subscription
+            ?? $invoice->parent?->subscription_details?->subscription
+            ?? $invoice->stripe_subscription_id
+            ?? null;
         if (!$stripeSubId) {
             return;
         }
 
-        $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)->first();
-        if ($agencySubscription) {
-            $agencySubscription->update(['status' => 'past_due']);
-        }
+        DB::transaction(function () use ($stripeSubId): void {
+            $subscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
+                ->lockForUpdate()
+                ->first();
+            $subscription?->update(['status' => 'past_due']);
+        });
     }
 
     private function handleStripeSubscriptionChanged($subscription): void
@@ -612,20 +641,45 @@ class PaymentController extends Controller
             return;
         }
 
-        $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)->first();
-        if (!$agencySubscription) {
-            return;
-        }
+        DB::transaction(function () use ($stripeSubId, $subscription): void {
+            $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
+                ->lockForUpdate()
+                ->first();
+            if (!$agencySubscription) {
+                return;
+            }
 
-        $status = match ($subscription->status ?? '') {
-            'active' => 'active',
-            'past_due' => 'past_due',
-            'canceled' => 'cancelled',
-            'unpaid' => 'past_due',
-            default => $agencySubscription->status,
-        };
+            $status = match ($subscription->status ?? '') {
+                'active' => 'active',
+                'past_due' => 'past_due',
+                'canceled' => 'cancelled',
+                'unpaid' => 'past_due',
+                default => $agencySubscription->status,
+            };
+            $updates = ['status' => $status];
+            $periodEnd = $subscription->current_period_end
+                ?? $subscription->items?->data[0]?->current_period_end
+                ?? null;
+            $trialEnd = $subscription->trial_end ?? null;
+            if (is_numeric($periodEnd)) {
+                $updates['ends_at'] = \\Illuminate\\Support\\Carbon::createFromTimestamp((int) $periodEnd);
+            }
+            if (is_numeric($trialEnd)) {
+                $updates['trial_ends_at'] = \\Illuminate\\Support\\Carbon::createFromTimestamp((int) $trialEnd);
+            }
+            if (($subscription->cancel_at_period_end ?? false) === true) {
+                $updates['auto_renew'] = false;
+            } elseif ($status === 'active') {
+                $updates['auto_renew'] = true;
+                $updates['cancelled_at'] = null;
+            }
+            if ($status === 'cancelled') {
+                $updates['cancelled_at'] = now();
+                $updates['auto_renew'] = false;
+            }
 
-        $agencySubscription->update(['status' => $status]);
+            $agencySubscription->update($updates);
+        });
     }
 
     private function activateSubscriptionFromInvoice(SubscriptionInvoice $invoice): void
