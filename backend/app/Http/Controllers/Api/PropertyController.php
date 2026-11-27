@@ -151,7 +151,7 @@ class PropertyController extends Controller
                 $page->through(fn (Property $p) => $this->publicPropertyPayload($p));
             } elseif ($request->boolean('with_meta')) {
                 $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
-                $page->through(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive));
+                $page->through(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive, $isModerator));
             }
 
             return response()->json([
@@ -172,7 +172,7 @@ class PropertyController extends Controller
             $results->transform(fn (Property $p) => $this->publicPropertyPayload($p));
         } elseif ($request->boolean('with_meta')) {
             $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
-            $results->transform(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive));
+            $results->transform(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive, $isModerator));
         }
 
         return response()->json($results);
