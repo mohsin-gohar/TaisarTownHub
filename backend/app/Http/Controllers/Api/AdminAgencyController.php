@@ -438,4 +438,5 @@ class AdminAgencyController extends Controller
             'message' => 'Invoice marked as paid.',
             'invoice' => $invoice->load(['agency:id,name', 'verifier:id,name']),
         ]);
-    }}
+    }
+}
