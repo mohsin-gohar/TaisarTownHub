@@ -230,8 +230,6 @@ class AgencyController extends Controller
             $listingsQuery->where('type', $request->type);
         }
 
-        $saleListings = $agency->properties()->publiclyVisible()->where('listing_purpose', 'sale');
-
         $saleListingCount = (int) $agency->public_sale_listing_count;
         $payload['stats'] = [
             'public_listings' => $saleListingCount,
