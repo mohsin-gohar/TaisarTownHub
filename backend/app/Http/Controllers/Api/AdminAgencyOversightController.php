@@ -46,9 +46,48 @@ class AdminAgencyOversightController extends Controller
 
         $page = $query->orderBy('name')->paginate(min((int) $request->get('per_page', 25), 100));
         $storageOnPage = 0;
+        $agencyIds = collect($page->items())->pluck('id')->all();
 
-        $agencies = collect($page->items())->map(function (Agency $agency) use (&$storageOnPage) {
-            $row = $this->storageRow($agency);
+        // Batch storage accounting for the current page. Calling
+        // PlanLimits::usage() inside the map ran three SUM queries per agency
+        // (documents, versions, media), turning a 100-row page into 300
+        // additional queries.
+        $documentBytesByAgency = collect();
+        $versionBytesByAgency = collect();
+        $mediaBytesByAgency = collect();
+
+        if ($agencyIds !== []) {
+            $documentBytesByAgency = Document::withTrashed()
+                ->whereIn('agency_id', $agencyIds)
+                ->selectRaw('agency_id, COALESCE(SUM(size_bytes), 0) as total_bytes')
+                ->groupBy('agency_id')
+                ->pluck('total_bytes', 'agency_id');
+
+            $versionBytesByAgency = DB::table('document_versions')
+                ->join('documents', 'documents.id', '=', 'document_versions.document_id')
+                ->whereIn('documents.agency_id', $agencyIds)
+                ->selectRaw('documents.agency_id as agency_id, COALESCE(SUM(document_versions.size_bytes), 0) as total_bytes')
+                ->groupBy('documents.agency_id')
+                ->pluck('total_bytes', 'agency_id');
+
+            $mediaBytesByAgency = MediaFile::withTrashed()
+                ->whereIn('agency_id', $agencyIds)
+                ->selectRaw('agency_id, COALESCE(SUM(size_bytes), 0) as total_bytes')
+                ->groupBy('agency_id')
+                ->pluck('total_bytes', 'agency_id');
+        }
+
+        $agencies = collect($page->items())->map(function (Agency $agency) use (
+            &$storageOnPage,
+            $documentBytesByAgency,
+            $versionBytesByAgency,
+            $mediaBytesByAgency
+        ) {
+            $row = [
+                'storage_used_bytes' => (int) ($documentBytesByAgency[$agency->id] ?? 0)
+                    + (int) ($versionBytesByAgency[$agency->id] ?? 0)
+                    + (int) ($mediaBytesByAgency[$agency->id] ?? 0),
+            ];
             $storageOnPage += (int) $row['storage_used_bytes'];
 
             return array_merge([
