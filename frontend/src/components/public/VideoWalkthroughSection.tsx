@@ -33,8 +33,8 @@ export const VideoWalkthroughSection: React.FC = () => {
       if (Array.isArray(data)) {
         // Filter out placeholder/sample video URLs — only show real content.
         const real = data.filter((v: any) => {
-          const url = (v.videoUrl || '').toLowerCase();
-          return url && !url.includes('sample-video');
+          const url = (v.videoUrl || '').trim();
+          return Boolean(url) && !/(?:sample-video|video[_-]?id|placeholder|example\.(?:com|test)|your[_-]?video|replace[_-]?me)/i.test(url);
         });
         setVideos(real);
       } else {
