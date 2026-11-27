@@ -260,6 +260,17 @@
 
 **Status:** code and regression test committed; no CI run/polling performed per instruction.
 
+### P1 — Property visibility mutation returned confidential deal fields to ordinary agents
+
+**Affected:** `backend/app/Http/Controllers/Api/PropertyController.php`, `backend/tests/Feature/SensitiveMetadataTest.php`.
+
+- `POST /api/properties/{id}/visibility` unconditionally called `makeVisible()` for purchase/selling price, internal notes, and staged changes before returning the property.
+- Any agent with a normal listing-update permission could therefore receive confidential economics and moderation-only staged edits in the mutation response, despite the stricter read-path policy.
+- Fix: serialize the response through the same permission-aware field filter used by agency listing reads. Finance/sensitive permissions govern deal economics; moderation permission alone governs staged changes.
+- Regression test asserts a plain agent receives none of the four protected fields from the visibility mutation.
+
+**Status:** code and regression test committed.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
