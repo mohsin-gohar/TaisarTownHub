@@ -999,7 +999,7 @@ public function update(Request $request, string $id)
                     ->where('user_id', (int) $data['user_id'])
                     ->where('status', 'active')
                     ->lockForUpdate()
-                    ->exists();
+                    ->first();
                 if (!$member) {
                     throw \\Illuminate\\Validation\\ValidationException::withMessages([
                         'user_id' => 'The selected user is not an active member of this agency.',
