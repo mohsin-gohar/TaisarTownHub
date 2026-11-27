@@ -54,14 +54,24 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
             if ($request->is('api/*')) {
-                $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
-                // Never leak internals for server errors; exception details are
-                // written to the Laravel log instead. Class names are only
-                // appended in local debug mode for non-5xx responses.
-                $message = $status >= 500 ? 'Server error.' : $e->getMessage();
-                if (config('app.debug') && $status < 500) {
-                    $message .= ' [' . get_class($e) . ']';
-                }
+                // Preserve Laravel's expected HTTP semantics for common
+                // framework exceptions instead of flattening them into 500s.
+                $status = match (true) {
+                    $e instanceof \\Illuminate\\Database\\Eloquent\\ModelNotFoundException => 404,
+                    $e instanceof \\Illuminate\\Auth\\Access\\AuthorizationException => 403,
+                    $e instanceof \\Symfony\\Component\\HttpKernel\\Exception\\HttpExceptionInterface => $e->getStatusCode(),
+                    default => 500,
+                };
+
+                // Keep API responses stable and avoid disclosing model names,
+                // SQL details, file paths or internal exception messages.
+                $message = match ($status) {
+                    403 => 'Permission denied.',
+                    404 => 'Resource not found.',
+                    422 => 'Validation failed.',
+                    429 => 'Too many requests.',
+                    default => 'Server error.',
+                };
                 return response()->json([
                     'success' => false,
                     'message' => $message,
