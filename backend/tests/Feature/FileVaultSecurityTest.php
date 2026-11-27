@@ -599,7 +599,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         [, $agency] = $this->uploader();
         $id = 'doc_' . bin2hex(random_bytes(8));
         $documentPath = 'expired/' . $id . '.pdf';
-        Document::create([
+        $document = Document::create([
             'id' => $id,
             'agency_id' => $agency->id,
             'category' => 'other',
@@ -609,8 +609,9 @@ class FileVaultSecurityTest extends EnterpriseTestCase
             'mime_type' => 'application/pdf',
             'size_bytes' => 20,
             'status' => 'quarantined',
-            'created_at' => now()->subDays(45),
         ]);
+        $document->created_at = now()->subDays(45);
+        $document->save();
 
         $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
         $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
