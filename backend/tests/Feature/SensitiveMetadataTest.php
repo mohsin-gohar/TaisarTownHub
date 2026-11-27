@@ -81,6 +81,31 @@ class SensitiveMetadataTest extends EnterpriseTestCase
         $this->assertArrayNotHasKey('pending_changes', $response->json(), 'only moderators may read staged changes');
     }
 
+    public function test_agency_sensitive_permission_cannot_read_another_agencys_private_prices(): void
+    {
+        [$user, $requestingAgency] = $this->agencyUser(
+            ['properties.view', 'view_sensitive_cnic'],
+            'manager'
+        );
+        $listingAgency = $this->makeAgency('Separate Listing Agency');
+        $property = $this->makePublicProperty($listingAgency, [
+            'purchasePricePKR' => 5000000,
+            'sellingPricePKR' => 7000000,
+            'internalNotes' => 'other agency confidential note',
+        ]);
+
+        $token = $this->tokenFor($user);
+        $this->actingAs($user, 'sanctum');
+        $response = $this->getJson(
+            "/api/properties/{$property->id}",
+            $this->authHeaders($token) + ['X-Agency-Id' => $requestingAgency->id]
+        )->assertStatus(200);
+
+        foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes'] as $key) {
+            $this->assertArrayNotHasKey($key, $response->json(), "cross-agency {$key} disclosure");
+        }
+    }
+
     public function test_moderation_scope_can_read_staged_changes(): void
     {
         $this->seedPlatformRole('moderator');
