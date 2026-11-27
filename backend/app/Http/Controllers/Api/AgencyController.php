@@ -144,7 +144,16 @@ class AgencyController extends Controller
      */
     public function index(Request $request)
     {
+        // Aggregate the card counts in the directory query. Calling
+        // activeMembers()->count() and properties()->count() while mapping
+        // every result caused three extra queries per agency (N+1).
         $query = Agency::query()
+            ->withCount([
+                'activeMembers as active_member_count',
+                'properties as public_sale_listing_count' => fn ($q) => $q
+                    ->publiclyVisible()
+                    ->where('listing_purpose', 'sale'),
+            ])
             ->where('status', 'active')
             ->where('verification_status', 'verified');
 
@@ -173,9 +182,7 @@ class AgencyController extends Controller
         if ($sort === 'newest') {
             $query->orderByDesc('created_at');
         } elseif ($sort === 'listings') {
-            $query->withCount(['properties as public_listings_count' => function ($q) {
-                $q->publiclyVisible();
-            }])->orderByDesc('public_listings_count')->orderBy('name');
+            $query->orderByDesc('public_sale_listing_count')->orderBy('name');
         } else {
             $query->orderBy('name');
         }
@@ -199,6 +206,12 @@ class AgencyController extends Controller
     public function show(Request $request, string $id)
     {
         $agency = Agency::query()
+            ->withCount([
+                'activeMembers as active_member_count',
+                'properties as public_sale_listing_count' => fn ($q) => $q
+                    ->publiclyVisible()
+                    ->where('listing_purpose', 'sale'),
+            ])
             ->where('status', 'active')
             ->where('verification_status', 'verified')
             ->where(function ($q) use ($id) {
@@ -219,11 +232,12 @@ class AgencyController extends Controller
 
         $saleListings = $agency->properties()->publiclyVisible()->where('listing_purpose', 'sale');
 
+        $saleListingCount = (int) $agency->public_sale_listing_count;
         $payload['stats'] = [
-            'public_listings' => (clone $saleListings)->count(),
-            'sale_listings' => (clone $saleListings)->count(),
+            'public_listings' => $saleListingCount,
+            'sale_listings' => $saleListingCount,
             'rent_listings' => 0,
-            'team_members' => $agency->activeMembers()->count(),
+            'team_members' => (int) $agency->active_member_count,
         ];
 
         $payload['listings'] = $listingsQuery
@@ -369,9 +383,9 @@ class AgencyController extends Controller
             'website' => $agency->website,
             'verification_status' => $agency->verification_status,
             'status' => $agency->status,
-            'member_count' => $agency->activeMembers()->count(),
-            'listing_count' => (clone $publicListings)->count(),
-            'sale_listing_count' => (clone $publicListings)->count(),
+            'member_count' => (int) ($agency->active_member_count ?? 0),
+            'listing_count' => (int) ($agency->public_sale_listing_count ?? 0),
+            'sale_listing_count' => (int) ($agency->public_sale_listing_count ?? 0),
             'rent_listing_count' => 0,
             'since' => optional($agency->created_at)->format('Y'),
             'created_at' => optional($agency->created_at)?->toIso8601String(),
