@@ -22,8 +22,9 @@
 5. Workspace financial audit: uses a hash lookup for changed IDs instead of repeated linear `in_array` scans.
 6. `GET /admin/agencies-oversight`: replaced three storage SUM queries per agency with three grouped queries for the page (documents, document versions, media).
 7. Map bulk uploads are capped at 50 images and map reorder requests at 500 IDs to bound request CPU, memory and database writes.
-8. Public directory query inputs now validate types and bounds for agency, dealer, project, video and map filters.
-9. Added query-count regression tests for agency directory, location index and admin storage oversight, plus request-size/query validation tests. These tests are committed but have not yet been executed.
+8. Public directory query inputs now validate types and bounds for agency, dealer, project, video and map filters; legacy inquiry lists now use a bounded result limit and a SQL subquery for dealer property scope.
+9. Admin oversight detail reuses a single set of storage aggregates rather than re-running the same totals.
+10. Added query-count regression tests for agency directory, location index and admin storage oversight, plus request-size/query validation tests. These tests are committed but have not yet been executed.
 
 ## Known remaining performance risks
 
