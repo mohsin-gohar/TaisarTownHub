@@ -70,7 +70,7 @@ export const Footer: React.FC = () => {
     if (!value) return false;
     // Never send visitors to a generic social-network homepage as if it were
     // the agency's official profile. Only configured profile URLs are shown.
-    return !/^https?:\\/\\/(www\\.)?(facebook|youtube|linkedin|x|instagram)\\.com\\/?$/i.test(value);
+    return !/^https?:\/\/(www\.)?(facebook|youtube|linkedin|x|instagram)\.com\/?$/i.test(value);
   });
 
   const renderLinkList = (items: Array<{ label: string; view: string }>) => (
