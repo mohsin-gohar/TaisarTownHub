@@ -28,7 +28,7 @@ A task is VERIFIED only when the evidence is linked or recorded. A passing unit 
 **Exit gate:** repository baseline is reproducible; all open PRs and branches are dispositioned; file ledger reconciles exactly; review coverage is evidence-backed.
 
 ## Phase 2 — Backend architecture and code audit
-- [x] Inventory all 204 API route declarations and map each to its controller action; static handler-existence check found 0 missing methods. See `docs/BACKEND_ROUTE_INVENTORY_20261127.md`.
+- [x] Inventory all 203 API route declarations and map each to its controller action; static handler-existence check found 0 missing methods. See `docs/BACKEND_ROUTE_INVENTORY_20261127.md`.
 - [~] Complete route-to-middleware/policy/validator/service/job/event/notification/test traceability.
 - [~] Begin high-risk controller review (auth, property, workspace sync, agency staff, finance, document/media vault, dealer files, payments); finish the full controller/request audit and add regression tests for confirmed findings.
 - [~] Begin identity/tenant/financial model review (User, Agency, Property, Transaction); full model and serialization audit remains pending.
