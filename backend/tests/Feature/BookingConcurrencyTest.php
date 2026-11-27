@@ -238,6 +238,34 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $this->assertDatabaseCount('transaction_payments', 1);
     }
 
+    public function test_commission_ledger_rejects_negative_and_over_precision_amounts(): void
+    {
+        [$user, $agency] = $this->agencyUser(['finance.manage_payments']);
+        $transaction = Transaction::create([
+            'id' => 'txn_' . Str::random(10),
+            'dealNumber' => 'DEAL-' . Str::upper(Str::random(6)),
+            'propertyId' => 'prop_' . Str::random(8),
+            'propertyTitle' => 'Commission Validation Plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agency_id' => $agency->id,
+            'transactionType' => 'sale',
+            'agreementAmountPKR' => 500000,
+            'dealStatus' => 'Active',
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $url = '/api/agency/transactions/' . $transaction->id . '/commissions';
+
+        $this->postJson($url, ['amount' => '-1.00'], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('amount');
+        $this->postJson($url, ['amount' => '100.001'], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('amount');
+
+        $this->assertDatabaseCount('commissions', 0);
+    }
+
     public function test_payment_updates_derived_ledger_status(): void
     {
         [$user, $agency] = $this->agencyUser(['finance.manage_payments']);
