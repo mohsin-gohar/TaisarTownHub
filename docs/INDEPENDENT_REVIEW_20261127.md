@@ -2,8 +2,8 @@
 
 **Date:** 2026-11-27  
 **Repository:** `mohsin-gohar/TaisarTownHub`  
-**Main commit:** `c006c2bb6b4a210a8db7139aa30d5bad9ab693a1`  
-**Merged PRs:** [#24 — tenant privacy and public marketplace fixes](https://github.com/mohsin-gohar/TaisarTownHub/pull/24), [#25 — Vercel legacy gallery redirect](https://github.com/mohsin-gohar/TaisarTownHub/pull/25), [#26 — documentation status refresh](https://github.com/mohsin-gohar/TaisarTownHub/pull/26)
+**Application baseline after PR #28:** `3584c9ca544ef2df6ffdb440f938a11b815140db`  
+**Merged PRs:** [#24 — tenant privacy and public marketplace fixes](https://github.com/mohsin-gohar/TaisarTownHub/pull/24), [#25 — Vercel legacy gallery redirect](https://github.com/mohsin-gohar/TaisarTownHub/pull/25), [#26 — documentation status refresh](https://github.com/mohsin-gohar/TaisarTownHub/pull/26), [#27 — release evidence alignment](https://github.com/mohsin-gohar/TaisarTownHub/pull/27), [#28 — Symfony/Stripe dependency security and CI audit gates](https://github.com/mohsin-gohar/TaisarTownHub/pull/28)
 
 ## Executive verdict
 
@@ -57,17 +57,17 @@ All required checks passed before merge: frontend verification, backend suite, P
 
 | Check | Result |
 |---|---|
-| Vercel deployment for main `c006c2b` | READY |
+| Vercel deployment for application baseline `3584c9c` | READY |
 | `/video-walkthroughs` | Redirects to `/gallery` |
 | Vercel `/api/health` proxy | 502 |
 | InfinityFree backend homepage | Default InfinityFree welcome page |
 | InfinityFree `/api/health` | 404 |
-| Vercel project domains | Only `taisartownhub.vercel.app`; custom domain not attached |
+| Vercel project domains | `taisartownhub.com` and `www.taisartownhub.com` attached; www redirects 308, but DNS is misconfigured and names do not resolve |
 | Vercel environment variables | Empty listing |
 
 The frontend proxy target `api.taisartownhub.com` is not serving the Laravel API. The InfinityFree endpoint checked separately is not serving Laravel either. Agency/map API data, authentication, and agency workspaces therefore remain blocked in production.
 
-## Required before full production sign-off
+## PR #28 — dependency security hardening and CI audit gates\n\n- Patched five Composer advisories by updating Symfony HTTP Foundation/Kernel, Mailer, Mime, Routing, and VarDumper to 7.4.24.\n- Updated Stripe PHP SDK from 17.0.0 to 17.6.1 under the compatible `^17.0` constraint.\n- Added Composer and npm security-audit steps to CI.\n- Composer audit: 0 advisories; npm audit: 0 vulnerabilities.\n- CI after PR #28: backend 426 passed (3,735 assertions), frontend 159 tests passed, Playwright Chromium 53 passed, OpenAPI parse passed, Docker images passed, backup/restore drill passed, and full-stack integration passed.\n\n## Updated DNS and live deployment observations\n\n- Vercel production deployment for `3584c9c` is READY.\n- `taisartownhub.com` and `www.taisartownhub.com` are attached to the Vercel project; `www` redirects to the apex with HTTP 308.\n- DNS lookups for apex, www, and `api.taisartownhub.com` return NXDOMAIN. Vercel reports the apex domain as misconfigured and recommends apex A records `216.198.79.1` + `64.29.17.1`, and `www` CNAME `fbb47a846f572c5c.vercel-dns-017.com`. No registrar DNS changes were made.\n- Vercel `/api/health` remains 502 because the Laravel API host is unavailable.\n\n## Required before full production sign-off
 
 1. Deploy Laravel to a supported PHP/container host with persistent private storage.
 2. Provision MySQL, Redis, ClamAV, queue worker, and scheduler as required by the repository's deployment architecture.
