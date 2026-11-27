@@ -83,7 +83,14 @@ class AgencyStaffController extends Controller
             // same remaining-seat count and exceed the subscription limit.
             $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
 
-            if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId))) {
+            // Recheck the owner-only grant after acquiring the same agency
+            // lock used by concurrent membership role/status changes.
+            if ($role->id === 'role_agency_owner'
+                && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
+                return ['error' => 403, 'message' => 'Only an agency owner may invite another owner.'];
+            }
+
+            if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId)))
                 return ['blocked' => $block];
             }
 
@@ -485,6 +492,11 @@ class AgencyStaffController extends Controller
             $member = AgencyMember::where('agency_id', $agencyId)
                 ->lockForUpdate()
                 ->findOrFail($id);
+
+            if ($member->role_id === 'role_agency_owner'
+                && !$this->requesterIsOwner($agencyId, $request->user()->id)) {
+                return ['error' => 403, 'message' => 'Only an agency owner may remove an owner membership.'];
+            }
 
             if ($member->status === 'active'
                 && $member->role_id === 'role_agency_owner'
