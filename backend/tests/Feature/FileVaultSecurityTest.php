@@ -618,7 +618,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
         $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
         $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(false);
-        Storage::shouldReceive('disk')->times(4)->with('documents')->andReturn($disk);
+        Storage::shouldReceive('disk')->twice()->with('documents')->andReturn($disk);
 
         $exitCode = Artisan::call('vault:purge-quarantine');
 
@@ -663,7 +663,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(true);
         $disk->shouldReceive('exists')->once()->with($versionPath)->andReturn(true);
         $disk->shouldReceive('delete')->once()->with($versionPath)->andReturn(false);
-        Storage::shouldReceive('disk')->twice()->with('documents')->andReturn($disk);
+        Storage::shouldReceive('disk')->times(4)->with('documents')->andReturn($disk);
 
         $exitCode = Artisan::call('vault:purge-quarantine');
 
