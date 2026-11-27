@@ -33,7 +33,7 @@ class Property extends Model
         'pending_changes',
     ];
 
-    protected $hidden = ['purchasePricePKR', 'sellingPricePKR', 'internalNotes'];
+    protected $hidden = ['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes'];
 
     protected $casts = [
         'images' => 'array',
