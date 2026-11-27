@@ -486,13 +486,16 @@ class MediaController extends Controller
         string $reason,
         array $threats
     ): void {
+        $qId = null;
+        $qPath = null;
+
         try {
             $qId = 'qtn_' . bin2hex(random_bytes(8));
             $qPath = $agencyId . '/' . now()->format('Y/m') . '/' . $qId . '.' . $ext;
 
             SecureFileStore::storeUpload('quarantine', $qPath, $file);
 
-            \App\Models\DocumentQuarantine::create([
+            \\App\\Models\\DocumentQuarantine::create([
                 'id' => $qId,
                 'agency_id' => $agencyId,
                 'document_id' => null,
@@ -515,7 +518,41 @@ class MediaController extends Controller
                     'entity_id' => $qId,
                     'metadata' => ['reason' => $reason, 'threats' => $threats],
                 ]);
-        } catch (\Throwable $e) {
+        } catch (\\Throwable $e) {
+            // Keep quarantine bytes discoverable by the retention purge: if
+            // metadata was not committed, remove the just-written bytes. If
+            // DB state is unknown, preserve them and log for reconciliation.
+            $metadataExists = false;
+            $metadataCheckFailed = false;
+            try {
+                $metadataExists = $qId !== null && \\App\\Models\\DocumentQuarantine::whereKey($qId)->exists();
+            } catch (\\Throwable $metadataError) {
+                $metadataCheckFailed = true;
+            }
+
+            if ($qPath !== null && !$metadataExists && !$metadataCheckFailed) {
+                try {
+                    $disk = Storage::disk('quarantine');
+                    if ($disk->exists($qPath) && !$disk->delete($qPath)) {
+                        Log::critical('Media quarantine bytes orphaned after metadata failure', [
+                            'quarantine_id' => $qId,
+                            'disk_path' => $qPath,
+                        ]);
+                    }
+                } catch (\\Throwable $cleanupError) {
+                    Log::critical('Media quarantine cleanup failed after metadata failure', [
+                        'quarantine_id' => $qId,
+                        'disk_path' => $qPath,
+                        'error' => $cleanupError->getMessage(),
+                    ]);
+                }
+            } elseif ($metadataCheckFailed) {
+                Log::critical('Media quarantine metadata state unknown; bytes retained for reconciliation', [
+                    'quarantine_id' => $qId,
+                    'disk_path' => $qPath,
+                ]);
+            }
+
             Log::warning('Media quarantine write failed', ['error' => $e->getMessage()]);
         }
     }
