@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 /**
  * A billing invoice for one agency/plan period. PAID invoices are immutable
@@ -53,18 +54,54 @@ class SubscriptionInvoice extends Model
         return $this->belongsTo(User::class, 'verified_by');
     }
 
-    /** Unique sequential invoice number: INV-YYYY-NNNNNN. */
+    /**
+     * Unique sequential invoice number: INV-YYYY-NNNNNN.
+     * The yearly sequence row is locked and incremented transactionally so
+     * simultaneous invoice creation cannot reserve the same number.
+     */
     public static function nextNumber(): string
     {
-        $year = now()->format('Y');
-        $seq = (int) self::where('invoice_number', 'like', "INV-{$year}-%")->count() + 1;
+        return DB::transaction(function (): string {
+            $year = (int) now()->format('Y');
+            $sequence = DB::table('invoice_sequences')
+                ->where('year', $year)
+                ->lockForUpdate()
+                ->first();
 
-        // Walk forward until unique (defensive against concurrent seeds).
-        do {
-            $number = sprintf('INV-%s-%06d', $year, $seq);
-            $seq++;
-        } while (self::where('invoice_number', $number)->exists());
+            if (!$sequence) {
+                // Initialize from legacy invoices on first use after rollout.
+                $latest = self::where('invoice_number', 'like', "INV-{$year}-%")
+                    ->orderByDesc('invoice_number')
+                    ->value('invoice_number');
+                $next = 1;
+                if (is_string($latest) && preg_match('/^INV-\\d{4}-(\\d+)$/', $latest, $matches)) {
+                    $next = (int) $matches[1] + 1;
+                }
 
-        return $number;
+                DB::table('invoice_sequences')->insertOrIgnore([
+                    'year' => $year,
+                    'next_number' => $next,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $sequence = DB::table('invoice_sequences')
+                    ->where('year', $year)
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            if (!$sequence) {
+                throw new \\RuntimeException('Unable to reserve an invoice number.');
+            }
+
+            $number = (int) $sequence->next_number;
+            DB::table('invoice_sequences')->where('year', $year)->update([
+                'next_number' => $number + 1,
+                'updated_at' => now(),
+            ]);
+
+            return sprintf('INV-%s-%06d', $year, $number);
+        });
     }
 }

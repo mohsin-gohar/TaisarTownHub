@@ -429,6 +429,70 @@ class FinanceIsolationTest extends EnterpriseTestCase
         $this->assertSame(60000.0, (float) TransactionPayment::where('transaction_id', $deal['id'])->sum('amount'));
     }
 
+    public function test_duplicate_installment_numbers_are_rejected_without_partial_schedule_writes(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/schedules", [
+            'schedules' => [
+                ['installment_no' => 1, 'due_date' => now()->addMonth()->toDateString(), 'amount' => 1000],
+                ['installment_no' => 1, 'due_date' => now()->addMonths(2)->toDateString(), 'amount' => 2000],
+            ],
+        ], $headers)->assertStatus(422)->assertJsonValidationErrors('schedules.1.installment_no');
+
+        $this->assertDatabaseCount('payment_schedules', 0);
+    }
+
+    public function test_completed_and_cancelled_deals_are_read_only_even_without_status_changes(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $completed = $this->createDeal($user);
+
+        foreach (['Negotiation', 'Under Transfer', 'Completed'] as $status) {
+            $this->patchJson("/api/agency/transactions/{$completed['id']}", [
+                'dealStatus' => $status,
+            ], $headers)->assertOk();
+        }
+        $this->patchJson("/api/agency/transactions/{$completed['id']}", [
+            'propertyTitle' => 'Must remain immutable',
+        ], $headers)->assertStatus(422);
+
+        $cancelled = $this->createDeal($user);
+        $this->patchJson("/api/agency/transactions/{$cancelled['id']}", [
+            'dealStatus' => 'Cancelled',
+        ], $headers)->assertOk();
+        $this->patchJson("/api/agency/transactions/{$cancelled['id']}", [
+            'buyerName' => 'Must remain immutable',
+        ], $headers)->assertStatus(422);
+    }
+
+    public function test_deal_update_cannot_lower_agreement_below_collected_payments(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 5000000,
+        ], $headers)->assertStatus(201);
+
+        $this->patchJson("/api/agency/transactions/{$deal['id']}", [
+            'agreementAmountPKR' => 4000000,
+        ], $headers)->assertStatus(422);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $deal['id'],
+            'agreementAmountPKR' => 10000000,
+        ]);
+        $this->assertDatabaseHas('transaction_payments', [
+            'transaction_id' => $deal['id'],
+            'amount' => '5000000.00',
+        ]);
+    }
+
     public function test_voided_deal_rejects_further_payments_and_schedules(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
@@ -444,6 +508,15 @@ class FinanceIsolationTest extends EnterpriseTestCase
         $this->postJson("/api/agency/transactions/{$deal['id']}/schedules", [
             'schedules' => [['installment_no' => 1, 'due_date' => now()->addMonth()->toDateString(), 'amount' => 1000]],
         ], $headers())->assertStatus(422);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/commissions", [
+            'amount' => 1000,
+        ], $headers())->assertStatus(422);
+        $this->assertDatabaseMissing('commissions', ['transaction_id' => $deal['id']]);
+
+        $this->patchJson("/api/agency/transactions/{$deal['id']}", [
+            'propertyTitle' => 'Must not mutate a voided deal',
+        ], $headers())->assertStatus(409);
 
         // A voided deal cannot be approved either.
         $this->postJson("/api/agency/transactions/{$deal['id']}/approve", [], $headers())->assertStatus(422);

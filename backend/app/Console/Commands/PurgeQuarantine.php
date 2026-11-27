@@ -33,14 +33,28 @@ class PurgeQuarantine extends Command
         $cutoff = now()->subDays(max(1, $days));
 
         $purgedRejected = 0;
-        DocumentQuarantine::where('created_at', '<', $cutoff)->get()->each(function (DocumentQuarantine $row) use (&$purgedRejected) {
+        $failed = 0;
+        DocumentQuarantine::where('created_at', '<', $cutoff)->get()->each(function (DocumentQuarantine $row) use (&$purgedRejected, &$failed) {
+            $deleteFailed = false;
             try {
-                if ($row->disk_path && Storage::disk('quarantine')->exists($row->disk_path)) {
-                    Storage::disk('quarantine')->delete($row->disk_path);
+                if ($row->disk_path && Storage::disk('quarantine')->exists($row->disk_path)
+                    && ! Storage::disk('quarantine')->delete($row->disk_path)) {
+                    $deleteFailed = true;
                 }
             } catch (\Throwable $e) {
+                $deleteFailed = true;
                 Log::warning('Quarantine purge byte delete failed', ['id' => $row->id, 'error' => $e->getMessage()]);
             }
+
+            // Keep the quarantine record if the bytes could not be erased.
+            // Otherwise a failed disk operation would orphan sensitive bytes
+            // with no database row, audit trail, or retry candidate.
+            if ($deleteFailed) {
+                Log::warning('Quarantine purge skipped: physical delete did not complete', ['id' => $row->id]);
+                $failed++;
+                return;
+            }
+
             $row->delete();
             $purgedRejected++;
         });
@@ -50,20 +64,37 @@ class PurgeQuarantine extends Command
             ->where('status', 'quarantined')
             ->where('created_at', '<', $cutoff)
             ->get()
-            ->each(function (Document $document) use (&$purgedHolds) {
+            ->each(function (Document $document) use (&$purgedHolds, &$failed) {
+                $deleteFailed = false;
                 try {
                     $disk = $document->storage_disk ?: 'documents';
-                    if ($document->disk_path && Storage::disk($disk)->exists($document->disk_path)) {
-                        Storage::disk($disk)->delete($document->disk_path);
+                    if ($document->disk_path && Storage::disk($disk)->exists($document->disk_path)
+                        && ! Storage::disk($disk)->delete($document->disk_path)) {
+                        $deleteFailed = true;
                     }
-                    DocumentVersion::where('document_id', $document->id)->get()->each(function (DocumentVersion $version) {
-                        $vDisk = $version->storage_disk ?: 'documents';
-                        if ($version->disk_path && Storage::disk($vDisk)->exists($version->disk_path)) {
-                            Storage::disk($vDisk)->delete($version->disk_path);
+
+                    if (! $deleteFailed) {
+                        foreach (DocumentVersion::where('document_id', $document->id)->get() as $version) {
+                            $vDisk = $version->storage_disk ?: 'documents';
+                            if ($version->disk_path && Storage::disk($vDisk)->exists($version->disk_path)
+                                && ! Storage::disk($vDisk)->delete($version->disk_path)) {
+                                $deleteFailed = true;
+                                break;
+                            }
                         }
-                    });
+                    }
                 } catch (\Throwable $e) {
+                    $deleteFailed = true;
                     Log::warning('Quarantine hold purge failed', ['id' => $document->id, 'error' => $e->getMessage()]);
+                }
+
+                // Physical deletion must succeed for the document AND every
+                // version before metadata is removed. Missing bytes are safe
+                // on retries; failed deletes keep the row for the next run.
+                if ($deleteFailed) {
+                    Log::warning('Quarantine hold purge skipped: physical delete did not complete', ['id' => $document->id]);
+                    $failed++;
+                    return;
                 }
 
                 \App\Models\AuditLog::create([
@@ -81,8 +112,8 @@ class PurgeQuarantine extends Command
                 $purgedHolds++;
             });
 
-        $this->info("Quarantine purge: {$purgedRejected} rejected upload(s), {$purgedHolds} expired hold(s) removed.");
+        $this->info("Quarantine purge: {$purgedRejected} rejected upload(s), {$purgedHolds} expired hold(s) removed, {$failed} cleanup(s) failed.");
 
-        return self::SUCCESS;
+        return $failed > 0 ? self::FAILURE : self::SUCCESS;
     }
 }

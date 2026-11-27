@@ -75,6 +75,55 @@ class PaymentGatewayTest extends EnterpriseTestCase
         }
     }
 
+    public function test_stripe_checkout_webhook_does_not_activate_unsettled_or_incomplete_sessions(): void
+    {
+        $secret = 'whsec_test_secret';
+        config(['services.stripe.webhook' => $secret]);
+
+        $plan = $this->makePlan();
+        [$user, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['stripe_session_id' => 'cs_test_pending']);
+
+        $payload = json_encode([
+            'id' => 'evt_test_pending',
+            'type' => 'checkout.session.completed',
+            'data' => ['object' => [
+                'id' => 'cs_test_pending',
+                'client_reference_id' => $agency->id,
+                'metadata' => ['agency_id' => $agency->id, 'plan_id' => (string) $plan->id],
+                'payment_status' => 'unpaid',
+                'amount_total' => 500000,
+                'currency' => 'pkr',
+            ]],
+        ]);
+
+        $this->asGuest();
+        $this->call('POST', '/api/payments/webhook/stripe', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+        ], $payload)->assertOk();
+        $this->assertSame('pending', $invoice->fresh()->status);
+
+        $payload = json_encode([
+            'id' => 'evt_test_missing_amount',
+            'type' => 'checkout.session.completed',
+            'data' => ['object' => [
+                'id' => 'cs_test_pending',
+                'client_reference_id' => $agency->id,
+                'metadata' => ['agency_id' => $agency->id, 'plan_id' => (string) $plan->id],
+                'payment_status' => 'paid',
+                'currency' => 'pkr',
+            ]],
+        ]);
+
+        $this->call('POST', '/api/payments/webhook/stripe', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+        ], $payload)->assertOk();
+        $this->assertSame('pending', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', ['agency_id' => $agency->id, 'status' => 'active']);
+    }
+
     public function test_flutterwave_webhook_rejects_everything_when_no_secret_is_configured(): void
     {
         // Regression: null header vs null config previously compared equal,
@@ -109,6 +158,9 @@ class PaymentGatewayTest extends EnterpriseTestCase
                 ],
                 'payment_intent' => 'pi_test_123',
                 'subscription' => 'sub_test_123',
+                'payment_status' => 'paid',
+                'amount_total' => 500000,
+                'currency' => 'pkr',
             ]],
         ]);
 
@@ -134,6 +186,103 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'status' => 'active',
             'stripe_subscription_id' => 'sub_test_123',
         ]);
+
+        // Replayed delivery is idempotent and must not create another subscription.
+        $this->call(
+            'POST',
+            '/api/payments/webhook/stripe',
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+            ],
+            $payload
+        )->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame(1, \App\Models\AgencySubscription::where('agency_id', $agency->id)->count());
+    }
+
+    public function test_stripe_webhook_cannot_reactivate_a_voided_invoice(): void
+    {
+        $secret = 'whsec_test_secret';
+        config(['services.stripe.webhook' => $secret]);
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['stripe_session_id' => 'cs_test_voided']);
+        $invoice->update(['status' => 'void']);
+
+        $payload = json_encode([
+            'id' => 'evt_test_voided',
+            'type' => 'checkout.session.completed',
+            'data' => ['object' => [
+                'id' => 'cs_test_voided',
+                'client_reference_id' => $agency->id,
+                'metadata' => [
+                    'agency_id' => $agency->id,
+                    'plan_id' => (string) $plan->id,
+                ],
+                'payment_intent' => 'pi_test_voided',
+                'subscription' => 'sub_test_voided',
+                'payment_status' => 'paid',
+                'amount_total' => 500000,
+                'currency' => 'pkr',
+            ]],
+        ]);
+
+        $this->asGuest();
+        $this->call('POST', '/api/payments/webhook/stripe', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+        ], $payload)->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame('void', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', [
+            'agency_id' => $agency->id,
+            'stripe_subscription_id' => 'sub_test_voided',
+        ]);
+    }
+
+    public function test_stripe_recurring_invoice_events_extend_the_subscription_period(): void
+    {
+        $secret = 'whsec_test_secret';
+        config(['services.stripe.webhook' => $secret]);
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+        $subscription->update([
+            'stripe_subscription_id' => 'sub_recurring_123',
+            'status' => 'past_due',
+            'ends_at' => now()->subDay(),
+        ]);
+
+        $periodStart = now()->startOfDay()->timestamp;
+        $periodEnd = now()->addMonth()->endOfDay()->timestamp;
+        $payload = json_encode([
+            'id' => 'evt_invoice_renewal',
+            'type' => 'invoice.payment_succeeded',
+            'data' => ['object' => [
+                'id' => 'in_renewal_123',
+                'subscription' => 'sub_recurring_123',
+                'lines' => ['data' => [[
+                    'period' => ['start' => $periodStart, 'end' => $periodEnd],
+                ]]],
+            ]],
+        ]);
+
+        $this->asGuest();
+        $this->call('POST', '/api/payments/webhook/stripe', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+        ], $payload)->assertOk();
+
+        $subscription->refresh();
+        $this->assertSame('active', $subscription->status);
+        $this->assertSame(
+            now()->addMonth()->toDateString(),
+            $subscription->ends_at->toDateString()
+        );
     }
 
     public function test_flutterwave_webhook_activates_only_a_matching_pending_invoice(): void
@@ -153,6 +302,33 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'id' => 991,
             'amount' => 1,
             'currency' => 'PKR',
+        ])->assertStatus(422);
+        $this->assertSame('pending', $invoice->fresh()->status);
+
+        // Rounding a slightly underpaid amount to the invoice total is not acceptable.
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
+            'status' => 'successful',
+            'tx_ref' => 'fw-ref-100',
+            'id' => 991,
+            'amount' => 4999.6,
+            'currency' => 'PKR',
+        ])->assertStatus(422);
+        $this->assertSame('pending', $invoice->fresh()->status);
+
+        // Missing amount or currency is not an implicit invoice match.
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
+            'status' => 'successful',
+            'tx_ref' => 'fw-ref-100',
+            'id' => 991,
+            'currency' => 'PKR',
+        ])->assertStatus(422);
+        $this->assertSame('pending', $invoice->fresh()->status);
+
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
+            'status' => 'successful',
+            'tx_ref' => 'fw-ref-100',
+            'id' => 991,
+            'amount' => 5000,
         ])->assertStatus(422);
         $this->assertSame('pending', $invoice->fresh()->status);
 
@@ -252,6 +428,75 @@ class PaymentGatewayTest extends EnterpriseTestCase
             $this->authHeaders($this->tokenFor($owner))
         )->assertOk();
         $this->assertSame(1, AgencySubscription::where('agency_id', $agency->id)->count());
+    }
+
+    public function test_flutterwave_verification_rejects_missing_amount_or_currency(): void
+    {
+        config(['services.flutterwave.secret_key' => 'FLWSECK_TEST-123']);
+
+        $plan = $this->makePlan();
+        [$owner, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['flutterwave_tx_ref' => 'fw-ref-missing-amount']);
+
+        Http::fake([
+            'api.flutterwave.com/*' => Http::response([
+                'status' => 'success',
+                'data' => [
+                    'id' => 4243,
+                    'status' => 'successful',
+                    'currency' => 'PKR',
+                ],
+            ], 200),
+        ]);
+
+        $this->getJson(
+            '/api/payments/flutterwave/verify/fw-ref-missing-amount',
+            $this->authHeaders($this->tokenFor($owner))
+        )->assertStatus(422);
+
+        $this->assertSame('pending', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', [
+            'agency_id' => $agency->id,
+            'status' => 'active',
+        ]);
+    }
+
+    public function test_flutterwave_verification_does_not_settle_invoice_voided_during_provider_request(): void
+    {
+        config(['services.flutterwave.secret_key' => 'FLWSECK_TEST-123']);
+
+        $plan = $this->makePlan();
+        [$owner, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['flutterwave_tx_ref' => 'fw-ref-void-race']);
+
+        Http::fake([
+            'api.flutterwave.com/*' => function ($request) use ($invoice) {
+                // Simulate a concurrent staff action while the external
+                // provider request is in flight.
+                $invoice->update(['status' => 'void']);
+
+                return Http::response([
+                    'status' => 'success',
+                    'data' => [
+                        'id' => 4244,
+                        'status' => 'successful',
+                        'amount' => 5000,
+                        'currency' => 'PKR',
+                    ],
+                ], 200);
+            },
+        ]);
+
+        $this->getJson(
+            '/api/payments/flutterwave/verify/fw-ref-void-race',
+            $this->authHeaders($this->tokenFor($owner))
+        )->assertStatus(422)->assertJsonPath('message', 'This invoice is no longer payable.');
+
+        $this->assertSame('void', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', [
+            'agency_id' => $agency->id,
+            'status' => 'active',
+        ]);
     }
 
     public function test_flutterwave_verification_rejects_amount_mismatch(): void

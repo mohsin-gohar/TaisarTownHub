@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -91,23 +92,34 @@ class MfaService
      */
     public function consumeRecoveryCode(User $user, string $code): bool
     {
-        $stored = is_array($user->mfa_recovery_codes) ? $user->mfa_recovery_codes : [];
         $code = strtoupper(trim((string) $code));
-
-        if ($code === '' || $stored === []) {
+        if ($code === '') {
             return false;
         }
 
-        foreach ($stored as $index => $hash) {
-            if (Hash::check($code, $hash)) {
-                unset($stored[$index]);
-                $user->forceFill(['mfa_recovery_codes' => array_values($stored)])->save();
-
-                return true;
+        // Lock the account row while consuming a recovery code. Separate
+        // MFA challenges can be verified concurrently, so challenge locking
+        // alone is not enough to prevent the same recovery code being replayed.
+        return DB::transaction(function () use ($user, $code): bool {
+            $lockedUser = User::query()->whereKey($user->getKey())->lockForUpdate()->first();
+            if (!$lockedUser) {
+                return false;
             }
-        }
 
-        return false;
+            $stored = is_array($lockedUser->mfa_recovery_codes) ? $lockedUser->mfa_recovery_codes : [];
+            foreach ($stored as $index => $hash) {
+                if (Hash::check($code, $hash)) {
+                    unset($stored[$index]);
+                    $remaining = array_values($stored);
+                    $lockedUser->forceFill(['mfa_recovery_codes' => $remaining])->save();
+                    $user->setAttribute('mfa_recovery_codes', $remaining);
+
+                    return true;
+                }
+            }
+
+            return false;
+        });
     }
 
     /* ------------------------------------------------------------------ */

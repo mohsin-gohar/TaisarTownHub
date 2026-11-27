@@ -31,13 +31,16 @@ class MediaFile extends Model
         return [
             'tags' => 'array',
             'size_bytes' => 'integer',
-            'sold_price_pk' => 'float',
-            'cost_price_pk' => 'float',
-            'profit_pk' => 'float',
+            // DECIMAL PKR amounts are retained as exact strings, never floats.
             'sold_at' => 'datetime',
             'scan_completed_at' => 'datetime',
         ];
     }
+
+    /** Numeric JSON compatibility; sale calculations use integer paise. */
+    public function getSoldPricePkAttribute($value): ?float { return $value === null ? null : (float) $value; }
+    public function getCostPricePkAttribute($value): ?float { return $value === null ? null : (float) $value; }
+    public function getProfitPkAttribute($value): float { return (float) $value; }
 
     public function agency(): BelongsTo
     {

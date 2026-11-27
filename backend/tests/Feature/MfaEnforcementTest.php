@@ -39,6 +39,59 @@ class MfaEnforcementTest extends EnterpriseTestCase
         ])->assertOk()->json('token');
     }
 
+    public function test_recovery_codes_are_single_use_across_separate_mfa_challenges(): void
+    {
+        $user = $this->makeUser('operator', ['email' => 'recovery@example.test']);
+        $service = app(MfaService::class);
+        [, $codes] = $this->enroll($user, $service);
+        $recoveryCode = $codes[0];
+
+        $challenge = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'Secret123!',
+        ])->assertOk()->json('challenge');
+
+        $this->postJson('/api/auth/mfa/verify', [
+            'challenge' => $challenge,
+            'code' => $recoveryCode,
+        ])->assertOk()->assertJsonPath('mfa_used', true);
+
+        $this->assertCount(7, $user->fresh()->mfa_recovery_codes);
+
+        $secondChallenge = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'Secret123!',
+        ])->assertOk()->json('challenge');
+
+        $this->postJson('/api/auth/mfa/verify', [
+            'challenge' => $secondChallenge,
+            'code' => $recoveryCode,
+        ])->assertStatus(422);
+        $this->assertCount(7, $user->fresh()->mfa_recovery_codes);
+    }
+
+    public function test_mfa_challenge_cannot_be_reused_after_successful_verification(): void
+    {
+        $user = $this->makeUser('operator', ['email' => 'challenge-once@example.test']);
+        $service = app(MfaService::class);
+        [$secret] = $this->enroll($user, $service);
+
+        $challenge = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'Secret123!',
+        ])->assertOk()->json('challenge');
+
+        $this->postJson('/api/auth/mfa/verify', [
+            'challenge' => $challenge,
+            'code' => $service->currentCode($secret),
+        ])->assertOk();
+
+        $this->postJson('/api/auth/mfa/verify', [
+            'challenge' => $challenge,
+            'code' => $service->currentCode($secret),
+        ])->assertUnauthorized();
+    }
+
     public function test_mfa_middleware_blocks_a_token_issued_before_enrolment(): void
     {
         $user = $this->makeUser('operator');
@@ -106,6 +159,40 @@ class MfaEnforcementTest extends EnterpriseTestCase
         $this->getJson('/api/auth/me', $this->authHeaders($token))
             ->assertOk()
             ->assertJsonPath('success', true);
+    }
+
+    public function test_global_mfa_policy_allows_required_agency_owner_to_enroll_mfa(): void
+    {
+        \Illuminate\Support\Facades\DB::table('system_settings')->updateOrInsert(
+            ['key' => 'security.mfa_required_for_admins'],
+            [
+                'value' => json_encode(true),
+                'group' => 'security',
+                'description' => 'test',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        [$owner] = $this->agencyUser(['agency.view'], 'agency_owner');
+        $token = $this->tokenFor($owner);
+        $headers = $this->authHeaders($token);
+        $service = app(MfaService::class);
+
+        $this->getJson('/api/auth/mfa/status', $headers)
+            ->assertOk()
+            ->assertJsonPath('enabled', false);
+
+        $secret = $this->postJson('/api/auth/mfa/setup', [], $headers)
+            ->assertOk()
+            ->json('secret');
+
+        $this->postJson('/api/auth/mfa/enable', [
+            'code' => $service->currentCode($secret),
+        ], $headers)->assertOk();
+
+        $this->asGuest();
+        $this->getJson('/api/auth/me', $this->authHeaders($token))->assertOk();
     }
 
     public function test_global_mfa_policy_uses_active_agency_role(): void

@@ -32,6 +32,41 @@ class DealerAgencyLinkTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_fixed_commission_can_exceed_one_hundred_but_percentage_is_capped(): void
+    {
+        $admin = $this->makeUser('super_admin');
+        $headers = $this->authHeaders($this->tokenFor($admin));
+
+        $fixed = $this->postJson('/api/dealers', [
+            'id' => 'deal-' . Str::random(8),
+            'fullName' => 'Fixed Commission Dealer',
+            'phone' => '03001234567',
+            'commissionType' => 'Fixed',
+            'commissionRate' => 20000,
+        ], $headers)->assertCreated();
+
+        $this->assertSame(20000.0, (float) $fixed->json('commissionRate'));
+
+        $this->postJson('/api/dealers', [
+            'id' => 'deal-' . Str::random(8),
+            'fullName' => 'Invalid Percentage Dealer',
+            'phone' => '03007654321',
+            'commissionType' => 'Percentage',
+            'commissionRate' => 101,
+        ], $headers)->assertStatus(422)
+            ->assertJsonValidationErrors('commissionRate');
+
+        $percentage = $this->postJson('/api/dealers', [
+            'id' => 'deal-' . Str::random(8),
+            'fullName' => 'Valid Percentage Dealer',
+            'phone' => '03001112222',
+            'commissionType' => 'Percentage',
+            'commissionRate' => 2.5,
+        ], $headers)->assertCreated();
+
+        $this->assertSame(2.5, (float) $percentage->json('commissionRate'));
+    }
+
     public function test_agency_scoped_publisher_is_confined_to_its_own_agency(): void
     {
         [$user, $agency] = $this->agencyUser(['manage_dealers'], 'agency_owner');

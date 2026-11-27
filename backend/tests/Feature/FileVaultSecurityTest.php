@@ -409,6 +409,97 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->get("/api/media/{$media['id']}/file")->assertStatus(200);
     }
 
+    public function test_media_sale_uses_exact_decimal_amounts_and_can_only_be_completed_once(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $media = MediaFile::create([
+            'id' => 'med_sale_' . bin2hex(random_bytes(5)),
+            'agency_id' => $agency->id,
+            'title' => 'Sale precision regression',
+            'type' => 'image',
+            'visibility' => 'private',
+            'status' => 'available',
+            'uploaded_by' => $user->id,
+        ]);
+
+        $this->postJson('/api/agency/media/' . $media->id . '/sell', [
+            'selling_price_pk' => '10000.25',
+            'cost_price_pk' => '7000.10',
+            'buyer_name' => 'Decimal Buyer',
+            'buyer_phone' => '03001234567',
+        ], $headers)->assertOk()
+            ->assertJsonPath('media.sold_price_pk', 10000.25)
+            ->assertJsonPath('media.cost_price_pk', 7000.10)
+            ->assertJsonPath('media.profit_pk', 3000.15);
+
+        $this->assertDatabaseHas('media_files', [
+            'id' => $media->id,
+            'sold_price_pk' => '10000.25',
+            'cost_price_pk' => '7000.10',
+            'profit_pk' => '3000.15',
+            'status' => 'sold',
+        ]);
+
+        $this->postJson('/api/agency/media/' . $media->id . '/sell', [
+            'selling_price_pk' => '12000.00',
+            'cost_price_pk' => '7000.10',
+            'buyer_name' => 'Second Buyer',
+        ], $headers)->assertStatus(422);
+
+        $this->assertDatabaseHas('media_files', [
+            'id' => $media->id,
+            'sold_price_pk' => '10000.25',
+            'buyer_name' => 'Decimal Buyer',
+        ]);
+
+        $lossMedia = MediaFile::create([
+            'id' => 'med_loss_' . bin2hex(random_bytes(5)),
+            'agency_id' => $agency->id,
+            'title' => 'Loss sale precision regression',
+            'type' => 'image',
+            'visibility' => 'private',
+            'status' => 'available',
+            'uploaded_by' => $user->id,
+        ]);
+        $this->postJson('/api/agency/media/' . $lossMedia->id . '/sell', [
+            'selling_price_pk' => '10000.00',
+            'cost_price_pk' => '12000.00',
+            'buyer_name' => 'Loss Buyer',
+        ], $headers)->assertOk()
+            ->assertJsonPath('media.profit_pk', -2000.00);
+        $this->assertDatabaseHas('media_files', [
+            'id' => $lossMedia->id,
+            'profit_pk' => '-2000.00',
+        ]);
+    }
+
+    public function test_media_sale_rejects_more_than_two_decimal_places(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $media = MediaFile::create([
+            'id' => 'med_precision_' . bin2hex(random_bytes(5)),
+            'agency_id' => $agency->id,
+            'title' => 'Invalid precision regression',
+            'type' => 'image',
+            'visibility' => 'private',
+            'status' => 'available',
+            'uploaded_by' => $user->id,
+        ]);
+
+        $this->postJson('/api/agency/media/' . $media->id . '/sell', [
+            'selling_price_pk' => '100.999',
+            'buyer_name' => 'Invalid Decimal Buyer',
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('selling_price_pk');
+
+        $this->assertDatabaseHas('media_files', [
+            'id' => $media->id,
+            'status' => 'available',
+        ]);
+    }
+
     /* ============ Storage monitoring (no quota) ============ */
 
     public function test_storage_quota_is_not_enforced_for_this_release(): void
@@ -568,6 +659,180 @@ class FileVaultSecurityTest extends EnterpriseTestCase
 
         $this->assertDatabaseHas('documents', ['id' => $liveId]);
         $this->get("/api/agency/documents/{$liveId}/download", $headers)->assertStatus(200);
+    }
+
+    public function test_quarantine_metadata_is_retained_when_byte_deletion_fails(): void
+    {
+        [, $agency] = $this->uploader();
+        $id = 'qtn_' . bin2hex(random_bytes(8));
+        $path = 'expired/' . $id . '.pdf';
+        DocumentQuarantine::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'disk_path' => $path,
+            'reason' => 'infected',
+            'created_at' => now()->subDays(45),
+        ]);
+
+        $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($path)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($path)->andReturn(false);
+        Storage::shouldReceive('disk')->twice()->with('quarantine')->andReturn($disk);
+
+        $exitCode = Artisan::call('vault:purge-quarantine');
+
+        $this->assertSame(1, $exitCode, 'A failed physical delete must make the purge command fail.');
+        $this->assertDatabaseHas('document_quarantines', ['id' => $id]);
+    }
+
+    public function test_quarantined_document_metadata_is_retained_when_document_delete_fails(): void
+    {
+        [, $agency] = $this->uploader();
+        $id = 'doc_' . bin2hex(random_bytes(8));
+        $documentPath = 'expired/' . $id . '.pdf';
+        $document = Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Expired Hold',
+            'original_name' => 'expired-hold.pdf',
+            'stored_name' => $id . '.pdf',
+            'disk_path' => $documentPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 20,
+            'status' => 'quarantined',
+        ]);
+        $document->created_at = now()->subDays(45);
+        $document->save();
+
+        $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(false);
+        Storage::shouldReceive('disk')->twice()->with('documents')->andReturn($disk);
+
+        $exitCode = Artisan::call('vault:purge-quarantine');
+
+        $this->assertSame(1, $exitCode);
+        $this->assertDatabaseHas('documents', ['id' => $id]);
+    }
+
+    public function test_quarantined_document_metadata_is_retained_when_version_delete_fails(): void
+    {
+        [, $agency] = $this->uploader();
+        $id = 'doc_' . bin2hex(random_bytes(8));
+        $documentPath = 'expired/' . $id . '.pdf';
+        $versionPath = 'expired/' . $id . '-v1.pdf';
+        $document = Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Expired Hold With Version',
+            'original_name' => 'expired-hold-version.pdf',
+            'stored_name' => $id . '.pdf',
+            'disk_path' => $documentPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 20,
+            'status' => 'quarantined',
+        ]);
+        $document->created_at = now()->subDays(45);
+        $document->save();
+        DocumentVersion::create([
+            'document_id' => $id,
+            'version' => 1,
+            'stored_name' => $id . '-v1.pdf',
+            'disk_path' => $versionPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 10,
+            'created_at' => now()->subDays(45),
+        ]);
+
+        $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('exists')->once()->with($versionPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($versionPath)->andReturn(false);
+        Storage::shouldReceive('disk')->times(4)->with('documents')->andReturn($disk);
+
+        $exitCode = Artisan::call('vault:purge-quarantine');
+
+        $this->assertSame(1, $exitCode);
+        $this->assertDatabaseHas('documents', ['id' => $id]);
+        $this->assertDatabaseHas('document_versions', ['document_id' => $id, 'version' => 1]);
+    }
+
+    public function test_media_metadata_is_retained_when_physical_delete_returns_false(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $id = 'med_delete_' . bin2hex(random_bytes(5));
+        $path = $agency->id . '/media/' . $id . '.pdf';
+        $media = MediaFile::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'title' => 'Delete failure regression',
+            'type' => 'document',
+            'visibility' => 'private',
+            'status' => 'available',
+            'disk_path' => $path,
+            'uploaded_by' => $user->id,
+        ]);
+
+        $disk = \\Mockery::mock(\\Illuminate\\Contracts\\Filesystem\\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($path)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($path)->andReturn(false);
+        Storage::shouldReceive('disk')->once()->with('documents')->andReturn($disk);
+
+        $this->deleteJson('/api/agency/media/' . $id, [], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(500);
+
+        $this->assertDatabaseHas('media_files', ['id' => $id, 'deleted_at' => null]);
+    }
+
+    public function test_permanent_document_delete_retains_all_metadata_when_a_version_delete_fails(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $id = 'doc_delete_' . bin2hex(random_bytes(5));
+        $documentPath = $agency->id . '/documents/' . $id . '.pdf';
+        $versionPath = $agency->id . '/documents/' . $id . '-v1.pdf';
+        $document = Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Permanent delete failure regression',
+            'original_name' => 'delete-failure.pdf',
+            'stored_name' => $id . '.pdf',
+            'disk_path' => $documentPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 20,
+            'status' => 'trashed',
+            'uploaded_by' => $user->id,
+        ]);
+        $document->delete();
+        DocumentVersion::create([
+            'document_id' => $id,
+            'version' => 1,
+            'stored_name' => $id . '-v1.pdf',
+            'disk_path' => $versionPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 10,
+        ]);
+
+        $disk = \\Mockery::mock(\\Illuminate\\Contracts\\Filesystem\\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('exists')->once()->with($versionPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($versionPath)->andReturn(false);
+        Storage::shouldReceive('disk')->twice()->with('documents')->andReturn($disk);
+
+        $this->deleteJson('/api/agency/documents/' . $id . '/permanent', [], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(500);
+
+        $this->assertDatabaseHas('documents', ['id' => $id]);
+        $this->assertDatabaseHas('document_versions', ['document_id' => $id, 'version' => 1]);
     }
 
     /* ============ Configuration guardrails ============ */

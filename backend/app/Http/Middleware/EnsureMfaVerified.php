@@ -36,8 +36,20 @@ class EnsureMfaVerified
             return $next($request);
         }
 
-        // MFA verification endpoint itself is always allowed.
-        if ($request->route() && str_ends_with($request->route()->uri, 'auth/mfa/verify')) {
+        $routeUri = $request->route()?->uri ?? '';
+
+        // The verification endpoint itself is always allowed. Users who are
+        // required to enroll but have not yet enabled MFA must also be able to
+        // inspect status, start setup and confirm the first authenticator code.
+        // Once enrolled, these routes are protected like every other endpoint.
+        if (str_ends_with($routeUri, 'auth/mfa/verify')) {
+            return $next($request);
+        }
+        if (!$user->hasMfaEnabled() && (
+            str_ends_with($routeUri, 'auth/mfa/status')
+            || str_ends_with($routeUri, 'auth/mfa/setup')
+            || str_ends_with($routeUri, 'auth/mfa/enable')
+        )) {
             return $next($request);
         }
 

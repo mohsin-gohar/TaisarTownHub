@@ -15,12 +15,18 @@ class SubscriptionPlan extends Model
     protected function casts(): array
     {
         return [
-            'price' => 'float',
+            // Keep DECIMAL(12,2) as its exact database string; never cast money to float.
             'limits' => 'array',
             'features' => 'array',
             'is_active' => 'boolean',
             'is_default' => 'boolean',
         ];
+    }
+
+    /** Numeric API compatibility; checkout reads the raw DECIMAL string. */
+    public function getPriceAttribute($value): float
+    {
+        return (float) $value;
     }
 
     public function subscriptions(): HasMany

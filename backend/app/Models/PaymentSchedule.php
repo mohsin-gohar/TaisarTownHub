@@ -16,10 +16,16 @@ class PaymentSchedule extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'float',
+            // DECIMAL(14,2) must remain an exact decimal string.
             'due_date' => 'date',
             'paid_at' => 'datetime',
         ];
+    }
+
+    /** Numeric JSON compatibility; persisted DECIMAL remains exact. */
+    public function getAmountAttribute($value): float
+    {
+        return (float) $value;
     }
 
     public function transaction(): BelongsTo

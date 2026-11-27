@@ -116,37 +116,49 @@ class Transaction extends Model
         return $this->approved_at !== null;
     }
 
-    /** Total money received against this deal. */
+    /** Exact total money received in integer paise (soft-deleted rows excluded). */
+    public function totalPaidCents(): int
+    {
+        $amount = (string) $this->payments()->sum('amount');
+        if (! preg_match('/^(-?)(\\d+)(?:\\.(\\d{1,2}))?$/', $amount, $matches)) {
+            return 0;
+        }
+
+        $cents = ((int) $matches[2] * 100) + (int) str_pad($matches[3] ?? '', 2, '0');
+        return ($matches[1] ?? '') === '-' ? -$cents : $cents;
+    }
+
+    /** Numeric compatibility accessor for existing API/report consumers. */
     public function totalPaid(): float
     {
-        return (float) $this->payments()->sum('amount');
+        return $this->totalPaidCents() / 100;
     }
 
     public function outstandingBalance(): float
     {
-        return max(0, (float) $this->agreementAmountPKR - $this->totalPaid());
+        $agreementCents = ((int) $this->agreementAmountPKR) * 100;
+        return max(0, $agreementCents - $this->totalPaidCents()) / 100;
     }
 
     /**
-     * Recalculate the payment status based on total payments received.
-     * Updates advancePaymentPKR and remainingBalancePKR to reflect current totals.
-     * Updates paymentStatus to reflect payment progress.
+     * Recalculate the payment status from exact paise totals. The legacy
+     * transaction summary columns are BIGINT whole-PKR fields, so their
+     * display values are rounded only when written to those summary columns.
      */
     public function recalculateStatus(): void
     {
-        $totalPaid = $this->totalPaid();
-        $agreementAmount = (float) $this->agreementAmountPKR;
+        $totalPaidCents = $this->totalPaidCents();
+        $agreementCents = ((int) $this->agreementAmountPKR) * 100;
 
-        // Update advancePaymentPKR to reflect total collected
-        $this->advancePaymentPKR = $totalPaid;
+        $roundedPaidRupees = $totalPaidCents >= 0
+            ? intdiv($totalPaidCents + 50, 100)
+            : -intdiv(abs($totalPaidCents) + 50, 100);
+        $this->advancePaymentPKR = $roundedPaidRupees;
+        $this->remainingBalancePKR = intdiv(max(0, $agreementCents - $totalPaidCents) + 50, 100);
 
-        // Calculate remaining balance
-        $this->remainingBalancePKR = max(0, $agreementAmount - $totalPaid);
-
-        // Determine payment status
-        if ($totalPaid <= 0) {
+        if ($totalPaidCents <= 0) {
             $this->paymentStatus = 'Pending';
-        } elseif ($totalPaid >= $agreementAmount && $agreementAmount > 0) {
+        } elseif ($totalPaidCents >= $agreementCents && $agreementCents > 0) {
             $this->paymentStatus = 'Fully Paid';
         } else {
             $this->paymentStatus = 'Partially Paid';

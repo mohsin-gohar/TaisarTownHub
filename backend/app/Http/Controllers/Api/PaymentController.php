@@ -44,6 +44,18 @@ class PaymentController extends Controller
 
         $plan = SubscriptionPlan::findOrFail($request->plan_id);
 
+        // Invoice amounts are integer PKR. Reject legacy/inconsistent plan rows
+        // rather than silently rounding a fractional or foreign-currency price.
+        $planPrice = (string) $plan->getRawOriginal('price');
+        if (strtoupper((string) $plan->currency) !== 'PKR'
+            || ! preg_match('/^\\d+(?:\\.00)?$/', $planPrice)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This plan has an unsupported price or currency. Contact the platform administrator.',
+            ], 422);
+        }
+        $amountPkr = (int) $planPrice;
+
         // Every agency already has a starter subscription (5 GB workspace), so
         // an existing row must never block an upgrade. Payment is optional
         // during the free launch; platform admins can also assign plans
@@ -77,7 +89,7 @@ class PaymentController extends Controller
                             'name' => $plan->name,
                             'description' => $plan->description ?? 'TaisarTownHub agency subscription',
                         ],
-                        'unit_amount' => (int) ($plan->price * 100),
+                        'unit_amount' => $amountPkr * 100,
                         'recurring' => [
                             'interval' => $plan->interval ?? 'month',
                         ],
@@ -94,7 +106,7 @@ class PaymentController extends Controller
             ]);
 
             // Create a pending invoice using the canonical schema columns.
-            $amount = (int) round((float) $plan->price);
+            $amount = $amountPkr;
             SubscriptionInvoice::create([
                 'id' => (string) Str::uuid(),
                 'invoice_number' => SubscriptionInvoice::nextNumber(),
@@ -244,8 +256,20 @@ class PaymentController extends Controller
                 }
 
                 $amount = $payload['amount'] ?? null;
-                $currency = strtoupper((string) ($payload['currency'] ?? ''));
-                if ($amount !== null && (int) round((float) $amount) !== (int) $invoice->total_pkr) {
+                $currency = strtoupper(trim((string) ($payload['currency'] ?? '')));
+                // A valid shared-secret header authenticates the sender, but
+                // a payment event without the invoice amount/currency cannot
+                // prove that the expected amount was settled. Never treat
+                // missing financial fields as an implicit match.
+                if ($amount === null || !is_numeric($amount)) {
+                    Log::error('Flutterwave webhook amount missing or invalid', ['tx_ref' => $txRef]);
+                    return 'amount_mismatch';
+                }
+                if ($currency === '') {
+                    Log::error('Flutterwave webhook currency missing', ['tx_ref' => $txRef]);
+                    return 'currency_mismatch';
+                }
+                if (abs((float) $amount - (float) $invoice->total_pkr) > 0.00001) {
                     Log::error('Flutterwave webhook amount mismatch', [
                         'tx_ref' => $txRef,
                         'expected' => (int) $invoice->total_pkr,
@@ -350,11 +374,13 @@ class PaymentController extends Controller
                 ], 422);
             }
 
-            $remoteAmount = (int) round((float) ($remote['amount'] ?? 0));
-            $remoteCurrency = strtoupper((string) ($remote['currency'] ?? ''));
+            $remoteAmountValue = $remote['amount'] ?? null;
+            $remoteAmount = is_numeric($remoteAmountValue) ? (float) $remoteAmountValue : null;
+            $remoteCurrency = strtoupper(trim((string) ($remote['currency'] ?? '')));
 
-            if ($remoteCurrency !== strtoupper((string) $invoice->currency)
-                || $remoteAmount !== (int) $invoice->total_pkr) {
+            if ($remoteAmount === null || $remoteCurrency === ''
+                || $remoteCurrency !== strtoupper((string) $invoice->currency)
+                || abs($remoteAmount - (float) $invoice->total_pkr) > 0.00001) {
                 Log::warning('Flutterwave verification amount/currency mismatch', [
                     'agency_id' => $agencyId,
                     'tx_ref' => $txRef,
@@ -370,20 +396,49 @@ class PaymentController extends Controller
                 ], 422);
             }
 
-            $activated = false;
-            if ($invoice->status === 'pending') {
-                DB::transaction(function () use ($invoice, $remote, $txRef): void {
-                    $invoice->update([
-                        'status' => 'paid',
-                        'payment_method' => 'flutterwave',
-                        'payment_reference' => $txRef,
-                        'flutterwave_tx_id' => isset($remote['id']) ? (string) $remote['id'] : null,
-                        'paid_at' => now(),
-                    ]);
-                    $this->activateSubscriptionFromInvoice($invoice);
-                });
-                $activated = true;
+            // The provider call happens outside the DB transaction, so the
+            // invoice may have been voided/failed while verification was in
+            // flight. Re-lock and re-check the current state before settlement.
+            $outcome = DB::transaction(function () use ($invoice, $remote, $txRef): string {
+                $lockedInvoice = SubscriptionInvoice::whereKey($invoice->getKey())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $lockedInvoice || (string) $lockedInvoice->agency_id !== (string) $invoice->agency_id) {
+                    return 'not_found';
+                }
+                if ($lockedInvoice->status === 'paid') {
+                    return 'already_paid';
+                }
+                if ($lockedInvoice->status !== 'pending') {
+                    return 'not_pending';
+                }
+
+                $lockedInvoice->update([
+                    'status' => 'paid',
+                    'payment_method' => 'flutterwave',
+                    'payment_reference' => $txRef,
+                    'flutterwave_tx_id' => isset($remote['id']) ? (string) $remote['id'] : null,
+                    'paid_at' => now(),
+                ]);
+                $this->activateSubscriptionFromInvoice($lockedInvoice);
+
+                return 'activated';
+            });
+
+            if ($outcome === 'not_found') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment reference not found.',
+                ], 404);
             }
+            if ($outcome === 'not_pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This invoice is no longer payable.',
+                ], 422);
+            }
+            $activated = $outcome === 'activated';
 
             if ($activated) {
                 $this->writeAudit(
@@ -448,60 +503,137 @@ class PaymentController extends Controller
             return; // idempotent
         }
 
-        // A completed Checkout Session is not proof of payment for async
-        // methods. Match the Flutterwave path: require a settled status and,
-        // when Stripe supplies it, the expected amount before activating.
+        // Signed Checkout events must still match the invoice created by this
+        // application. Never accept missing payment fields or infer a settled
+        // payment from checkout.session.completed alone (async methods can
+        // complete the checkout flow before payment settles).
+        if ((string) $agencyId !== (string) $invoice->agency_id
+            || (string) $planId !== (string) $invoice->plan_id) {
+            Log::warning('Stripe checkout: session metadata does not match invoice', [
+                'session_id' => $session->id,
+                'invoice_id' => $invoice->id,
+            ]);
+            return;
+        }
+
         $paymentStatus = $session->payment_status ?? null;
-        if ($paymentStatus !== null && !in_array($paymentStatus, ['paid', 'no_payment_required'], true)) {
+        if (!in_array($paymentStatus, ['paid', 'no_payment_required'], true)) {
             Log::warning('Stripe checkout: session not settled', [
                 'session_id' => $session->id, 'payment_status' => $paymentStatus,
             ]);
             return;
         }
+
         $amountTotal = $session->amount_total ?? null;
-        $currency = strtolower((string) ($session->currency ?? 'pkr'));
-        if ($amountTotal !== null && $currency === 'pkr'
-            && (int) $amountTotal < (int) round((float) $invoice->total_pkr * 100)) {
-            Log::warning('Stripe checkout: amount below invoice total', [
-                'session_id' => $session->id, 'amount_total' => $amountTotal,
+        $currency = strtolower(trim((string) ($session->currency ?? '')));
+        $expectedCurrency = strtolower(trim((string) $invoice->currency));
+        $expectedAmountMinor = (float) $invoice->total_pkr * 100;
+        if (!is_numeric($amountTotal) || $currency === '' || $currency !== $expectedCurrency
+            || abs((float) $amountTotal - $expectedAmountMinor) > 0.00001) {
+            Log::warning('Stripe checkout: amount or currency does not match invoice', [
+                'session_id' => $session->id,
+                'amount_total' => $amountTotal,
+                'currency' => $currency,
+                'expected_amount_minor' => $expectedAmountMinor,
+                'expected_currency' => $expectedCurrency,
             ]);
             return;
         }
 
-        $invoice->update([
-            'status' => 'paid',
-            'stripe_payment_intent_id' => $session->payment_intent ?? null,
-            'stripe_subscription_id' => $stripeSubId,
-            'paid_at' => now(),
-        ]);
+        // Invoice settlement and subscription activation are one atomic
+        // state transition. Stripe may retry/deliver the same event in
+        // parallel; lock and re-check the invoice inside the transaction so
+        // a paid invoice can never be committed without its subscription.
+        $outcome = DB::transaction(function () use ($invoice, $session, $stripeSubId): string {
+            $lockedInvoice = SubscriptionInvoice::whereKey($invoice->getKey())
+                ->lockForUpdate()
+                ->first();
 
-        $this->activateSubscriptionFromInvoice($invoice);
+            if (!$lockedInvoice) {
+                return 'not_found';
+            }
+            if ($lockedInvoice->status === 'paid') {
+                return 'already_paid';
+            }
+            if ($lockedInvoice->status !== 'pending') {
+                return 'not_pending';
+            }
+
+            $lockedInvoice->update([
+                'status' => 'paid',
+                'stripe_payment_intent_id' => $session->payment_intent ?? null,
+                'stripe_subscription_id' => $stripeSubId,
+                'paid_at' => now(),
+            ]);
+
+            $this->activateSubscriptionFromInvoice($lockedInvoice);
+            return 'activated';
+        });
+
+        if ($outcome === 'not_pending') {
+            Log::warning('Stripe checkout: invoice is no longer payable', [
+                'session_id' => $session->id,
+                'invoice_id' => $invoice->id,
+                'status' => $invoice->fresh()?->status,
+            ]);
+        }
     }
 
     private function handleStripeInvoicePaid($invoice): void
     {
-        $stripeSubId = $invoice->stripe_subscription_id ?? null;
+        // Stripe Invoice uses the subscription field (or parent.subscription_details
+        // on newer API versions), not stripe_subscription_id.
+        $stripeSubId = $invoice->subscription
+            ?? $invoice->parent?->subscription_details?->subscription
+            ?? $invoice->stripe_subscription_id
+            ?? null;
         if (!$stripeSubId) {
             return;
         }
 
-        $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)->first();
-        if ($agencySubscription) {
-            $agencySubscription->update(['status' => 'active']);
-        }
+        $invoiceLines = $invoice->lines->data ?? [];
+        $firstLine = is_array($invoiceLines) ? ($invoiceLines[0] ?? null) : null;
+        $periodEnd = $firstLine->period->end ?? null;
+        $periodStart = $firstLine->period->start ?? null;
+
+        DB::transaction(function () use ($stripeSubId, $periodEnd, $periodStart): void {
+            $subscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
+                ->lockForUpdate()
+                ->first();
+            if (!$subscription) {
+                return;
+            }
+
+            $updates = ['status' => 'active', 'cancelled_at' => null];
+            if (is_numeric($periodEnd)) {
+                $newEnd = \\Illuminate\\Support\\Carbon::createFromTimestamp((int) $periodEnd);
+                if ($subscription->ends_at === null || $newEnd->greaterThan($subscription->ends_at)) {
+                    $updates['ends_at'] = $newEnd;
+                }
+            }
+            if (is_numeric($periodStart) && $subscription->starts_at === null) {
+                $updates['starts_at'] = \\Illuminate\\Support\\Carbon::createFromTimestamp((int) $periodStart);
+            }
+            $subscription->update($updates);
+        });
     }
 
     private function handleStripeInvoiceFailed($invoice): void
     {
-        $stripeSubId = $invoice->stripe_subscription_id ?? null;
+        $stripeSubId = $invoice->subscription
+            ?? $invoice->parent?->subscription_details?->subscription
+            ?? $invoice->stripe_subscription_id
+            ?? null;
         if (!$stripeSubId) {
             return;
         }
 
-        $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)->first();
-        if ($agencySubscription) {
-            $agencySubscription->update(['status' => 'past_due']);
-        }
+        DB::transaction(function () use ($stripeSubId): void {
+            $subscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
+                ->lockForUpdate()
+                ->first();
+            $subscription?->update(['status' => 'past_due']);
+        });
     }
 
     private function handleStripeSubscriptionChanged($subscription): void
@@ -511,20 +643,45 @@ class PaymentController extends Controller
             return;
         }
 
-        $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)->first();
-        if (!$agencySubscription) {
-            return;
-        }
+        DB::transaction(function () use ($stripeSubId, $subscription): void {
+            $agencySubscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
+                ->lockForUpdate()
+                ->first();
+            if (!$agencySubscription) {
+                return;
+            }
 
-        $status = match ($subscription->status ?? '') {
-            'active' => 'active',
-            'past_due' => 'past_due',
-            'canceled' => 'cancelled',
-            'unpaid' => 'past_due',
-            default => $agencySubscription->status,
-        };
+            $status = match ($subscription->status ?? '') {
+                'active' => 'active',
+                'past_due' => 'past_due',
+                'canceled' => 'cancelled',
+                'unpaid' => 'past_due',
+                default => $agencySubscription->status,
+            };
+            $updates = ['status' => $status];
+            $subscriptionItems = $subscription->items->data ?? [];
+            $firstItem = is_array($subscriptionItems) ? ($subscriptionItems[0] ?? null) : null;
+            $periodEnd = $subscription->current_period_end ?? $firstItem->current_period_end ?? null;
+            $trialEnd = $subscription->trial_end ?? null;
+            if (is_numeric($periodEnd)) {
+                $updates['ends_at'] = \\Illuminate\\Support\\Carbon::createFromTimestamp((int) $periodEnd);
+            }
+            if (is_numeric($trialEnd)) {
+                $updates['trial_ends_at'] = \\Illuminate\\Support\\Carbon::createFromTimestamp((int) $trialEnd);
+            }
+            if (($subscription->cancel_at_period_end ?? false) === true) {
+                $updates['auto_renew'] = false;
+            } elseif ($status === 'active') {
+                $updates['auto_renew'] = true;
+                $updates['cancelled_at'] = null;
+            }
+            if ($status === 'cancelled') {
+                $updates['cancelled_at'] = now();
+                $updates['auto_renew'] = false;
+            }
 
-        $agencySubscription->update(['status' => $status]);
+            $agencySubscription->update($updates);
+        });
     }
 
     private function activateSubscriptionFromInvoice(SubscriptionInvoice $invoice): void
@@ -532,6 +689,9 @@ class PaymentController extends Controller
         $agencyId = $invoice->agency_id;
         $planId = $invoice->plan_id;
 
+        // Serialize all plan activations for one tenant, including different
+        // invoices/providers, so the final subscription row cannot be raced.
+        Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
         $plan = SubscriptionPlan::findOrFail($planId);
 
         // Determine interval ends_at

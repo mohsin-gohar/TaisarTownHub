@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Document;
+use App\Models\DocumentQuarantine;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -213,4 +214,39 @@ class StorageSecurityTest extends EnterpriseTestCase
         Storage::disk('documents')->assertExists(Document::withTrashed()->find($document['id'])->disk_path);
         $this->assertNotNull(Document::withTrashed()->find($document['id'])->deleted_at);
     }
+    public function test_media_quarantine_bytes_are_cleaned_up_when_metadata_cannot_be_persisted(): void
+    {
+        [$user] = $this->agencyUser($this->documentPermissions());
+
+        $this->app->instance(
+            \App\Services\MalwareScanner::class,
+            new class implements \App\Services\MalwareScanner {
+                public function scan(string $filePath): \App\Support\MalwareScanResult
+                {
+                    return \App\Support\MalwareScanResult::infected('clamav', ['Eicar-Test-Signature FOUND']);
+                }
+
+                public function isAvailable(): bool
+                {
+                    return true;
+                }
+            }
+        );
+
+        DocumentQuarantine::creating(function (): void {
+            throw new \RuntimeException('Simulated quarantine metadata failure.');
+        });
+
+        $this->post('/api/agency/media', [
+            'file' => UploadedFile::fake()->image('infected.jpg'),
+            'title' => 'Rejected media',
+            'visibility' => 'private',
+            'type' => 'image',
+        ], $this->authHeaders($this->tokenFor($user)))->assertStatus(422);
+
+        $this->assertSame([], Storage::disk('quarantine')->allFiles());
+        $this->assertDatabaseCount('document_quarantines', 0);
+        $this->assertDatabaseCount('media_files', 0);
+    }
+
 }

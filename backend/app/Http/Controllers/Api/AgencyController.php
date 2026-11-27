@@ -272,8 +272,7 @@ class AgencyController extends Controller
         $payload = $agency->only([
             'id', 'name', 'slug', 'logo_url', 'cover_url', 'description', 'email',
             'phone', 'whatsapp', 'office_address', 'city', 'registration_number',
-            'website', 'status', 'verification_status', 'verification_notes',
-            'owner_user_id', 'verified_at', 'created_at',
+            'website', 'status', 'verification_status', 'verified_at', 'created_at',
         ]);
 
         $payload['stats'] = [

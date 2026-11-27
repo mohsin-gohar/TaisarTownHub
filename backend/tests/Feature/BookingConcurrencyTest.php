@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Dealer;
 use App\Models\DealerFile;
+use App\Models\Commission;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -51,6 +52,29 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_whole_rupee_deal_columns_reject_fractional_input_instead_of_truncating(): void
+    {
+        [$user] = $this->agencyUser(['finance.create_transaction']);
+        $this->postJson('/api/agency/transactions', [
+            'propertyTitle' => 'Precision Validation Plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agreementAmountPKR' => '100000.50',
+            'advancePaymentPKR' => '1000.25',
+            'commissionAmountPKR' => '250.50',
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors([
+                'agreementAmountPKR',
+                'advancePaymentPKR',
+                'commissionAmountPKR',
+            ]);
+
+        $this->assertDatabaseMissing('transactions', [
+            'propertyTitle' => 'Precision Validation Plot',
+        ]);
+    }
+
     public function test_file_can_be_sold_exactly_once(): void
     {
         [$user, $dealer] = $this->dealerUser();
@@ -76,6 +100,25 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $this->assertSame(3000, (int) $dealer->totalEarnedPKR);
         $this->assertSame(3000, (int) $dealer->pendingCommissionPKR);
         $this->assertSame(1, (int) $dealer->dealsClosed);
+    }
+
+    public function test_loss_making_dealer_file_records_negative_profit_without_negative_commission(): void
+    {
+        [$user, $dealer] = $this->dealerUser();
+        $file = $this->makeFile($dealer, 12000.00);
+        $this->postJson('/api/dealer-files/' . $file->id . '/sell', [
+            'selling_price_kbr' => '10000.00',
+            'buyer_name' => 'Loss Buyer',
+            'buyer_phone' => '03001112222',
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertDatabaseHas('dealer_files', [
+            'id' => $file->id,
+            'profit_kbr' => '-2000.00',
+        ]);
+        $dealer->refresh();
+        $this->assertSame(0, (int) $dealer->totalEarnedPKR);
+        $this->assertSame(0, (int) $dealer->pendingCommissionPKR);
     }
 
     public function test_second_sell_of_the_same_file_is_rejected(): void
@@ -162,6 +205,138 @@ class BookingConcurrencyTest extends EnterpriseTestCase
             ->assertJsonPath('success', false);
     }
 
+    public function test_fractional_payments_use_exact_paise_and_block_one_paisa_overpayment(): void
+    {
+        [$user, $agency] = $this->agencyUser(['finance.manage_payments']);
+        $transaction = Transaction::create([
+            'id' => 'txn_' . Str::random(10),
+            'dealNumber' => 'DEAL-' . Str::upper(Str::random(6)),
+            'propertyId' => 'prop_' . Str::random(8),
+            'propertyTitle' => 'Decimal Ledger Plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agency_id' => $agency->id,
+            'transactionType' => 'sale',
+            'agreementAmountPKR' => 100000,
+            'dealStatus' => 'Active',
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson('/api/agency/transactions/' . $transaction->id . '/payments', [
+            'amount' => '1000.25',
+            'type' => 'advance',
+            'method' => 'bank_transfer',
+        ], $headers)->assertStatus(201);
+
+        $transaction->refresh();
+        $this->assertSame(100025, $transaction->totalPaidCents());
+        $this->assertSame(1000.25, (float) $transaction->totalPaid());
+        $this->assertDatabaseHas('transaction_payments', [
+            'transaction_id' => $transaction->id,
+            'amount' => '1000.25',
+        ]);
+
+        // 98,999.76 + 1,000.25 = 100,000.01: exactly one paisa over.
+        $this->postJson('/api/agency/transactions/' . $transaction->id . '/payments', [
+            'amount' => '98999.76',
+            'type' => 'installment',
+            'method' => 'bank_transfer',
+        ], $headers)->assertStatus(422);
+
+        $this->assertSame(100025, $transaction->fresh()->totalPaidCents());
+        $this->assertDatabaseCount('transaction_payments', 1);
+
+        // A refund greater than all collected funds must not create a negative ledger.
+        $this->postJson('/api/agency/transactions/' . $transaction->id . '/payments', [
+            'amount' => '1000.26',
+            'type' => 'refund',
+            'method' => 'bank_transfer',
+        ], $headers)->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Refund cannot exceed the amount already collected.']);
+
+        $this->assertSame(100025, $transaction->fresh()->totalPaidCents());
+        $this->assertDatabaseCount('transaction_payments', 1);
+    }
+
+    public function test_commission_ledger_rejects_negative_and_over_precision_amounts(): void
+    {
+        [$user, $agency] = $this->agencyUser(['finance.manage_payments']);
+        $transaction = Transaction::create([
+            'id' => 'txn_' . Str::random(10),
+            'dealNumber' => 'DEAL-' . Str::upper(Str::random(6)),
+            'propertyId' => 'prop_' . Str::random(8),
+            'propertyTitle' => 'Commission Validation Plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agency_id' => $agency->id,
+            'transactionType' => 'sale',
+            'agreementAmountPKR' => 500000,
+            'dealStatus' => 'Active',
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $url = '/api/agency/transactions/' . $transaction->id . '/commissions';
+
+        $this->postJson($url, ['amount' => '-1.00'], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('amount');
+        $this->postJson($url, ['amount' => '100.001'], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('amount');
+
+        $this->assertDatabaseCount('commissions', 0);
+    }
+
+    public function test_commission_payout_requires_accrual_and_is_immutable(): void
+    {
+        [$user, $agency] = $this->agencyUser(['finance.manage_payments']);
+        $transaction = Transaction::create([
+            'id' => 'txn_' . Str::random(10),
+            'dealNumber' => 'DEAL-' . Str::upper(Str::random(6)),
+            'propertyId' => 'prop_' . Str::random(8),
+            'propertyTitle' => 'Commission State Plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agency_id' => $agency->id,
+            'transactionType' => 'sale',
+            'agreementAmountPKR' => 500000,
+            'dealStatus' => 'Active',
+        ]);
+        $commission = Commission::create([
+            'agency_id' => $agency->id,
+            'transaction_id' => $transaction->id,
+            'beneficiary_type' => 'agency',
+            'amount' => '5000.25',
+            'status' => 'pending',
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $url = '/api/agency/commissions/' . $commission->id;
+
+        $this->patchJson($url, ['status' => 'paid'], $headers)
+            ->assertStatus(422);
+        $this->patchJson($url, ['status' => 'accrued'], $headers)
+            ->assertOk()
+            ->assertJsonPath('commission.status', 'accrued');
+        $this->assertNotNull($commission->fresh()->accrued_at);
+        $this->patchJson($url, ['status' => 'paid'], $headers)
+            ->assertOk()
+            ->assertJsonPath('commission.status', 'paid');
+
+        $this->assertDatabaseHas('commissions', [
+            'id' => $commission->id,
+            'status' => 'paid',
+            'paid_by' => $user->id,
+        ]);
+        $this->assertNotNull($commission->fresh()->paid_at);
+
+        $this->patchJson($url, ['status' => 'pending'], $headers)
+            ->assertStatus(422);
+        $this->assertDatabaseHas('commissions', [
+            'id' => $commission->id,
+            'status' => 'paid',
+            'paid_by' => $user->id,
+        ]);
+    }
+
     public function test_payment_updates_derived_ledger_status(): void
     {
         [$user, $agency] = $this->agencyUser(['finance.manage_payments']);
@@ -193,5 +368,18 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $this->assertSame('Partially Paid', $transaction->paymentStatus);
         $this->assertSame(200000, (int) $transaction->advancePaymentPKR);
         $this->assertSame(300000, (int) $transaction->remainingBalancePKR);
+
+        $paymentId = DB::table('transaction_payments')
+            ->where('transaction_id', $transaction->id)
+            ->value('id');
+        $this->deleteJson('/api/agency/payments/' . $paymentId, [
+            'reason' => 'Duplicate payment correction.',
+        ], $this->authHeaders($token))->assertOk();
+
+        $transaction->refresh();
+        $this->assertSame(0, $transaction->totalPaidCents());
+        $this->assertSame('Pending', $transaction->paymentStatus);
+        $this->assertSame(0, (int) $transaction->advancePaymentPKR);
+        $this->assertSame(500000, (int) $transaction->remainingBalancePKR);
     }
 }

@@ -19,9 +19,15 @@ class TransactionPayment extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'float',
+            // DECIMAL(14,2) must remain an exact decimal string.
             'received_at' => 'datetime',
         ];
+    }
+
+    /** Numeric JSON compatibility; ledger calculations use SQL decimal sums. */
+    public function getAmountAttribute($value): float
+    {
+        return (float) $value;
     }
 
     public function transaction(): BelongsTo
