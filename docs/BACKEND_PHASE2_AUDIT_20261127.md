@@ -497,3 +497,11 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - The Stripe handler rechecked for an already-paid invoice under lock, but did not require the locked invoice to still be pending. A late signed checkout event could therefore overwrite a void/failed state and activate the plan.
 - The locked settlement now proceeds only for pending invoices; paid remains idempotent and all other states are left unchanged.
 - Regression coverage delivers a valid signed, fully paid Stripe event for a voided invoice and asserts no subscription is activated.
+
+
+### P1 — Recurring Stripe invoice events did not extend subscription expiry
+
+- Invoice lifecycle handlers looked for a non-standard stripe_subscription_id field on Stripe Invoice objects, while Stripe events identify the subscription through subscription (or the newer parent subscription details path). Renewal events could therefore fail to find the local subscription.
+- Successful recurring invoice events now resolve the Stripe subscription ID, lock the local subscription, reactivate it and advance its period from the invoice line timestamps. Failed invoice events lock the same row before marking it past_due.
+- Subscription update events now synchronize current period/trial timestamps and auto-renew/cancellation state.
+- Regression coverage verifies a signed recurring invoice.payment_succeeded event extends the agency subscription period.
