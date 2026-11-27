@@ -287,7 +287,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
 
     public function test_owner_detail_exposes_confidential_fields_only_with_sensitive_grant(): void
     {
-        [$agent, $agency] = $this->agencyUser([...$this->agentPermissions(), 'view_sensitive_cnic']);
+        [$agent, $agency] = $this->agencyUser([...$this->agentPermissions(), 'finance.view']);
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Owner Confidentiality Plot',
