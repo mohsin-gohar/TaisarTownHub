@@ -31,9 +31,7 @@ class MediaFile extends Model
         return [
             'tags' => 'array',
             'size_bytes' => 'integer',
-            'sold_price_pk' => 'float',
-            'cost_price_pk' => 'float',
-            'profit_pk' => 'float',
+            // DECIMAL PKR amounts are retained as exact strings, never floats.
             'sold_at' => 'datetime',
             'scan_completed_at' => 'datetime',
         ];
