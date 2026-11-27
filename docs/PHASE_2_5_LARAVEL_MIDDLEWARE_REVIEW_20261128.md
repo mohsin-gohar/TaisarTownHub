@@ -63,4 +63,4 @@ HSTS is emitted on secure requests with `includeSubDomains`. This is correct onl
 - No middleware source files changed in this review.
 - No Laravel boot, route:list, HTTP feature tests, MFA E2E, reverse-proxy deployment test, or browser media-preview test run.
 - CI intentionally not triggered.
-- The MFA pipeline wiring finding is actionable and should be fixed before production security sign-off.
+- **Superseded by Phase 2.7–2.9:** the current reviewed `backend/routes/api_definitions.php` attaches `EnsureMfaVerified::class` to the authenticated API route group. The earlier conclusion that it was unattached was incorrect for snapshot `a3f0b5ad632ddf68562ba444bb1a5429a40711b0`. Runtime tests remain outstanding. See `PHASE_2_7_2_9_API_ROUTES_VALIDATION_RESPONSE_REVIEW_20261128.md`.
