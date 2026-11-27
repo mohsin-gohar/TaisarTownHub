@@ -106,6 +106,7 @@ services:
       APP_ENV: production
       APP_DEBUG: "false"
       APP_KEY: ${APP_KEY}
+      FRONTEND_URL: ${FRONTEND_URL:-https://taisartownhub.vercel.app}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
@@ -142,6 +143,7 @@ services:
       APP_DEBUG: "false"
       APP_KEY: ${APP_KEY}
       APP_URL: https://api.taisartownhub.com
+      FRONTEND_URL: ${FRONTEND_URL:-https://taisartownhub.vercel.app}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
@@ -159,8 +161,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
-      CORS_ALLOWED_ORIGINS: https://taisartownhub.com,https://www.taisartownhub.com
-      SANCTUM_STATEFUL_DOMAINS: taisartownhub.com,www.taisartownhub.com
+      CORS_ALLOWED_ORIGINS: https://taisartownhub.vercel.app,https://taisartownhub.com,https://www.taisartownhub.com
+      SANCTUM_STATEFUL_DOMAINS: taisartownhub.vercel.app,taisartownhub.com,www.taisartownhub.com
       STRIPE_KEY: ${STRIPE_KEY}
       STRIPE_SECRET: ${STRIPE_SECRET}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
@@ -171,11 +173,15 @@ services:
       SENTRY_DSN: ${SENTRY_DSN}
       LOGROCKET_APP_ID: ${LOGROCKET_APP_ID}
       MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_SCHEME: ${MAIL_SCHEME:-tls}
       MAIL_HOST: ${MAIL_HOST}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@taisartownhub.com}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://api.taisartownhub.com/api/auth/google/callback}
       # Malware scanning — real ClamAV daemon (see the `clamav` service).
       # Fail closed: an upload is rejected when no scan could be performed.
       MALWARE_SCAN_ENABLED: "true"
@@ -188,7 +194,7 @@ services:
       RUN_MIGRATIONS: "false"
     volumes:
       # Shared private document vault: every replica must see the same files.
-      - private_vault:/var/www/html/storage/app/private/documents
+      - private_vault:/var/www/html/storage/app/private
       # Shared public disk (maps, public media) so uploads survive container
       # recreation and every replica serves the same files.
       - public_storage:/var/www/html/storage/app/public
@@ -289,6 +295,8 @@ services:
     environment:
       APP_ENV: production
       APP_KEY: ${APP_KEY}
+      APP_URL: https://api.taisartownhub.com
+      FRONTEND_URL: ${FRONTEND_URL:-https://taisartownhub.vercel.app}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
@@ -299,6 +307,13 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
       QUEUE_CONNECTION: redis
+      MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_SCHEME: ${MAIL_SCHEME:-tls}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@taisartownhub.com}
       # Queue jobs must honour the same real client IP policy as HTTP.
       TRUSTED_PROXIES: "${TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}"
       RUN_MIGRATIONS: "false"
@@ -309,7 +324,7 @@ services:
       MALWARE_SCAN_FAIL_CLOSED: "true"
       MALWARE_SCAN_LOG_SKIPPED: "true"
     volumes:
-      - private_vault:/var/www/html/storage/app/private/documents
+      - private_vault:/var/www/html/storage/app/private
       - public_storage:/var/www/html/storage/app/public
     depends_on:
       mysql:
@@ -347,6 +362,7 @@ services:
       APP_DEBUG: "false"
       APP_KEY: ${APP_KEY}
       APP_URL: https://api.taisartownhub.com
+      FRONTEND_URL: ${FRONTEND_URL:-https://taisartownhub.vercel.app}
       DB_CONNECTION: mysql
       DB_HOST: mysql
       DB_PORT: 3306
@@ -365,6 +381,7 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the deployment environment}
       MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_SCHEME: ${MAIL_SCHEME:-tls}
       MAIL_HOST: ${MAIL_HOST}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME}
@@ -372,7 +389,7 @@ services:
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@taisartownhub.com}
       RUN_MIGRATIONS: "false"
     volumes:
-      - private_vault:/var/www/html/storage/app/private/documents
+      - private_vault:/var/www/html/storage/app/private
       - public_storage:/var/www/html/storage/app/public
     depends_on:
       mysql:

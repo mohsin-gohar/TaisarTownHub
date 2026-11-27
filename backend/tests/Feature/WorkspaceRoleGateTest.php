@@ -64,4 +64,26 @@ class WorkspaceRoleGateTest extends EnterpriseTestCase
         $this->getJson('/api/workspace', $this->authHeaders($this->tokenFor($user)))
             ->assertForbidden();
     }
+
+    public function test_agency_owner_cannot_overwrite_platform_cms_settings(): void
+    {
+        [$user] = $this->agencyUser(Permissions::agencyRoleGrants('agency_owner'), 'agency_owner');
+        $before = BusinessRecord::where('collection', 'cms')
+            ->where('record_id', 'default')
+            ->value('payload');
+
+        $response = $this->putJson('/api/workspace', [
+            'collections' => [
+                'cms' => ['heroHeadline' => 'Tenant must not replace the platform homepage'],
+            ],
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertContains('cms', $response->json('denied'));
+        $this->assertSame(
+            $before,
+            BusinessRecord::where('collection', 'cms')->where('record_id', 'default')->value('payload'),
+            'agency-scoped users must not overwrite the platform-wide CMS record'
+        );
+    }
+
 }
