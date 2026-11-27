@@ -386,6 +386,7 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
     {
         $agency = $this->makeAgency('Owner Protection Agency');
         $ownerRole = $this->makeRole('agency', 'agency_owner', $this->staffPermissions());
+        $ownerRole->forceFill(['id' => 'role_agency_owner'])->save();
         $managerRole = $this->makeRole('agency', 'manager', $this->staffPermissions());
 
         $owner = $this->makeUser('agent');
