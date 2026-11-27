@@ -291,7 +291,7 @@ public function update(Request $request, string $id)
             'sellerName' => 'sometimes|string|max:255',
             'buyerName' => 'sometimes|string|max:255',
             'dealerId' => 'nullable|string|max:64|exists:dealers,id',
-            'agreementAmountPKR' => 'sometimes|numeric|min:0|max:999999999999',
+            'agreementAmountPKR' => 'sometimes|integer|min:0|max:999999999999',
             'advancePaymentPKR' => 'nullable|integer|min:0|max:999999999999',
             'commissionAmountPKR' => 'nullable|integer|min:0|max:999999999999',
             'dealStatus' => 'sometimes|string|max:50',
