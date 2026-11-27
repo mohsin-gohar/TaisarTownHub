@@ -134,8 +134,9 @@ class FavoritesNotificationsTest extends EnterpriseTestCase
         [$user] = $this->agencyUser(['view_properties']);
         $token = $this->authHeaders($this->tokenFor($user));
 
-        $this->notify($user, ['title' => 'First']);
-        $this->notify($user, ['title' => 'Second']);
+        $first = $this->notify($user, ['title' => 'First']);
+        $first->forceFill(['created_at' => now()->subMinute()])->save();
+        $second = $this->notify($user, ['title' => 'Second']);
 
         $this->getJson('/api/notifications?per_page=0', $token)
             ->assertOk()
@@ -146,6 +147,10 @@ class FavoritesNotificationsTest extends EnterpriseTestCase
             ->assertOk()
             ->assertJsonPath('pagination.per_page', 100)
             ->assertJsonCount(2, 'notifications');
+
+        $this->getJson('/api/notifications?per_page=100', $token)
+            ->assertOk()
+            ->assertJsonPath('notifications.0.id', $second->id);
     }
 
 }
