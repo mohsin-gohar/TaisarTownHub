@@ -449,3 +449,9 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Payment removal previously soft-deleted the ledger row and recalculated transaction summary fields outside a single locked transaction.
 - It now resolves the parent deal, locks the transaction first (same lock order as payment creation), locks the agency-scoped payment row, soft-deletes it and recalculates summary fields atomically.
 - Regression coverage now checks that deleting the sole payment restores the deal's collected amount, remaining balance and Pending status.
+
+
+### P2 — Commission ledger accepted negative and over-precision amounts
+
+- Commission creation now rejects negative PKR values and values with more than two decimal places; percentage rates are also limited to the schema's two-decimal precision.
+- Regression coverage rejects negative and three-decimal commission amounts before any ledger row is created.
