@@ -429,9 +429,9 @@ class FileVaultSecurityTest extends EnterpriseTestCase
             'buyer_name' => 'Decimal Buyer',
             'buyer_phone' => '03001234567',
         ], $headers)->assertOk()
-            ->assertJsonPath('media.sold_price_pk', '10000.25')
-            ->assertJsonPath('media.cost_price_pk', '7000.10')
-            ->assertJsonPath('media.profit_pk', '3000.15');
+            ->assertJsonPath('media.sold_price_pk', 10000.25)
+            ->assertJsonPath('media.cost_price_pk', 7000.10)
+            ->assertJsonPath('media.profit_pk', 3000.15);
 
         $this->assertDatabaseHas('media_files', [
             'id' => $media->id,
