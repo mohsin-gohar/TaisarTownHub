@@ -42,7 +42,7 @@ Regression tests cover the owning-agency detail permission, cross-agency privacy
 - Hero search filters were compressed into six desktop columns, clipping long labels. The repair branch uses three readable desktop columns.
 - `/video-walkthroughs` is now a backward-compatible alias for the gallery route.
 - Playwright now tests 390px mobile navigation/no-overflow and desktop filter widths.
-- `vercel.json` now routes `/api/:path*` to `https://api.taisartownhub.com/api/:path*` before the SPA catch-all. This prevents API requests from being served the frontend `index.html`; the Laravel API host must still be online.
+- Both root and `frontend/vercel.json` now route `/api/:path*` to `https://api.taisartownhub.com/api/:path*` before the SPA catch-all. This prevents API requests from being served the frontend `index.html`; the Laravel API host must still be online.
 
 ## Verification evidence
 
