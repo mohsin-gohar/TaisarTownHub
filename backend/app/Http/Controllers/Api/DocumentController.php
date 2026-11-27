@@ -69,34 +69,41 @@ class DocumentController extends Controller
             'property_id' => 'nullable|string|max:256',
         ]);
 
-        $parent = null;
-        if ($request->parent_id) {
-            $parent = DocumentFolder::where('agency_id', $agencyId)
-                ->where('id', $request->parent_id)
-                ->firstOrFail();
-        }
-        if ($request->property_id) {
-            Property::where('agency_id', $agencyId)->where('id', $request->property_id)->firstOrFail();
-        }
+        // Serialize path allocation per agency. The database unique index on
+        // (agency_id, path) remains the final integrity guard.
+        $folder = DB::transaction(function () use ($agencyId, $request): DocumentFolder {
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
 
-        $slug = Str::slug($request->name) ?: 'folder';
-        $basePath = $parent ? $parent->path . '/' . $slug : $slug;
+            $parent = null;
+            if ($request->parent_id) {
+                $parent = DocumentFolder::where('agency_id', $agencyId)
+                    ->where('id', $request->parent_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+            }
+            if ($request->property_id) {
+                Property::where('agency_id', $agencyId)
+                    ->where('id', $request->property_id)
+                    ->firstOrFail();
+            }
 
-        // Materialised path, unique per agency
-        $path = $basePath;
-        $i = 2;
-        while (DocumentFolder::where('agency_id', $agencyId)->where('path', $path)->exists()) {
-            $path = $basePath . '-' . $i++;
-        }
+            $slug = Str::slug($request->name) ?: 'folder';
+            $basePath = $parent ? $parent->path . '/' . $slug : $slug;
+            $path = $basePath;
+            $suffix = 2;
+            while (DocumentFolder::where('agency_id', $agencyId)->where('path', $path)->exists()) {
+                $path = $basePath . '-' . $suffix++;
+            }
 
-        $folder = DocumentFolder::create([
-            'agency_id' => $agencyId,
-            'parent_id' => $parent?->id,
-            'property_id' => $request->property_id,
-            'name' => $request->name,
-            'path' => $path,
-            'created_by' => $request->user()->id,
-        ]);
+            return DocumentFolder::create([
+                'agency_id' => $agencyId,
+                'parent_id' => $parent?->id,
+                'property_id' => $request->property_id,
+                'name' => $request->name,
+                'path' => $path,
+                'created_by' => $request->user()->id,
+            ]);
+        }, 3);
 
         $this->writeAudit($request, 'document.folder.create', $folder->id, "Folder created: {$folder->path}", [
             'agency_id' => $agencyId,
