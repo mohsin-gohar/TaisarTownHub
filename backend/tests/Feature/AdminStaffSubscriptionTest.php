@@ -119,11 +119,12 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         ]);
         $membership->update([
             'role_id' => $foreignRole->id,
-            'permissions' => ['admin.manage_users', 'agency.manage_staff'],
+            'permissions' => ['admin.manage_users', 'unknown.root'],
         ]);
 
         $this->assertFalse($user->fresh()->hasPermission('agency.manage_staff', $agency->id));
         $this->assertFalse($user->fresh()->hasPermission('admin.manage_users', $agency->id));
+        $this->assertFalse($user->fresh()->hasPermission('unknown.root', $agency->id));
     }
 
     public function test_platform_admin_can_manage_users_with_self_protection(): void
