@@ -390,12 +390,12 @@ No production database, files, credentials, DNS, payment configuration, or hosti
 
 **Validation:** source changes and test assertions were checked after commit. PHPUnit/CI were not run or polled, consistent with the instruction to keep CI paused.
 
-### Additional financial review findings — not yet fixed
+### Additional financial review findings — resolved in follow-up commits
 
-- `DealerFile` stores `selling_price_kbr`, `cost_price_kbr`, and `profit_kbr` as DECIMAL(15,2), but its model casts them to float and `DealerFilesController::sell()` performs profit/commission calculations with floating-point arithmetic.
-- `MediaFile` stores sale prices/profit as DECIMAL(14,2), but its model casts them to float and `MediaController::sell()` converts request values to float. Its sale transition also lacks the row lock/transaction used by the dealer-file sale path, so concurrent requests require a separate integrity fix and regression test.
+- DealerFile DECIMAL sale amounts no longer use float casts; dealer-file sale profit/commission uses integer-paise calculations and preserves actual losses without negative commission accrual.
+- MediaFile DECIMAL sale amounts no longer use float casts; media sale uses integer-paise calculations and an agency-scoped row lock/transaction to prevent duplicate concurrent sales.
 
-These findings remain open for the next financial-integrity pass; no claim is made that the wider financial audit is complete.
+The fixes and regression coverage are detailed in the follow-up findings below. The wider backend audit remains incomplete.
 
 
 ### P2 — Dealer-file and media-sale monetary precision and duplicate-sale protection
