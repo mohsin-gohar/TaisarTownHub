@@ -99,6 +99,12 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->getJson('/api/admin/plans', $this->authHeaders($this->tokenFor($agent)))->assertStatus(403);
         $this->getJson('/api/admin/audit-logs', $this->authHeaders($this->tokenFor($agent)))->assertStatus(403);
 
+        // Legacy platform roles with broad report access must not inherit
+        // platform-wide audit visibility without the dedicated permission.
+        $operator = $this->makeUser('operator');
+        $this->getJson('/api/admin/audit-logs', $this->authHeaders($this->tokenFor($operator)))
+            ->assertStatus(403);
+
         $this->assertDatabaseMissing('users', ['email' => 'sneaky@example.test']);
     }
 
