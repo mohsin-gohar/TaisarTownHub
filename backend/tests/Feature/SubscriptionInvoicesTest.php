@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\SubscriptionInvoice;
 use App\Models\AgencySubscription;
 use App\Models\SubscriptionPlan;
+use Illuminate\Support\Str;
 use Tests\Feature\EnterpriseTestCase;
 
 /**
