@@ -50,12 +50,12 @@ Regression tests cover the owning-agency detail permission, cross-agency privacy
 ### Passing runs (earlier branch heads)
 
 - **CI at `ab9a3eb`:** backend suite passed **425 tests / 3,728 assertions** against MySQL 8; frontend verification and OpenAPI parsing passed; Playwright Chromium passed **53 tests**.
-- **Docker CI at `ab9a3eb`:** backend and frontend images built; migrations and backend health check passed; MySQL backup and isolated restore drill passed. The full-stack integration job was still running at the last check.
+- **Docker CI at `ab9a3eb`:** backend and frontend images built; migrations and backend health check passed; MySQL backup and isolated restore drill passed; full-stack integration smoke tests passed.
 - **Responsive browser coverage at `ab9a3eb`:** Playwright passed mobile widths 320, 360, 375, 390, 414, 430px; tablet 768, 1024px; and desktop 1280, 1440, 1920px, including navigation/no-overflow and desktop search-filter widths.
 
 ### Latest head still pending
 
-PR #24 includes the final `finance.view` permission alignment, Vercel API rewrite, responsive search-filter layout, and placeholder-video filtering; later PR commits also correct the historical audit/release documentation. The latest code-changing commit tested by CI is `ab9a3ebd7e5b53d86248a681dca07f9963812f66`; later PR commits update documentation only. CI passed on that code commit. Docker full-stack integration was still running at the last check. The latest Vercel build was rate-limited, so the preview deployment is not currently verified.
+PR #24 includes the final `finance.view` permission alignment, Vercel API rewrite, responsive search-filter layout, and placeholder-video filtering; later PR commits also correct the historical audit/release documentation. The latest code-changing commit tested by CI and Docker CI is `ab9a3ebd7e5b53d86248a681dca07f9963812f66`; later PR commits update documentation only. Backend, frontend, OpenAPI, 53 Playwright tests, Docker image builds, MySQL backup/restore, and full-stack integration smoke tests all passed on that code commit. The latest Vercel build was rate-limited, so the preview deployment is not currently verified.
 
 ## Live website observations
 
