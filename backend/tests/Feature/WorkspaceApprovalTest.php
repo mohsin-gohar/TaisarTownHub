@@ -400,6 +400,31 @@ class WorkspaceApprovalTest extends EnterpriseTestCase
         $this->assertSame(0, $user->tokens()->count());
     }
 
+
+    public function test_suspended_or_unverified_agency_listings_are_hidden_from_public_marketplace(): void
+    {
+        [, $agency] = $this->agencyUser($this->ownerPermissions());
+        $property = $this->makePublicProperty($agency, [
+            'title' => 'Listing From Suspended Agency',
+        ]);
+
+        $agency->update(['status' => 'suspended']);
+
+        $this->app['auth']->forgetGuards();
+        $this->getJson('/api/properties')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $property->id]);
+        $this->getJson("/api/properties/{$property->id}")
+            ->assertNotFound();
+
+        $agency->update(['status' => 'active', 'verification_status' => 'unverified']);
+        $this->getJson('/api/properties')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $property->id]);
+        $this->getJson("/api/properties/{$property->id}")
+            ->assertNotFound();
+    }
+
     public function test_denied_user_sees_only_public_listings_not_the_privileged_agency_view(): void
     {
         [$user, $agency] = $this->agencyUser($this->ownerPermissions());
