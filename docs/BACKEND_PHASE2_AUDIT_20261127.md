@@ -563,3 +563,5 @@ The fixes and regression coverage are detailed in the follow-up findings below. 
 - Regression coverage checks duplicate schedule rejection with no partial writes and commission rejection for a voided deal. Runtime execution remains paused with CI.
 
 - Deal edits now share the row lock with void/payment writes, reject an agreement amount below the already-collected ledger, validate advance ≤ agreement, and recalculate the remaining balance from the authoritative payment rows.
+
+- The same locked deal update path now rechecks the voided/terminal state before applying edits; regression coverage verifies a voided deal cannot be edited after cancellation.
