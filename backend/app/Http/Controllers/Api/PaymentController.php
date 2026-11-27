@@ -591,8 +591,10 @@ class PaymentController extends Controller
             return;
         }
 
-        $periodEnd = $invoice->lines?->data[0]?->period?->end ?? null;
-        $periodStart = $invoice->lines?->data[0]?->period?->start ?? null;
+        $invoiceLines = $invoice->lines->data ?? [];
+        $firstLine = is_array($invoiceLines) ? ($invoiceLines[0] ?? null) : null;
+        $periodEnd = $firstLine->period->end ?? null;
+        $periodStart = $firstLine->period->start ?? null;
 
         DB::transaction(function () use ($stripeSubId, $periodEnd, $periodStart): void {
             $subscription = AgencySubscription::where('stripe_subscription_id', $stripeSubId)
@@ -657,9 +659,9 @@ class PaymentController extends Controller
                 default => $agencySubscription->status,
             };
             $updates = ['status' => $status];
-            $periodEnd = $subscription->current_period_end
-                ?? $subscription->items?->data[0]?->current_period_end
-                ?? null;
+            $subscriptionItems = $subscription->items->data ?? [];
+            $firstItem = is_array($subscriptionItems) ? ($subscriptionItems[0] ?? null) : null;
+            $periodEnd = $subscription->current_period_end ?? $firstItem->current_period_end ?? null;
             $trialEnd = $subscription->trial_end ?? null;
             if (is_numeric($periodEnd)) {
                 $updates['ends_at'] = \\Illuminate\\Support\\Carbon::createFromTimestamp((int) $periodEnd);
