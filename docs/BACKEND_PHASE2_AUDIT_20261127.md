@@ -94,6 +94,19 @@
 
 **Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
 
+### P1 — Stripe invoice settlement and subscription activation were not atomic
+**Affected:** `backend/app/Http/Controllers/Api/PaymentController.php`, `backend/tests/Feature/PaymentGatewayTest.php`.
+
+- The previous Stripe handler marked an invoice paid before creating/updating the agency subscription, with no surrounding database transaction.
+- If subscription activation failed after the invoice update, Stripe's retry would see the invoice as already paid and return early, leaving a paid invoice without an activated subscription.
+- Parallel/replayed events also needed a row lock and an in-transaction status re-check.
+
+**Fix applied:** lock and re-check the invoice inside a database transaction; update the paid state and activate the subscription in that same transaction. A failure rolls both changes back.
+
+**Regression coverage:** the Stripe success test now replays the same signed event and verifies only one subscription row exists.
+
+**Status:** code and regression test committed on the Phase 2 branch; CI result pending.
+
 ## 4. Open review risks — not yet classified as defects
 1. **Best-effort audit persistence:** `AuthorizesApi::writeAudit()` logs a warning and continues if `AuditLog::create()` fails. Confirm which actions require durable audit records and whether those operations need a transactional outbox/fail-closed policy.
 2. **Legacy workspace sync atomicity:** `WorkspaceController::save()` processes collections sequentially and writes rows one at a time. Tenant ownership and destructive replace guards exist, but a mid-request database failure can leave a partially applied multi-collection sync. Confirm the frontend contract and whether per-collection or whole-request atomicity is required.
@@ -117,7 +130,7 @@
 - Full model/relationship/cast/serialization review.
 - Jobs/notifications/queue failure and retry behavior beyond the sampled commands.
 - Full migration/index/foreign-key/data-integrity review.
-- Running backend tests on the working branch and confirming all CI jobs.
+- Running backend tests on the latest working branch and confirming all CI jobs. The first CI attempt exposed a PHP `continue` inside an `each()` callback in the quarantine purge fix; this was corrected to `return` in the callback, and the latest head is being re-tested.
 - Fixing any further confirmed defects discovered by the remaining audit.
 
 No production database, files, credentials, DNS, payment configuration, or hosting settings were accessed or modified. No changes were made directly to `main`.
