@@ -16,9 +16,9 @@
 - Missing controller/action pairs in this static check: **0**.
 - This is a static existence check, not proof that each route behaves correctly at runtime.
 
-### HTTP declaration counts
-- GET: 82
-- POST: 77
+### Expanded HTTP verb counts (each verb in a `Route::match` declaration is counted)
+- GET: 83
+- POST: 78
 - PUT: 24
 - PATCH: 20
 - DELETE: 17
