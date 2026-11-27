@@ -714,6 +714,13 @@ public function update(Request $request, string $id)
                     'amount' => $amountCents / 100,
                 ]];
             }
+            if ($existingCollectedCents + $amountCents < 0) {
+                return [null, [
+                    'refund_exceeds_collected' => true,
+                    'collected' => $existingCollectedCents / 100,
+                    'amount' => $amountCents / 100,
+                ]];
+            }
             $amount = $this->moneyFromCents($amountCents);
 
             $payment = TransactionPayment::create([
@@ -740,6 +747,13 @@ public function update(Request $request, string $id)
             return response()->json([
                 'success' => false,
                 'message' => 'Overpayment: collected (' . number_format($over['collected'], 2) . ') plus amount (' . number_format($over['amount'], 2) . ') exceeds agreement (' . number_format($over['agreement'], 2) . ').',
+            ], 422);
+        }
+
+        if (isset($result[1]['refund_exceeds_collected'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Refund cannot exceed the amount already collected.',
             ], 422);
         }
 
