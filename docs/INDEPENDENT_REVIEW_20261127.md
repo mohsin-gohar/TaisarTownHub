@@ -54,7 +54,7 @@ Regression tests cover the owning-agency detail permission, cross-agency privacy
 
 ### Latest head still pending
 
-The latest code-changing commit is `c571814f1a4906a376dd6988dc3784924cd2c9ec`, which includes the final `finance.view` permission alignment and Vercel API rewrite; later PR commits update audit/release documentation only. CI, Docker CI, and Vercel checks on the current PR head remain authoritative and must finish before merge. Results from earlier commits are not represented as verification of the latest code head.
+PR #24 includes the final `finance.view` permission alignment, Vercel API rewrite, responsive search-filter layout, and placeholder-video filtering; later PR commits also correct the historical audit/release documentation. CI, Docker CI, and Vercel checks on the current PR head remain authoritative and must finish before merge. Results from earlier commits are not represented as verification of the latest code head.
 
 ## Live website observations
 
