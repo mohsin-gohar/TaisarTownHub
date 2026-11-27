@@ -397,22 +397,34 @@ public function update(Request $request, string $id)
 
         $transaction = $this->findScoped($agencyId, $id, $request->user());
 
-        if ($transaction->isVoided()) {
+        $request->validate([
+            'reason' => 'required|string|min:3|max:500',
+        ]);
+
+        // Share the deal-row lock with payment, schedule and commission writes.
+        // A void cannot race a financial write that already passed its state check.
+        $voided = DB::transaction(function () use ($transaction, $request): ?Transaction {
+            $locked = Transaction::whereKey($transaction->id)->lockForUpdate()->firstOrFail();
+            if ($locked->isVoided()) {
+                return null;
+            }
+
+            $locked->update([
+                'voided_at' => now(),
+                'void_reason' => $request->reason,
+                'voided_by' => $request->user()->id,
+            ]);
+
+            return $locked->fresh();
+        });
+
+        if ($voided === null) {
             return response()->json([
                 'success' => false,
                 'message' => 'Transaction is already voided.',
             ], 422);
         }
-
-        $request->validate([
-            'reason' => 'required|string|min:3|max:500',
-        ]);
-
-        $transaction->update([
-            'voided_at' => now(),
-            'void_reason' => $request->reason,
-            'voided_by' => $request->user()->id,
-        ]);
+        $transaction = $voided;
 
         $this->writeAudit($request, 'transaction.void', $transaction->id, "Transaction voided: {$request->reason}", [
             'agency_id' => $transaction->agency_id,
