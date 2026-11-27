@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Dealer;
 use App\Models\DealerFile;
+use App\Models\Commission;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -264,6 +265,56 @@ class BookingConcurrencyTest extends EnterpriseTestCase
             ->assertJsonValidationErrors('amount');
 
         $this->assertDatabaseCount('commissions', 0);
+    }
+
+    public function test_commission_payout_requires_accrual_and_is_immutable(): void
+    {
+        [$user, $agency] = $this->agencyUser(['finance.manage_payments']);
+        $transaction = Transaction::create([
+            'id' => 'txn_' . Str::random(10),
+            'dealNumber' => 'DEAL-' . Str::upper(Str::random(6)),
+            'propertyId' => 'prop_' . Str::random(8),
+            'propertyTitle' => 'Commission State Plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agency_id' => $agency->id,
+            'transactionType' => 'sale',
+            'agreementAmountPKR' => 500000,
+            'dealStatus' => 'Active',
+        ]);
+        $commission = Commission::create([
+            'agency_id' => $agency->id,
+            'transaction_id' => $transaction->id,
+            'beneficiary_type' => 'agency',
+            'amount' => '5000.25',
+            'status' => 'pending',
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $url = '/api/agency/commissions/' . $commission->id;
+
+        $this->patchJson($url, ['status' => 'paid'], $headers)
+            ->assertStatus(422);
+        $this->patchJson($url, ['status' => 'accrued'], $headers)
+            ->assertOk()
+            ->assertJsonPath('commission.status', 'accrued');
+        $this->patchJson($url, ['status' => 'paid'], $headers)
+            ->assertOk()
+            ->assertJsonPath('commission.status', 'paid');
+
+        $this->assertDatabaseHas('commissions', [
+            'id' => $commission->id,
+            'status' => 'paid',
+            'paid_by' => $user->id,
+        ]);
+        $this->assertNotNull($commission->fresh()->paid_at);
+
+        $this->patchJson($url, ['status' => 'pending'], $headers)
+            ->assertStatus(422);
+        $this->assertDatabaseHas('commissions', [
+            'id' => $commission->id,
+            'status' => 'paid',
+            'paid_by' => $user->id,
+        ]);
     }
 
     public function test_payment_updates_derived_ledger_status(): void
