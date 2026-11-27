@@ -44,7 +44,7 @@ A release cannot be approved unless all applicable gates pass. Each item is clas
 - [ ] NOT TESTED - No E2E test suite exists
 
 ### Docker Integration
-- [x] PASS AT PRIOR HEAD - Docker CI at 9ebff378 passed image builds, migrations, health checks, full-stack integration, and backup/restore; latest code changes require rerun.
+- [x] PASS AT PRIOR HEAD - Docker CI at ab9a3eb passed image builds, migrations, health checks, full-stack integration, and backup/restore.
 - [ ] FAIL - Docker integration tests failing
 - [ ] BLOCKED - Integration environment not available
 - [ ] NOT TESTED - No Docker configuration
@@ -124,8 +124,8 @@ A release cannot be approved unless all applicable gates pass. Each item is clas
 | MySQL backend tests green | PASS AT PRIOR HEAD | 425 tests / 3,728 assertions at ab9a3eb; current code CI passed |
 | Frontend tests/build green | PASS AT PRIOR HEAD | Frontend verify passed at 1b4701c |
 | Browser E2E green | PASS AT PRIOR HEAD | 53 Chromium Playwright tests passed at ab9a3eb |
-| Full Docker integration green | PASS AT PRIOR HEAD | Full-stack integration and backup/restore passed at 9ebff378; latest head pending rerun |
-| Backup/restore verified | PASS AT PRIOR HEAD | Isolated MySQL restore drill passed at 9ebff378 |
+| Full Docker integration green | PASS AT PRIOR HEAD | Full-stack integration and backup/restore passed at ab9a3eb |
+| Backup/restore verified | PASS AT PRIOR HEAD | Isolated MySQL restore drill passed at ab9a3eb |
 | No broken critical workflows | BLOCKED | Live agency and map data fail while API origin is unavailable |
 | Tenant isolation proven | BLOCKED | Sensitive-data and CRM export scope fixes in PR #24 await latest CI and deployment |
 | Production secrets and TLS plan ready | PLANNED | Plan exists, not configured |
