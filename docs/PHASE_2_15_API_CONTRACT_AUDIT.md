@@ -20,13 +20,16 @@
 3. `AgencyPromotionService::expireDue()`: eager-loads each promotion's agency before the expiry loop, avoiding lazy-load query growth.
 4. Workspace media-sale audit: fetches prior media sale states in one `whereIn` query rather than one lookup per sold row.
 5. Workspace financial audit: uses a hash lookup for changed IDs instead of repeated linear `in_array` scans.
-6. Map bulk uploads are capped at 50 images and map reorder requests at 500 IDs to bound request CPU, memory and database writes.
-7. Added query-count regression tests for the agency directory and location index, plus request-size regression coverage for map bulk/reorder. These tests are committed but have not yet been executed.
+6. `GET /admin/agencies-oversight`: replaced three storage SUM queries per agency with three grouped queries for the page (documents, document versions, media).
+7. Map bulk uploads are capped at 50 images and map reorder requests at 500 IDs to bound request CPU, memory and database writes.
+8. Public directory query inputs now validate types and bounds for agency, dealer, project, video and map filters.
+9. Added query-count regression tests for agency directory, location index and admin storage oversight, plus request-size/query validation tests. These tests are committed but have not yet been executed.
 
 ## Known remaining performance risks
 
 - `WorkspaceController::syncList()` still performs a per-row existence lookup and per-row upsert/ownership write for up to 2000 rows per collection. A bulk-upsert rewrite needs a separate concurrency/tenant-ownership design and regression tests before changing it.
 - `AdminDashboardController` executes a fixed set of many aggregate queries per dashboard request. This is not N+1, but should be profiled and consolidated if response latency is high.
+- `WorkspaceController::syncList()` still performs per-row read/upsert work for up to 2000 rows per collection; bulk write optimization remains open due tenant ownership/concurrency risk.
 - `AgencyVideoController::index()` eager-loads comments for up to 200 videos in one relation query; this avoids N+1 but may produce a large response. Comment payload bounds/pagination need a compatibility decision.
 - `MapController::publicIndex()` currently loads every active map; add a bounded/paginated contract if map count is expected to grow materially.
 - No runtime query trace or production EXPLAIN/slow-query log was available during this repository-only review. The new query-count tests still require execution in the backend test environment.
