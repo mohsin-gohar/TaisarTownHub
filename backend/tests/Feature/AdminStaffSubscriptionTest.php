@@ -384,26 +384,25 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
 
     public function test_agency_manager_cannot_remove_an_owner_even_when_another_owner_remains(): void
     {
+        $agency = $this->makeAgency('Owner Protection Agency');
         $ownerRole = $this->makeRole('agency', 'agency_owner', $this->staffPermissions());
-        $ownerRole->forceFill(['id' => 'role_agency_owner'])->save();
+        $managerRole = $this->makeRole('agency', 'manager', $this->staffPermissions());
 
-        [$owner, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
-        $ownerMembership = $owner->memberships()->where('agency_id', $agency->id)->firstOrFail();
-        $ownerMembership->update(['role_id' => $ownerRole->id]);
+        $owner = $this->makeUser('agent');
+        $this->makeMember($owner, $agency, $ownerRole);
+        $secondOwner = $this->makeUser('agent');
+        $this->makeMember($secondOwner, $agency, $ownerRole);
+        $manager = $this->makeUser('agent');
+        $this->makeMember($manager, $agency, $managerRole);
 
-        [$secondOwner] = $this->agencyUser($this->staffPermissions(), 'manager', $agency);
-        $secondOwner->memberships()->where('agency_id', $agency->id)->firstOrFail()
-            ->update(['role_id' => $ownerRole->id]);
-
-        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager', $agency);
         $targetMembership = $owner->memberships()->where('agency_id', $agency->id)->firstOrFail();
-
         $this->deleteJson('/api/agency/members/' . $targetMembership->id, [], $this->authHeaders($this->tokenFor($manager)))
             ->assertStatus(403)
             ->assertJsonPath('message', 'Only an agency owner may remove an owner membership.');
 
         $this->assertSame('active', $targetMembership->fresh()->status);
     }
+
 
     public function test_invitation_token_cannot_be_accepted_twice(): void
     {
