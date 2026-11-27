@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\AgencySubscription;
 use App\Models\Role;
+use App\Models\Transaction;
+use App\Models\TransactionPayment;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
