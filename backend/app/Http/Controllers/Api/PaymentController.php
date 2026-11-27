@@ -384,20 +384,49 @@ class PaymentController extends Controller
                 ], 422);
             }
 
-            $activated = false;
-            if ($invoice->status === 'pending') {
-                DB::transaction(function () use ($invoice, $remote, $txRef): void {
-                    $invoice->update([
-                        'status' => 'paid',
-                        'payment_method' => 'flutterwave',
-                        'payment_reference' => $txRef,
-                        'flutterwave_tx_id' => isset($remote['id']) ? (string) $remote['id'] : null,
-                        'paid_at' => now(),
-                    ]);
-                    $this->activateSubscriptionFromInvoice($invoice);
-                });
-                $activated = true;
+            // The provider call happens outside the DB transaction, so the
+            // invoice may have been voided/failed while verification was in
+            // flight. Re-lock and re-check the current state before settlement.
+            $outcome = DB::transaction(function () use ($invoice, $remote, $txRef): string {
+                $lockedInvoice = SubscriptionInvoice::whereKey($invoice->getKey())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $lockedInvoice || (string) $lockedInvoice->agency_id !== (string) $invoice->agency_id) {
+                    return 'not_found';
+                }
+                if ($lockedInvoice->status === 'paid') {
+                    return 'already_paid';
+                }
+                if ($lockedInvoice->status !== 'pending') {
+                    return 'not_pending';
+                }
+
+                $lockedInvoice->update([
+                    'status' => 'paid',
+                    'payment_method' => 'flutterwave',
+                    'payment_reference' => $txRef,
+                    'flutterwave_tx_id' => isset($remote['id']) ? (string) $remote['id'] : null,
+                    'paid_at' => now(),
+                ]);
+                $this->activateSubscriptionFromInvoice($lockedInvoice);
+
+                return 'activated';
+            });
+
+            if ($outcome === 'not_found') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment reference not found.',
+                ], 404);
             }
+            if ($outcome === 'not_pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This invoice is no longer payable.',
+                ], 422);
+            }
+            $activated = $outcome === 'activated';
 
             if ($activated) {
                 $this->writeAudit(
