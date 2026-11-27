@@ -102,6 +102,25 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $this->assertSame(1, (int) $dealer->dealsClosed);
     }
 
+    public function test_loss_making_dealer_file_records_negative_profit_without_negative_commission(): void
+    {
+        [$user, $dealer] = $this->dealerUser();
+        $file = $this->makeFile($dealer, 12000.00);
+        $this->postJson('/api/dealer-files/' . $file->id . '/sell', [
+            'selling_price_kbr' => '10000.00',
+            'buyer_name' => 'Loss Buyer',
+            'buyer_phone' => '03001112222',
+        ], $this->authHeaders($this->tokenFor($user)))->assertOk();
+
+        $this->assertDatabaseHas('dealer_files', [
+            'id' => $file->id,
+            'profit_kbr' => '-2000.00',
+        ]);
+        $dealer->refresh();
+        $this->assertSame(0, (int) $dealer->totalEarnedPKR);
+        $this->assertSame(0, (int) $dealer->pendingCommissionPKR);
+    }
+
     public function test_second_sell_of_the_same_file_is_rejected(): void
     {
         [$user, $dealer] = $this->dealerUser();
