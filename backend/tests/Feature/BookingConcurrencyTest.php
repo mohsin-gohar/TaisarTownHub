@@ -162,6 +162,48 @@ class BookingConcurrencyTest extends EnterpriseTestCase
             ->assertJsonPath('success', false);
     }
 
+    public function test_fractional_payments_use_exact_paise_and_block_one_paisa_overpayment(): void
+    {
+        [$user, $agency] = $this->agencyUser(['finance.manage_payments']);
+        $transaction = Transaction::create([
+            'id' => 'txn_' . Str::random(10),
+            'dealNumber' => 'DEAL-' . Str::upper(Str::random(6)),
+            'propertyId' => 'prop_' . Str::random(8),
+            'propertyTitle' => 'Decimal Ledger Plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agency_id' => $agency->id,
+            'transactionType' => 'sale',
+            'agreementAmountPKR' => 100000,
+            'dealStatus' => 'Active',
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson('/api/agency/transactions/' . $transaction->id . '/payments', [
+            'amount' => '1000.25',
+            'type' => 'advance',
+            'method' => 'bank_transfer',
+        ], $headers)->assertStatus(201);
+
+        $transaction->refresh();
+        $this->assertSame(100025, $transaction->totalPaidCents());
+        $this->assertSame(1000.25, (float) $transaction->totalPaid());
+        $this->assertDatabaseHas('transaction_payments', [
+            'transaction_id' => $transaction->id,
+            'amount' => '1000.25',
+        ]);
+
+        // 98,999.76 + 1,000.25 = 100,000.01: exactly one paisa over.
+        $this->postJson('/api/agency/transactions/' . $transaction->id . '/payments', [
+            'amount' => '98999.76',
+            'type' => 'installment',
+            'method' => 'bank_transfer',
+        ], $headers)->assertStatus(422);
+
+        $this->assertSame(100025, $transaction->fresh()->totalPaidCents());
+        $this->assertDatabaseCount('transaction_payments', 1);
+    }
+
     public function test_payment_updates_derived_ledger_status(): void
     {
         [$user, $agency] = $this->agencyUser(['finance.manage_payments']);
