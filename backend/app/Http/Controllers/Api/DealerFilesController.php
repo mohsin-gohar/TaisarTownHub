@@ -138,15 +138,15 @@ class DealerFilesController extends Controller
         }
 
         $validated = $request->validate([
-            'selling_price_kbr' => 'required|numeric|min:0|max:9999999999',
+            'selling_price_kbr' => 'required|numeric|decimal:0,2|min:0|max:9999999999',
             'buyer_name' => 'required|string|max:255',
             'buyer_phone' => 'required|string|max:50',
             'buyer_cnic' => 'nullable|string|max:20',
         ]);
 
-        $profit = 0.0;
+        $profitCents = 0;
 
-        $soldFile = DB::transaction(function () use ($id, $dealerId, $validated, &$profit) {
+        $soldFile = DB::transaction(function () use ($id, $dealerId, $validated, &$profitCents) {
             $file = DealerFile::where('id', $id)
                 ->where('dealer_id', $dealerId)
                 ->lockForUpdate()
@@ -160,12 +160,17 @@ class DealerFilesController extends Controller
                 return null;
             }
 
-            $costPrice = $file->cost_price_kbr ?? ($validated['selling_price_kbr'] * 0.7);
-            $profit = round($validated['selling_price_kbr'] - $costPrice, 2);
+            $sellingCents = $this->toCents($validated['selling_price_kbr']);
+            $costCents = $file->cost_price_kbr !== null
+                ? $this->toCents($file->cost_price_kbr)
+                : intdiv(($sellingCents * 7) + 5, 10); // exact 70% fallback, rounded to cents
+            $profitCents = max(0, $sellingCents - $costCents);
+            $costPrice = $this->fromCents($costCents);
+            $profit = $this->fromCents($profitCents);
 
             $file->update([
                 'status' => 'sold',
-                'selling_price_kbr' => $validated['selling_price_kbr'],
+                'selling_price_kbr' => $this->fromCents($sellingCents),
                 'cost_price_kbr' => $costPrice,
                 'profit_kbr' => $profit,
                 'buyer_name' => strip_tags($validated['buyer_name']),
@@ -176,7 +181,8 @@ class DealerFilesController extends Controller
                 'sold_by_dealer_id' => $dealerId,
             ]);
 
-            $this->updateDealerCommission($dealerId, (int) round($profit));
+            // Existing dealer commission counters are whole-PKR integer fields.
+            $this->updateDealerCommission($dealerId, intdiv($profitCents + 50, 100));
 
             return $file;
         });
@@ -285,6 +291,19 @@ class DealerFilesController extends Controller
                 })->values()->toArray(),
             ],
         ]);
+    }
+
+    /** Convert a validated non-negative decimal PKR amount to integer paise. */
+    private function toCents(string|int|float $amount): int
+    {
+        $value = number_format((float) $amount, 2, '.', '');
+        [$rupees, $paise] = array_pad(explode('.', $value, 2), 2, '00');
+        return ((int) $rupees * 100) + (int) str_pad($paise, 2, '0');
+    }
+
+    private function fromCents(int $amount): string
+    {
+        return intdiv($amount, 100) . '.' . str_pad((string) ($amount % 100), 2, '0', STR_PAD_LEFT);
     }
 
     /** Resolve the acting dealer strictly from the authenticated account. */
