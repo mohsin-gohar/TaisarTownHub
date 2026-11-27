@@ -49,15 +49,20 @@ class AgencyMember extends Model
         // A corrupt/stale membership must never inherit platform grants or a
         // custom role owned by a different agency through its role_id.
         $rolePerms = $roleBelongsToThisAgency ? ($role->permissions ?? []) : [];
-        // Preserve explicit legacy aliases for the compatibility mapper, but
-        // never trust unknown/platform keys in persisted role definitions.
-        $rolePerms = array_values(array_filter($rolePerms, fn ($key) =>
-            is_string($key) && (str_starts_with($key, 'legacy.') || !Permissions::isPlatform($key))
+        // Preserve only catalogued agency permissions and their explicitly
+        // mapped legacy aliases; unknown/platform keys are never effective.
+        $allowedRoleKeys = Permissions::agencyAssignable();
+        $allowedLegacyKeys = [];
+        foreach ($allowedRoleKeys as $key) {
+            foreach (Permissions::LEGACY_ALIASES[$key] ?? [] as $alias) {
+                $allowedLegacyKeys[] = 'legacy.' . $alias;
+            }
+        }
+        $rolePerms = array_values(array_intersect(
+            $rolePerms,
+            array_merge($allowedRoleKeys, $allowedLegacyKeys)
         ));
-        $extras = array_values(array_intersect(
-            $this->permissions ?? [],
-            Permissions::agencyAssignable()
-        ));
+        $extras = array_values(array_intersect($this->permissions ?? [], $allowedRoleKeys));
 
         return array_values(array_unique(array_merge($rolePerms, $extras)));
     }
