@@ -188,93 +188,124 @@ class AgencyStaffController extends Controller
                 'message' => 'Invalid or already used invitation token.',
             ], 422);
         }
-        if ($invitation->expires_at !== null && $invitation->expires_at->isPast()) {
-            $invitation->update(['status' => 'expired']);
-            return response()->json([
-                'success' => false,
-                'message' => 'This invitation has expired.',
-            ], 422);
-        }
 
         $user = null;
         if ($request->bearerToken()) {
             try {
                 $user = auth('sanctum')->user();
-            } catch (\Throwable $e) {
+            } catch (\\Throwable $e) {
                 $user = null;
             }
         }
 
         if (!$user) {
-            // Register through invitation
             $request->validate([
                 'name' => 'required|string|min:2|max:255',
                 'password' => 'required|string|min:8',
             ]);
+        }
 
-            if (User::where('email', $invitation->email)->exists()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'An account with this email already exists — please sign in first.',
-                ], 422);
-            }
-
-            // SECURITY: agency roles live ONLY in agency_members.role_id.
-            // users.role is the legacy *platform* role key. Mapping an agency
-            // owner invitation to 'admin' here made every invitee a platform
-            // administrator (isPlatformUser() grants admin.manage_agencies).
-            // Use the same non-platform base role as agency self-registration
-            // (AgencyController::register) for every invited account.
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $invitation->email,
-                'password' => Hash::make($request->password),
-                'role' => 'dealer',
-                'last_login_at' => now(),
-            ]);
-        } elseif (strtolower($user->email) !== strtolower($invitation->email)) {
+        if ($user && strtolower($user->email) !== strtolower($invitation->email)) {
             return response()->json([
                 'success' => false,
                 'message' => 'This invitation was issued to a different email address.',
             ], 403);
         }
 
-        try {
-            $membership = DB::transaction(function () use ($invitation, $user) {
-                // Re-read and claim the row INSIDE the transaction. The initial
-                // lookup above is inherently race-prone: two concurrent calls
-                // could otherwise both mint a token from one invitation.
-                $claim = AgencyInvitation::where('id', $invitation->id)
-                    ->where('status', 'pending')
-                    ->lockForUpdate()
-                    ->first();
-                if (!$claim) {
-                    throw new \RuntimeException('invitation_already_claimed');
+        // Claim the invitation before creating an account. Otherwise a stale
+        // or concurrently-consumed invite can leave an uninvited user row
+        // behind even though membership creation returns 422.
+        $result = DB::transaction(function () use ($invitation, $user, $request): array {
+            $claim = AgencyInvitation::where('id', $invitation->id)
+                ->where('status', 'pending')
+                ->lockForUpdate()
+                ->first();
+
+            if (!$claim) {
+                return ['status' => 'invalid'];
+            }
+
+            if ($claim->expires_at !== null && $claim->expires_at->isPast()) {
+                $claim->update(['status' => 'expired']);
+                return ['status' => 'expired'];
+            }
+
+            $resolvedUser = $user;
+            if (!$resolvedUser) {
+                if (User::where('email', $claim->email)->exists()) {
+                    return ['status' => 'account_exists'];
                 }
 
-                $membership = AgencyMember::updateOrCreate(
-                    ['agency_id' => $claim->agency_id, 'user_id' => $user->id],
-                    [
-                        'role_id' => $claim->role_id,
-                        'status' => 'active',
-                        'deactivated_at' => null,
-                        'invited_by' => $claim->invited_by,
-                    ]
-                );
-                $claim->update(['status' => 'accepted', 'accepted_at' => now()]);
-                return $membership;
-            });
-        } catch (\RuntimeException $e) {
+                // Agency roles belong only in agency_members.role_id. The
+                // base users.role remains the non-platform dealer role.
+                $resolvedUser = User::create([
+                    'name' => $request->name,
+                    'email' => $claim->email,
+                    'password' => Hash::make($request->password),
+                    'role' => 'dealer',
+                    'last_login_at' => now(),
+                ]);
+            }
+
+            if (strtolower($resolvedUser->email) !== strtolower($claim->email)) {
+                return ['status' => 'email_mismatch'];
+            }
+
+            $membership = AgencyMember::updateOrCreate(
+                ['agency_id' => $claim->agency_id, 'user_id' => $resolvedUser->id],
+                [
+                    'role_id' => $claim->role_id,
+                    'status' => 'active',
+                    'deactivated_at' => null,
+                    'invited_by' => $claim->invited_by,
+                ]
+            );
+
+            $claim->update(['status' => 'accepted', 'accepted_at' => now()]);
+
+            return [
+                'status' => 'accepted',
+                'user' => $resolvedUser,
+                'membership' => $membership,
+                'invitation' => $claim,
+            ];
+        });
+
+        if ($result['status'] === 'expired') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This invitation has expired.',
+            ], 422);
+        }
+
+        if ($result['status'] === 'account_exists') {
+            return response()->json([
+                'success' => false,
+                'message' => 'An account with this email already exists — please sign in first.',
+            ], 422);
+        }
+
+        if ($result['status'] === 'email_mismatch') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This invitation was issued to a different email address.',
+            ], 403);
+        }
+
+        if ($result['status'] !== 'accepted') {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid or already used invitation token.',
             ], 422);
         }
 
+        $user = $result['user'];
+        $membership = $result['membership'];
+        $acceptedInvitation = $result['invitation'];
         $token = $user->createToken('auth-token')->plainTextToken;
 
-        $this->writeAudit($request, 'agency.invite.accept', 'user:' . $user->id, 'Joined agency ' . $invitation->agency_id, [
-            'agency_id' => $invitation->agency_id,
+        $this->writeAudit($request, 'agency.invite.accept', 'user:' . $user->id, 'Joined agency ' . $acceptedInvitation->agency_id, [
+            'agency_id' => $acceptedInvitation->agency_id,
             'entity_type' => 'agency_member',
             'entity_id' => (string) $membership->id,
         ]);
@@ -284,15 +315,15 @@ class AgencyStaffController extends Controller
         return response()->json([
             'success' => true,
             'token' => $token,
-            'message' => 'Invitation accepted. You now belong to ' . ($invitation->agency?->name ?? 'the agency') . '.',
+            'message' => 'Invitation accepted. You now belong to ' . ($acceptedInvitation->agency?->name ?? 'the agency') . '.',
             'user' => [
                 'id' => $fresh->id,
                 'name' => $fresh->name,
                 'email' => $fresh->email,
                 'role' => $fresh->role,
                 'dealer_id' => $fresh->dealer_id,
-                'permissions' => \App\Support\RolePermissions::forRole($fresh->role),
-                'enterprise_permissions' => $fresh->permissionsFor($invitation->agency_id),
+                'permissions' => \\App\\Support\\RolePermissions::forRole($fresh->role),
+                'enterprise_permissions' => $fresh->permissionsFor($acceptedInvitation->agency_id),
                 'agencies' => $fresh->memberAgencies(),
                 'is_platform' => $fresh->isPlatformUser(),
             ],
