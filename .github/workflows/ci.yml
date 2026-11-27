@@ -62,6 +62,9 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
+      - name: Audit Composer dependencies
+        run: composer audit --no-interaction
+
       - name: Wait for MySQL
         run: php scripts/wait-for-db.php
 
@@ -89,6 +92,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=moderate
 
       - name: Verify chain (lint, tests, build + prerender, bundle check)
         run: npm run verify
