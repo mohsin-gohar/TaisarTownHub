@@ -435,3 +435,10 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Create and update validation now explicitly require integer PKR for those BIGINT fields.
 - Regression coverage rejects fractional agreement, advance and commission values instead of allowing silent truncation.
 - Numeric API compatibility is retained for plan, payment, commission, installment, media-sale and dealer-file sale response amounts through read-only accessors; raw DECIMAL values remain available for server-side financial calculations.
+
+
+### P1 — Fixed dealer commissions were incorrectly capped at 100
+
+- Dealer create/update validation applied the percentage ceiling to every commission type, rejecting legitimate fixed PKR commissions such as the seeded PKR 20,000 rate.
+- Validation now permits fixed/custom rates within the database-safe numeric ceiling and enforces the 100 maximum only when the effective commission type is Percentage (including updates that omit the type).
+- Regression tests cover a PKR 20,000 fixed commission, a valid 2.5% rate, and rejection of 101%.
