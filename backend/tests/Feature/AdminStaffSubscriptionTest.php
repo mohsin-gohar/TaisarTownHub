@@ -397,10 +397,34 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->makePublicProperty($agencyA, ['title' => 'Agency A Listing']);
         $this->makePublicProperty($agencyB, ['title' => 'Agency B Draft', 'approval_status' => 'draft', 'visibility' => 'private']);
 
+        $deal = Transaction::create([
+            'id' => 'txn_' . \\Illuminate\\Support\\Str::random(10),
+            'dealNumber' => 'DEAL-' . \\Illuminate\\Support\\Str::upper(\\Illuminate\\Support\\Str::random(6)),
+            'propertyId' => 'prop_' . \\Illuminate\\Support\\Str::random(8),
+            'propertyTitle' => 'Dashboard report plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agency_id' => $agencyA->id,
+            'transactionType' => 'sale',
+            'agreementAmountPKR' => 500000,
+            'dealStatus' => 'Active',
+        ]);
+        $deletedPayment = TransactionPayment::create([
+            'agency_id' => $agencyA->id,
+            'transaction_id' => $deal->id,
+            'amount' => 12345,
+            'type' => 'advance',
+            'method' => 'cash',
+            'received_at' => now(),
+        ]);
+        $deletedPayment->delete();
+
         $platform = $this->getJson('/api/admin/dashboard', $this->authHeaders($this->tokenFor($admin)))
             ->assertStatus(200)
             ->assertJsonPath('scope', 'platform')
             ->assertJsonPath('listings.total', 2)
+            ->assertJsonPath('finance.collected_total', 0)
+            ->assertJsonPath('finance.collected_' . 30 . 'd', 0)
             ->json();
         $this->assertArrayHasKey('platform', $platform);
         $this->assertArrayHasKey('users', $platform['platform']);
