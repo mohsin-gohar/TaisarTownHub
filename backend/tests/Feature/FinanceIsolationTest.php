@@ -445,6 +445,30 @@ class FinanceIsolationTest extends EnterpriseTestCase
         $this->assertDatabaseCount('payment_schedules', 0);
     }
 
+    public function test_completed_and_cancelled_deals_are_read_only_even_without_status_changes(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $completed = $this->createDeal($user);
+
+        foreach (['Negotiation', 'Under Transfer', 'Completed'] as $status) {
+            $this->patchJson("/api/agency/transactions/{$completed['id']}", [
+                'dealStatus' => $status,
+            ], $headers)->assertOk();
+        }
+        $this->patchJson("/api/agency/transactions/{$completed['id']}", [
+            'propertyTitle' => 'Must remain immutable',
+        ], $headers)->assertStatus(422);
+
+        $cancelled = $this->createDeal($user);
+        $this->patchJson("/api/agency/transactions/{$cancelled['id']}", [
+            'dealStatus' => 'Cancelled',
+        ], $headers)->assertOk();
+        $this->patchJson("/api/agency/transactions/{$cancelled['id']}", [
+            'buyerName' => 'Must remain immutable',
+        ], $headers)->assertStatus(422);
+    }
+
     public function test_deal_update_cannot_lower_agreement_below_collected_payments(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
