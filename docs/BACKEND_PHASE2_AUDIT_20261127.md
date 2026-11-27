@@ -197,6 +197,16 @@
 
 **Status:** code and regression test committed; latest CI/Docker rerun pending.
 
+### P1 — Concurrent staff mutations could remove every active agency owner
+
+**Affected:** `backend/app/Http/Controllers/Api/AgencyStaffController.php`, `backend/tests/Feature/AdminStaffSubscriptionTest.php`.
+
+- The last-owner checks previously counted active owners and updated membership outside a transaction. Two concurrent requests could both observe two active owners and then demote/deactivate a different owner, leaving the agency with none.
+- Fix: serialize role and status changes by locking the agency row and target membership inside a transaction before rechecking the active-owner count. Both update and remove flows now share the same per-agency serialization boundary.
+- Regression coverage verifies the final active owner cannot be demoted, deactivated, or removed. The DB row-lock path is implemented; a true parallel-request stress test remains a follow-up.
+
+**Status:** code and regression test committed; latest CI/Docker rerun pending.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
