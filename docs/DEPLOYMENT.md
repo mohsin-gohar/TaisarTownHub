@@ -48,9 +48,11 @@ Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `sch
 4. **Post-deploy checks:** `/api/health` → 200 `healthy`; homepage renders over HTTPS; login, agency workspace, a private document download and one queued job all succeed; watch logs for one business day before sign-off.
 5. **Rollback:** keep previous image tags + a verified DB/storage backup; stop traffic at the gateway, restore previous images, restore data only if a schema/data regression is confirmed, re-run the B-gates on the rollback commit.
 
-## 5. Vercel (frontend-only preview — NOT the production deployment)
+## 5. Vercel (frontend preview + API reverse proxy — NOT the full-stack production deployment)
 
-The live Vercel deployment serves the SPA only, with the bundled public catalog and no API. It is a preview, not the required full-stack production deployment; set `VITE_API_URL` there if you want it to talk to the API origin.
+Vercel serves the SPA; it does not host the Laravel runtime or MySQL database. The root `vercel.json` routes `/api/:path*` to `https://api.taisartownhub.com/api/:path*` before the SPA catch-all, so the frontend can keep its same-origin `/api` default. The API origin must be deployed, healthy, and configured with the correct database, storage, queue, and secrets. If you use a different API host, set `VITE_API_URL` to its full `/api` URL and update the Vercel rewrite plus CSP `connect-src` together.
+
+A successful Vercel frontend build is not proof that the Laravel API is available. Verify `https://api.taisartownhub.com/api/health`, `/api/agencies`, `/api/maps`, login, agency workspace, and private-document authorization against the deployed backend before calling the site production-ready.
 
 ## 6. Production .env checklist (all keys, NO secrets committed)
 
