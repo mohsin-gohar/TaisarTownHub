@@ -477,3 +477,10 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Dealer-file and media-sale calculations previously clamped negative profit to zero, hiding the actual loss.
 - Sale records now retain signed integer-paise profit/loss values. Dealer commission accrual remains zero for loss-making sales and cannot reduce previously earned commission balances.
 - Regression coverage checks negative dealer-file and media-sale profit while ensuring no negative commission is accrued.
+
+
+### P1 — Concurrent invoice creation could reserve the same invoice number
+
+- Invoice numbering previously used `COUNT(*) + 1` followed by an existence check. Two concurrent requests could both reserve the same `INV-YYYY-NNNNNN` value and one would fail on the unique constraint.
+- Added a yearly sequence table and a transactional, row-locked counter. First use backfills the counter from the latest legacy invoice number for that year.
+- Regression coverage verifies legacy sequence continuation and unique sequential reservations.
