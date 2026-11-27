@@ -426,17 +426,31 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
-        $member = AgencyMember::where('agency_id', $agencyId)->findOrFail($id);
+        $result = DB::transaction(function () use ($request, $agencyId, $id): array {
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+            $member = AgencyMember::where('agency_id', $agencyId)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        if ($member->role_id === 'role_agency_owner' && $this->activeOwnerCount($agencyId) <= 1) {
+            if ($member->status === 'active'
+                && $member->role_id === 'role_agency_owner'
+                && $this->activeOwnerCount($agencyId) <= 1) {
+                return ['error' => 422, 'message' => 'An agency must keep at least one active owner.'];
+            }
+
+            $member->update(['status' => 'deactivated', 'deactivated_at' => now()]);
+
+            return ['member' => $member];
+        });
+
+        if (isset($result['error'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'An agency must keep at least one active owner.',
-            ], 422);
+                'message' => $result['message'],
+            ], $result['error']);
         }
 
-        $member->update(['status' => 'deactivated', 'deactivated_at' => now()]);
-
+        $member = $result['member'];
         $this->writeAudit($request, 'agency.member.remove', 'member:' . $member->id, 'Member deactivated', [
             'agency_id' => $agencyId,
             'entity_type' => 'agency_member',
