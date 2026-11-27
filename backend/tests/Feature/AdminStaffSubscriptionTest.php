@@ -117,7 +117,10 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             'is_system' => false,
             'permissions' => ['agency.manage_staff'],
         ]);
-        $membership->update(['role_id' => $foreignRole->id]);
+        $membership->update([
+            'role_id' => $foreignRole->id,
+            'permissions' => ['admin.manage_users', 'agency.manage_staff'],
+        ]);
 
         $this->assertFalse($user->fresh()->hasPermission('agency.manage_staff', $agency->id));
         $this->assertFalse($user->fresh()->hasPermission('admin.manage_users', $agency->id));
