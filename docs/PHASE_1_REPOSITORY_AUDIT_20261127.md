@@ -37,6 +37,14 @@ The complete recursive tree was returned without truncation, so 566 is the verif
 - These historical figures do not match the current main tree: **566**. The ledger is not evidence that 706 or 566 files have been individually reviewed.
 - The docs/status count is corrected in this audit branch; the historical ledger is preserved pending a deliberate line-by-line reconciliation.
 
+## 3A. Historical file-ledger reconciliation
+A complete machine-readable inventory is recorded in [FILE_INVENTORY_20261127.md](FILE_INVENTORY_20261127.md).
+- 203 unique literal paths were extracted from the historical ledger.
+- 172 exact paths still exist in the current tree (including path mentions for files/directories).
+- 31 historical paths are absent at the exact path; this is not assumed to mean deletion because some may be renamed/migrated/obsolete.
+- Of 566 current blobs, 172 are named by the old ledger and **394 current blobs are not named** there.
+- Every current blob is now inventoried, but all remain READ pending. Semantic mapping of the 31 stale paths and line-by-line source review remain open.
+
 ## 4. Pull request and branch review
 ### PR #31 — Fix persistent quarantine storage and deployment runbook
 - Head: `f54afa51fe6328305fdd7853cb905922e11cb702`
@@ -90,8 +98,7 @@ These observations are inherited from the dated reports and must be rechecked be
 | Stale/diverged PR #5 disposition | BLOCKED — requires detailed review; no merge performed |
 
 ## 8. Phase 1 exit assessment
-**Repository and delivery baseline: COMPLETE.**  
-**Full source-file audit: NOT COMPLETE and deliberately remains a later tracked task.**
+**Repository baseline and exact-path inventory reconciliation: COMPLETE.** The historical path list has been compared against the current tree and every current blob is inventoried. **Semantic resolution of 31 stale paths and line-by-line review of all 566 blobs remain pending**, so the full source audit is not complete.
 
 Phase 1 establishes the exact baseline and safe work branch, surfaces stale documentation and risky open PRs, and records verified CI evidence. It does not authorize merging PR #31 or PR #5 and does not clear production launch.
 
