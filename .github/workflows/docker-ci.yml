@@ -348,6 +348,10 @@ jobs:
           for key in ("MAIL_MAILER", "MAIL_HOST", "MAIL_PORT", "MAIL_USERNAME", "MAIL_FROM_ADDRESS", "FRONTEND_URL"):
               assert key in worker_env, f"worker must receive {key}"
           assert worker_env["MAIL_MAILER"] == "smtp", "worker must use SMTP by default"
+          assert worker_env["MAIL_SCHEME"] == "tls", "worker must use the configured TLS mail scheme"
+          for service in ("backend", "worker", "scheduler"):
+              env = config["services"][service].get("environment", {})
+              assert env.get("MAIL_SCHEME") == "tls", f"{service} must receive the configured TLS mail scheme"
           print("private vault persistence, web-tier isolation, and auth origins: OK")
           '
       
