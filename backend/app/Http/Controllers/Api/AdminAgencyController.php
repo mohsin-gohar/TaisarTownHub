@@ -406,10 +406,10 @@ class AdminAgencyController extends Controller
                 ], 422)];
             }
 
-            if ($invoice->status === 'void') {
+            if ($invoice->status !== 'pending') {
                 return ['response' => response()->json([
                     'success' => false,
-                    'message' => 'A voided invoice cannot be paid.',
+                    'message' => 'Only a pending invoice can be verified as paid.',
                 ], 422)];
             }
 
