@@ -499,14 +499,28 @@ class PaymentController extends Controller
             return;
         }
 
-        $invoice->update([
-            'status' => 'paid',
-            'stripe_payment_intent_id' => $session->payment_intent ?? null,
-            'stripe_subscription_id' => $stripeSubId,
-            'paid_at' => now(),
-        ]);
+        // Invoice settlement and subscription activation are one atomic
+        // state transition. Stripe may retry/deliver the same event in
+        // parallel; lock and re-check the invoice inside the transaction so
+        // a paid invoice can never be committed without its subscription.
+        DB::transaction(function () use ($invoice, $session, $stripeSubId): void {
+            $lockedInvoice = SubscriptionInvoice::whereKey($invoice->getKey())
+                ->lockForUpdate()
+                ->first();
 
-        $this->activateSubscriptionFromInvoice($invoice);
+            if (!$lockedInvoice || $lockedInvoice->status === 'paid') {
+                return;
+            }
+
+            $lockedInvoice->update([
+                'status' => 'paid',
+                'stripe_payment_intent_id' => $session->payment_intent ?? null,
+                'stripe_subscription_id' => $stripeSubId,
+                'paid_at' => now(),
+            ]);
+
+            $this->activateSubscriptionFromInvoice($lockedInvoice);
+        });
     }
 
     private function handleStripeInvoicePaid($invoice): void
