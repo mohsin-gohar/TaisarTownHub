@@ -425,6 +425,56 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->assertSame(1, \App\\Support\\PlanLimits::staffUsed($agency->id));
     }
 
+
+    public function test_agency_cannot_create_duplicate_pending_invitations_for_same_email(): void
+    {
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $role = $this->makeRole('agency', 'invite_once', ['properties.view']);
+        $headers = $this->authHeaders($this->tokenFor($manager));
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'duplicate-invite@example.test',
+            'role_id' => $role->id,
+        ], $headers)->assertStatus(201);
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'DUPLICATE-INVITE@example.test',
+            'role_id' => $role->id,
+        ], $headers)->assertStatus(422);
+
+        $this->assertSame(1, DB::table('agency_invitations')
+            ->whereRaw('LOWER(email) = ?', ['duplicate-invite@example.test'])
+            ->where('status', 'pending')
+            ->count());
+    }
+
+    public function test_accepted_invitation_cannot_be_revoked_after_membership_was_created(): void
+    {
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $role = $this->makeRole('agency', 'accepted_invite', ['properties.view']);
+        $headers = $this->authHeaders($this->tokenFor($manager));
+
+        $invite = $this->postJson('/api/agency/members/invite', [
+            'email' => 'accepted-invite@example.test',
+            'role_id' => $role->id,
+        ], $headers)->assertStatus(201)->json('invitation');
+
+        $this->asGuest();
+        $this->postJson('/api/agency/invitations/accept', [
+            'token' => $invite['invite_token'],
+            'name' => 'Accepted Invite',
+            'password' => 'AcceptedPass123!',
+        ])->assertStatus(200);
+
+        $this->deleteJson('/api/agency/invitations/' . $invite['id'], [], $headers)
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('agency_invitations', [
+            'id' => $invite['id'],
+            'status' => 'accepted',
+        ]);
+    }
+
     public function test_invitations_respect_the_subscription_staff_limit(): void
     {
         [$manager, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
