@@ -10,6 +10,7 @@ use App\Models\DocumentVersion;
 use App\Models\MediaFile;
 use App\Support\PlanLimits;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Platform oversight of agency storage — read-only monitoring.
