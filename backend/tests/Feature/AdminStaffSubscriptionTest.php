@@ -75,6 +75,27 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             ->assertJsonPath('plan.price', 5000);
     }
 
+    public function test_subscription_plan_updates_reject_fractional_rupees_and_preserve_decimal_strings(): void
+    {
+        $this->seedPlatformRole('super_admin');
+        $admin = $this->makeUser('super_admin');
+        $headers = $this->authHeaders($this->tokenFor($admin));
+        $plan = $this->makePlan(['price' => 5000]);
+
+        $this->assertIsString($plan->fresh()->price, 'DECIMAL money must not be cast to a binary float.');
+        $this->assertSame('5000.00', $plan->fresh()->price);
+
+        $this->patchJson('/api/admin/plans/' . $plan->id, ['price' => 5000.50], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('price');
+        $this->assertDatabaseHas('subscription_plans', ['id' => $plan->id, 'price' => '5000.00']);
+
+        $this->patchJson('/api/admin/plans/' . $plan->id, ['price' => 6000], $headers)
+            ->assertOk();
+        $this->assertDatabaseHas('subscription_plans', ['id' => $plan->id, 'price' => '6000.00']);
+        $this->assertSame('6000.00', $plan->fresh()->price);
+    }
+
     public function test_platform_admin_can_manage_users_with_self_protection(): void
     {
         $this->seedPlatformRole('super_admin');
