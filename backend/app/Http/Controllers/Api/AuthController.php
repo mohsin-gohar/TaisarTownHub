@@ -571,6 +571,7 @@ class AuthController extends Controller
 
     private function completeMfaVerification(Request $request, array $data, string $key)
     {
+        $payload = Cache::get($key);
 
         if (!is_array($payload) || !isset($payload['user_id'])) {
             return response()->json([
