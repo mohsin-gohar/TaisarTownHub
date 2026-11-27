@@ -551,7 +551,26 @@ class AuthController extends Controller
         ]);
 
         $key = $this->mfaChallengeKey($data['challenge']);
-        $payload = Cache::get($key);
+        // Serialize verification for a challenge. A plain Cache::get followed
+        // by Cache::forget is not atomic: parallel requests could both mint
+        // tokens from the same challenge before either request consumed it.
+        $lock = Cache::lock('auth:mfa:verify-lock:' . hash('sha256', $data['challenge']), 30);
+        if (!$lock->get()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This verification session is already being used. Please retry.',
+            ], 429);
+        }
+
+        try {
+            return $this->completeMfaVerification($request, $data, $key);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function completeMfaVerification(Request $request, array $data, string $key)
+    {
 
         if (!is_array($payload) || !isset($payload['user_id'])) {
             return response()->json([
