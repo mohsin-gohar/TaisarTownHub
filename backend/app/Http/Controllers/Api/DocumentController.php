@@ -570,7 +570,7 @@ class DocumentController extends Controller
             // The new bytes are not referenced by committed metadata. Remove
             // them so a failed DB transaction cannot leak orphaned vault files.
             try {
-                SecureFileStore::delete('documents', $relativePath);
+                Storage::disk('documents')->delete($relativePath);
             } catch (\\Throwable $cleanupError) {
                 Log::critical('Failed to clean up uncommitted document version bytes', [
                     'document_id' => $id,
