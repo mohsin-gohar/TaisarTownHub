@@ -162,8 +162,9 @@ class DealerFilesController extends Controller
             }
 
             $sellingCents = $this->toCents($validated['selling_price_kbr']);
-            $costCents = $file->cost_price_kbr !== null
-                ? $this->toCents($file->cost_price_kbr)
+            $rawCostPrice = $file->getRawOriginal('cost_price_kbr');
+            $costCents = $rawCostPrice !== null
+                ? $this->toCents($rawCostPrice)
                 : intdiv(($sellingCents * 7) + 5, 10); // exact 70% fallback, rounded to cents
             $profitCents = max(0, $sellingCents - $costCents);
             $costPrice = $this->fromCents($costCents);
