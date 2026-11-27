@@ -362,10 +362,12 @@ class PaymentController extends Controller
                 ], 422);
             }
 
-            $remoteAmount = (float) ($remote['amount'] ?? 0);
-            $remoteCurrency = strtoupper((string) ($remote['currency'] ?? ''));
+            $remoteAmountValue = $remote['amount'] ?? null;
+            $remoteAmount = is_numeric($remoteAmountValue) ? (float) $remoteAmountValue : null;
+            $remoteCurrency = strtoupper(trim((string) ($remote['currency'] ?? '')));
 
-            if ($remoteCurrency !== strtoupper((string) $invoice->currency)
+            if ($remoteAmount === null || $remoteCurrency === ''
+                || $remoteCurrency !== strtoupper((string) $invoice->currency)
                 || abs($remoteAmount - (float) $invoice->total_pkr) > 0.00001) {
                 Log::warning('Flutterwave verification amount/currency mismatch', [
                     'agency_id' => $agencyId,
