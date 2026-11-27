@@ -46,6 +46,13 @@ test.describe('Public Pages', () => {
     await expect(page.locator('text=/Video Tours|Walkthroughs/i').first()).toBeVisible();
   });
 
+  test('Legacy video walkthrough URL opens the gallery', async ({ page }) => {
+    await page.goto('/video-walkthroughs');
+    await expect(page).toHaveURL(/\\/video-walkthroughs$/);
+    await expect(page.locator('main')).toBeVisible();
+    await expect(page.locator('text=/Video Tours|Walkthroughs/i').first()).toBeVisible();
+  });
+
   test('Services page loads', async ({ page }) => {
     await page.goto('/services');
     await expect(page.locator('main')).toBeVisible();
