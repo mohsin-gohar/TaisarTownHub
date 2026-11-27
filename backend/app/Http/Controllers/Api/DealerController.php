@@ -85,7 +85,7 @@ class DealerController extends Controller
             'role' => 'nullable|string|max:50',
             'commissionType' => 'nullable|string|in:Fixed,Percentage,Custom',
             'commissionRate' => [
-                'nullable', 'numeric', 'min:0', 'max:9999999999',
+                'nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:99999999.99',
                 function (string $attribute, mixed $value, \\Closure $fail) use ($request) {
                     if ($request->input('commissionType', 'Fixed') === 'Percentage' && $value > 100) {
                         $fail('Percentage commission cannot exceed 100%.');
@@ -144,7 +144,7 @@ class DealerController extends Controller
             'role' => 'nullable|string|max:50',
             'commissionType' => 'nullable|string|in:Fixed,Percentage,Custom',
             'commissionRate' => [
-                'nullable', 'numeric', 'min:0', 'max:9999999999',
+                'nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:99999999.99',
                 function (string $attribute, mixed $value, \\Closure $fail) use ($commissionType) {
                     if ($commissionType === 'Percentage' && $value > 100) {
                         $fail('Percentage commission cannot exceed 100%.');
