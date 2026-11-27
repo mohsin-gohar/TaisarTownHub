@@ -15,7 +15,7 @@ class Commission extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'float',
+            // DECIMAL(14,2) must remain an exact decimal string.
             'rate' => 'float',
             'accrued_at' => 'datetime',
             'paid_at' => 'datetime',
