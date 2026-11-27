@@ -36,6 +36,72 @@ class SensitiveMetadataTest extends EnterpriseTestCase
         }
     }
 
+    public function test_property_show_hides_sensitive_fields_from_plain_agency_agents(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.view'], 'agent');
+        $property = $this->makePublicProperty($agency, [
+            'purchasePricePKR' => 5000000,
+            'sellingPricePKR' => 7000000,
+            'internalNotes' => 'confidential deal note',
+            'pending_changes' => ['title' => 'Unapproved staged title'],
+        ]);
+
+        $token = $this->tokenFor($user);
+        $this->actingAs($user, 'sanctum');
+        $response = $this->getJson(
+            "/api/properties/{$property->id}",
+            $this->authHeaders($token) + ['X-Agency-Id' => $agency->id]
+        )->assertStatus(200);
+
+        foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes'] as $key) {
+            $this->assertArrayNotHasKey($key, $response->json(), "{$key} leaked through GET /api/properties/{id}");
+        }
+    }
+
+    public function test_property_show_requires_sensitive_permission_even_for_owning_agency(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.view', 'view_sensitive_cnic'], 'manager');
+        $property = $this->makePublicProperty($agency, [
+            'purchasePricePKR' => 5000000,
+            'sellingPricePKR' => 7000000,
+            'internalNotes' => 'confidential deal note',
+            'pending_changes' => ['title' => 'Unapproved staged title'],
+        ]);
+
+        $token = $this->tokenFor($user);
+        $this->actingAs($user, 'sanctum');
+        $response = $this->getJson(
+            "/api/properties/{$property->id}",
+            $this->authHeaders($token) + ['X-Agency-Id' => $agency->id]
+        )->assertStatus(200);
+
+        $this->assertSame(5000000.0, (float) $response->json('purchasePricePKR'));
+        $this->assertSame(7000000.0, (float) $response->json('sellingPricePKR'));
+        $this->assertSame('confidential deal note', $response->json('internalNotes'));
+        $this->assertArrayNotHasKey('pending_changes', $response->json(), 'only moderators may read staged changes');
+    }
+
+    public function test_moderation_scope_can_read_staged_changes(): void
+    {
+        $this->seedPlatformRole('moderator');
+        $moderator = $this->makeUser('moderator');
+        $agency = $this->makeAgency();
+        $property = $this->makePublicProperty($agency, [
+            'pending_changes' => ['title' => 'Unapproved staged title'],
+        ]);
+
+        $token = $this->tokenFor($moderator);
+        $this->actingAs($moderator, 'sanctum');
+        $response = $this->getJson(
+            '/api/properties?scope=moderation&with_meta=1',
+            $this->authHeaders($token)
+        )->assertStatus(200);
+
+        $row = collect($response->json())->firstWhere('id', $property->id);
+        $this->assertNotNull($row, 'moderation queue must include the property');
+        $this->assertSame('Unapproved staged title', $row['pending_changes']['title']);
+    }
+
     public function test_with_meta_still_exposes_sensitive_fields_with_the_grant(): void
     {
         [$user, $agency] = $this->agencyUser(['properties.view', 'view_sensitive_cnic'], 'manager');
