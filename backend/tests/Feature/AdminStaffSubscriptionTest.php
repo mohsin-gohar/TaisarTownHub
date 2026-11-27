@@ -400,6 +400,31 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         ]);
     }
 
+
+    public function test_deactivated_members_do_not_consume_staff_invitation_quota(): void
+    {
+        [$manager, $agency, $role] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $plan = $this->makePlan(['limits' => ['staff' => 2, 'listings' => 10]]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+        ]);
+
+        $inactiveUser = $this->makeUser('dealer', ['email' => 'inactive-staff@example.test']);
+        $this->makeMember($inactiveUser, $agency, $role, 'deactivated');
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'replacement-staff@example.test',
+            'role_id' => $role->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(201)
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(1, \\App\\Support\\PlanLimits::staffUsed($agency->id));
+    }
+
     public function test_invitations_respect_the_subscription_staff_limit(): void
     {
         [$manager, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
