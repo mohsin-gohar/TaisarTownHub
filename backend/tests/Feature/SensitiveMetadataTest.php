@@ -20,6 +20,10 @@ class SensitiveMetadataTest extends EnterpriseTestCase
 
         // The properties index is a public route; explicitly authenticate the
         // Sanctum guard so the agency-scoped `with_meta` branch is exercised.
+        $this->assertSame($agency->id, $user->resolveAgencyId($agency->id));
+        $this->assertTrue($user->workspaceAccess($agency->id)['allowed']);
+        $this->assertTrue($user->hasPermission('finance.view', $agency->id));
+
         $token = $this->tokenFor($user);
         $this->actingAs($user, 'sanctum');
         $response = $this->getJson(
