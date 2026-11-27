@@ -127,4 +127,15 @@ class PublicIndexBoundsTest extends EnterpriseTestCase
         $this->assertSame(0, count($countQueries), 'location listing counts must be aggregate subqueries, not one query per item');
     }
 
+
+    public function test_public_directory_filters_reject_invalid_types_and_out_of_range_limits(): void
+    {
+        $this->getJson('/api/agencies?per_page=not-a-number')->assertStatus(422);
+        $this->getJson('/api/agencies?sort=unsupported')->assertStatus(422);
+        $this->getJson('/api/dealers?limit=0')->assertStatus(422);
+        $this->getJson('/api/projects?limit=not-a-number')->assertStatus(422);
+        $this->getJson('/api/videos?limit=999999')->assertStatus(422);
+        $this->getJson('/api/maps?category=not-a-map-category')->assertStatus(422);
+    }
+
 }
