@@ -408,3 +408,15 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Added regression coverage for exact media sale amounts, rejection of excess decimal precision, and rejection of a second sale without overwriting the original buyer or sale amount.
 
 **Validation:** committed source was fetched again and checked for removal of float casts, integer-paise calculations, the locked media state transition, and presence of regression tests. PHPUnit and CI remain unrun/paused as instructed.
+
+
+### P2 — Finance ledger DECIMAL casts and payment overpayment arithmetic
+
+**Affected:** `TransactionPayment`, `PaymentSchedule`, `Commission`, `Transaction`, and `FinanceController`.
+
+- Removed float casts from payment, installment, and commission DECIMAL amounts. Commission percentage `rate` remains numeric because it is a percentage, not a PKR ledger amount.
+- Payment creation and commission creation now preserve validated decimal strings; schedules explicitly validate no more than two decimal places.
+- Payment overpayment checks now compare integer paise, not binary floating-point totals. `Transaction::totalPaidCents()` provides the exact aggregate; legacy BIGINT summary columns are rounded only at the boundary where they are written.
+- Added a regression test proving a fractional payment is persisted exactly and an attempted one-paisa overpayment is rejected.
+
+**Validation:** committed files re-fetched and source assertions reviewed. Runtime test execution and CI remain paused.
