@@ -1335,7 +1335,7 @@ class DocumentController extends Controller
                     'entity_id' => $qId,
                     'metadata' => ['reason' => $reason, 'threats' => $threats, 'document_id' => $documentId],
                 ]);
-        } catch (\\Throwable $e) {
+        } catch (\Throwable $e) {
             // Do not leave quarantined bytes without a database row that the
             // retention purge can discover. If the database cannot confirm
             // whether the row committed, preserve bytes for manual recovery.
@@ -1343,7 +1343,7 @@ class DocumentController extends Controller
             $metadataCheckFailed = false;
             try {
                 $metadataExists = $qId !== null && DocumentQuarantine::whereKey($qId)->exists();
-            } catch (\\Throwable $metadataError) {
+            } catch (\Throwable $metadataError) {
                 $metadataCheckFailed = true;
             }
 
@@ -1356,7 +1356,7 @@ class DocumentController extends Controller
                             'disk_path' => $qPath,
                         ]);
                     }
-                } catch (\\Throwable $cleanupError) {
+                } catch (\Throwable $cleanupError) {
                     Log::critical('Quarantine bytes cleanup failed after metadata failure', [
                         'quarantine_id' => $qId,
                         'disk_path' => $qPath,
