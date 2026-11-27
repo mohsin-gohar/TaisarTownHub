@@ -255,7 +255,7 @@ class DocumentController extends Controller
             if (config('malware.fail_closed', false)) {
                 $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats);
                 Log::warning('Upload rejected: malware scanner unavailable (fail-closed)', [
-                    'file' => $file->getClientOriginalName(),
+                    'extension' => strtolower($file->getClientOriginalExtension()),
                     'agency_id' => $agencyId,
                     'reason' => $scan->skipReason ?? 'scan_unavailable',
                 ]);
@@ -271,7 +271,7 @@ class DocumentController extends Controller
             $scanHold = true;
             if (config('malware.log_skipped', true)) {
                 Log::warning('Upload accepted without malware scan (quarantined)', [
-                    'file' => $file->getClientOriginalName(),
+                    'extension' => strtolower($file->getClientOriginalExtension()),
                     'agency_id' => $agencyId,
                     'reason' => $scan->skipReason ?? 'scan_unavailable',
                 ]);
@@ -279,7 +279,7 @@ class DocumentController extends Controller
         } elseif (!$scan->isClean) {
             $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'infected', $scan->threats);
             Log::warning('Upload rejected: malware detected', [
-                'file' => $file->getClientOriginalName(),
+                'extension' => strtolower($file->getClientOriginalExtension()),
                 'agency_id' => $agencyId,
                 'threats' => $scan->threats,
             ]);
@@ -582,7 +582,7 @@ class DocumentController extends Controller
                 Log::critical('Failed to clean up uncommitted document version bytes', [
                     'document_id' => $id,
                     'disk_path' => $relativePath,
-                    'error' => $cleanupError->getMessage(),
+                    'cleanup_exception' => get_class($cleanupError),
                 ]);
             }
 
@@ -787,7 +787,7 @@ class DocumentController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning('Document file deletion failed', ['error' => $e->getMessage()]);
+            Log::warning('Document file deletion failed', ['exception' => get_class($e)]);
         }
 
         $this->writeAudit($request, 'document.permanent_delete', $document->id, "Permanently deleted: {$document->title}", [
@@ -1314,7 +1314,7 @@ class DocumentController extends Controller
                 'created_at' => now(),
             ]);
         } catch (\Throwable $e) {
-            Log::warning('Document access log write failed', ['error' => $e->getMessage()]);
+            Log::warning('Document access log write failed', ['exception' => get_class($e)]);
         }
     }
 
@@ -1391,7 +1391,7 @@ class DocumentController extends Controller
                     Log::critical('Quarantine bytes cleanup failed after metadata failure', [
                         'quarantine_id' => $qId,
                         'disk_path' => $qPath,
-                        'error' => $cleanupError->getMessage(),
+                        'cleanup_exception' => get_class($cleanupError),
                     ]);
                 }
             } elseif ($metadataCheckFailed) {
@@ -1401,7 +1401,7 @@ class DocumentController extends Controller
                 ]);
             }
 
-            Log::warning('Quarantine write failed', ['error' => $e->getMessage()]);
+            Log::warning('Quarantine write failed', ['exception' => get_class($e)]);
         }
     }
 }
