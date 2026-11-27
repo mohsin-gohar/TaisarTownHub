@@ -130,7 +130,7 @@
 - Full model/relationship/cast/serialization review.
 - Jobs/notifications/queue failure and retry behavior beyond the sampled commands.
 - Full migration/index/foreign-key/data-integrity review.
-- Running backend tests on the latest working branch and confirming all CI jobs. The initial CI attempts caught two implementation mistakes before test execution: a PHP `continue` inside an `each()` callback in the purge fix (changed to `return`) and an over-escaped fully qualified class name in a Stripe test (corrected). The latest head is being re-tested; no passing backend result is claimed yet.
+- Running backend tests on the latest working branch and confirming all CI jobs. CI then reached the full MySQL suite (431 passed, 3 newly added vault-purge tests failed due to test fixture/mock expectations, not a production-code assertion): the storage facade is called once for `exists` and once for `delete`, and the document fixtures require `original_name`/`stored_name`. Those fixture issues and mock call counts have been corrected on the latest branch head; rerun is pending. Earlier CI also caught and we corrected a PHP `continue` inside an `each()` callback and an over-escaped model name in a Stripe test. No passing backend result is claimed yet.
 - Fixing any further confirmed defects discovered by the remaining audit.
 
 No production database, files, credentials, DNS, payment configuration, or hosting settings were accessed or modified. No changes were made directly to `main`.
