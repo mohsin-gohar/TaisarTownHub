@@ -27,10 +27,11 @@ Between the 706-blob baseline and current main, Git path comparison shows **33 p
 
 ## 2. What the historical ledger actually contains
 
-The ledger has 207 unchecked checklist entries:
+The ledger has **209 unchecked checklist entries**:
 
 - **197 explicit file-path entries**
-- **10 aggregate/directory/task entries** (for example whole test directories, configuration folders, scripts, all documentation, and the binary-assets verification task)
+- **10 aggregate/directory entries** (test directories, configuration folders, scripts, the Nginx directory, and all documentation)
+- **2 general task/cross-reference entries** (the policy cross-reference in Section 6 and the referenced-assets verification task)
 - **0 checked boxes**; every checklist item remains unchecked in the committed ledger
 
 Of the 197 explicit paths:
@@ -122,11 +123,18 @@ The ten non-file-specific checklist entries are:
 
 These are directory scopes or conditional tasks, not ten individual files. They must be replaced with exact current paths and evidence records before they can be marked complete.
 
+### Two additional general task/cross-reference entries
+
+- `Already covered in Sections 1 and 5` — a cross-reference placeholder, not a file or independent completed review.
+- `Verify all referenced assets exist and are used correctly` — an aggregate verification task; no asset-by-asset evidence is attached to the historical ledger.
+
+The complete checklist arithmetic is therefore **197 explicit paths + 10 aggregate scopes + 2 general entries = 209 unchecked entries**.
+
 ## 5. Reconciliation decision
 
 1. Preserve the historical ledger as an immutable historical record of its original scope, but append the corrected baseline metadata and link this reconciliation.
 2. Use the 566-file inventory generated from current main commit `ae306f81...` as the authoritative current path-level baseline.
-3. Treat all 207 old checklist entries as **unverified**. No READ or TESTED completion is inferred from the old status suffixes because all checkboxes are unchecked and no per-file evidence is attached.
+3. Treat all 209 old checklist entries as **unverified**. No READ or TESTED completion is inferred from the old status suffixes because all checkboxes are unchecked and no per-file evidence is attached.
 4. Retire the 26 non-existent path entries and replace them with current exact paths only after confirming the actual source graph; the three config/service paths and three migration names have clear current path counterparts as shown above.
 5. Expand the ten aggregate entries into exact tracked paths, using the 566-file inventory as the denominator.
 6. Do not mark all 566 files audited. The 566 count is inventory coverage only; source-content review and test evidence must be tracked separately.
@@ -142,4 +150,4 @@ These are directory scopes or conditional tasks, not ten individual files. They 
 
 ## Conclusion
 
-The **706** number is the correct tracked-blob count for historical baseline `ed401f5`; the subsequent ledger commit contains **713** blobs after seven additions; current main contains **566** blobs. The old ledger itself is only a partial, unchecked 207-entry checklist and must not be presented as a completed 706-file audit.
+The **706** number is the correct tracked-blob count for historical baseline `ed401f5`; the subsequent ledger commit contains **713** blobs after seven additions; current main contains **566** blobs. The old ledger itself is only a partial, unchecked 209-entry checklist and must not be presented as a completed 706-file audit.
