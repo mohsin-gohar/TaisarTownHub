@@ -488,75 +488,99 @@ class DocumentController extends Controller
         }
 
         $scanClean = $scan->isClean;
-        $storedName = $document->id . '_v' . ($document->version + 1) . '.' . $check['ext'];
-        $relativePath = $agencyId . '/' . now()->format('Y/m') . '/' . $storedName;
 
-        // Storage quota/trial enforcement is not part of this release.
-        // Individual file size, type, malware and authorization checks above
-        // still apply. Write the bytes first (encrypted at rest); only then
-        // flip the DB pointers inside a transaction so the document never
-        // points at bytes that were not stored.
+        // Use a unique physical filename; the logical version number is
+        // allocated only after locking the document row below.
+        $storedName = $document->id . '_v' . bin2hex(random_bytes(6)) . '.' . $check['ext'];
+        $relativePath = $agencyId . '/' . now()->format('Y/m') . '/' . $storedName;
         SecureFileStore::storeUpload('documents', $relativePath, $file);
 
-        $previous = [
-            'version' => $document->version,
-            'stored_name' => $document->stored_name,
-            'disk_path' => $document->disk_path,
-            'storage_disk' => $document->storage_disk ?? 'documents',
-            'mime_type' => $document->mime_type,
-            'size_bytes' => $document->size_bytes,
-            'checksum' => $document->checksum,
-            'uploaded_by' => $document->uploaded_by,
-            'created_at' => $document->updated_at ?? now(),
-        ];
+        try {
+            $document = DB::transaction(function () use (
+                $agencyId, $id, $relativePath, $storedName, $check, $file,
+                $scan, $scanClean, $request
+            ): Document {
+                $locked = Document::where('agency_id', $agencyId)
+                    ->whereKey($id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-        DB::transaction(function () use ($document, $previous, $relativePath, $storedName, $check, $file, $scan, $scanClean, $request) {
-            // Archive the current version.
-            DocumentVersion::create([
-                'document_id' => $document->id,
-                'version' => $previous['version'],
-                'stored_name' => $previous['stored_name'],
-                'disk_path' => $previous['disk_path'],
-                'storage_disk' => $previous['storage_disk'],
-                'mime_type' => $previous['mime_type'],
-                'size_bytes' => $previous['size_bytes'],
-                'checksum' => $previous['checksum'],
-                'uploaded_by' => $previous['uploaded_by'],
-                'note' => 'Superseded',
-                'created_at' => $previous['created_at'],
-            ]);
+                if ($locked->status !== 'active') {
+                    abort(409, 'Document is no longer active; version upload was not applied.');
+                }
 
-            $document->version += 1;
-            $document->stored_name = $storedName;
-            $document->disk_path = $relativePath;
-            $document->storage_disk = 'documents';
-            $document->mime_type = $check['mime'] ?: $document->mime_type;
-            $document->size_bytes = (int) $file->getSize();
-            $document->checksum = hash_file('sha256', $file->getRealPath()) ?: $document->checksum;
-            $document->original_name = UploadSecurity::sanitizeOriginalName($file->getClientOriginalName());
-            $document->scan_status = $scanClean ? 'scanned_clean' : 'skipped';
-            $document->scan_threats = $scanClean ? null : [$scan->skipReason ?? 'scan_unavailable'];
-            $document->scan_completed_at = $scanClean ? now() : null;
-            $document->scanner = $scanClean ? $scan->scanner : null;
-            $document->status = $scanClean ? 'active' : 'quarantined';
-            $document->save();
+                $previous = [
+                    'version' => $locked->version,
+                    'stored_name' => $locked->stored_name,
+                    'disk_path' => $locked->disk_path,
+                    'storage_disk' => $locked->storage_disk ?? 'documents',
+                    'mime_type' => $locked->mime_type,
+                    'size_bytes' => $locked->size_bytes,
+                    'checksum' => $locked->checksum,
+                    'uploaded_by' => $locked->uploaded_by,
+                    'created_at' => $locked->updated_at ?? now(),
+                ];
 
-            DocumentVersion::create([
-                'document_id' => $document->id,
-                'version' => $document->version,
-                'stored_name' => $storedName,
-                'disk_path' => $relativePath,
-                'storage_disk' => 'documents',
-                'mime_type' => $document->mime_type,
-                'size_bytes' => $document->size_bytes,
-                'checksum' => $document->checksum,
-                'uploaded_by' => $request->user()->id,
-                'note' => $request->note,
-                'created_at' => now(),
-            ]);
-        });
+                DocumentVersion::create([
+                    'document_id' => $locked->id,
+                    'version' => $previous['version'],
+                    'stored_name' => $previous['stored_name'],
+                    'disk_path' => $previous['disk_path'],
+                    'storage_disk' => $previous['storage_disk'],
+                    'mime_type' => $previous['mime_type'],
+                    'size_bytes' => $previous['size_bytes'],
+                    'checksum' => $previous['checksum'],
+                    'uploaded_by' => $previous['uploaded_by'],
+                    'note' => 'Superseded',
+                    'created_at' => $previous['created_at'],
+                ]);
 
+                $locked->version = $previous['version'] + 1;
+                $locked->stored_name = $storedName;
+                $locked->disk_path = $relativePath;
+                $locked->storage_disk = 'documents';
+                $locked->mime_type = $check['mime'] ?: $locked->mime_type;
+                $locked->size_bytes = (int) $file->getSize();
+                $locked->checksum = hash_file('sha256', $file->getRealPath()) ?: $locked->checksum;
+                $locked->original_name = UploadSecurity::sanitizeOriginalName($file->getClientOriginalName());
+                $locked->scan_status = $scanClean ? 'scanned_clean' : 'skipped';
+                $locked->scan_threats = $scanClean ? null : [$scan->skipReason ?? 'scan_unavailable'];
+                $locked->scan_completed_at = $scanClean ? now() : null;
+                $locked->scanner = $scanClean ? $scan->scanner : null;
+                $locked->status = $scanClean ? 'active' : 'quarantined';
+                $locked->save();
 
+                DocumentVersion::create([
+                    'document_id' => $locked->id,
+                    'version' => $locked->version,
+                    'stored_name' => $storedName,
+                    'disk_path' => $relativePath,
+                    'storage_disk' => 'documents',
+                    'mime_type' => $locked->mime_type,
+                    'size_bytes' => $locked->size_bytes,
+                    'checksum' => $locked->checksum,
+                    'uploaded_by' => $request->user()->id,
+                    'note' => $request->note,
+                    'created_at' => now(),
+                ]);
+
+                return $locked->fresh();
+            }, 3);
+        } catch (\\Throwable $e) {
+            // The new bytes are not referenced by committed metadata. Remove
+            // them so a failed DB transaction cannot leak orphaned vault files.
+            try {
+                SecureFileStore::delete('documents', $relativePath);
+            } catch (\\Throwable $cleanupError) {
+                Log::critical('Failed to clean up uncommitted document version bytes', [
+                    'document_id' => $id,
+                    'disk_path' => $relativePath,
+                    'error' => $cleanupError->getMessage(),
+                ]);
+            }
+
+            throw $e;
+        }
 
         $this->logAccess($document, $agencyId, $request, 'upload');
         $this->writeAudit($request, 'document.version', $document->id, "New version v{$document->version}: {$document->title}", [
