@@ -1,7 +1,7 @@
 # TaisarTownHub - Release Checklist
 
 ## Release Date: 2026-11-23
-## Historical baseline commit: 6c92d52audit: add enterprise audit reports and file ledger
+## Historical baseline commit: `6c92d52` — audit: add enterprise audit reports and file ledger
 
 > **Updated 2026-11-27:** This checklist supersedes the historical PASS claims below. See [INDEPENDENT_REVIEW_20261127.md](INDEPENDENT_REVIEW_20261127.md). The complete file-by-file audit is not finished, PR #24 contains security fixes not yet merged/deployed, and the live API is unavailable.
 
