@@ -66,6 +66,23 @@ test.describe('Public Pages', () => {
     await expect(page.getByTestId('video-gallery-empty')).toContainText(/No verified video tours/i);
   });
 
+  test('Homepage filters placeholder YouTube video IDs from public tours', async ({ page }) => {
+    await page.route('**/api/videos**', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'placeholder-video',
+        title: 'Placeholder walkthrough',
+        description: 'Seed placeholder',
+        videoUrl: 'https://www.youtube.com/embed/VIDEO_ID',
+        thumbnailUrl: 'https://example.test/placeholder.jpg',
+      }]),
+    }));
+    await page.goto('/');
+    await expect(page.getByText('No verified video walkthroughs are available right now.')).toBeVisible();
+    await expect(page.getByText('Placeholder walkthrough')).toHaveCount(0);
+  });
+
   test('Footer never links to generic social network homepages', async ({ page }) => {
     await page.goto('/');
     const socialLinks = page.locator('footer a[aria-label*=" on "]');
