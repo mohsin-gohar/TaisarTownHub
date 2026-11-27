@@ -1302,6 +1302,9 @@ class DocumentController extends Controller
         array $threats,
         ?string $documentId = null
     ): void {
+        $qId = null;
+        $qPath = null;
+
         try {
             $qId = 'qtn_' . bin2hex(random_bytes(8));
             $qPath = $agencyId . '/' . now()->format('Y/m') . '/' . $qId . '.' . $ext;
@@ -1332,7 +1335,41 @@ class DocumentController extends Controller
                     'entity_id' => $qId,
                     'metadata' => ['reason' => $reason, 'threats' => $threats, 'document_id' => $documentId],
                 ]);
-        } catch (\Throwable $e) {
+        } catch (\\Throwable $e) {
+            // Do not leave quarantined bytes without a database row that the
+            // retention purge can discover. If the database cannot confirm
+            // whether the row committed, preserve bytes for manual recovery.
+            $metadataExists = false;
+            $metadataCheckFailed = false;
+            try {
+                $metadataExists = $qId !== null && DocumentQuarantine::whereKey($qId)->exists();
+            } catch (\\Throwable $metadataError) {
+                $metadataCheckFailed = true;
+            }
+
+            if ($qPath !== null && !$metadataExists && !$metadataCheckFailed) {
+                try {
+                    $disk = Storage::disk('quarantine');
+                    if ($disk->exists($qPath) && !$disk->delete($qPath)) {
+                        Log::critical('Quarantine bytes orphaned after metadata failure; manual cleanup required', [
+                            'quarantine_id' => $qId,
+                            'disk_path' => $qPath,
+                        ]);
+                    }
+                } catch (\\Throwable $cleanupError) {
+                    Log::critical('Quarantine bytes cleanup failed after metadata failure', [
+                        'quarantine_id' => $qId,
+                        'disk_path' => $qPath,
+                        'error' => $cleanupError->getMessage(),
+                    ]);
+                }
+            } elseif ($metadataCheckFailed) {
+                Log::critical('Quarantine metadata state unknown; bytes retained for reconciliation', [
+                    'quarantine_id' => $qId,
+                    'disk_path' => $qPath,
+                ]);
+            }
+
             Log::warning('Quarantine write failed', ['error' => $e->getMessage()]);
         }
     }
