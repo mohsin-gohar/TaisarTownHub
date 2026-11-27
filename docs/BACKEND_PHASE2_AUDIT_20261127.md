@@ -455,3 +455,10 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 
 - Commission creation now rejects negative PKR values and values with more than two decimal places; percentage rates are also limited to the schema's two-decimal precision.
 - Regression coverage rejects negative and three-decimal commission amounts before any ledger row is created.
+
+
+### P1 — Commission payout status could be changed without recording an actual payout
+
+- The previous status endpoint allowed pending commissions to be marked paid immediately, allowed paid entries to be moved back to pending/cancelled, and did not set `paid_at` or `paid_by`.
+- The endpoint now locks the commission row, requires pending → accrued → paid, allows cancellation before payout, treats paid/cancelled as terminal, and records the authenticated payout actor and timestamp atomically.
+- Regression coverage checks that pending cannot be paid directly, successful payout records actor/time, and a paid commission cannot be reopened.
