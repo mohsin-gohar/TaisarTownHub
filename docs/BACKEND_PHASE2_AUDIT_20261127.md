@@ -351,3 +351,15 @@ No production database, files, credentials, DNS, payment configuration, or hosti
 - Status audit remains after the successful transaction commit.
 
 **Validation:** regression test added for atomic ticket + opening-message creation. CI and test execution remain paused as instructed; these latest changes are not yet runtime-verified.
+
+
+### P1 — Flutterwave verification could settle an invoice voided during the provider request
+
+**Affected:** `backend/app/Http/Controllers/Api/PaymentController.php`, `backend/tests/Feature/PaymentGatewayTest.php`.
+
+- Verification checked the invoice's `pending` state before making the external provider request, then updated the previously loaded model without locking or rechecking its current status.
+- A concurrent staff void/failure action during that network request could therefore be overwritten by a late successful verification, activating a subscription for an invoice that was no longer payable.
+- Fix: after the provider confirms the payment, re-fetch the invoice with `lockForUpdate()` inside a transaction and re-check its current status before marking it paid and activating the subscription. Already-paid invoices remain idempotent; void/failed invoices are rejected.
+- Regression test simulates the invoice being voided during the provider request and verifies that it stays void and no subscription is activated.
+
+**Validation:** regression coverage added; test execution and CI remain paused per instruction.
