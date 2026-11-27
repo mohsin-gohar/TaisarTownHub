@@ -172,7 +172,7 @@ class MediaController extends Controller
             if ($scannerUnavailable && config('malware.fail_closed', false)) {
                 $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats);
                 Log::warning('Media upload rejected: malware scanner unavailable (fail-closed)', [
-                    'file' => $file->getClientOriginalName(),
+                    'extension' => strtolower($file->getClientOriginalExtension()),
                     'agency_id' => $agencyId,
                 ]);
 
@@ -185,7 +185,7 @@ class MediaController extends Controller
             if (!$scannerUnavailable && !$scan->isClean && !$scan->skipped) {
                 $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'infected', $scan->threats);
                 Log::warning('Media upload rejected: malware detected', [
-                    'file' => $file->getClientOriginalName(),
+                    'extension' => strtolower($file->getClientOriginalExtension()),
                     'agency_id' => $agencyId,
                     'threats' => $scan->threats,
                 ]);
@@ -394,7 +394,7 @@ class MediaController extends Controller
             try {
                 Storage::disk('documents')->delete($media->disk_path);
             } catch (\Throwable $e) {
-                Log::warning('Media file delete failed', ['error' => $e->getMessage()]);
+                Log::warning('Media file delete failed', ['exception' => get_class($e)]);
             }
         }
 
@@ -543,7 +543,7 @@ class MediaController extends Controller
                     Log::critical('Media quarantine cleanup failed after metadata failure', [
                         'quarantine_id' => $qId,
                         'disk_path' => $qPath,
-                        'error' => $cleanupError->getMessage(),
+                        'cleanup_exception' => get_class($cleanupError),
                     ]);
                 }
             } elseif ($metadataCheckFailed) {
@@ -553,7 +553,7 @@ class MediaController extends Controller
                 ]);
             }
 
-            Log::warning('Media quarantine write failed', ['error' => $e->getMessage()]);
+            Log::warning('Media quarantine write failed', ['exception' => get_class($e)]);
         }
     }
 }
