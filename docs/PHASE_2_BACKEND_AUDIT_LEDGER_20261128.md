@@ -291,6 +291,40 @@
 - No Laravel boot, route:list, HTTP/MFA integration, proxy spoofing, or browser media-preview test run.
 - CI intentionally not triggered.
 
+
+---
+
+## Phase 2.6 — All policies and authorization rules review
+
+<badge>Reviewed — static</badge>
+
+**Report:** [Phase 2.6 Laravel Policies and Authorization Rules Review](PHASE_2_6_LARAVEL_AUTHORIZATION_REVIEW_20261128.md)
+
+**Reviewed snapshot:** `8df11cf88388ce7568071dedde806a9d10f88e64`  
+**Coverage:** Core authorization trait, agency context middleware, User permission resolution, membership/role models, canonical and legacy permission catalogs, tenancy resolver, bootstrap/routes, role seeding, staff/role administration controllers, and eight relevant authorization/security tests were inspected.
+
+### Main findings
+1. **P1:** An agency staff manager with `agency.manage_staff` can grant extra agency permissions to their own membership or create/assign a custom role to themselves; permission delegation is not bounded by the requester's own grants.
+2. **P1:** `EnsureMfaVerified` remains unattached to the protected API request pipeline (also recorded in Phase 2.5); do not consider MFA globally enforced until wired and tested.
+3. **P2:** No formal Laravel Policy classes or Gate definitions were found; authorization is distributed across middleware, controller trait, User model, role matrices and endpoint-specific checks.
+4. **P2:** `AgencyContext` identifies protected routes through the literal `auth:sanctum` middleware string.
+5. **P2:** Effective platform grants depend on platform role rows seeded by `EnterpriseSeeder`; missing/stale rows can make runtime grants diverge from the permission catalog.
+6. **P3:** Existing unit/feature tests do not cover self-escalation, custom-role self-assignment or a complete endpoint authorization matrix.
+
+### Positive controls
+- Permission checks distinguish unauthenticated (401) from unauthorized (403) requests.
+- Tenant context derives from current membership, not request-body agency IDs.
+- Platform-only permissions are excluded from agency-assignable grants.
+- Agency role resolution scopes custom roles to the acting agency.
+- Owner-role promotion/invitation checks and invitation row locking are present.
+- Existing tests cover key legacy role exclusions, cross-agency access and workspace tenant isolation.
+
+### Verification state
+- Static review only; no source authorization files changed.
+- No PHPUnit execution, exploit reproduction, route:list, full endpoint authorization matrix, DB permission audit or MFA middleware integration test run.
+- CI intentionally not triggered.
+- P1 self-escalation and inactive MFA middleware require remediation before production authorization sign-off.
+
 ## Phase 2 remaining
 
-Continue with Phase 2.6 and subsequent backend areas. Findings in these reports are review findings, not claims of runtime reproduction or completed remediation.
+Continue with Phase 2.7 and subsequent backend areas. Reviews remain task-scoped; no claim that the entire backend is complete.
