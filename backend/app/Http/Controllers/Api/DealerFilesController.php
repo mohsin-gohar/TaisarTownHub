@@ -208,7 +208,7 @@ class DealerFilesController extends Controller
             'success' => true,
             'data' => $soldFile,
             'message' => 'File marked as sold. Commission calculated and updated.',
-            'profit' => $profit,
+            'profit' => (float) $profit, // numeric response contract; ledger storage remains exact decimal
         ]);
     }
 
