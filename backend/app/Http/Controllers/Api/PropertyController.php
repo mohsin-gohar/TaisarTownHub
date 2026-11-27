@@ -254,12 +254,6 @@ class PropertyController extends Controller
 
         $agencyId = $this->requireAgencyForWrite($request);
 
-        // G-8: plan limit — listings quota is enforced server-side.
-        $agency = Agency::find($agencyId);
-        if ($agency && ($block = PlanLimits::block($agency, 'listings'))) {
-            return PlanLimits::deny('Listing limit reached for your plan. Upgrade to create more listings.', $block);
-        }
-
         $data = $request->validate([
             'title' => 'required|string|max:255',
             'pricePKR' => 'required|numeric|min:0',
@@ -317,18 +311,35 @@ class PropertyController extends Controller
         $propertyId = 'prop_' . bin2hex(random_bytes(8));
         $now = now();
 
-        $payload = collect($data)->except(['submit', 'id'])->all();
-        $payload['id'] = $propertyId;
-        $payload['agency_id'] = $agencyId;
-        $payload['created_by'] = $request->user()->id;
-        $payload['approval_status'] = $request->boolean('submit') ? 'pending' : 'draft';
-        $payload['visibility'] = 'private';
-        $payload['createdDate'] = $now->toDateString();
-        $payload['submitted_at'] = $request->boolean('submit') ? $now : null;
-        $payload['slug'] = $this->uniqueSlug($data['title'], $propertyId);
-        $payload['listing_purpose'] = 'sale';
+        // Serialize listing quota checks per agency so concurrent creates
+        // cannot all pass the same remaining-seat count.
+        $result = DB::transaction(function () use ($agencyId, $request, $data, $propertyId, $now): array {
+            if ($agencyId !== null) {
+                $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+                if ($block = PlanLimits::block($agency, 'listings')) {
+                    return ['blocked' => $block];
+                }
+            }
 
-        $property = Property::create($payload);
+            $payload = collect($data)->except(['submit', 'id'])->all();
+            $payload['id'] = $propertyId;
+            $payload['agency_id'] = $agencyId;
+            $payload['created_by'] = $request->user()->id;
+            $payload['approval_status'] = $request->boolean('submit') ? 'pending' : 'draft';
+            $payload['visibility'] = 'private';
+            $payload['createdDate'] = $now->toDateString();
+            $payload['submitted_at'] = $request->boolean('submit') ? $now : null;
+            $payload['slug'] = $this->uniqueSlug($data['title'], $propertyId);
+            $payload['listing_purpose'] = 'sale';
+
+            return ['property' => Property::create($payload)];
+        });
+
+        if (isset($result['blocked'])) {
+            return PlanLimits::deny('Listing limit reached for your plan. Upgrade to create more listings.', $result['blocked']);
+        }
+
+        $property = $result['property'];
 
         if ($request->boolean('submit')) {
             $this->recordTransition($property, null, 'pending', 'Submitted for approval');
