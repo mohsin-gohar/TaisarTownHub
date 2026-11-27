@@ -130,6 +130,7 @@ class AgencyController extends Controller
                 'user' => app(AuthController::class)->userPayload($user, $agency->id),
             ], 201);
         } catch (\Throwable $e) {
+            report($e);
             Log::error('Agency registration failed', ['exception' => get_class($e)]);
             return response()->json([
                 'success' => false,
