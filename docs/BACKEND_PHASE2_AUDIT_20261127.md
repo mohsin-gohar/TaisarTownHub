@@ -249,6 +249,17 @@
 
 **Status:** code and regression test committed.
 
+### P1 — Public inquiry quota and legacy/relational writes were not atomic
+
+**Affected:** `backend/app/Http/Controllers/Api/InquiryController.php`, `backend/tests/Feature/InquiryCaptchaTest.php`.
+
+- Public inquiry storage wrote the legacy `business_records` mirror before inserting the relational `inquiries` row, without a transaction. A relational insert failure could leave an orphan legacy record.
+- The lead quota was checked before writes and without an agency lock, so simultaneous public submissions could all pass the same remaining-lead count.
+- Fix: lock the owning agency row, recheck the lead quota, and persist both the legacy mirror and relational inquiry in one database transaction. A quota rejection now occurs before either row is written.
+- Regression test simulates relational insert failure and asserts both tables remain empty.
+
+**Status:** code and regression test committed; no CI run/polling performed per instruction.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
