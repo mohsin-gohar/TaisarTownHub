@@ -512,3 +512,9 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Agency permission resolution previously trusted the membership's role_id and merged that role's permissions without verifying that the role was agency-scoped and either global-system or owned by the same agency.
 - Membership permission resolution now rejects platform roles and custom roles owned by another agency, even if a stale/corrupt role_id is present in the membership row.
 - Regression coverage injects both a platform-role reference and a foreign agency custom-role reference and verifies neither grants permissions in the member's agency context.
+
+
+### P1 — Custom role deletion could race with invitation acceptance
+
+- Role deletion checked for members/pending invitations outside a transaction, while invitation acceptance locked only the invitation row. A role could be deleted concurrently with a membership being attached to it.
+- Role deletion and invitation acceptance now acquire the same agency-row lock before their role/invitation row locks, serializing role lifecycle and membership attachment.
