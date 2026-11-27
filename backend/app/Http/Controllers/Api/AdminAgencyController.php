@@ -265,21 +265,24 @@ class AdminAgencyController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        $agency = Agency::findOrFail($id);
+        $subscription = DB::transaction(function () use ($id, $request) {
+            $agency = Agency::whereKey($id)->lockForUpdate()->firstOrFail();
 
-        $subscription = AgencySubscription::updateOrCreate(
-            ['agency_id' => $agency->id],
-            [
-                'plan_id' => $request->plan_id,
-                'status' => $request->get('status', 'active'),
-                'starts_at' => $request->starts_at ?: now(),
-                'ends_at' => $request->ends_at,
-                'trial_ends_at' => $request->trial_ends_at,
-                'limits_override' => $request->limits_override,
-                'notes' => $request->notes,
-                'created_by' => $request->user()->id,
-            ]
-        );
+            return AgencySubscription::updateOrCreate(
+                ['agency_id' => $agency->id],
+                [
+                    'plan_id' => $request->plan_id,
+                    'status' => $request->get('status', 'active'),
+                    'starts_at' => $request->starts_at ?: now(),
+                    'ends_at' => $request->ends_at,
+                    'trial_ends_at' => $request->trial_ends_at,
+                    'limits_override' => $request->limits_override,
+                    'notes' => $request->notes,
+                    'created_by' => $request->user()->id,
+                ]
+            );
+        });
+        $agency = Agency::findOrFail($id);
 
         $this->writeAudit($request, 'subscription.assign', $agency->id, "Subscription assigned to {$agency->name}", [
             'agency_id' => $agency->id,
