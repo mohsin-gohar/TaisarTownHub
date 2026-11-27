@@ -298,4 +298,4 @@
 - [ ] Verify all referenced assets exist and are used correctly
 
 
-> **Phase 2 tracking:** Current Laravel backend review status is maintained in [Phase 2 Backend Audit Ledger](PHASE_2_BACKEND_AUDIT_LEDGER_20261128.md). Phase 2.1 static architecture review covers 26 exact current paths; it does not mark the historical checklist complete or imply the entire backend has been reviewed.
+> **Phase 2 tracking:** Current Laravel backend review status is maintained in [Phase 2 Backend Audit Ledger](PHASE_2_BACKEND_AUDIT_LEDGER_20261128.md). Phase 2.1 statically reviewed 26 exact architecture/config/bootstrap paths. Phase 2.2 statically reviewed all 33 tracked files under `backend/app/Http/Controllers/`; see [Phase 2.2 Laravel Controllers Review](PHASE_2_2_LARAVEL_CONTROLLERS_REVIEW_20261128.md). These task-scoped reviews do not mark the historical checklist complete or imply the entire backend has been reviewed.
