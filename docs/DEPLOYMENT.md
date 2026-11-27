@@ -32,7 +32,7 @@ cd frontend && npm run verify                 # tsc + unit tests + build + prere
 
 ```bash
 cp backend/.env.example backend/.env          # then edit secrets — see §6
-cp frontend/.env.example frontend/.env        # VITE_API_URL=https://taisartownhub.com/api (or same-origin /api)
+cp frontend/.env.example frontend/.env        # VITE_API_URL=https://api.taisartownhub.com/api (or same-origin /api)
 docker compose up -d --build
 docker compose exec api php artisan migrate --force
 docker compose exec api php artisan app:production-check --strict
