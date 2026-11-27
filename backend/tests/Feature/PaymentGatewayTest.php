@@ -201,7 +201,7 @@ class PaymentGatewayTest extends EnterpriseTestCase
             $payload
         )->assertOk()->assertJsonPath('success', true);
 
-        $this->assertSame(1, \\App\\Models\\AgencySubscription::where('agency_id', $agency->id)->count());
+        $this->assertSame(1, \App\Models\AgencySubscription::where('agency_id', $agency->id)->count());
     }
 
     public function test_flutterwave_webhook_activates_only_a_matching_pending_invoice(): void
