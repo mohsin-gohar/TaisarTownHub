@@ -302,6 +302,14 @@ class PropertyController extends Controller
             'submit' => 'nullable|boolean',
         ]);
 
+        $sensitiveFields = ['purchasePricePKR', 'sellingPricePKR', 'internalNotes'];
+        $hasSensitiveChanges = count(array_intersect(array_keys($data), $sensitiveFields)) > 0;
+        $canManageSensitive = $this->can($request, 'finance.view')
+            || $this->can($request, 'view_sensitive_cnic');
+        if ($hasSensitiveChanges && !$canManageSensitive) {
+            abort(403, 'Sensitive property financial fields require an explicit finance permission.');
+        }
+
         if (!empty($data['assignedDealerId'])) {
             $this->assertDealerInAgency($data['assignedDealerId'], $agencyId);
         }
