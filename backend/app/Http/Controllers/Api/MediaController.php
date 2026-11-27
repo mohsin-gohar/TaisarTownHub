@@ -13,6 +13,7 @@ use App\Support\PlanLimits;
 use App\Support\UploadSecurity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -315,36 +316,55 @@ class MediaController extends Controller
         }
 
         $request->validate([
-            'selling_price_pk' => 'required|numeric|min:0',
-            'cost_price_pk' => 'nullable|numeric|min:0',
+            'selling_price_pk' => 'required|numeric|decimal:0,2|min:0|max:999999999999.99',
+            'cost_price_pk' => 'nullable|numeric|decimal:0,2|min:0|max:999999999999.99',
             'buyer_name' => 'required|string|max:255',
             'buyer_phone' => 'nullable|string|max:30',
             'buyer_national_id_masked' => 'nullable|string|max:40',
             'sold_at' => 'nullable|date',
         ]);
 
-        $media = MediaFile::where('agency_id', $agencyId)->findOrFail($id);
+        // Serialize the state transition: concurrent requests cannot both sell
+        // the same media record or overwrite its buyer/financial attribution.
+        $sale = DB::transaction(function () use ($agencyId, $id, $request) {
+            $media = MediaFile::where('agency_id', $agencyId)
+                ->whereKey($id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if ($media->status === 'sold') {
+            if ($media->status === 'sold') {
+                return null;
+            }
+
+            $sellingCents = $this->toCents((string) $request->input('selling_price_pk'));
+            $costCents = $request->filled('cost_price_pk')
+                ? $this->toCents((string) $request->input('cost_price_pk'))
+                : null;
+            $profitCents = $costCents !== null ? max(0, $sellingCents - $costCents) : 0;
+
+            $media->status = 'sold';
+            $media->sold_at = $request->sold_at ? now()->parse($request->sold_at) : now();
+            $media->sold_price_pk = $this->fromCents($sellingCents);
+            $media->cost_price_pk = $costCents !== null ? $this->fromCents($costCents) : null;
+            $media->profit_pk = $this->fromCents($profitCents);
+            $media->buyer_name = $request->buyer_name;
+            $media->buyer_phone = $request->buyer_phone;
+            $media->buyer_national_id_masked = $request->buyer_national_id_masked;
+            $media->sold_by = $request->user()->name;
+            $media->save();
+
+            return $media->fresh();
+        });
+
+        if ($sale === null) {
             return response()->json([
                 'success' => false,
                 'message' => 'This item is already marked as sold.',
             ], 422);
         }
-
-        $selling = (float) $request->selling_price_pk;
-        $cost = $request->filled('cost_price_pk') ? (float) $request->cost_price_pk : null;
-
-        $media->status = 'sold';
-        $media->sold_at = $request->sold_at ? now()->parse($request->sold_at) : now();
-        $media->sold_price_pk = $selling;
-        $media->cost_price_pk = $cost;
-        $media->profit_pk = $cost !== null ? max(0, $selling - $cost) : 0;
-        $media->buyer_name = $request->buyer_name;
-        $media->buyer_phone = $request->buyer_phone;
-        $media->buyer_national_id_masked = $request->buyer_national_id_masked;
-        $media->sold_by = $request->user()->name;
-        $media->save();
+        $media = $sale;
+        $selling = $media->sold_price_pk;
+        $cost = $media->cost_price_pk;
 
         $this->writeAudit($request, 'media.sell', $media->id, "Marked sold: {$media->title}", [
             'agency_id' => $agencyId,
@@ -472,6 +492,21 @@ class MediaController extends Controller
         }
 
         abort(410, 'File is no longer available.');
+    }
+
+    /** Convert a validated decimal PKR amount to integer paise without floats. */
+    private function toCents(string $amount): int
+    {
+        if (! preg_match('/^(\\d+)(?:\\.(\\d{1,2}))?$/', $amount, $matches)) {
+            throw new \\InvalidArgumentException('Invalid decimal PKR amount.');
+        }
+
+        return ((int) $matches[1] * 100) + (int) str_pad($matches[2] ?? '', 2, '0');
+    }
+
+    private function fromCents(int $amount): string
+    {
+        return intdiv($amount, 100) . '.' . str_pad((string) ($amount % 100), 2, '0', STR_PAD_LEFT);
     }
 
     /**
