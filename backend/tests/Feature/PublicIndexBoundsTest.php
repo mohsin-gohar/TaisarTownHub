@@ -2,14 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Models\Agency;
 use App\Models\AgencyVideo;
+use App\Models\Dealer;
+use App\Models\Project;
 use App\Models\PropertyCategory;
 use App\Models\Sector;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
-use App\Models\Dealer;
-use App\Models\Project;
 use Illuminate\Support\Str;
 
 /**
