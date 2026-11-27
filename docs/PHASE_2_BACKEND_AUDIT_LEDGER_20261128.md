@@ -224,6 +224,73 @@
 - CI: intentionally not triggered.
 - Phase 2 backend audit remains in progress; this task completes model/relationship review only.
 
+
+---
+
+## Phase 2.4 — All Laravel services review
+
+<badge>Reviewed — static</badge>
+
+**Report:** [Phase 2.4 Laravel Services Review](PHASE_2_4_LARAVEL_SERVICES_REVIEW_20261128.md)
+
+**Reviewed snapshot:** `d2a01d65dc4f5904b7ec9d2934bd30a5e05539dd`  
+**Coverage:** 7/7 tracked PHP files under `backend/app/Services/`; service container, malware/vault configuration, relevant model scopes and integration points cross-checked.
+
+### Exact files reviewed
+- `backend/app/Services/AgencyOnboarding.php`
+- `backend/app/Services/AgencyPromotionService.php`
+- `backend/app/Services/ClamAVScanner.php`
+- `backend/app/Services/DisabledMalwareScanner.php`
+- `backend/app/Services/FileVaultCrypto.php`
+- `backend/app/Services/MalwareScanner.php`
+- `backend/app/Services/SecureFileStore.php`
+
+### Main findings
+1. **P1:** `SecureFileStore::move()` ignores destination write success and deletes the source regardless; store/put methods also ignore write results, risking file loss or DB records for missing bytes.
+2. **P1:** ClamAV INSTREAM loop can break on `fread() === false`, still terminate the stream, and potentially accept an incomplete file as clean.
+3. **P2:** Featured placement slot/agency uniqueness checks are not serialized; concurrent promotions can exceed capacity or duplicate placements.
+4. **P2:** Vault upload, move, checksum, scan and response paths buffer complete files in PHP memory.
+5. **P2:** Scanner availability reports a configured socket as available without checking reachability; CLI execution has no enforced process timeout.
+6. **P2:** `scanStored()` does not verify the temporary plaintext file write before scanning.
+7. **P3:** Vault envelope base64 fields are not strict-decoded or explicitly length-validated.
+
+### Verification state
+- Static review: 7/7 service files read.
+- No service source files changed.
+- No PHPUnit, PHP static analysis, storage failure-injection, ClamAV integration, database concurrency, or load test run.
+- CI intentionally not triggered.
+
+---
+
+## Phase 2.5 — All Laravel middleware review
+
+<badge>Reviewed — static</badge>
+
+**Report:** [Phase 2.5 Laravel Middleware Review](PHASE_2_5_LARAVEL_MIDDLEWARE_REVIEW_20261128.md)
+
+**Reviewed snapshot:** `d2a01d65dc4f5904b7ec9d2934bd30a5e05539dd`  
+**Coverage:** 5/5 tracked PHP files under `backend/app/Http/Middleware/`; bootstrap, API route declarations and MFA verification helper cross-checked.
+
+### Exact files reviewed
+- `backend/app/Http/Middleware/AgencyContext.php`
+- `backend/app/Http/Middleware/CorrelationId.php`
+- `backend/app/Http/Middleware/EnsureMfaVerified.php`
+- `backend/app/Http/Middleware/SecurityHeaders.php`
+- `backend/app/Http/Middleware/TrustProxies.php`
+
+### Main findings
+1. **P1:** `EnsureMfaVerified` is not registered in `bootstrap/app.php` or attached to the inspected protected API routes; its enforcement is therefore not active in the request pipeline.
+2. **P2:** `AgencyContext` detects protected routes by searching for the literal `auth:sanctum` middleware string, making the approval gate fragile if routes are reorganized under another auth alias/group.
+3. **P2:** Trusted client IP/scheme handling depends on deployment-specific `TRUSTED_PROXIES` being set to the actual proxy CIDRs.
+4. **P3:** The global restrictive CSP/sandbox requires browser verification for inline PDF/image previews and cross-origin public media.
+5. **P3:** HSTS `includeSubDomains` is safe only if every covered subdomain supports HTTPS.
+
+### Verification state
+- Static review: 5/5 middleware files read.
+- No middleware source files changed.
+- No Laravel boot, route:list, HTTP/MFA integration, proxy spoofing, or browser media-preview test run.
+- CI intentionally not triggered.
+
 ## Phase 2 remaining
 
-Continue with Phase 2.4 and later. Keep exact paths and evidence; do not infer READ/TESTED status from inventory, historical reports, or another file's references.
+Continue with Phase 2.6 and subsequent backend areas. Findings in these reports are review findings, not claims of runtime reproduction or completed remediation.
