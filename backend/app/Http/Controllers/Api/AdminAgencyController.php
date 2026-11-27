@@ -418,6 +418,35 @@ class AdminAgencyController extends Controller
                 'verified_by' => $request->user()->id,
             ])->save();
 
+            // A verified invoice tied to a plan is the manual billing path:
+            // settle the invoice and activate that agency plan atomically.
+            if ($invoice->plan_id !== null) {
+                Agency::whereKey($invoice->agency_id)->lockForUpdate()->firstOrFail();
+                $plan = SubscriptionPlan::findOrFail($invoice->plan_id);
+                $startsAt = $invoice->period_start
+                    ? \\Illuminate\\Support\\Carbon::parse($invoice->period_start)
+                    : now();
+                $endsAt = $invoice->period_end
+                    ? \\Illuminate\\Support\\Carbon::parse($invoice->period_end)->endOfDay()
+                    : $startsAt->copy()->add($plan->interval === 'year' ? '1 year' : '1 month');
+
+                AgencySubscription::updateOrCreate(
+                    ['agency_id' => $invoice->agency_id],
+                    [
+                        'plan_id' => $invoice->plan_id,
+                        'status' => 'active',
+                        'starts_at' => $startsAt,
+                        'ends_at' => $endsAt,
+                        'trial_ends_at' => null,
+                        'auto_renew' => false,
+                        'stripe_subscription_id' => null,
+                        'provider' => 'manual',
+                        'cancelled_at' => null,
+                        'created_by' => $request->user()->id,
+                    ]
+                );
+            }
+
             return ['invoice' => $invoice];
         });
 
