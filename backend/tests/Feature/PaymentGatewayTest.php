@@ -156,6 +156,16 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ])->assertStatus(422);
         $this->assertSame('pending', $invoice->fresh()->status);
 
+        // Rounding a slightly underpaid amount to the invoice total is not acceptable.
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
+            'status' => 'successful',
+            'tx_ref' => 'fw-ref-100',
+            'id' => 991,
+            'amount' => 4999.6,
+            'currency' => 'PKR',
+        ])->assertStatus(422);
+        $this->assertSame('pending', $invoice->fresh()->status);
+
         // Missing amount or currency is not an implicit invoice match.
         $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
             'status' => 'successful',
