@@ -20,15 +20,20 @@ class AgencyVideoController extends Controller
      */
     public function index(Request $request)
     {
+        $filters = $request->validate([
+            'phase' => 'nullable|string|max:50',
+            'limit' => 'nullable|integer|min:1|max:2000',
+        ]);
+
         $query = AgencyVideo::with('comments');
 
-        if ($request->filled('phase') && $request->phase !== 'All') {
-            $query->where('phase', $request->phase);
+        if (!empty($filters['phase']) && $filters['phase'] !== 'All') {
+            $query->where('phase', $filters['phase']);
         }
 
         // Public gallery: bounded page (plain-array shape kept for the
         // existing frontend). Newest first; ?limit narrows further.
-        $limit = $request->filled('limit') ? (int) $request->limit : 100;
+        $limit = (int) ($filters['limit'] ?? 100);
 
         return response()->json(
             $query->orderByDesc('created_at')->orderBy('id')->limit(min(max($limit, 1), 200))->get()
