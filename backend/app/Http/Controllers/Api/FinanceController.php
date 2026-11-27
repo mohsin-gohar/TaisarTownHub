@@ -351,7 +351,12 @@ public function store(Request $request)
             }
 
             $agreement = (int) ($data['agreementAmountPKR'] ?? $locked->agreementAmountPKR);
-            $advance = (int) ($data['advancePaymentPKR'] ?? $locked->advancePaymentPKR);
+            $advance = array_key_exists('advancePaymentPKR', $data)
+                ? (int) ($data['advancePaymentPKR'] ?? 0)
+                : (int) $locked->advancePaymentPKR;
+            if (array_key_exists('advancePaymentPKR', $data) && $data['advancePaymentPKR'] === null) {
+                $data['advancePaymentPKR'] = 0;
+            }
             $collectedCents = $locked->totalPaidCents();
             if ($agreement * 100 < $collectedCents) {
                 return ['error' => 422, 'message' => 'Agreement amount cannot be lower than payments already collected.'];
