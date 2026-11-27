@@ -5,6 +5,9 @@
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
   "cleanUrls": true,
+  "redirects": [
+    { "source": "/video-walkthroughs", "destination": "/gallery", "permanent": true }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
