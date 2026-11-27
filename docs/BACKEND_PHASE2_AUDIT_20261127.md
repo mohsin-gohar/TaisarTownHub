@@ -130,7 +130,7 @@
 - Full model/relationship/cast/serialization review.
 - Jobs/notifications/queue failure and retry behavior beyond the sampled commands.
 - Full migration/index/foreign-key/data-integrity review.
-- Running backend tests on the latest working branch and confirming all CI jobs. The first CI attempt exposed a PHP `continue` inside an `each()` callback in the quarantine purge fix; this was corrected to `return` in the callback, and the latest head is being re-tested.
+- Running backend tests on the latest working branch and confirming all CI jobs. The initial CI attempts caught two implementation mistakes before test execution: a PHP `continue` inside an `each()` callback in the purge fix (changed to `return`) and an over-escaped fully qualified class name in a Stripe test (corrected). The latest head is being re-tested; no passing backend result is claimed yet.
 - Fixing any further confirmed defects discovered by the remaining audit.
 
 No production database, files, credentials, DNS, payment configuration, or hosting settings were accessed or modified. No changes were made directly to `main`.
