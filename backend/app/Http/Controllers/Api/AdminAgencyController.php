@@ -9,7 +9,8 @@ use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;\nuse Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /** Platform agency administration: directory, verification, moderation. */
 class AdminAgencyController extends Controller
