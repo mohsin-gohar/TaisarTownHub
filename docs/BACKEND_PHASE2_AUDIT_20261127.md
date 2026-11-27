@@ -292,6 +292,16 @@
 
 **Status:** code committed; CI intentionally not run/polled.
 
+### P1 — Concurrent/replayed moderation transitions could overwrite a listing decision
+
+**Affected:** `backend/app/Http/Controllers/Api/PropertyController.php`, `backend/tests/Feature/PropertyLifecycleTest.php`.
+
+- Approval and rejection previously read `approval_status`, checked for `pending`, and saved without a row lock or transaction. Two moderators could act on the same stale pending state, allowing the later request to overwrite the first decision.
+- Fix: both approve and reject now lock the property row and re-check the pending state inside the transaction before applying the transition. The first committed decision wins; later requests receive 422.
+- Regression test verifies a listing cannot be approved twice or rejected after approval. True parallel-request stress coverage remains a follow-up.
+
+**Status:** code and regression test committed; CI intentionally paused.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
