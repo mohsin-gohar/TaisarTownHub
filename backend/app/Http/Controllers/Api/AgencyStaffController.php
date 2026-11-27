@@ -263,6 +263,13 @@ class AgencyStaffController extends Controller
         // or concurrently-consumed invite can leave an uninvited user row
         // behind even though membership creation returns 422.
         $result = DB::transaction(function () use ($invitation, $user, $request): array {
+            // Share the per-agency lock used by role deletion and staff
+            // mutations so an invite cannot attach a role while it is removed.
+            $agency = Agency::whereKey($invitation->agency_id)->lockForUpdate()->first();
+            if (!$agency) {
+                return ['status' => 'invalid'];
+            }
+
             $claim = AgencyInvitation::where('id', $invitation->id)
                 ->where('status', 'pending')
                 ->lockForUpdate()
@@ -640,24 +647,34 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
-        $role = Role::where('scope', 'agency')
-            ->where('agency_id', $agencyId)
-            ->where('is_system', false)
-            ->findOrFail($id);
+        $result = DB::transaction(function () use ($agencyId, $id): array {
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+            $role = Role::where('scope', 'agency')
+                ->where('agency_id', $agencyId)
+                ->where('is_system', false)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        $inUse = AgencyMember::where('role_id', $role->id)->exists();
-        $pendingInvites = AgencyInvitation::where('role_id', $role->id)
-            ->where('status', 'pending')->exists();
+            $inUse = AgencyMember::where('role_id', $role->id)->exists();
+            $pendingInvites = AgencyInvitation::where('role_id', $role->id)
+                ->where('status', 'pending')->exists();
 
-        if ($inUse || $pendingInvites) {
+            if ($inUse || $pendingInvites) {
+                return ['error' => 422, 'message' => 'Role is still assigned to members or pending invitations.'];
+            }
+
+            $role->delete();
+            return ['role' => $role];
+        });
+
+        if (isset($result['error'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'Role is still assigned to members or pending invitations.',
-            ], 422);
+                'message' => $result['message'],
+            ], $result['error']);
         }
 
-        $role->delete();
-
+        $role = $result['role'];
         $this->writeAudit($request, 'agency.role.delete', 'role:' . $id, 'Custom role deleted', [
             'agency_id' => $agencyId,
             'entity_type' => 'role',
