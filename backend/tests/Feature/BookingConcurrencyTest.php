@@ -202,6 +202,17 @@ class BookingConcurrencyTest extends EnterpriseTestCase
 
         $this->assertSame(100025, $transaction->fresh()->totalPaidCents());
         $this->assertDatabaseCount('transaction_payments', 1);
+
+        // A refund greater than all collected funds must not create a negative ledger.
+        $this->postJson('/api/agency/transactions/' . $transaction->id . '/payments', [
+            'amount' => '1000.26',
+            'type' => 'refund',
+            'method' => 'bank_transfer',
+        ], $headers)->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Refund cannot exceed the amount already collected.']);
+
+        $this->assertSame(100025, $transaction->fresh()->totalPaidCents());
+        $this->assertDatabaseCount('transaction_payments', 1);
     }
 
     public function test_payment_updates_derived_ledger_status(): void
