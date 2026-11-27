@@ -1054,6 +1054,9 @@ public function update(Request $request, string $id)
             if ($to !== $from) {
                 $updates['status'] = $to;
             }
+            if ($to === 'accrued' && $from === 'pending') {
+                $updates['accrued_at'] = now();
+            }
             if ($to === 'paid' && $from !== 'paid') {
                 $updates['paid_at'] = now();
                 $updates['paid_by'] = $request->user()->id;
