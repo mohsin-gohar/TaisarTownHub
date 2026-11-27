@@ -204,6 +204,46 @@ class PaymentGatewayTest extends EnterpriseTestCase
         $this->assertSame(1, \App\Models\AgencySubscription::where('agency_id', $agency->id)->count());
     }
 
+    public function test_stripe_webhook_cannot_reactivate_a_voided_invoice(): void
+    {
+        $secret = 'whsec_test_secret';
+        config(['services.stripe.webhook' => $secret]);
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['stripe_session_id' => 'cs_test_voided']);
+        $invoice->update(['status' => 'void']);
+
+        $payload = json_encode([
+            'id' => 'evt_test_voided',
+            'type' => 'checkout.session.completed',
+            'data' => ['object' => [
+                'id' => 'cs_test_voided',
+                'client_reference_id' => $agency->id,
+                'metadata' => [
+                    'agency_id' => $agency->id,
+                    'plan_id' => (string) $plan->id,
+                ],
+                'payment_intent' => 'pi_test_voided',
+                'subscription' => 'sub_test_voided',
+                'payment_status' => 'paid',
+                'amount_total' => 500000,
+                'currency' => 'pkr',
+            ]],
+        ]);
+
+        $this->asGuest();
+        $this->call('POST', '/api/payments/webhook/stripe', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+        ], $payload)->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame('void', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', [
+            'agency_id' => $agency->id,
+            'stripe_subscription_id' => 'sub_test_voided',
+        ]);
+    }
+
     public function test_flutterwave_webhook_activates_only_a_matching_pending_invoice(): void
     {
         config(['services.flutterwave.webhook_secret' => 'fw_test_hash']);
