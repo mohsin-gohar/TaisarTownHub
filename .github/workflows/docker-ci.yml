@@ -325,7 +325,7 @@ jobs:
               mounts = config["services"][service].get("volumes", [])
               assert any(
                   mount.get("type") == "volume"
-                  and mount.get("source") == "private_vault"
+                  and mount.get("source", "").endswith("private_vault")
                   and mount.get("target") == expected_target
                   for mount in mounts
               ), f"{service} must mount private_vault at {expected_target}"
@@ -333,7 +333,7 @@ jobs:
               mounts = config["services"][service].get("volumes", [])
               assert not any(
                   mount.get("target", "").startswith("/var/www/html/storage/app/private")
-                  or mount.get("source") == "private_vault"
+                  or mount.get("source", "").endswith("private_vault")
                   for mount in mounts
               ), f"{service} must not access the private vault"
           print("private vault persistence and web-tier isolation: OK")
