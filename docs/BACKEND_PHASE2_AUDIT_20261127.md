@@ -518,3 +518,9 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 
 - Role deletion checked for members/pending invitations outside a transaction, while invitation acceptance locked only the invitation row. A role could be deleted concurrently with a membership being attached to it.
 - Role deletion and invitation acceptance now acquire the same agency-row lock before their role/invitation row locks, serializing role lifecycle and membership attachment.
+
+
+### P2 — Concurrent custom-role creation could race the agency role-key uniqueness check
+
+- Custom role creation checked for an existing key and inserted the role without the agency serialization lock used by other staff mutations.
+- The duplicate check and insert now execute under the same per-agency row lock, so concurrent requests cannot both pass the check.
