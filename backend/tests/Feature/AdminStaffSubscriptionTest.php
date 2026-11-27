@@ -422,7 +422,7 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             ->assertStatus(201)
             ->assertJsonPath('success', true);
 
-        $this->assertSame(1, \\App\\Support\\PlanLimits::staffUsed($agency->id));
+        $this->assertSame(1, \App\\Support\\PlanLimits::staffUsed($agency->id));
     }
 
     public function test_invitations_respect_the_subscription_staff_limit(): void
