@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 /**
  * Regression coverage for with_meta leaks on agency-scoped property lists.
- * Confidential deal fields must require the explicit sensitive-data grant,
+ * Confidential deal fields must require the explicit finance.view grant,
  * exactly like GET /api/properties/{id}.
  */
 class SensitiveMetadataTest extends EnterpriseTestCase
@@ -32,7 +32,7 @@ class SensitiveMetadataTest extends EnterpriseTestCase
         $row = collect($payload)->firstWhere('id', $property->id);
         $this->assertNotNull($row, 'the agency listing must be present');
         foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes'] as $key) {
-            $this->assertArrayNotHasKey($key, $row, "{$key} leaked without the sensitive-data grant");
+            $this->assertArrayNotHasKey($key, $row, "{$key} leaked without the finance.view grant");
         }
     }
 
@@ -58,9 +58,9 @@ class SensitiveMetadataTest extends EnterpriseTestCase
         }
     }
 
-    public function test_property_show_requires_sensitive_permission_even_for_owning_agency(): void
+    public function test_property_show_requires_finance_permission_even_for_owning_agency(): void
     {
-        [$user, $agency] = $this->agencyUser(['properties.view', 'view_sensitive_cnic'], 'manager');
+        [$user, $agency] = $this->agencyUser(['properties.view', 'finance.view'], 'manager');
         $property = $this->makePublicProperty($agency, [
             'purchasePricePKR' => 5000000,
             'sellingPricePKR' => 7000000,
@@ -81,10 +81,10 @@ class SensitiveMetadataTest extends EnterpriseTestCase
         $this->assertArrayNotHasKey('pending_changes', $response->json(), 'only moderators may read staged changes');
     }
 
-    public function test_agency_sensitive_permission_cannot_read_another_agencys_private_prices(): void
+    public function test_agency_finance_permission_cannot_read_another_agencys_private_prices(): void
     {
         [$user, $requestingAgency] = $this->agencyUser(
-            ['properties.view', 'view_sensitive_cnic'],
+            ['properties.view', 'finance.view'],
             'manager'
         );
         $listingAgency = $this->makeAgency('Separate Listing Agency');
@@ -129,7 +129,7 @@ class SensitiveMetadataTest extends EnterpriseTestCase
 
     public function test_with_meta_still_exposes_sensitive_fields_with_the_grant(): void
     {
-        [$user, $agency] = $this->agencyUser(['properties.view', 'view_sensitive_cnic'], 'manager');
+        [$user, $agency] = $this->agencyUser(['properties.view', 'finance.view'], 'manager');
         $property = $this->makePublicProperty($agency, [
             'purchasePricePKR' => 5000000,
             'sellingPricePKR' => 7000000,
