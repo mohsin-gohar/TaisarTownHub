@@ -23,6 +23,12 @@ class SubscriptionPlan extends Model
         ];
     }
 
+    /** Numeric API compatibility; checkout reads the raw DECIMAL string. */
+    public function getPriceAttribute($value): float
+    {
+        return (float) $value;
+    }
+
     public function subscriptions(): HasMany
     {
         return $this->hasMany(AgencySubscription::class, 'plan_id');
