@@ -495,7 +495,7 @@ class MediaController extends Controller
 
             SecureFileStore::storeUpload('quarantine', $qPath, $file);
 
-            \App\\Models\\DocumentQuarantine::create([
+            \App\Models\DocumentQuarantine::create([
                 'id' => $qId,
                 'agency_id' => $agencyId,
                 'document_id' => null,
@@ -525,7 +525,7 @@ class MediaController extends Controller
             $metadataExists = false;
             $metadataCheckFailed = false;
             try {
-                $metadataExists = $qId !== null && \App\\Models\\DocumentQuarantine::whereKey($qId)->exists();
+                $metadataExists = $qId !== null && \App\Models\DocumentQuarantine::whereKey($qId)->exists();
             } catch (\Throwable $metadataError) {
                 $metadataCheckFailed = true;
             }
