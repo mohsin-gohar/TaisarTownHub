@@ -543,3 +543,5 @@ The fixes and regression coverage are detailed in the follow-up findings below. 
 - The MFA middleware enforced the global policy on every authenticated route except the verification endpoint. A privileged user without MFA was therefore blocked from the status, setup and enable endpoints needed to enroll in the first place.
 - Users who have not yet enabled MFA may now access only the MFA status/setup/enable enrollment routes; once enabled, those routes are protected by the normal token-scoped verification requirement. The sign-in verification endpoint remains available.
 - Regression coverage verifies an agency owner subject to the global policy can enroll, confirm the first TOTP code and then access protected routes with the same verified token.
+
+- Manual admin invoice verification now follows the same pending-only settlement rule as provider webhooks; paid, voided, failed or otherwise non-pending invoices cannot be overwritten.
