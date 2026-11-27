@@ -34,6 +34,13 @@ test.describe('Public Pages', () => {
     await expect(page.locator('text=/Agency/i').first()).toBeVisible();
   });
 
+  test('Agency API failure does not show a false empty-filter state', async ({ page }) => {
+    await page.route('**/api/agencies**', (route) => route.abort());
+    await page.goto('/agencies');
+    await expect(page.locator('main')).toContainText(/Could not load agencies right now/i);
+    await expect(page.getByText('No agencies match your filters')).toHaveCount(0);
+  });
+
   test('Guide page loads', async ({ page }) => {
     await page.goto('/guide');
     await expect(page.locator('main')).toBeVisible();
