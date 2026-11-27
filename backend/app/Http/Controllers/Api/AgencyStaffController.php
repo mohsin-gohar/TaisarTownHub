@@ -565,26 +565,35 @@ class AgencyStaffController extends Controller
             ], 422);
         }
 
-        if (Role::where('scope', 'agency')->where('key', $request->key)
-            ->where(function ($q) use ($agencyId) {
-                $q->whereNull('agency_id')->orWhere('agency_id', $agencyId);
-            })->exists()) {
+        $result = DB::transaction(function () use ($agencyId, $request): array {
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+
+            if (Role::where('scope', 'agency')->where('key', $request->key)
+                ->where(function ($q) use ($agencyId) {
+                    $q->whereNull('agency_id')->orWhere('agency_id', $agencyId);
+                })->exists()) {
+                return ['error' => 422, 'message' => 'A role with this key already exists.'];
+            }
+
+            return ['role' => Role::create([
+                'id' => 'rol_' . bin2hex(random_bytes(8)),
+                'scope' => 'agency',
+                'agency_id' => $agencyId,
+                'key' => $request->key,
+                'name' => $request->name,
+                'is_system' => false,
+                'permissions' => array_values($request->permissions),
+                'created_by' => $request->user()->id,
+            ])];
+        });
+
+        if (isset($result['error'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'A role with this key already exists.',
-            ], 422);
+                'message' => $result['message'],
+            ], $result['error']);
         }
-
-        $role = Role::create([
-            'id' => 'rol_' . bin2hex(random_bytes(8)),
-            'scope' => 'agency',
-            'agency_id' => $agencyId,
-            'key' => $request->key,
-            'name' => $request->name,
-            'is_system' => false,
-            'permissions' => array_values($request->permissions),
-            'created_by' => $request->user()->id,
-        ]);
+        $role = $result['role'];
 
         $this->writeAudit($request, 'agency.role.create', 'role:' . $role->id, 'Custom role created: ' . $role->name, [
             'agency_id' => $agencyId,
