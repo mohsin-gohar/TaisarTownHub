@@ -25,30 +25,42 @@ class InquiryController extends Controller
     {
         $this->requireAny($request, ['view_inquiries', 'crm.view']);
 
+        $filters = $request->validate([
+            'status' => 'nullable|string|max:50',
+            'source' => 'nullable|string|max:50',
+            'mine' => 'sometimes|boolean',
+            'limit' => 'nullable|integer|min:1|max:5000',
+        ]);
+
         $query = Inquiry::query();
 
         $agencyId = $this->agencyId($request);
         if ($agencyId !== null) {
             $query->where('agency_id', $agencyId);
         } elseif ($request->boolean('mine') && $request->user()->dealer_id) {
-            // Legacy dealer: only leads on their own assigned properties
-            $myPropertyIds = Property::where('assignedDealerId', $request->user()->dealer_id)->pluck('id');
-            $query->where(function ($q) use ($myPropertyIds) {
-                $q->whereIn('property_id', $myPropertyIds)
-                    ->orWhere('agency_id', null);
+            // Legacy dealer: keep the assigned-property lookup as a SQL
+            // subquery so a large property portfolio is not materialized in PHP.
+            $dealerId = $request->user()->dealer_id;
+            $query->where(function ($q) use ($dealerId) {
+                $q->whereIn('property_id', Property::where('assignedDealerId', $dealerId)->select('id'))
+                    ->orWhereNull('agency_id');
             });
         }
 
-        if ($request->filled('status') && $request->status !== 'All') {
-            $query->where('status', $request->status);
+        if (!empty($filters['status']) && $filters['status'] !== 'All') {
+            $query->where('status', $filters['status']);
         }
 
-        if ($request->filled('source')) {
-            $query->where('source', $request->source);
+        if (!empty($filters['source'])) {
+            $query->where('source', $filters['source']);
         }
+
+        // Keep the legacy plain-array response shape while bounding work and
+        // response size for tenants with long inquiry histories.
+        $limit = min((int) ($filters['limit'] ?? 1000), 1000);
 
         // Mask CNIC in responses
-        $inquiries = $query->orderByDesc('created_at')->orderBy('id')->get();
+        $inquiries = $query->orderByDesc('created_at')->orderBy('id')->limit($limit)->get();
         foreach ($inquiries as $inquiry) {
             // Ensure CNIC is masked if present
             if ($inquiry->cnic) {
