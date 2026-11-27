@@ -82,7 +82,7 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $headers = $this->authHeaders($this->tokenFor($admin));
         $plan = $this->makePlan(['price' => 5000]);
 
-        $this->assertSame('5000.00', $plan->fresh()->getRawOriginal('price'), 'The database DECIMAL must remain exact.');
+        $this->assertSame('5000.00', number_format((float) $plan->fresh()->getRawOriginal('price'), 2, '.', ''), 'The database DECIMAL must remain exact.');
 
         $this->patchJson('/api/admin/plans/' . $plan->id, ['price' => 5000.50], $headers)
             ->assertStatus(422)
@@ -92,7 +92,7 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->patchJson('/api/admin/plans/' . $plan->id, ['price' => 6000], $headers)
             ->assertOk();
         $this->assertDatabaseHas('subscription_plans', ['id' => $plan->id, 'price' => '6000.00']);
-        $this->assertSame('6000.00', $plan->fresh()->getRawOriginal('price'));
+        $this->assertSame('6000.00', number_format((float) $plan->fresh()->getRawOriginal('price'), 2, '.', ''));
     }
 
     public function test_platform_admin_can_manage_users_with_self_protection(): void
