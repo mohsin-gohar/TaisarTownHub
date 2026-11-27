@@ -60,6 +60,22 @@ test.describe('Public Pages', () => {
     await expect(page.locator('text=/Video Tours|Walkthroughs/i').first()).toBeVisible();
   });
 
+  test('Gallery explains when no verified tours are published', async ({ page }) => {
+    await page.goto('/gallery');
+    await expect(page.getByTestId('video-gallery-empty')).toBeVisible();
+    await expect(page.getByTestId('video-gallery-empty')).toContainText(/No verified video tours/i);
+  });
+
+  test('Footer never links to generic social network homepages', async ({ page }) => {
+    await page.goto('/');
+    const socialLinks = page.locator('footer a[aria-label*=" on "]');
+    const count = await socialLinks.count();
+    for (let index = 0; index < count; index += 1) {
+      const href = await socialLinks.nth(index).getAttribute('href');
+      expect(href || '').not.toMatch(/^https?:\\/\\/(www\\.)?(facebook|youtube|linkedin|x|instagram)\\.com\\/?$/i);
+    }
+  });
+
   test('Services page loads', async ({ page }) => {
     await page.goto('/services');
     await expect(page.locator('main')).toBeVisible();
