@@ -69,6 +69,19 @@
 
 **Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
 
+### P1 — Stripe Checkout webhook activated sessions without proving settlement or invoice match
+**Affected:** `backend/app/Http/Controllers/Api/PaymentController.php`, `backend/tests/Feature/PaymentGatewayTest.php`.
+
+- The prior handler accepted a missing `payment_status`, missing `amount_total`, or missing `currency`; the existing success test omitted all three and still expected the invoice to become paid.
+- It only rejected underpayment for PKR, using integer rounding, and did not compare the event's agency/plan metadata with the invoice.
+- A signed `checkout.session.completed` event alone is not proof that an asynchronous payment has settled.
+
+**Fix applied:** require `payment_status` to be `paid` or `no_payment_required`; require exact currency and numeric amount to match the invoice (minor-unit amount, without rounding); verify the session's agency and plan metadata match the invoice before activation.
+
+**Regression tests added:** successful webhook fixture now includes settled payment fields; unpaid and missing-amount sessions remain pending and do not activate a subscription.
+
+**Status:** code and regression tests committed on the Phase 2 branch; CI result pending.
+
 ## 4. Open review risks — not yet classified as defects
 1. **Best-effort audit persistence:** `AuthorizesApi::writeAudit()` logs a warning and continues if `AuditLog::create()` fails. Confirm which actions require durable audit records and whether those operations need a transactional outbox/fail-closed policy.
 2. **Legacy workspace sync atomicity:** `WorkspaceController::save()` processes collections sequentially and writes rows one at a time. Tenant ownership and destructive replace guards exist, but a mid-request database failure can leave a partially applied multi-collection sync. Confirm the frontend contract and whether per-collection or whole-request atomicity is required.
