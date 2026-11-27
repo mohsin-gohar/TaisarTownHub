@@ -93,6 +93,20 @@ class ProductionCheck extends Command
             ($production && $prefix === '') ? 'WARN' : 'PASS',
             'A token prefix makes leaked credentials identifiable and revocable.');
 
+        // Uploaded files must never silently bypass malware inspection in
+        // production. The config defaults are intentionally development-safe
+        // (disabled/fail-open), so the live environment must opt in explicitly.
+        $malwareEnabled = (bool) config('malware.enabled', false);
+        $malwareFailClosed = (bool) config('malware.fail_closed', false);
+        $this->add('malware_scan_enabled', 'MALWARE_SCAN_ENABLED',
+            $malwareEnabled ? 'true' : 'false',
+            (!$production || $malwareEnabled) ? 'PASS' : 'FAIL',
+            'Enable a real malware scanner in production before accepting uploads.');
+        $this->add('malware_fail_closed', 'MALWARE_SCAN_FAIL_CLOSED',
+            $malwareFailClosed ? 'true' : 'false',
+            (!$production || $malwareFailClosed) ? 'PASS' : 'FAIL',
+            'Reject uploads whenever the malware scanner cannot produce a real verdict.');
+
         $dbOk = false;
         try {
             DB::select('select 1');
