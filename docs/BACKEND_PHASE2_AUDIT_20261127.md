@@ -565,3 +565,5 @@ The fixes and regression coverage are detailed in the follow-up findings below. 
 - Deal edits now share the row lock with void/payment writes, reject an agreement amount below the already-collected ledger, validate advance ≤ agreement, and recalculate the remaining balance from the authoritative payment rows.
 
 - The same locked deal update path now rechecks the voided/terminal state before applying edits; regression coverage verifies a voided deal cannot be edited after cancellation.
+
+- Completed and cancelled deals are now read-only for all field edits, not only status transitions; regression coverage attempts ordinary field changes after each terminal state.
