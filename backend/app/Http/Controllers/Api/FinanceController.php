@@ -780,31 +780,37 @@ public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments']);
-
-        $payment = TransactionPayment::where('id', $id);
-        if ($agencyId !== null) {
-            $payment->where('agency_id', $agencyId);
-        }
-        $payment = $payment->firstOrFail();
-
-        $transaction = Transaction::where('id', $payment->transaction_id)->first();
-
         $request->validate(['reason' => 'required|string|min:3|max:500']);
 
-        $this->writeAudit($request, 'payment.delete', $payment->id, "Payment {$payment->amount} removed ({$request->reason})", [
-            'agency_id' => $payment->agency_id,
-            'entity_type' => 'transaction_payment',
-            'entity_id' => (string) $payment->id,
-            'metadata' => ['amount' => $payment->amount, 'reason' => $request->reason],
-        ]);
+        DB::transaction(function () use ($agencyId, $id, $request): void {
+            // Resolve the parent id, then take locks in the same transaction-first
+            // order used by payment creation to avoid stale summary totals/deadlocks.
+            $lookup = TransactionPayment::where('id', $id)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->firstOrFail();
 
-        // Soft delete via the model's SoftDeletes trait so the audit trail is
-        // preserved and aggregate totals automatically exclude voided rows.
-        $payment->delete();
+            $transactionQuery = Transaction::whereKey($lookup->transaction_id);
+            if ($agencyId !== null) {
+                $transactionQuery->where('agency_id', $agencyId);
+            }
+            $transaction = $transactionQuery->lockForUpdate()->firstOrFail();
 
-        if ($transaction) {
+            $payment = TransactionPayment::where('id', $id)
+                ->where('transaction_id', $transaction->id)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $this->writeAudit($request, 'payment.delete', $payment->id, "Payment {$payment->amount} removed ({$request->reason})", [
+                'agency_id' => $payment->agency_id,
+                'entity_type' => 'transaction_payment',
+                'entity_id' => (string) $payment->id,
+                'metadata' => ['amount' => $payment->amount, 'reason' => $request->reason],
+            ]);
+
+            $payment->delete();
             $transaction->recalculateStatus();
-        }
+        });
 
         return response()->json(['success' => true, 'message' => 'Payment voided.']);
     }
