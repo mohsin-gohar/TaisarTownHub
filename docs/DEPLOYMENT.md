@@ -64,7 +64,7 @@ A successful Vercel frontend build is not proof that the Laravel API is availabl
 | `DB_ROOT_PASSWORD` (compose) | initial bootstrap only |
 | `REDIS_HOST/PORT/PASSWORD` | cache, sessions, queues, rate limits |
 | `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`, `SESSION_DRIVER=redis` | |
-| `MAIL_MAILER/MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_FROM_ADDRESS` | real SMTP; verify delivery of verification/reset mail |
+| `MAIL_MAILER/MAIL_SCHEME/MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_FROM_ADDRESS` | real SMTP; verify delivery of verification/reset mail |
 | `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` | exact SPA origin(s), including `taisartownhub.vercel.app` until custom-domain DNS is live — never `*` |
 | `TRUSTED_PROXIES` | real load-balancer/nginx IPs (X-Forwarded-For spoofing prevention) |
 | `CLAMAV_HOST/PORT`, scan enabled | fail-closed upload scanning |
