@@ -171,7 +171,7 @@ class PropertyController extends Controller
         if ($isPublicScope) {
             $results->transform(fn (Property $p) => $this->publicPropertyPayload($p));
         } elseif ($request->boolean('with_meta')) {
-            $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
+            $canSeeSensitive = $this->can($request, 'finance.view') || $this->can($request, 'view_sensitive_cnic');
             $results->transform(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive, $isModerator));
         }
 
