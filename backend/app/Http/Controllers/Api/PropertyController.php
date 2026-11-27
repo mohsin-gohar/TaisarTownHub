@@ -150,7 +150,7 @@ class PropertyController extends Controller
             if ($isPublicScope) {
                 $page->through(fn (Property $p) => $this->publicPropertyPayload($p));
             } elseif ($request->boolean('with_meta')) {
-                $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
+                $canSeeSensitive = $this->can($request, 'finance.view') || $this->can($request, 'view_sensitive_cnic');
                 $page->through(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive, $isModerator));
             }
 
@@ -224,7 +224,7 @@ class PropertyController extends Controller
             // deal economics. Those fields require the explicit sensitive-data
             // permission even for the owning agency. Staged moderation changes
             // are visible only to users who can approve listings.
-            if ($this->can($request, 'view_sensitive_cnic')) {
+            if ($this->can($request, 'finance.view') || $this->can($request, 'view_sensitive_cnic')) {
                 $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
             }
             if ($isModerator) {
@@ -237,7 +237,7 @@ class PropertyController extends Controller
         // An agency-scoped sensitive-data grant must never unlock another
         // agency's confidential economics on a public listing. Only the owning
         // agency (above) or an intentional platform user may receive them.
-        if ($user && $user->isPlatformUser() && $this->can($request, 'view_sensitive_cnic')) {
+        if ($user && $user->isPlatformUser() && ($this->can($request, 'finance.view') || $this->can($request, 'view_sensitive_cnic'))) {
             $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
             return response()->json($property);
         }
@@ -933,7 +933,7 @@ class PropertyController extends Controller
     ): array {
         $payload = $property->toArray();
 
-        // Confidential deal fields require the explicit sensitive-data grant.
+        // Confidential deal fields require finance.view (or the legacy platform grant).
         // Agency membership alone must not raise an agent's access level.
         if ($canSeeSensitive) {
             $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
