@@ -400,9 +400,9 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->makePublicProperty($agencyB, ['title' => 'Agency B Draft', 'approval_status' => 'draft', 'visibility' => 'private']);
 
         $deal = Transaction::create([
-            'id' => 'txn_' . \Illuminate\\Support\\Str::random(10),
-            'dealNumber' => 'DEAL-' . \Illuminate\\Support\\Str::upper(\Illuminate\\Support\\Str::random(6)),
-            'propertyId' => 'prop_' . \Illuminate\\Support\\Str::random(8),
+            'id' => 'txn_' . \Illuminate\Support\Str::random(10),
+            'dealNumber' => 'DEAL-' . \Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(6)),
+            'propertyId' => 'prop_' . \Illuminate\Support\Str::random(8),
             'propertyTitle' => 'Dashboard report plot',
             'sellerName' => 'Seller',
             'buyerName' => 'Buyer',
