@@ -26,19 +26,19 @@ A release cannot be approved unless all applicable gates pass. Each item is clas
 - [ ] NOT TESTED - No security assessment performed
 
 ### MySQL Backend Tests
-- [x] PASS AT PRIOR HEAD - 425 tests / 3,716 assertions passed on MySQL 8 at commit 9ebff378; latest finance.view changes require the current-head CI result.
+- [x] PASS AT PRIOR HEAD - 425 tests / 3,728 assertions passed on MySQL 8 at code commit ab9a3eb; current code CI passed.
 - [ ] FAIL - Backend tests failing
 - [ ] BLOCKED - Cannot run PHP in this environment
 - [ ] NOT TESTED - No test suite exists
 
 ### Frontend Tests/Build
-- [x] PASS AT PRIOR HEAD - Frontend verification passed at 1b4701c; Playwright ran 52 Chromium tests. Latest Vercel proxy changes require current-head CI.
+- [x] PASS AT PRIOR HEAD - Frontend verification passed at code commit ab9a3eb; Playwright ran 53 Chromium tests. Latest Vercel build is rate-limited.
 - [ ] FAIL - Frontend tests failing
 - [ ] BLOCKED - Cannot run Node in this environment
 - [ ] NOT TESTED - No test suite exists
 
 ### Browser E2E Tests
-- [x] PASS AT PRIOR HEAD - 52 Playwright Chromium tests executed and passed at 1b4701c; the workflow did not execute all 84 tests listed in the historical audit.
+- [x] PASS AT PRIOR HEAD - 53 Playwright Chromium tests executed and passed at code commit ab9a3eb, including 320–1920px responsive coverage; the workflow did not execute all 84 tests listed in the historical audit.
 - [ ] FAIL - E2E tests failing
 - [ ] BLOCKED - Cannot run browsers in this environment
 - [ ] NOT TESTED - No E2E test suite exists
@@ -121,9 +121,9 @@ A release cannot be approved unless all applicable gates pass. Each item is clas
 |---|---|---|
 | Complete source review | IN PROGRESS | Ledger still incomplete; current baseline tree contains 564 tracked file blobs |
 | No unresolved critical/high security vulnerabilities | BLOCKED | Security fixes are in PR #24; latest CI and production verification pending |
-| MySQL backend tests green | PASS AT PRIOR HEAD | 425 tests / 3,716 assertions at 9ebff378; latest permission changes pending CI |
+| MySQL backend tests green | PASS AT PRIOR HEAD | 425 tests / 3,728 assertions at ab9a3eb; current code CI passed |
 | Frontend tests/build green | PASS AT PRIOR HEAD | Frontend verify passed at 1b4701c |
-| Browser E2E green | PASS AT PRIOR HEAD | 52 Chromium Playwright tests passed at 1b4701c |
+| Browser E2E green | PASS AT PRIOR HEAD | 53 Chromium Playwright tests passed at ab9a3eb |
 | Full Docker integration green | PASS AT PRIOR HEAD | Full-stack integration and backup/restore passed at 9ebff378; latest head pending rerun |
 | Backup/restore verified | PASS AT PRIOR HEAD | Isolated MySQL restore drill passed at 9ebff378 |
 | No broken critical workflows | BLOCKED | Live agency and map data fail while API origin is unavailable |
