@@ -44,7 +44,7 @@
 - 31 stale exact-path references have been classified.
 - 3 migration filenames have direct purpose-matched current names with updated timestamps.
 - 20 frontend source paths have been moved, consolidated, or refactored.
-- 6 directory references are directory markers rather than missing file artifacts.
+- 7 directory references are directory markers rather than missing file artifacts.
 - `.env.testing` has no committed replacement by design; CI environment is defined in workflow configuration and `phpunit.xml`.
 - The old `Breadcrumb.tsx` and `StatusBadges.tsx` names have no dedicated same-purpose standalone component in the current tree; behavior appears integrated in page/feature modules and needs UI-specific follow-up if a visual component is a product requirement.
 
