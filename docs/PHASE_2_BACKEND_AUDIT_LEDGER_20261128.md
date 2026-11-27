@@ -279,7 +279,7 @@
 - `backend/app/Http/Middleware/TrustProxies.php`
 
 ### Main findings
-1. **P1:** `EnsureMfaVerified` is not registered in `bootstrap/app.php` or attached to the inspected protected API routes; its enforcement is therefore not active in the request pipeline.
+1. **Superseded by Phase 2.7:** the current reviewed `api_definitions.php` explicitly attaches `EnsureMfaVerified` to the authenticated API group. The earlier inactive-middleware conclusion was incorrect for snapshot `a3f0b5a`; see the Phase 2.7–2.9 API review.
 2. **P2:** `AgencyContext` detects protected routes by searching for the literal `auth:sanctum` middleware string, making the approval gate fragile if routes are reorganized under another auth alias/group.
 3. **P2:** Trusted client IP/scheme handling depends on deployment-specific `TRUSTED_PROXIES` being set to the actual proxy CIDRs.
 4. **P3:** The global restrictive CSP/sandbox requires browser verification for inline PDF/image previews and cross-origin public media.
@@ -305,7 +305,7 @@
 
 ### Main findings
 1. **P1:** An agency staff manager with `agency.manage_staff` can grant extra agency permissions to their own membership or create/assign a custom role to themselves; permission delegation is not bounded by the requester's own grants.
-2. **P1:** `EnsureMfaVerified` remains unattached to the protected API request pipeline (also recorded in Phase 2.5); do not consider MFA globally enforced until wired and tested.
+2. **Superseded by Phase 2.7:** `EnsureMfaVerified` is attached to the authenticated route group in the reviewed snapshot; runtime behavior still requires executing the existing MFA feature tests.
 3. **P2:** No formal Laravel Policy classes or Gate definitions were found; authorization is distributed across middleware, controller trait, User model, role matrices and endpoint-specific checks.
 4. **P2:** `AgencyContext` identifies protected routes through the literal `auth:sanctum` middleware string.
 5. **P2:** Effective platform grants depend on platform role rows seeded by `EnterpriseSeeder`; missing/stale rows can make runtime grants diverge from the permission catalog.
@@ -323,8 +323,33 @@
 - Static review only; no source authorization files changed.
 - No PHPUnit execution, exploit reproduction, route:list, full endpoint authorization matrix, DB permission audit or MFA middleware integration test run.
 - CI intentionally not triggered.
-- P1 self-escalation and inactive MFA middleware require remediation before production authorization sign-off.
+- P1 self-escalation requires remediation before production authorization sign-off. MFA middleware attachment is confirmed in source; runtime test execution remains outstanding.
 
 ## Phase 2 remaining
 
 Continue with Phase 2.7 and subsequent backend areas. Reviews remain task-scoped; no claim that the entire backend is complete.
+
+
+---
+
+## Phase 2.7–2.9 — API routes, request validation and response consistency
+
+**Report:** [Phase 2.7–2.9 API Routes, Validation and Response Review](PHASE_2_7_2_9_API_ROUTES_VALIDATION_RESPONSE_REVIEW_20261128.md)
+
+**Reviewed snapshot:** `a3f0b5ad632ddf68562ba444bb1a5429a40711b0`  
+**Coverage:** 203 route declarations across both API prefixes, API bootstrap/exception renderers, all 31 API endpoint controllers, MFA middleware, API versioning test and MFA feature tests.
+
+### Main findings
+1. **P2 (runtime confirmation required):** Generic API exception rendering only recognizes `getStatusCode()`; AuthorizationException and ModelNotFoundException may fall through to HTTP 500 instead of 403/404.
+2. **P2:** API response shapes are inconsistent: raw models, bare collections, paginator payloads and success/resource envelopes coexist; no API Resource classes are present.
+3. **P2:** Query-string validation and pagination bounds are inconsistent across list/report endpoints.
+4. **P2:** Existing Phase 2.2 input/authorization issues remain open, including checkout return URL allowlisting and bulk map upload bounds.
+5. **P3:** API versioning test checks route-path parity but discards HTTP method sets; health endpoint has no route-specific throttle.
+
+### Important correction
+The current source explicitly attaches `EnsureMfaVerified::class` alongside `auth:sanctum` to the authenticated route group. Earlier Phase 2.5 and 2.6 statements that this middleware was unattached are superseded/incorrect for the reviewed snapshot. Runtime test execution is still required.
+
+### Verification state
+- Static review only; no route:list, PHPUnit, HTTP contract tests, fuzzing or database-backed validation tests executed.
+- No source-code changes.
+- CI intentionally not triggered.
