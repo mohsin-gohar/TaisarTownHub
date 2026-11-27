@@ -70,7 +70,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     404 => 'Resource not found.',
                     422 => 'Validation failed.',
                     429 => 'Too many requests.',
-                    default => 'Server error.',
+                    default => $status < 500 ? 'Request could not be completed.' : 'Server error.',
                 };
                 return response()->json([
                     'success' => false,
