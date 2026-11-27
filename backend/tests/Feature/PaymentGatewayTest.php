@@ -244,6 +244,47 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ]);
     }
 
+    public function test_stripe_recurring_invoice_events_extend_the_subscription_period(): void
+    {
+        $secret = 'whsec_test_secret';
+        config(['services.stripe.webhook' => $secret]);
+        $plan = $this->makePlan();
+        [, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $subscription = AgencySubscription::where('agency_id', $agency->id)->firstOrFail();
+        $subscription->update([
+            'stripe_subscription_id' => 'sub_recurring_123',
+            'status' => 'past_due',
+            'ends_at' => now()->subDay(),
+        ]);
+
+        $periodStart = now()->startOfDay()->timestamp;
+        $periodEnd = now()->addMonth()->endOfDay()->timestamp;
+        $payload = json_encode([
+            'id' => 'evt_invoice_renewal',
+            'type' => 'invoice.payment_succeeded',
+            'data' => ['object' => [
+                'id' => 'in_renewal_123',
+                'subscription' => 'sub_recurring_123',
+                'lines' => ['data' => [[
+                    'period' => ['start' => $periodStart, 'end' => $periodEnd],
+                ]]],
+            ]],
+        ]);
+
+        $this->asGuest();
+        $this->call('POST', '/api/payments/webhook/stripe', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+        ], $payload)->assertOk();
+
+        $subscription->refresh();
+        $this->assertSame('active', $subscription->status);
+        $this->assertSame(
+            now()->addMonth()->toDateString(),
+            $subscription->ends_at->toDateString()
+        );
+    }
+
     public function test_flutterwave_webhook_activates_only_a_matching_pending_invoice(): void
     {
         config(['services.flutterwave.webhook_secret' => 'fw_test_hash']);
