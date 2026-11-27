@@ -211,6 +211,8 @@ class SupportTicketsTest extends EnterpriseTestCase
     {
         [$user] = $this->memberUser();
 
+        $this->withoutExceptionHandling();
+
         SupportMessage::creating(function () {
             throw new \\RuntimeException('Simulated opening-message persistence failure.');
         });
