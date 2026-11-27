@@ -188,7 +188,7 @@ services:
       RUN_MIGRATIONS: "false"
     volumes:
       # Shared private document vault: every replica must see the same files.
-      - private_vault:/var/www/html/storage/app/private/documents
+      - private_vault:/var/www/html/storage/app/private
       # Shared public disk (maps, public media) so uploads survive container
       # recreation and every replica serves the same files.
       - public_storage:/var/www/html/storage/app/public
@@ -309,7 +309,7 @@ services:
       MALWARE_SCAN_FAIL_CLOSED: "true"
       MALWARE_SCAN_LOG_SKIPPED: "true"
     volumes:
-      - private_vault:/var/www/html/storage/app/private/documents
+      - private_vault:/var/www/html/storage/app/private
       - public_storage:/var/www/html/storage/app/public
     depends_on:
       mysql:
@@ -372,7 +372,7 @@ services:
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@taisartownhub.com}
       RUN_MIGRATIONS: "false"
     volumes:
-      - private_vault:/var/www/html/storage/app/private/documents
+      - private_vault:/var/www/html/storage/app/private
       - public_storage:/var/www/html/storage/app/public
     depends_on:
       mysql:
