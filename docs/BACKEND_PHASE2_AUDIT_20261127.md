@@ -462,3 +462,11 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - The previous status endpoint allowed pending commissions to be marked paid immediately, allowed paid entries to be moved back to pending/cancelled, and did not set `paid_at` or `paid_by`.
 - The endpoint now locks the commission row, requires pending → accrued → paid, allows cancellation before payout, treats paid/cancelled as terminal, and records the authenticated payout actor and timestamp atomically.
 - Regression coverage checks that pending cannot be paid directly, successful payout records actor/time, and a paid commission cannot be reopened.
+
+
+### P1 — Verifying a manual plan invoice did not activate the agency subscription
+
+- Admin invoice verification marked a plan-linked invoice paid but left the agency on its previous plan, despite the invoice being the manual subscription billing path.
+- When a verified invoice has a `plan_id`, invoice settlement now locks the agency and activates/updates its subscription in the same database transaction, using the invoice period where supplied and disabling automatic renewal for the manual payment.
+- Invoices without a plan remain simple manual receivables and do not change the subscription.
+- Added regression coverage for the plan-linked manual invoice activation and period boundaries.
