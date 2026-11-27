@@ -634,15 +634,10 @@ class AgencyStaffController extends Controller
     }
 
     /** PUT /api/agency/roles/{id} — update a custom role. */
-    public function updateRole(Request $request, string $id)
+        public function updateRole(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
-
-        $role = Role::where('scope', 'agency')
-            ->where('agency_id', $agencyId)
-            ->where('is_system', false)
-            ->findOrFail($id);
 
         $request->validate([
             'name' => 'sometimes|string|min:2|max:60',
@@ -650,21 +645,40 @@ class AgencyStaffController extends Controller
             'permissions.*' => 'string|max:100',
         ]);
 
-        if ($request->has('permissions')) {
-            $invalid = array_diff($request->permissions, Permissions::agencyAssignable());
-            if ($invalid) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
-                ], 422);
-            }
-            $role->permissions = array_values($request->permissions);
-        }
-        if ($request->has('name')) {
-            $role->name = $request->name;
-        }
-        $role->save();
+        $result = DB::transaction(function () use ($agencyId, $id, $request): array {
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+            $role = Role::where('scope', 'agency')
+                ->where('agency_id', $agencyId)
+                ->where('is_system', false)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
+            if ($request->has('permissions')) {
+                $invalid = array_diff($request->permissions, Permissions::agencyAssignable());
+                if ($invalid) {
+                    return [
+                        'error' => 422,
+                        'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
+                    ];
+                }
+                $role->permissions = array_values($request->permissions);
+            }
+            if ($request->has('name')) {
+                $role->name = $request->name;
+            }
+            $role->save();
+
+            return ['role' => $role->fresh()];
+        });
+
+        if (isset($result['error'])) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], $result['error']);
+        }
+
+        $role = $result['role'];
         $this->writeAudit($request, 'agency.role.update', 'role:' . $role->id, 'Custom role updated: ' . $role->name, [
             'agency_id' => $agencyId,
             'entity_type' => 'role',
@@ -674,7 +688,6 @@ class AgencyStaffController extends Controller
         return response()->json(['success' => true, 'message' => 'Role updated.']);
     }
 
-    /** DELETE /api/agency/roles/{id} — delete an unused custom role. */
     public function destroyRole(Request $request, string $id)
     {
         $agencyId = $this->requireAgency($request);
