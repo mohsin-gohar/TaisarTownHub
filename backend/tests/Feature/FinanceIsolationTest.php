@@ -445,6 +445,30 @@ class FinanceIsolationTest extends EnterpriseTestCase
         $this->assertDatabaseCount('payment_schedules', 0);
     }
 
+    public function test_deal_update_cannot_lower_agreement_below_collected_payments(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 5000000,
+        ], $headers)->assertStatus(201);
+
+        $this->patchJson("/api/agency/transactions/{$deal['id']}", [
+            'agreementAmountPKR' => 4000000,
+        ], $headers)->assertStatus(422);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $deal['id'],
+            'agreementAmountPKR' => 10000000,
+        ]);
+        $this->assertDatabaseHas('transaction_payments', [
+            'transaction_id' => $deal['id'],
+            'amount' => '5000000.00',
+        ]);
+    }
+
     public function test_voided_deal_rejects_further_payments_and_schedules(): void
     {
         [$user] = $this->agencyUser($this->financePermissions());
