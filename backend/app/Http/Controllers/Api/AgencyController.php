@@ -144,6 +144,14 @@ class AgencyController extends Controller
      */
     public function index(Request $request)
     {
+        $filters = $request->validate([
+            'search' => 'nullable|string|max:120',
+            'city' => 'nullable|string|max:60',
+            'has_listings' => 'sometimes|boolean',
+            'sort' => 'nullable|in:name,newest,listings',
+            'per_page' => 'nullable|integer|min:1|max:1000',
+        ]);
+
         // Aggregate the card counts in the directory query. Calling
         // activeMembers()->count() and properties()->count() while mapping
         // every result caused three extra queries per agency (N+1).
@@ -157,8 +165,8 @@ class AgencyController extends Controller
             ->where('status', 'active')
             ->where('verification_status', 'verified');
 
-        if ($request->filled('search')) {
-            $s = $this->escapeLike((string) $request->search);
+        if (!empty($filters['search'])) {
+            $s = $this->escapeLike($filters['search']);
             $query->where(function ($q) use ($s) {
                 $q->where('name', 'like', "%{$s}%")
                     ->orWhere('city', 'like', "%{$s}%")
@@ -166,8 +174,8 @@ class AgencyController extends Controller
             });
         }
 
-        if ($request->filled('city')) {
-            $city = $this->escapeLike((string) $request->city);
+        if (!empty($filters['city'])) {
+            $city = $this->escapeLike($filters['city']);
             $query->where('city', 'like', "%{$city}%");
         }
 
@@ -178,7 +186,7 @@ class AgencyController extends Controller
             });
         }
 
-        $sort = (string) $request->get('sort', 'name');
+        $sort = (string) ($filters['sort'] ?? 'name');
         if ($sort === 'newest') {
             $query->orderByDesc('created_at');
         } elseif ($sort === 'listings') {
@@ -187,7 +195,7 @@ class AgencyController extends Controller
             $query->orderBy('name');
         }
 
-        $perPage = min(max((int) $request->get('per_page', 12), 1), 50);
+        $perPage = min((int) ($filters['per_page'] ?? 12), 50);
         $agencies = $query->paginate($perPage);
 
         $agencies->getCollection()->transform(function (Agency $agency) {
@@ -205,6 +213,11 @@ class AgencyController extends Controller
      */
     public function show(Request $request, string $id)
     {
+        $filters = $request->validate([
+            'type' => 'nullable|string|max:50',
+            'per_page' => 'nullable|integer|min:1|max:1000',
+        ]);
+
         $agency = Agency::query()
             ->withCount([
                 'activeMembers as active_member_count',
@@ -226,8 +239,8 @@ class AgencyController extends Controller
         $listingsQuery = $agency->properties()->publiclyVisible()
             ->where('listing_purpose', 'sale');
 
-        if ($request->filled('type')) {
-            $listingsQuery->where('type', $request->type);
+        if (!empty($filters['type'])) {
+            $listingsQuery->where('type', $filters['type']);
         }
 
         $saleListingCount = (int) $agency->public_sale_listing_count;
@@ -242,7 +255,7 @@ class AgencyController extends Controller
             ->orderByDesc('isFeatured')
             ->orderByDesc('published_at')
             ->orderBy('id')
-            ->paginate(min(max((int) $request->get('per_page', 12), 1), 50))
+            ->paginate(min((int) ($filters['per_page'] ?? 12), 50))
             ->through(fn ($p) => $this->publicListingPayload($p));
 
         return response()->json([
