@@ -65,11 +65,12 @@ A successful Vercel frontend build is not proof that the Laravel API is availabl
 | `REDIS_HOST/PORT/PASSWORD` | cache, sessions, queues, rate limits |
 | `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`, `SESSION_DRIVER=redis` | |
 | `MAIL_MAILER/MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_FROM_ADDRESS` | real SMTP; verify delivery of verification/reset mail |
-| `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` | exact production origin(s) — never `*` |
+| `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` | exact SPA origin(s), including `taisartownhub.vercel.app` until custom-domain DNS is live — never `*` |
 | `TRUSTED_PROXIES` | real load-balancer/nginx IPs (X-Forwarded-For spoofing prevention) |
 | `CLAMAV_HOST/PORT`, scan enabled | fail-closed upload scanning |
 | `STRIPE_*`, `FLUTTERWAVE_*` | live keys + webhook secrets, or explicitly disable payments |
-| `GOOGLE_OAUTH_*` | client id/secret + production redirect URI |
+| `FRONTEND_URL` | SPA origin used by OAuth callbacks, password reset, and verification emails; set to the registered custom domain after DNS is live |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Google OAuth credentials + API callback URI, or leave unset to disable Google Sign-In |
 | `SENTRY / LOGROCKET / GA` | optional monitoring ids |
 | Backup credentials | off-site storage; `APP_KEY` stored separately from data backups |
 
