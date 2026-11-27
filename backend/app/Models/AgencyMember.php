@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Support\Permissions;
 
 class AgencyMember extends Model
 {
@@ -48,7 +49,15 @@ class AgencyMember extends Model
         // A corrupt/stale membership must never inherit platform grants or a
         // custom role owned by a different agency through its role_id.
         $rolePerms = $roleBelongsToThisAgency ? ($role->permissions ?? []) : [];
-        $extras = $this->permissions ?? [];
+        // Preserve explicit legacy aliases for the compatibility mapper, but
+        // never trust unknown/platform keys in persisted role definitions.
+        $rolePerms = array_values(array_filter($rolePerms, fn ($key) =>
+            is_string($key) && (str_starts_with($key, 'legacy.') || !Permissions::isPlatform($key))
+        ));
+        $extras = array_values(array_intersect(
+            $this->permissions ?? [],
+            Permissions::agencyAssignable()
+        ));
 
         return array_values(array_unique(array_merge($rolePerms, $extras)));
     }
