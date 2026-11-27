@@ -89,7 +89,7 @@ test.describe('Public Pages', () => {
     const drawer = page.getByRole('dialog', { name: 'Navigation menu' });
     await expect(drawer).toBeVisible();
     await drawer.getByRole('button', { name: 'Properties' }).click();
-    await expect(page).toHaveURL(/\\/properties$/);
+    await expect(page).toHaveURL(/properties$/);
     await expect(page.getByRole('dialog', { name: 'Navigation menu' })).toHaveCount(0);
 
     const widths = await page.evaluate(() => ({
