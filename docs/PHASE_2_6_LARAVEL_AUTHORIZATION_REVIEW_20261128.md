@@ -121,4 +121,4 @@ Existing tests verify catalog key existence, exclusion of platform/legacy keys f
 - No source files changed in this review.
 - No PHPUnit execution, role mutation exploit reproduction, database permission audit, route:list, HTTP authorization matrix, or MFA middleware integration test run.
 - CI intentionally not triggered.
-- The P1 self-escalation and inactive MFA middleware findings must be addressed before production authorization sign-off.
+- The P1 self-escalation finding must be addressed before production authorization sign-off. **MFA wiring correction (Phase 2.7–2.9):** current `backend/routes/api_definitions.php` explicitly attaches `EnsureMfaVerified::class` to the authenticated API route group; the earlier statement that it was unattached was incorrect for reviewed snapshot `a3f0b5ad632ddf68562ba444bb1a5429a40711b0`. Runtime tests remain outstanding. See `PHASE_2_7_2_9_API_ROUTES_VALIDATION_RESPONSE_REVIEW_20261128.md`.
