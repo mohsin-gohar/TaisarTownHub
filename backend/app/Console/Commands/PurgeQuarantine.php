@@ -34,7 +34,7 @@ class PurgeQuarantine extends Command
 
         $purgedRejected = 0;
         $failed = 0;
-        DocumentQuarantine::where('created_at', '<', $cutoff)->get()->each(function (DocumentQuarantine $row) use (&$purgedRejected) {
+        DocumentQuarantine::where('created_at', '<', $cutoff)->get()->each(function (DocumentQuarantine $row) use (&$purgedRejected, &$failed) {
             $deleteFailed = false;
             try {
                 if ($row->disk_path && Storage::disk('quarantine')->exists($row->disk_path)
@@ -63,7 +63,7 @@ class PurgeQuarantine extends Command
             ->where('status', 'quarantined')
             ->where('created_at', '<', $cutoff)
             ->get()
-            ->each(function (Document $document) use (&$purgedHolds) {
+            ->each(function (Document $document) use (&$purgedHolds, &$failed) {
                 $deleteFailed = false;
                 try {
                     $disk = $document->storage_disk ?: 'documents';
