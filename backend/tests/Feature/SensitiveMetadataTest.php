@@ -58,6 +58,30 @@ class SensitiveMetadataTest extends EnterpriseTestCase
         }
     }
 
+
+    public function test_visibility_mutation_response_does_not_leak_sensitive_property_fields(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.view', 'properties.update'], 'agent');
+        $property = $this->makePublicProperty($agency, [
+            'purchasePricePKR' => 5000000,
+            'sellingPricePKR' => 7000000,
+            'internalNotes' => 'confidential visibility response note',
+            'pending_changes' => ['title' => 'Unapproved staged title'],
+        ]);
+
+        $token = $this->tokenFor($user);
+        $this->actingAs($user, 'sanctum');
+        $response = $this->postJson(
+            "/api/properties/{$property->id}/visibility",
+            ['visibility' => 'private'],
+            $this->authHeaders($token) + ['X-Agency-Id' => $agency->id]
+        )->assertOk()->assertJsonPath('success', true);
+
+        foreach (['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes'] as $key) {
+            $this->assertArrayNotHasKey($key, $response->json('property'), "{$key} leaked from visibility mutation response");
+        }
+    }
+
     public function test_property_show_requires_finance_permission_even_for_owning_agency(): void
     {
         [$user, $agency] = $this->agencyUser(['properties.view', 'finance.view'], 'manager');
