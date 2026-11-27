@@ -60,6 +60,31 @@ class SensitiveMetadataTest extends EnterpriseTestCase
 
 
 
+
+    public function test_plain_listing_creator_cannot_set_sensitive_financial_fields(): void
+    {
+        [$user, $agency] = $this->agencyUser(['properties.create'], 'agent');
+        $token = $this->tokenFor($user);
+        $this->actingAs($user, 'sanctum');
+
+        $this->postJson(
+            '/api/properties',
+            [
+                'title' => 'Sensitive create attempt',
+                'pricePKR' => 1000000,
+                'phase' => '1',
+                'sector' => 'A',
+                'sizeSqYards' => 120,
+                'purchasePricePKR' => 1,
+                'sellingPricePKR' => 2,
+                'internalNotes' => 'unauthorized note',
+            ],
+            $this->authHeaders($token) + ['X-Agency-Id' => $agency->id]
+        )->assertForbidden();
+
+        $this->assertDatabaseCount('properties', 0);
+    }
+
     public function test_plain_listing_editor_cannot_change_sensitive_financial_fields(): void
     {
         [$user, $agency] = $this->agencyUser(['properties.view', 'properties.update'], 'agent');
