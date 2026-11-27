@@ -22,15 +22,16 @@ A task is VERIFIED only when the evidence is linked or recorded. A passing unit 
 - [x] Record production launch blockers without changing production.
 - [x] Create a reconciled baseline report and this master checklist.
 - [x] Reconcile the current 566-blob inventory against the historical ledger at exact-path level; record matched, absent, and newly unlisted paths in `docs/FILE_INVENTORY_20261127.md`.
-- [ ] Semantically map the 31 historical paths absent at exact path to renames, migrations, obsolete entries, or confirmed removals; review any ambiguous mapping.
+- [x] Classify all 31 historical paths absent at exact path as refactors/moves, migration timestamp changes, directory markers, or intentionally untracked environment files; unresolved standalone Breadcrumb/StatusBadges component equivalence is explicitly documented.
 - [ ] Complete the actual line-by-line review of all 566 blobs; inventory alone is not a file audit.
 - [ ] Review all branches/PRs and resolve stale/diverged work only after code-level review and explicit merge authorization.
 **Exit gate:** repository baseline is reproducible; all open PRs and branches are dispositioned; file ledger reconciles exactly; review coverage is evidence-backed.
 
 ## Phase 2 — Backend architecture and code audit
-- [ ] Map all API routes to controllers, middleware, policies, validators, services, jobs, events, notifications, and tests.
-- [ ] Review controllers and request validation for authorization, mass assignment, error handling, transactions, and consistent API responses.
-- [ ] Review models, casts, relations, scopes, observers, factories, and serialization.
+- [x] Inventory all 204 API route declarations and map each to its controller action; static handler-existence check found 0 missing methods. See `docs/BACKEND_ROUTE_INVENTORY_20261127.md`.
+- [~] Complete route-to-middleware/policy/validator/service/job/event/notification/test traceability.
+- [~] Begin high-risk controller review (auth, property, workspace sync, agency staff, finance, document/media vault, dealer files, payments); finish the full controller/request audit and add regression tests for confirmed findings.
+- [~] Begin identity/tenant/financial model review (User, Agency, Property, Transaction); full model and serialization audit remains pending.
 - [ ] Review service boundaries, duplicate logic, race conditions, idempotency, retries, and failure handling.
 - [ ] Review queue jobs, scheduler commands, events/listeners, notifications, mail, and logging/PII.
 - [ ] Review caching, query counts, pagination, N+1 risks, timeouts, and resource limits.
