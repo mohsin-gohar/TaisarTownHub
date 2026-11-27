@@ -66,6 +66,80 @@
 
 ---
 
+
+---
+
+## Phase 2.2 — All Laravel controllers review
+
+<badge>Reviewed — static</badge>
+
+**Report:** [Phase 2.2 Laravel Controllers Review](PHASE_2_2_LARAVEL_CONTROLLERS_REVIEW_20261128.md)
+
+**Reviewed snapshot:** `1504217879532fdfa7985cb41373e92b3c527f2d`  
+**Coverage:** 33/33 tracked files under `backend/app/Http/Controllers/` (31 API controllers plus the shared authorization trait and base controller).
+
+### Exact files reviewed
+
+| Status | Current path |
+|---|---|
+| READ | `backend/app/Http/Controllers/Api/AdminAgencyController.php` |
+| READ | `backend/app/Http/Controllers/Api/AdminAgencyOversightController.php` |
+| READ | `backend/app/Http/Controllers/Api/AdminDashboardController.php` |
+| READ | `backend/app/Http/Controllers/Api/AdminFeaturedAgencyController.php` |
+| READ | `backend/app/Http/Controllers/Api/AdminSystemController.php` |
+| READ | `backend/app/Http/Controllers/Api/AdminUserController.php` |
+| READ | `backend/app/Http/Controllers/Api/AgencyController.php` |
+| READ | `backend/app/Http/Controllers/Api/AgencyStaffController.php` |
+| READ | `backend/app/Http/Controllers/Api/AgencyVideoController.php` |
+| READ | `backend/app/Http/Controllers/Api/AuthController.php` |
+| READ | `backend/app/Http/Controllers/Api/AuthorizesApi.php` |
+| READ | `backend/app/Http/Controllers/Api/DealerController.php` |
+| READ | `backend/app/Http/Controllers/Api/DealerFilesController.php` |
+| READ | `backend/app/Http/Controllers/Api/DocumentController.php` |
+| READ | `backend/app/Http/Controllers/Api/FavoriteController.php` |
+| READ | `backend/app/Http/Controllers/Api/FeaturedAgencyController.php` |
+| READ | `backend/app/Http/Controllers/Api/FinanceController.php` |
+| READ | `backend/app/Http/Controllers/Api/HealthController.php` |
+| READ | `backend/app/Http/Controllers/Api/InquiryController.php` |
+| READ | `backend/app/Http/Controllers/Api/LeadController.php` |
+| READ | `backend/app/Http/Controllers/Api/LocationController.php` |
+| READ | `backend/app/Http/Controllers/Api/MapController.php` |
+| READ | `backend/app/Http/Controllers/Api/MediaController.php` |
+| READ | `backend/app/Http/Controllers/Api/NotificationController.php` |
+| READ | `backend/app/Http/Controllers/Api/PaymentController.php` |
+| READ | `backend/app/Http/Controllers/Api/ProjectController.php` |
+| READ | `backend/app/Http/Controllers/Api/PropertyController.php` |
+| READ | `backend/app/Http/Controllers/Api/SavedSearchController.php` |
+| READ | `backend/app/Http/Controllers/Api/SubscriptionController.php` |
+| READ | `backend/app/Http/Controllers/Api/SupportController.php` |
+| READ | `backend/app/Http/Controllers/Api/TransactionController.php` |
+| READ | `backend/app/Http/Controllers/Api/WorkspaceController.php` |
+| READ | `backend/app/Http/Controllers/Controller.php` |
+
+### Main findings
+
+1. **P1:** Property private financial fields are accepted without a separate finance permission gate; the visibility endpoint also returns private financial fields and `pending_changes` unconditionally.
+2. **P1:** Finance refunds have no upper bound tied to the amount already collected, allowing an excessive refund to make ledger totals negative.
+3. **P1:** Media sale mutation has no transaction/row lock, allowing concurrent sale requests to overwrite sale attribution.
+4. **P2:** MFA challenge consumption uses a non-atomic cache read/verify/delete sequence.
+5. **P2:** Stripe checkout return URLs are accepted from the client after URL syntax validation only.
+6. **P2:** Last-active-agency-owner checks are not serialized with the membership mutation.
+7. **P2:** Bulk map uploads lack a maximum image count and all-or-nothing file/database cleanup.
+8. **P2:** Legacy public workspace property projection exposes `assignedDealerId`.
+9. **P2:** Admin subscription invoice verification is not a locked state transition.
+10. **P2:** Several upload flows need compensating cleanup if database persistence fails after bytes are written.
+11. **P3:** Several paginated endpoints cap only the upper `per_page` bound and do not clamp the lower bound to 1.
+12. **P3:** Finance, document, workspace and authentication controllers combine multiple business responsibilities and compatibility paths.
+
+### Verification state
+
+- Static controller source review: complete for all 33 controller-directory files.
+- Findings recorded with file/method/line evidence in the Phase 2.2 report.
+- No application controller source files changed.
+- PHPUnit, runtime HTTP, concurrency and storage failure-injection tests: not run.
+- CI: intentionally not triggered.
+- Phase 2 backend audit remains in progress; this task completes controller review only.
+
 ## Phase 2 remaining
 
-Keep adding exact paths and evidence under each numbered Phase 2 task. Do not infer READ/TESTED status from file existence, inventory, historical reports, or another file's references.
+Continue with Phase 2.3 and later. Keep exact paths and evidence; do not infer READ/TESTED status from inventory, historical reports, or another file's references.
