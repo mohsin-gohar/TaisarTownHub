@@ -72,7 +72,9 @@ test.describe('Public Pages', () => {
     const count = await socialLinks.count();
     for (let index = 0; index < count; index += 1) {
       const href = await socialLinks.nth(index).getAttribute('href');
-      expect(href || '').not.toMatch(/^https?:\\/\\/(www\\.)?(facebook|youtube|linkedin|x|instagram)\\.com\\/?$/i);
+      if (!href) continue;
+      const hostname = new URL(href).hostname.toLowerCase();
+      expect(['facebook.com', 'www.facebook.com', 'youtube.com', 'www.youtube.com', 'linkedin.com', 'www.linkedin.com', 'x.com', 'www.x.com', 'instagram.com', 'www.instagram.com']).not.toContain(hostname);
     }
   });
 
