@@ -21,8 +21,9 @@ A task is VERIFIED only when the evidence is linked or recorded. A passing unit 
 - [x] Separate main-merged evidence from unmerged PR evidence and production observations.
 - [x] Record production launch blockers without changing production.
 - [x] Create a reconciled baseline report and this master checklist.
-- [ ] Reconcile every historical file-ledger entry to the current 566-blob tree; classify added, removed, renamed, generated, binary, and historical files.
-- [ ] Complete the actual line-by-line file review; inventory alone is not a file audit.
+- [x] Reconcile the current 566-blob inventory against the historical ledger at exact-path level; record matched, absent, and newly unlisted paths in `docs/FILE_INVENTORY_20261127.md`.
+- [ ] Semantically map the 31 historical paths absent at exact path to renames, migrations, obsolete entries, or confirmed removals; review any ambiguous mapping.
+- [ ] Complete the actual line-by-line review of all 566 blobs; inventory alone is not a file audit.
 - [ ] Review all branches/PRs and resolve stale/diverged work only after code-level review and explicit merge authorization.
 **Exit gate:** repository baseline is reproducible; all open PRs and branches are dispositioned; file ledger reconciles exactly; review coverage is evidence-backed.
 
