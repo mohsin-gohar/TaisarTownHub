@@ -1,0 +1,29 @@
+# Block direct access to sensitive files and directories
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+RedirectMatch 404 /\.env
+RedirectMatch 404 /vendor/
+RedirectMatch 404 /storage/
+RedirectMatch 404 /bootstrap/
+RedirectMatch 404 /config/
+RedirectMatch 404 /database/
+RedirectMatch 404 /routes/
+RedirectMatch 404 /app/
+RedirectMatch 404 /resources/
+RedirectMatch 404 /tests/
+RedirectMatch 404 /scripts/
+RedirectMatch 404 /\.git
+
+# Laravel front controller
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
