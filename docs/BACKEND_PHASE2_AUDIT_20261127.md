@@ -524,3 +524,10 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 
 - Custom role creation checked for an existing key and inserted the role without the agency serialization lock used by other staff mutations.
 - The duplicate check and insert now execute under the same per-agency row lock, so concurrent requests cannot both pass the check.
+
+
+### P1 — Agency managers could remove another owner while multiple owners remained
+
+- Role-change endpoints already required an owner to change owner membership, but the separate member-removal endpoint enforced only the last-owner invariant. A manager with staff-management permission could therefore remove an owner whenever a second owner remained.
+- Removal now applies the same owner-only authorization inside the agency lock. Owner invitations also recheck the requester’s owner membership after acquiring that lock, closing the corresponding stale-authorization race.
+- Regression coverage verifies a manager cannot remove an owner even when another active owner remains.
