@@ -409,6 +409,77 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->get("/api/media/{$media['id']}/file")->assertStatus(200);
     }
 
+    public function test_media_sale_uses_exact_decimal_amounts_and_can_only_be_completed_once(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $headers = $this->authHeaders($this->tokenFor($user));
+        $media = MediaFile::create([
+            'id' => 'med_sale_' . bin2hex(random_bytes(5)),
+            'agency_id' => $agency->id,
+            'title' => 'Sale precision regression',
+            'type' => 'image',
+            'visibility' => 'private',
+            'status' => 'available',
+            'uploaded_by' => $user->id,
+        ]);
+
+        $this->postJson('/api/agency/media/' . $media->id . '/sell', [
+            'selling_price_pk' => '10000.25',
+            'cost_price_pk' => '7000.10',
+            'buyer_name' => 'Decimal Buyer',
+            'buyer_phone' => '03001234567',
+        ], $headers)->assertOk()
+            ->assertJsonPath('media.sold_price_pk', '10000.25')
+            ->assertJsonPath('media.cost_price_pk', '7000.10')
+            ->assertJsonPath('media.profit_pk', '3000.15');
+
+        $this->assertDatabaseHas('media_files', [
+            'id' => $media->id,
+            'sold_price_pk' => '10000.25',
+            'cost_price_pk' => '7000.10',
+            'profit_pk' => '3000.15',
+            'status' => 'sold',
+        ]);
+
+        $this->postJson('/api/agency/media/' . $media->id . '/sell', [
+            'selling_price_pk' => '12000.00',
+            'cost_price_pk' => '7000.10',
+            'buyer_name' => 'Second Buyer',
+        ], $headers)->assertStatus(422);
+
+        $this->assertDatabaseHas('media_files', [
+            'id' => $media->id,
+            'sold_price_pk' => '10000.25',
+            'buyer_name' => 'Decimal Buyer',
+        ]);
+    }
+
+    public function test_media_sale_rejects_more_than_two_decimal_places(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $media = MediaFile::create([
+            'id' => 'med_precision_' . bin2hex(random_bytes(5)),
+            'agency_id' => $agency->id,
+            'title' => 'Invalid precision regression',
+            'type' => 'image',
+            'visibility' => 'private',
+            'status' => 'available',
+            'uploaded_by' => $user->id,
+        ]);
+
+        $this->postJson('/api/agency/media/' . $media->id . '/sell', [
+            'selling_price_pk' => '100.999',
+            'buyer_name' => 'Invalid Decimal Buyer',
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('selling_price_pk');
+
+        $this->assertDatabaseHas('media_files', [
+            'id' => $media->id,
+            'status' => 'available',
+        ]);
+    }
+
     /* ============ Storage monitoring (no quota) ============ */
 
     public function test_storage_quota_is_not_enforced_for_this_release(): void
