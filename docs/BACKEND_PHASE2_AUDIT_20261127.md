@@ -328,7 +328,7 @@
 - Full model/relationship/cast/serialization review.
 - Jobs/notifications/queue failure and retry behavior beyond the sampled commands.
 - Full migration/index/foreign-key/data-integrity review.
-- Latest full MySQL 8 backend suite passed: **435 tests, 3,789 assertions** (32.51 seconds). Frontend verification, OpenAPI parsing, and Playwright Chromium also passed on the same tested code head. Docker frontend image and MySQL backup/restore drill passed; the Docker backend-image build/integration job is still running at the time of this report update.
+- At the prior tested code head (before the follow-up changes in section 7), the MySQL 8 backend suite passed: **435 tests, 3,789 assertions** (32.51 seconds). Frontend verification, OpenAPI parsing, and Playwright Chromium also passed on that earlier code head. Docker frontend image and MySQL backup/restore drill passed; the Docker backend-image build/integration job was still running at that time. The follow-up changes in section 7 have not been rerun; CI/test execution remains paused per instruction.
 - Fixing any further confirmed defects discovered by the remaining audit.
 
 No production database, files, credentials, DNS, payment configuration, or hosting settings were accessed or modified. No changes were made directly to `main`.
