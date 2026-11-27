@@ -396,3 +396,15 @@ No production database, files, credentials, DNS, payment configuration, or hosti
 - `MediaFile` stores sale prices/profit as DECIMAL(14,2), but its model casts them to float and `MediaController::sell()` converts request values to float. Its sale transition also lacks the row lock/transaction used by the dealer-file sale path, so concurrent requests require a separate integrity fix and regression test.
 
 These findings remain open for the next financial-integrity pass; no claim is made that the wider financial audit is complete.
+
+
+### P2 — Dealer-file and media-sale monetary precision and duplicate-sale protection
+
+**Affected:** `DealerFile`, `DealerFilesController::sell()`, `MediaFile`, `MediaController::sell()`, and `FileVaultSecurityTest`.
+
+- Removed binary-float casts from DECIMAL sale-price, cost-price, and profit fields.
+- Dealer-file sale profit now uses integer paise arithmetic, including the legacy 70% default-cost calculation; dealer commission counters retain their existing whole-PKR rounding contract.
+- Media sale now validates a maximum of two decimal places, calculates sale/cost/profit in integer paise, and locks the agency-scoped media row inside a database transaction before changing its sold state.
+- Added regression coverage for exact media sale amounts, rejection of excess decimal precision, and rejection of a second sale without overwriting the original buyer or sale amount.
+
+**Validation:** committed source was fetched again and checked for removal of float casts, integer-paise calculations, the locked media state transition, and presence of regression tests. PHPUnit and CI remain unrun/paused as instructed.
