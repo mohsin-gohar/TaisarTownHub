@@ -186,6 +186,22 @@ class PaymentGatewayTest extends EnterpriseTestCase
             'status' => 'active',
             'stripe_subscription_id' => 'sub_test_123',
         ]);
+
+        // Replayed delivery is idempotent and must not create another subscription.
+        $this->call(
+            'POST',
+            '/api/payments/webhook/stripe',
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, $secret),
+            ],
+            $payload
+        )->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame(1, \\App\\Models\\AgencySubscription::where('agency_id', $agency->id)->count());
     }
 
     public function test_flutterwave_webhook_activates_only_a_matching_pending_invoice(): void
