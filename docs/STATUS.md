@@ -37,9 +37,9 @@ These are repository/CI and local test-environment results, not production-host 
 ## Live deployment observations
 
 - Vercel production deployment for application baseline `3584c9c` reached **READY**.
-- The Vercel project has `taisartownhub.vercel.app`, `taisartownhub.com`, and `www.taisartownhub.com` attached. `www` is configured to redirect to the apex domain with HTTP 308.
+- The Vercel project has `taisartownhub.vercel.app`, `taisartownhub.com`, and `www.taisartownhub.com` attached. `www` is configured to redirect to the apex domain with HTTP 308. **However, a Vercel registrar availability lookup reports `taisartownhub.com` is available to register; its Vercel domain record has no purchase timestamp or nameservers. The domain is not currently registered/purchased.**
 - **The custom-domain DNS is still misconfigured.** DNS lookups for `taisartownhub.com` and `www.taisartownhub.com` returned “DNS name does not exist”. Vercel reports `misconfigured: true`.
-- Vercel's current recommended apex A records are `216.198.79.1` and `64.29.17.1`; the recommended `www` CNAME is `fbb47a846f572c5c.vercel-dns-017.com`. These records have **not** been changed at the registrar.
+- Vercel's current recommended apex A records are `216.198.79.1` and `64.29.17.1`; the recommended `www` CNAME is `fbb47a846f572c5c.vercel-dns-017.com`. These records have **not** been changed at a registrar; first the domain must be purchased/registered.
 - DNS lookup for `api.taisartownhub.com` also returned “DNS name does not exist”. The backend host must be selected and deployed before its DNS target can be configured.
 - The Vercel `/api/health` proxy remains **502** because the configured API origin is unavailable.
 - The InfinityFree backend endpoint is not serving the Laravel API; its response is a hosting-provider page/challenge, not a healthy API.
