@@ -37,6 +37,11 @@ class MediaFile extends Model
         ];
     }
 
+    /** Numeric JSON compatibility; sale calculations use integer paise. */
+    public function getSoldPricePkAttribute($value): ?float { return $value === null ? null : (float) $value; }
+    public function getCostPricePkAttribute($value): ?float { return $value === null ? null : (float) $value; }
+    public function getProfitPkAttribute($value): float { return (float) $value; }
+
     public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class, 'agency_id');
