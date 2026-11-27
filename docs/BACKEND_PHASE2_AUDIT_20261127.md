@@ -271,6 +271,17 @@
 
 **Status:** code and regression test committed.
 
+### P1 — Ordinary listing editors could alter confidential property financial fields
+
+**Affected:** `backend/app/Http/Controllers/Api/PropertyController.php`, `backend/tests/Feature/SensitiveMetadataTest.php`.
+
+- `PUT/PATCH /api/properties/{id}` accepted `purchasePricePKR`, `sellingPricePKR`, and `internalNotes` from any user with ordinary `properties.update`, even though read paths require an explicit finance/sensitive permission.
+- The same update response also unconditionally exposed those fields and moderation-only `pending_changes`.
+- Fix: reject sensitive-field writes unless the caller has `finance.view` or the legacy `view_sensitive_cnic` grant, and serialize the response with the shared field-level permission filter. Staged changes remain restricted to moderators.
+- Regression tests cover denied edits, unchanged stored values, authorized finance edits, and absence of moderation-only staged changes in the response.
+
+**Status:** code and regression tests committed.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
