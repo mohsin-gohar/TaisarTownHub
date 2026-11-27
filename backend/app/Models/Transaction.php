@@ -150,7 +150,10 @@ class Transaction extends Model
         $totalPaidCents = $this->totalPaidCents();
         $agreementCents = ((int) $this->agreementAmountPKR) * 100;
 
-        $this->advancePaymentPKR = (int) round($totalPaidCents / 100);
+        $roundedPaidRupees = $totalPaidCents >= 0
+            ? intdiv($totalPaidCents + 50, 100)
+            : -intdiv(abs($totalPaidCents) + 50, 100);
+        $this->advancePaymentPKR = $roundedPaidRupees;
         $this->remainingBalancePKR = intdiv(max(0, $agreementCents - $totalPaidCents) + 50, 100);
 
         if ($totalPaidCents <= 0) {
