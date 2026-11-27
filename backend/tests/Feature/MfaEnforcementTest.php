@@ -161,6 +161,40 @@ class MfaEnforcementTest extends EnterpriseTestCase
             ->assertJsonPath('success', true);
     }
 
+    public function test_global_mfa_policy_allows_required_agency_owner_to_enroll_mfa(): void
+    {
+        \Illuminate\Support\Facades\DB::table('system_settings')->updateOrInsert(
+            ['key' => 'security.mfa_required_for_admins'],
+            [
+                'value' => json_encode(true),
+                'group' => 'security',
+                'description' => 'test',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        [$owner] = $this->agencyUser(['agency.view'], 'agency_owner');
+        $token = $this->tokenFor($owner);
+        $headers = $this->authHeaders($token);
+        $service = app(MfaService::class);
+
+        $this->getJson('/api/auth/mfa/status', $headers)
+            ->assertOk()
+            ->assertJsonPath('enabled', false);
+
+        $secret = $this->postJson('/api/auth/mfa/setup', [], $headers)
+            ->assertOk()
+            ->json('secret');
+
+        $this->postJson('/api/auth/mfa/enable', [
+            'code' => $service->currentCode($secret),
+        ], $headers)->assertOk();
+
+        $this->asGuest();
+        $this->getJson('/api/auth/me', $this->authHeaders($token))->assertOk();
+    }
+
     public function test_global_mfa_policy_uses_active_agency_role(): void
     {
         \Illuminate\Support\Facades\DB::table('system_settings')->updateOrInsert(
