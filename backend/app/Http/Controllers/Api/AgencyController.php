@@ -110,7 +110,7 @@ class AgencyController extends Controller
             try {
                 $user->notify(VerifyEmailLink::issueFor($user->email));
             } catch (\Throwable $e) {
-                Log::warning('Verification mail could not be queued', ['error' => $e->getMessage()]);
+                Log::warning('Verification mail could not be queued', ['exception' => get_class($e)]);
             }
 
             $this->writeAudit($request, 'agency.register', 'agency:' . $agency->id, 'Agency self-registered: ' . $agency->name, [
@@ -130,7 +130,7 @@ class AgencyController extends Controller
                 'user' => app(AuthController::class)->userPayload($user, $agency->id),
             ], 201);
         } catch (\Throwable $e) {
-            Log::error('Agency registration failed', ['error' => $e->getMessage()]);
+            Log::error('Agency registration failed', ['exception' => get_class($e)]);
             return response()->json([
                 'success' => false,
                 'message' => 'Agency registration could not be completed.',
