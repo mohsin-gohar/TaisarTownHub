@@ -52,7 +52,7 @@ class PurgeQuarantine extends Command
             if ($deleteFailed) {
                 Log::warning('Quarantine purge skipped: physical delete did not complete', ['id' => $row->id]);
                 $failed++;
-                continue;
+                return;
             }
 
             $row->delete();
@@ -93,7 +93,7 @@ class PurgeQuarantine extends Command
                 // on retries; failed deletes keep the row for the next run.
                 if ($deleteFailed) {
                     $failed++;
-                    continue;
+                    return;
                 }
 
                 \App\Models\AuditLog::create([
