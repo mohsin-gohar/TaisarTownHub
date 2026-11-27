@@ -763,6 +763,78 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->assertDatabaseHas('document_versions', ['document_id' => $id, 'version' => 1]);
     }
 
+    public function test_media_metadata_is_retained_when_physical_delete_returns_false(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $id = 'med_delete_' . bin2hex(random_bytes(5));
+        $path = $agency->id . '/media/' . $id . '.pdf';
+        $media = MediaFile::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'title' => 'Delete failure regression',
+            'type' => 'document',
+            'visibility' => 'private',
+            'status' => 'available',
+            'disk_path' => $path,
+            'uploaded_by' => $user->id,
+        ]);
+
+        $disk = \\Mockery::mock(\\Illuminate\\Contracts\\Filesystem\\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($path)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($path)->andReturn(false);
+        Storage::shouldReceive('disk')->once()->with('documents')->andReturn($disk);
+
+        $this->deleteJson('/api/agency/media/' . $id, [], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(500);
+
+        $this->assertDatabaseHas('media_files', ['id' => $id, 'deleted_at' => null]);
+    }
+
+    public function test_permanent_document_delete_retains_all_metadata_when_a_version_delete_fails(): void
+    {
+        [$user, $agency] = $this->uploader();
+        $id = 'doc_delete_' . bin2hex(random_bytes(5));
+        $documentPath = $agency->id . '/documents/' . $id . '.pdf';
+        $versionPath = $agency->id . '/documents/' . $id . '-v1.pdf';
+        $document = Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Permanent delete failure regression',
+            'original_name' => 'delete-failure.pdf',
+            'stored_name' => $id . '.pdf',
+            'disk_path' => $documentPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 20,
+            'status' => 'trashed',
+            'uploaded_by' => $user->id,
+        ]);
+        $document->delete();
+        DocumentVersion::create([
+            'document_id' => $id,
+            'version' => 1,
+            'stored_name' => $id . '-v1.pdf',
+            'disk_path' => $versionPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 10,
+        ]);
+
+        $disk = \\Mockery::mock(\\Illuminate\\Contracts\\Filesystem\\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('exists')->once()->with($versionPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($versionPath)->andReturn(false);
+        Storage::shouldReceive('disk')->twice()->with('documents')->andReturn($disk);
+
+        $this->deleteJson('/api/agency/documents/' . $id . '/permanent', [], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(500);
+
+        $this->assertDatabaseHas('documents', ['id' => $id]);
+        $this->assertDatabaseHas('document_versions', ['document_id' => $id, 'version' => 1]);
+    }
+
     /* ============ Configuration guardrails ============ */
 
     public function test_vault_disks_stay_configured_outside_the_web_root(): void
