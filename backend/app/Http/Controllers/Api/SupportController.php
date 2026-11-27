@@ -202,30 +202,39 @@ class SupportController extends Controller
     public function updateStatus(Request $request, string $id)
     {
         $user = $request->user();
-        $ticket = $this->findVisible($request, $id);
-
         $isStaff = $this->can($request, 'admin.support_tickets');
-        $isCreator = $ticket->user_id === $user->id;
-
-        if (!$isStaff && !$isCreator) {
-            abort(403, 'Only the ticket creator or support staff can change its status.');
-        }
 
         $data = $request->validate([
             'status' => 'required|string|in:' . implode(',', SupportTicket::STATUSES),
         ]);
 
-        $status = $data['status'];
-        $ticket->status = $status;
-        $ticket->closed_at = $status === 'closed' ? now() : null;
-        $ticket->resolved_at = $status === 'resolved' ? now() : null;
-        if ($status === 'resolved' && $ticket->first_response_at === null && $isStaff) {
-            $ticket->first_response_at = now();
-        }
-        $ticket->save();
+        $ticket = DB::transaction(function () use ($request, $id, $user, $isStaff, $data) {
+            $locked = SupportTicket::where('id', $id)->lockForUpdate()->first();
+            if (! $locked) {
+                abort(404, 'Ticket not found.');
+            }
+
+            $ticket = $this->findVisible($request, $id);
+            $isCreator = (int) $ticket->user_id === (int) $user->id;
+
+            if (! $isStaff && ! $isCreator) {
+                abort(403, 'Only the ticket creator or support staff can change its status.');
+            }
+
+            $status = $data['status'];
+            $ticket->status = $status;
+            $ticket->closed_at = $status === 'closed' ? now() : null;
+            $ticket->resolved_at = $status === 'resolved' ? now() : null;
+            if ($status === 'resolved' && $ticket->first_response_at === null && $isStaff) {
+                $ticket->first_response_at = now();
+            }
+            $ticket->save();
+
+            return $ticket;
+        });
 
         $this->writeAudit($request, 'support.ticket_status', $ticket->id,
-            "Ticket status → {$status}: {$ticket->subject}", [
+            "Ticket status → {$ticket->status}: {$ticket->subject}", [
                 'agency_id' => $ticket->agency_id,
                 'entity_type' => 'support_ticket',
                 'entity_id' => $ticket->id,
