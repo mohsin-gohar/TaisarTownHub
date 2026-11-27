@@ -412,9 +412,26 @@ class MediaController extends Controller
 
         if ($media->disk_path) {
             try {
-                Storage::disk('documents')->delete($media->disk_path);
+                $disk = Storage::disk('documents');
+                if ($disk->exists($media->disk_path) && !$disk->delete($media->disk_path)) {
+                    Log::warning('Media file delete returned false; metadata retained', [
+                        'media_id' => $media->id,
+                        'disk_path' => $media->disk_path,
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The media file could not be erased. The record was retained so cleanup can be retried.',
+                    ], 500);
+                }
             } catch (\Throwable $e) {
-                Log::warning('Media file delete failed', ['error' => $e->getMessage()]);
+                Log::warning('Media file delete failed; metadata retained', [
+                    'media_id' => $media->id,
+                    'error' => $e->getMessage(),
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The media file could not be erased. The record was retained so cleanup can be retried.',
+                ], 500);
             }
         }
 
