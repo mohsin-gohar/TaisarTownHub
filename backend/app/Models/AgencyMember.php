@@ -40,8 +40,16 @@ class AgencyMember extends Model
     /** Effective permission keys for this membership (role grants + per-member extras). */
     public function permissionKeys(): array
     {
-        $rolePerms = $this->role ? ($this->role->permissions ?? []) : [];
+        $role = $this->role;
+        $roleBelongsToThisAgency = $role !== null
+            && $role->scope === 'agency'
+            && ($role->agency_id === null || (string) $role->agency_id === (string) $this->agency_id);
+
+        // A corrupt/stale membership must never inherit platform grants or a
+        // custom role owned by a different agency through its role_id.
+        $rolePerms = $roleBelongsToThisAgency ? ($role->permissions ?? []) : [];
         $extras = $this->permissions ?? [];
+
         return array_values(array_unique(array_merge($rolePerms, $extras)));
     }
 }
