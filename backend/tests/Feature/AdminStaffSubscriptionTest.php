@@ -394,7 +394,7 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         [$manager] = $this->agencyUser($this->staffPermissions(), 'manager', $agency);
         $targetMembership = $owner->memberships()->where('agency_id', $agency->id)->firstOrFail();
 
-        $this->deleteJson('/api/agency/members/' . $targetMembership->id, $this->authHeaders($this->tokenFor($manager)))
+        $this->deleteJson('/api/agency/members/' . $targetMembership->id, [], $this->authHeaders($this->tokenFor($manager)))
             ->assertStatus(403)
             ->assertJsonPath('message', 'Only an agency owner may remove an owner membership.');
 
