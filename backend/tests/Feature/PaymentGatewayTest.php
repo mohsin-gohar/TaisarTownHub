@@ -156,6 +156,23 @@ class PaymentGatewayTest extends EnterpriseTestCase
         ])->assertStatus(422);
         $this->assertSame('pending', $invoice->fresh()->status);
 
+        // Missing amount or currency is not an implicit invoice match.
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
+            'status' => 'successful',
+            'tx_ref' => 'fw-ref-100',
+            'id' => 991,
+            'currency' => 'PKR',
+        ])->assertStatus(422);
+        $this->assertSame('pending', $invoice->fresh()->status);
+
+        $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
+            'status' => 'successful',
+            'tx_ref' => 'fw-ref-100',
+            'id' => 991,
+            'amount' => 5000,
+        ])->assertStatus(422);
+        $this->assertSame('pending', $invoice->fresh()->status);
+
         // Correct payload activates it.
         $this->withHeaders(['verif-hash' => 'fw_test_hash'])->postJson('/api/payments/webhook/flutterwave', [
             'status' => 'successful',
