@@ -160,6 +160,33 @@
 4. **Route middleware traceability:** the 203 route actions exist, but each must still be traced through its handler's permission gates, validators, service calls, and negative authorization tests. Static method existence is not a security review.
 5. **API v1 contract:** both prefixes share identical definitions. Verify the OpenAPI document covers the same contract and that versioned routes are intentionally not assigned distinct route names.
 
+### P1 — Quarantine storage could be orphaned when metadata persistence failed
+
+**Affected:** `backend/app/Http/Controllers/Api/DocumentController.php`, `backend/tests/Feature/MalwareUploadEnforcementTest.php`.
+
+- The rejected-upload path wrote encrypted bytes to the quarantine disk and then inserted the `DocumentQuarantine` row inside one broad `try` block.
+- If the database insert failed, the catch only logged the exception. The bytes remained on disk without a row for the retention purge to find.
+- Fix: after a failure, check whether the quarantine metadata row exists. If it does not, attempt to delete the just-written bytes and log a critical reconciliation event if deletion fails. If the database cannot establish whether the row committed, preserve the bytes and log the exact path for manual recovery rather than risk deleting a file with valid metadata.
+- Regression test simulates a metadata-create failure and asserts no quarantine bytes or metadata remain.
+
+**Status:** fix and regression test committed; CI rerun in progress on the latest branch head.
+
+### P2 — Quarantine purge scheduler could overlap
+
+**Affected:** `backend/routes/console.php`.
+
+- The daily purge command had no scheduler mutex. Multiple scheduler instances could run the same purge concurrently.
+- Fix: added Laravel's `withoutOverlapping()` scheduler lock to the daily quarantine purge event.
+- This complements the command's per-row retry-safe physical deletion checks. Multi-instance cache-lock behavior still depends on production using a shared cache backend.
+
+**Status:** scheduler guard committed; CI rerun in progress.
+
+### Reclassified review notes
+
+- **Workspace sync:** the product's validation contract explicitly permits partial saves and missing collections are intentionally skipped. Therefore sequential collection processing is not, by itself, a defect. A database exception mid-sync can still leave earlier collections committed; retain this as a documented partial-failure/operational consideration rather than imposing all-or-nothing semantics without a product contract change.
+- **Audit persistence:** best-effort audit writes are explicitly documented in the existing error-handling contract. This pass has not yet established which individual mutation endpoints require fail-closed or transactional audit guarantees; keep as an open governance/security decision, not a confirmed defect.
+- **Scheduler lock:** the purge overlap gap is now addressed in code; production correctness still requires a shared cache lock store if more than one scheduler replica is deployed.
+
 ## 5. Evidence read in this pass
 - `backend/routes/api.php`, `backend/routes/api_definitions.php`
 - `backend/bootstrap/app.php`, `backend/app/Providers/AppServiceProvider.php`
