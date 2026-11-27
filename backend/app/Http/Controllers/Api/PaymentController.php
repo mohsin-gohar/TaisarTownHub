@@ -257,7 +257,7 @@ class PaymentController extends Controller
                     Log::error('Flutterwave webhook currency missing', ['tx_ref' => $txRef]);
                     return 'currency_mismatch';
                 }
-                if ((int) round((float) $amount) !== (int) $invoice->total_pkr) {
+                if (abs((float) $amount - (float) $invoice->total_pkr) > 0.00001) {
                     Log::error('Flutterwave webhook amount mismatch', [
                         'tx_ref' => $txRef,
                         'expected' => (int) $invoice->total_pkr,
@@ -362,11 +362,11 @@ class PaymentController extends Controller
                 ], 422);
             }
 
-            $remoteAmount = (int) round((float) ($remote['amount'] ?? 0));
+            $remoteAmount = (float) ($remote['amount'] ?? 0);
             $remoteCurrency = strtoupper((string) ($remote['currency'] ?? ''));
 
             if ($remoteCurrency !== strtoupper((string) $invoice->currency)
-                || $remoteAmount !== (int) $invoice->total_pkr) {
+                || abs($remoteAmount - (float) $invoice->total_pkr) > 0.00001) {
                 Log::warning('Flutterwave verification amount/currency mismatch', [
                     'agency_id' => $agencyId,
                     'tx_ref' => $txRef,
