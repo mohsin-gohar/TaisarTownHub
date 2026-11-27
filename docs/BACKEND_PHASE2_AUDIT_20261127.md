@@ -561,3 +561,5 @@ The fixes and regression coverage are detailed in the follow-up findings below. 
 - Voiding now locks the deal row and rechecks the state inside a transaction. Payment creation, schedule replacement and commission creation share that parent-row lock and recheck the voided state before writing.
 - Schedule writes are now atomic and reject duplicate installment numbers in one request; voided deals cannot receive new schedules or commissions.
 - Regression coverage checks duplicate schedule rejection with no partial writes and commission rejection for a voided deal. Runtime execution remains paused with CI.
+
+- Deal edits now share the row lock with void/payment writes, reject an agreement amount below the already-collected ledger, validate advance ≤ agreement, and recalculate the remaining balance from the authoritative payment rows.
