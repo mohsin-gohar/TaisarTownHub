@@ -267,25 +267,15 @@ public function store(Request $request)
         ], 201);
     }
 
-public function update(Request $request, string $id)
+    public function update(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
-        // Same catalogue gap as store(): use the real update-transaction
-        // grants, plus the legacy keys for custom integrations.
         $this->requireAny($request, [
             'finance.update_transaction', 'update_transactions',
             'manage_deals', 'finance.manage_deals',
         ]);
 
         $transaction = $this->findScoped($agencyId, $id, $request->user());
-
-        if ($transaction->isVoided()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Voided deals are read-only.',
-            ], 409);
-        }
-
         $data = $request->validate([
             'propertyTitle' => 'sometimes|string|max:255',
             'sellerName' => 'sometimes|string|max:255',
@@ -299,95 +289,102 @@ public function update(Request $request, string $id)
             'transactionDate' => 'nullable|date',
         ]);
 
-        // Reject a dealer from another agency. Prefer dealers.agency_id and
-        // fall back to active memberships for legacy unlinked rows.
         if (!empty($data['dealerId']) && $agencyId !== null
             && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw \\Illuminate\\Validation\\ValidationException::withMessages([
                 'dealerId' => ['Dealer does not belong to the acting agency.'],
             ]);
         }
 
-        // Handle dealStatus transition with state machine validation
-        $newStatus = $data['dealStatus'] ?? $data['status'] ?? null;
-        if ($newStatus !== null) {
-            $currentStatus = $transaction->dealStatus;
-
-            // Terminal states: Completed and Cancelled are read-only once reached
-            if (in_array($currentStatus, ['Completed', 'Cancelled'], true)) {
-                $message = $currentStatus === 'Cancelled'
-                    ? 'Deal is cancelled — the record is read-only for bookkeeping.'
-                    : 'Completed deals are read-only.';
-                return response()->json([
-                    'success' => false,
-                    'message' => $message,
-                ], 422);
+        $result = DB::transaction(function () use ($transaction, $data): array {
+            $locked = Transaction::whereKey($transaction->id)->lockForUpdate()->firstOrFail();
+            if ($locked->isVoided()) {
+                return ['error' => 409, 'message' => 'Voided deals are read-only.'];
             }
 
-            // Validate forward transitions
-            $validForward = [
-                'Draft' => ['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Negotiation' => ['Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Agreement Signed' => ['Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Token Paid' => ['Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Advance Received' => ['Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Payment Pending' => ['Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Partially Paid' => ['Fully Paid', 'Under Transfer', 'Cancelled'],
-                'Fully Paid' => ['Under Transfer', 'Cancelled'],
-                'Under Transfer' => ['Completed', 'Cancelled'],
-            ];
+            $newStatus = $data['dealStatus'] ?? $data['status'] ?? null;
+            if ($newStatus !== null) {
+                $currentStatus = $locked->dealStatus;
+                if (in_array($currentStatus, ['Completed', 'Cancelled'], true)) {
+                    $message = $currentStatus === 'Cancelled'
+                        ? 'Deal is cancelled — the record is read-only for bookkeeping.'
+                        : 'Completed deals are read-only.';
+                    return ['error' => 422, 'message' => $message];
+                }
 
-            // Check if this is a valid forward transition
-            $allowedNext = $validForward[$currentStatus] ?? [];
-            if (!in_array($newStatus, $allowedNext, true)) {
-                // Check if it's a backward transition (one step back is allowed)
-                $backwardMap = [
-                    'Negotiation' => 'Draft',
-                    'Agreement Signed' => 'Negotiation',
-                    'Token Paid' => 'Agreement Signed',
-                    'Advance Received' => 'Token Paid',
-                    'Payment Pending' => 'Advance Received',
-                    'Partially Paid' => 'Payment Pending',
-                    'Fully Paid' => 'Partially Paid',
-                    'Under Transfer' => 'Fully Paid',
+                $validForward = [
+                    'Draft' => ['Negotiation', 'Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Negotiation' => ['Agreement Signed', 'Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Agreement Signed' => ['Token Paid', 'Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Token Paid' => ['Advance Received', 'Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Advance Received' => ['Payment Pending', 'Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Payment Pending' => ['Partially Paid', 'Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Partially Paid' => ['Fully Paid', 'Under Transfer', 'Cancelled'],
+                    'Fully Paid' => ['Under Transfer', 'Cancelled'],
+                    'Under Transfer' => ['Completed', 'Cancelled'],
                 ];
 
-                $expectedPrev = $backwardMap[$currentStatus] ?? null;
-                if ($newStatus !== $expectedPrev) {
-                    // Special case for Completed: requires Under Transfer
-                    if ($newStatus === 'Completed' && $currentStatus !== 'Under Transfer') {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'A deal can only be marked Completed after it is Under Transfer at MDA.',
-                        ], 422);
+                $allowedNext = $validForward[$currentStatus] ?? [];
+                if (!in_array($newStatus, $allowedNext, true)) {
+                    $backwardMap = [
+                        'Negotiation' => 'Draft',
+                        'Agreement Signed' => 'Negotiation',
+                        'Token Paid' => 'Agreement Signed',
+                        'Advance Received' => 'Token Paid',
+                        'Payment Pending' => 'Advance Received',
+                        'Partially Paid' => 'Payment Pending',
+                        'Fully Paid' => 'Partially Paid',
+                        'Under Transfer' => 'Fully Paid',
+                    ];
+                    $expectedPrev = $backwardMap[$currentStatus] ?? null;
+                    if ($newStatus !== $expectedPrev) {
+                        if ($newStatus === 'Completed' && $currentStatus !== 'Under Transfer') {
+                            return ['error' => 422, 'message' => 'A deal can only be marked Completed after it is Under Transfer at MDA.'];
+                        }
+                        return ['error' => 422, 'message' => 'Invalid status transition.'];
                     }
+                }
 
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Invalid status transition.',
-                    ], 422);
+                if ($newStatus === 'Cancelled') {
+                    $data['dealStatus'] = 'Cancelled';
                 }
             }
 
-            // Handle Cancelled - allowed from any non-terminal state
-            if ($newStatus === 'Cancelled') {
-                $data['dealStatus'] = 'Cancelled';
+            $agreement = (int) ($data['agreementAmountPKR'] ?? $locked->agreementAmountPKR);
+            $advance = (int) ($data['advancePaymentPKR'] ?? $locked->advancePaymentPKR);
+            $collectedCents = $locked->totalPaidCents();
+            if ($agreement * 100 < $collectedCents) {
+                return ['error' => 422, 'message' => 'Agreement amount cannot be lower than payments already collected.'];
             }
-        }
+            if ($advance > $agreement) {
+                return ['error' => 422, 'message' => 'Advance payment cannot exceed the agreement amount.'];
+            }
 
-        $transaction->update($data);
+            $locked->update($data);
+            if ($locked->payments()->exists()) {
+                $locked->recalculateStatus();
+            } else {
+                $locked->remainingBalancePKR = max(0, $agreement - $advance);
+                $locked->save();
+            }
+
+            return ['transaction' => $locked->fresh()->load(['payments', 'commissions'])];
+        });
+
+        if (isset($result['error'])) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], $result['error']);
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'Deal updated.',
-            'transaction' => $transaction->fresh()->load(['payments', 'commissions']),
+            'transaction' => $result['transaction'],
         ]);
     }
 
-    /**
-     * POST /api/agency/transactions/{id}/void
-     * Void a transaction (mark as read-only for bookkeeping).
-     */
     public function void(Request $request, string $id)
     {
         $agencyId = $this->agencyId($request);
