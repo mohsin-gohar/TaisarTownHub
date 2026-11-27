@@ -545,3 +545,11 @@ The fixes and regression coverage are detailed in the follow-up findings below. 
 - Regression coverage verifies an agency owner subject to the global policy can enroll, confirm the first TOTP code and then access protected routes with the same verified token.
 
 - Manual admin invoice verification now follows the same pending-only settlement rule as provider webhooks; paid, voided, failed or otherwise non-pending invoices cannot be overwritten.
+
+
+### P1 — Media/document permanent deletion could discard metadata after storage failure
+
+- Media deletion ignored a false return or exception from the private disk and soft-deleted the database row anyway, leaving inaccessible orphaned bytes.
+- Permanent document deletion also ignored false delete results for the original file and archived versions, then force-deleted all metadata even when one or more physical files remained.
+- Both paths now treat a missing file as already erased, but return an error and retain the database record(s) if an existing file cannot be deleted. This preserves a retry/reconciliation candidate rather than silently orphaning private data.
+- Regression tests cover media delete returning false and a document-version delete failing after the original file was erased; all relevant metadata remains available for retry.
