@@ -182,9 +182,29 @@ class AgencyStaffController extends Controller
         $agencyId = $this->requireAgency($request);
         $this->requirePermission($request, 'agency.manage_staff');
 
-        $invitation = AgencyInvitation::where('agency_id', $agencyId)->findOrFail($id);
-        $invitation->update(['status' => 'revoked']);
+        $result = DB::transaction(function () use ($agencyId, $id): array {
+            Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
+            $invitation = AgencyInvitation::where('agency_id', $agencyId)
+                ->lockForUpdate()
+                ->findOrFail($id);
 
+            if ($invitation->status !== 'pending') {
+                return ['error' => 422, 'message' => 'Only pending invitations can be revoked.'];
+            }
+
+            $invitation->update(['status' => 'revoked']);
+
+            return ['invitation' => $invitation];
+        });
+
+        if (isset($result['error'])) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], $result['error']);
+        }
+
+        $invitation = $result['invitation'];
         $this->writeAudit($request, 'agency.invite.revoke', 'invitation:' . $id, 'Invitation revoked', [
             'agency_id' => $agencyId,
         ]);
