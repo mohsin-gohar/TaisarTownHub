@@ -16,7 +16,7 @@ class NotificationController extends Controller
             abort(401, 'Authentication required.');
         }
 
-        $query = $user->notifications();
+        $query = $user->notifications()->latest();
 
         if ($request->boolean('unreadOnly')) {
             $query->whereNull('read_at');
@@ -77,11 +77,12 @@ class NotificationController extends Controller
         }
 
         $user->unreadNotifications()->update(['read_at' => now()]);
+        $unreadCount = $user->unreadNotifications()->count();
 
         return response()->json([
             'success' => true,
             'message' => 'All notifications marked as read.',
-            'unread_count' => 0,
+            'unread_count' => $unreadCount,
         ]);
     }
 }
