@@ -22,7 +22,8 @@ class NotificationController extends Controller
             $query->whereNull('read_at');
         }
 
-        $page = $query->paginate(min((int) $request->get('per_page', 20), 100));
+        $perPage = max(1, min((int) $request->get('per_page', 20), 100));
+        $page = $query->paginate($perPage);
 
         return response()->json([
             'success' => true,
@@ -75,7 +76,7 @@ class NotificationController extends Controller
             abort(401, 'Authentication required.');
         }
 
-        $user->unreadNotifications->each->markAsRead();
+        $user->unreadNotifications()->update(['read_at' => now()]);
 
         return response()->json([
             'success' => true,
