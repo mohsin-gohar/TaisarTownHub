@@ -374,3 +374,25 @@ No production database, files, credentials, DNS, payment configuration, or hosti
 - Regression coverage rejects USD and fractional prices and accepts an integer PKR plan.
 
 **Validation:** regression test added; runtime test execution and CI remain paused per instruction.
+
+
+## 7. Follow-up financial precision audit (2026-11-27)
+
+### P1 — Subscription plan price was converted to binary float and rounded before invoice creation
+
+**Affected:** `backend/app/Models/SubscriptionPlan.php`, `backend/app/Http/Controllers/Api/AdminAgencyController.php`, `backend/app/Http/Controllers/Api/PaymentController.php`.
+
+- The database stores plan prices as `DECIMAL(12,2)`, but the Eloquent model cast the value to PHP `float`.
+- Plan creation rejected fractional PKR, but plan updates did not; an administrator could update a plan to a fractional price.
+- Checkout multiplied the float by 100 for Stripe and separately rounded the float to an integer PKR invoice amount. This allowed the provider charge and invoice ledger to disagree.
+- Fix on branch `fix/financial-precision-20261127`: preserve the DECIMAL value as its exact database string; reject fractional rupee values on both create and update; reject legacy/non-PKR or fractional plan rows at checkout; derive both Stripe minor units and the invoice PKR amount from the same validated integer.
+- Regression test added for exact decimal-string preservation, rejection of fractional updates, and acceptance of an integer update.
+
+**Validation:** source changes and test assertions were checked after commit. PHPUnit/CI were not run or polled, consistent with the instruction to keep CI paused.
+
+### Additional financial review findings — not yet fixed
+
+- `DealerFile` stores `selling_price_kbr`, `cost_price_kbr`, and `profit_kbr` as DECIMAL(15,2), but its model casts them to float and `DealerFilesController::sell()` performs profit/commission calculations with floating-point arithmetic.
+- `MediaFile` stores sale prices/profit as DECIMAL(14,2), but its model casts them to float and `MediaController::sell()` converts request values to float. Its sale transition also lacks the row lock/transaction used by the dealer-file sale path, so concurrent requests require a separate integrity fix and regression test.
+
+These findings remain open for the next financial-integrity pass; no claim is made that the wider financial audit is complete.
