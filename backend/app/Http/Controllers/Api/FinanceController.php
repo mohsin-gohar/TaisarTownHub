@@ -703,7 +703,7 @@ public function update(Request $request, string $id)
         $result = DB::transaction(function () use ($transaction, $request): array {
             $locked = Transaction::where('id', $transaction->id)->lockForUpdate()->first();
 
-            if ($locked->isVoided()) {
+            if (!$locked || $locked->isVoided()) {
                 return [null, null];
             }
 
