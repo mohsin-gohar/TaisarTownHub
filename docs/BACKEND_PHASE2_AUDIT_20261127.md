@@ -567,3 +567,5 @@ The fixes and regression coverage are detailed in the follow-up findings below. 
 - The same locked deal update path now rechecks the voided/terminal state before applying edits; regression coverage verifies a voided deal cannot be edited after cancellation.
 
 - Completed and cancelled deals are now read-only for all field edits, not only status transitions; regression coverage attempts ordinary field changes after each terminal state.
+
+- Custom-role updates now take the same per-agency lock as role creation/deletion and invitation acceptance, preventing a stale update from racing a delete or invite claim.
