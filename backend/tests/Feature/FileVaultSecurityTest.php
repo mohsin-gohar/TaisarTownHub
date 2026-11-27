@@ -586,7 +586,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
         $disk->shouldReceive('exists')->once()->with($path)->andReturn(true);
         $disk->shouldReceive('delete')->once()->with($path)->andReturn(false);
-        Storage::shouldReceive('disk')->once()->with('quarantine')->andReturn($disk);
+        Storage::shouldReceive('disk')->twice()->with('quarantine')->andReturn($disk);
 
         $exitCode = Artisan::call('vault:purge-quarantine');
 
@@ -604,6 +604,8 @@ class FileVaultSecurityTest extends EnterpriseTestCase
             'agency_id' => $agency->id,
             'category' => 'other',
             'title' => 'Expired Hold',
+            'original_name' => 'expired-hold.pdf',
+            'stored_name' => $id . '.pdf',
             'disk_path' => $documentPath,
             'storage_disk' => 'documents',
             'mime_type' => 'application/pdf',
@@ -616,7 +618,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
         $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
         $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(false);
-        Storage::shouldReceive('disk')->once()->with('documents')->andReturn($disk);
+        Storage::shouldReceive('disk')->times(4)->with('documents')->andReturn($disk);
 
         $exitCode = Artisan::call('vault:purge-quarantine');
 
@@ -635,6 +637,8 @@ class FileVaultSecurityTest extends EnterpriseTestCase
             'agency_id' => $agency->id,
             'category' => 'other',
             'title' => 'Expired Hold With Version',
+            'original_name' => 'expired-hold-version.pdf',
+            'stored_name' => $id . '.pdf',
             'disk_path' => $documentPath,
             'storage_disk' => 'documents',
             'mime_type' => 'application/pdf',
@@ -646,6 +650,7 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         DocumentVersion::create([
             'document_id' => $id,
             'version' => 1,
+            'stored_name' => $id . '-v1.pdf',
             'disk_path' => $versionPath,
             'storage_disk' => 'documents',
             'mime_type' => 'application/pdf',
