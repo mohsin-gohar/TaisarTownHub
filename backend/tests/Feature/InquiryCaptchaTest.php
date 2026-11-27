@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\BusinessRecord;
 use App\Models\Inquiry;
 use App\Support\InquiryCaptcha;
 
@@ -59,6 +60,22 @@ class InquiryCaptchaTest extends EnterpriseTestCase
             ->assertStatus(201);
 
         $this->assertDatabaseHas('inquiries', ['phone' => '03009998887']);
+    }
+
+
+    public function test_failed_relational_inquiry_insert_rolls_back_legacy_mirror(): void
+    {
+        $this->asGuest();
+
+        Inquiry::creating(function (): void {
+            throw new \\RuntimeException('Simulated inquiry persistence failure.');
+        });
+
+        $this->postJson('/api/inquiries', $this->basePayload() + $this->solveCaptcha())
+            ->assertServerError();
+
+        $this->assertDatabaseCount('inquiries', 0);
+        $this->assertDatabaseCount('business_records', 0);
     }
 
     public function test_submission_without_captcha_fields_is_rejected(): void
