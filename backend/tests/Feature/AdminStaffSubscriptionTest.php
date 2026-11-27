@@ -371,6 +371,35 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         ]);
     }
 
+
+    public function test_last_active_agency_owner_cannot_be_demoted_or_deactivated(): void
+    {
+        [$owner, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $ownerRole = $this->makeRole('agency', 'agency_owner', $this->staffPermissions());
+        $ownerRole->forceFill(['id' => 'role_agency_owner'])->save();
+        $member = $owner->memberships()->where('agency_id', $agency->id)->firstOrFail();
+        $member->update(['role_id' => $ownerRole->id]);
+
+        $agentRole = $this->makeRole('agency', 'field_agent', ['properties.view']);
+        $headers = $this->authHeaders($this->tokenFor($owner));
+
+        $this->patchJson("/api/agency/members/{$member->id}", [
+            'role_id' => $agentRole->id,
+        ], $headers)->assertStatus(422);
+
+        $this->patchJson("/api/agency/members/{$member->id}", [
+            'status' => 'deactivated',
+        ], $headers)->assertStatus(422);
+
+        $this->deleteJson("/api/agency/members/{$member->id}", [], $headers)->assertStatus(422);
+
+        $this->assertDatabaseHas('agency_members', [
+            'id' => $member->id,
+            'role_id' => 'role_agency_owner',
+            'status' => 'active',
+        ]);
+    }
+
     public function test_invitations_respect_the_subscription_staff_limit(): void
     {
         [$manager, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
