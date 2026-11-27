@@ -17,15 +17,20 @@ class DealerController extends Controller
      */
     public function index(Request $request)
     {
+        $filters = $request->validate([
+            'status' => 'nullable|string|max:50',
+            'limit' => 'nullable|integer|min:1|max:5000',
+        ]);
+
         $query = Dealer::query();
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+        if (!empty($filters['status'])) {
+            $query->where('status', $filters['status']);
         }
 
         // Public directory: bounded page (plain-array shape kept for the
         // existing frontend). Newest first; ?limit narrows further.
-        $limit = $request->filled('limit') ? (int) $request->limit : 200;
+        $limit = (int) ($filters['limit'] ?? 200);
         $dealers = $query->orderByDesc('created_at')->orderBy('id')
             ->limit(min(max($limit, 1), 500))->get();
 
