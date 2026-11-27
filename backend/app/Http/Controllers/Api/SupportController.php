@@ -7,6 +7,7 @@ use App\Models\SupportMessage;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Module 15 — platform support desk.
@@ -70,23 +71,29 @@ class SupportController extends Controller
         // Agency link comes from the membership context, never from input.
         $agencyId = $this->agencyId($request);
 
-        $ticket = SupportTicket::create([
-            'id' => 'tkt_' . bin2hex(random_bytes(8)),
-            'agency_id' => $agencyId,
-            'user_id' => $user->id,
-            'subject' => strip_tags($data['subject']),
-            'category' => $data['category'] ?? 'general',
-            'priority' => $data['priority'] ?? 'normal',
-            'status' => 'open',
-        ]);
+        // The ticket and its opening message form one logical operation:
+        // never leave an empty ticket if the first message cannot be stored.
+        $ticket = DB::transaction(function () use ($user, $agencyId, $data) {
+            $ticket = SupportTicket::create([
+                'id' => 'tkt_' . bin2hex(random_bytes(8)),
+                'agency_id' => $agencyId,
+                'user_id' => $user->id,
+                'subject' => strip_tags($data['subject']),
+                'category' => $data['category'] ?? 'general',
+                'priority' => $data['priority'] ?? 'normal',
+                'status' => 'open',
+            ]);
 
-        SupportMessage::create([
-            'ticket_id' => $ticket->id,
-            'user_id' => $user->id,
-            'is_staff' => false,
-            'body' => strip_tags($data['body']),
-            'created_at' => now(),
-        ]);
+            SupportMessage::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $user->id,
+                'is_staff' => false,
+                'body' => strip_tags($data['body']),
+                'created_at' => now(),
+            ]);
+
+            return $ticket;
+        });
 
         $this->writeAudit($request, 'support.ticket_created', $ticket->id,
             "Support ticket: {$ticket->subject}", [
