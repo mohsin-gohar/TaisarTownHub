@@ -505,3 +505,10 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Successful recurring invoice events now resolve the Stripe subscription ID, lock the local subscription, reactivate it and advance its period from the invoice line timestamps. Failed invoice events lock the same row before marking it past_due.
 - Subscription update events now synchronize current period/trial timestamps and auto-renew/cancellation state.
 - Regression coverage verifies a signed recurring invoice.payment_succeeded event extends the agency subscription period.
+
+
+### P1 — A stale/corrupt membership role reference could inherit another tenant's permissions
+
+- Agency permission resolution previously trusted the membership's role_id and merged that role's permissions without verifying that the role was agency-scoped and either global-system or owned by the same agency.
+- Membership permission resolution now rejects platform roles and custom roles owned by another agency, even if a stale/corrupt role_id is present in the membership row.
+- Regression coverage injects both a platform-role reference and a foreign agency custom-role reference and verifies neither grants permissions in the member's agency context.
