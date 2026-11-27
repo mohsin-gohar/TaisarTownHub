@@ -16,7 +16,7 @@ Consolidates the former root `DEPLOYMENT.md`, `DEPLOYMENT_GUIDE.md`, `HOSTINGER_
         ┌────────────────────┼────────────────────┐
         ▼                    ▼                    ▼
    MySQL 8 (data)      queue worker         private disk
-   Redis (cache/queue) scheduler             (vault documents)
+   Redis (cache/queue) scheduler             (vault documents + quarantine)
                         ClamAV sidecar (fail-closed scans)
 ```
 
@@ -34,8 +34,8 @@ cd frontend && npm run verify                 # tsc + unit tests + build + prere
 cp backend/.env.example backend/.env          # then edit secrets — see §6
 cp frontend/.env.example frontend/.env        # VITE_API_URL=https://api.taisartownhub.com/api (or same-origin /api)
 docker compose up -d --build
-docker compose exec api php artisan migrate --force
-docker compose exec api php artisan app:production-check --strict
+# The one-shot migrate service runs automatically during docker compose up.
+docker compose exec backend php artisan app:production-check --strict
 ```
 
 Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `scheduler`, `mysql` (MySQL 8.4), `redis`, `clamav`, one-shot `migrate`. Volumes: `mysql_data`, `redis_data`, `clamav_data`, `private_vault`, `public_storage`. The `private_vault` volume is mounted at `storage/app/private` in the API, queue worker, and scheduler so both `documents` and `quarantine` disks survive restarts and remain available to background jobs. It is never mounted in the frontend or nginx gateway, so public web-serving containers cannot read private files. `php artisan serve` is not used in production. The root `Dockerfile.prod` is deprecated; use `backend/Dockerfile.prod` / `frontend/Dockerfile.prod` with `docker-compose.yml`.
