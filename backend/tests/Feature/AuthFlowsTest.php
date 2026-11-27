@@ -151,8 +151,8 @@ class AuthFlowsTest extends EnterpriseTestCase
         foreach ([
             new VerifyEmailLink(),
             new ResetPasswordLink('token'),
-            new \\App\\Notifications\\PasswordChangedNotification(),
-            new \\App\\Notifications\\SuspiciousLoginDetected('new_device'),
+            new \App\Notifications\PasswordChangedNotification(),
+            new \App\Notifications\SuspiciousLoginDetected('new_device'),
         ] as $notification) {
             $this->assertSame(3, $notification->tries);
             $this->assertSame(60, $notification->timeout);
