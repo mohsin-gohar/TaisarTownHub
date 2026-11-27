@@ -531,3 +531,6 @@ These findings remain open for the next financial-integrity pass; no claim is ma
 - Role-change endpoints already required an owner to change owner membership, but the separate member-removal endpoint enforced only the last-owner invariant. A manager with staff-management permission could therefore remove an owner whenever a second owner remained.
 - Removal now applies the same owner-only authorization inside the agency lock. Owner invitations also recheck the requester’s owner membership after acquiring that lock, closing the corresponding stale-authorization race.
 - Regression coverage verifies a manager cannot remove an owner even when another active owner remains.
+
+
+- The same permission resolver now filters persisted per-member extras and role grants against the agency-assignable catalog plus its explicit legacy aliases. A corrupt extra-permission array cannot inject a platform permission or unknown key into the effective agency grant set.
