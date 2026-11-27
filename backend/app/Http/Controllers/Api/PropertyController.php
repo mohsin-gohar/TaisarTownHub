@@ -234,7 +234,10 @@ class PropertyController extends Controller
             return response()->json($property);
         }
 
-        if ($user && $this->can($request, 'view_sensitive_cnic')) {
+        // An agency-scoped sensitive-data grant must never unlock another
+        // agency's confidential economics on a public listing. Only the owning
+        // agency (above) or an intentional platform user may receive them.
+        if ($user && $user->isPlatformUser() && $this->can($request, 'view_sensitive_cnic')) {
             $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
             return response()->json($property);
         }
