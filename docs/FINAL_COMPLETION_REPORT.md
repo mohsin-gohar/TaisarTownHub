@@ -1,5 +1,7 @@
 # TaisarTownHub - Final Completion Report
 
+> **HISTORICAL SNAPSHOT — NOT A CURRENT RELEASE SIGN-OFF.** This report describes the 2026-11-25 audit at commit `372a00a`. Its production-ready verdict is superseded by [the independent verification update](INDEPENDENT_REVIEW_20261127.md): additional property metadata and CRM export authorization defects were found and fixed on PR #24, the live API origin is currently unavailable, and latest-head CI/deployment verification is still pending. Do not rely on the historical “GENUINELY PRODUCTION-READY” wording for release approval.
+
 ## Audit Completion: 2026-11-25
 ## Final Commit: 372a00a
 ## Repository: https://github.com/mohsin-gohar/TaisarTownHub

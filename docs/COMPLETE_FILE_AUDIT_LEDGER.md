@@ -1,5 +1,7 @@
 # TaisarTownHub - Complete File Audit Ledger
 
+> **PARTIAL INVENTORY — NOT A COMPLETED FILE AUDIT.** This ledger is historical to commit `6c92d52`, explicitly marked `Audit Coverage: In progress`, and contains unchecked `READ` entries. Its 706-file count is not reconciled with the current baseline tree (564 tracked file blobs). It does not prove every repository file was read. See [the independent verification update](INDEPENDENT_REVIEW_20261127.md).
+
 ## Audit Metadata
 - **Audit Date:** 2026-11-23
 - **Auditor:** Independent Enterprise Software Audit Team

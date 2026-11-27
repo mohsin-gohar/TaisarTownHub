@@ -285,9 +285,9 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->assertDatabaseHas('properties', ['id' => $id, 'isFeatured' => false]);
     }
 
-    public function test_owner_detail_exposes_confidential_fields_but_never_a_storage_path(): void
+    public function test_owner_detail_exposes_confidential_fields_only_with_sensitive_grant(): void
     {
-        [$agent, $agency] = $this->agencyUser($this->agentPermissions());
+        [$agent, $agency] = $this->agencyUser([...$this->agentPermissions(), 'finance.view']);
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Owner Confidentiality Plot',
@@ -300,7 +300,7 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $response = $this->getJson("/api/properties/{$id}", $this->authHeaders($this->tokenFor($agent)))
             ->assertOk();
 
-        // The owning agency sees the confidential deal columns...
+        // The owning agency sees confidential deal columns only with the explicit grant...
         $response->assertJsonPath('purchasePricePKR', 4000000)
             ->assertJsonPath('sellingPricePKR', 5000000)
             ->assertJsonPath('internalNotes', 'Owner-only note');

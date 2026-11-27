@@ -123,6 +123,7 @@ const KNOWN_PUBLIC_PATHS = new Set([
   '/scheme45-guide',
   '/gallery',
   '/media-gallery',
+  '/video-walkthroughs',
   '/maps',
   '/services',
   '/about',

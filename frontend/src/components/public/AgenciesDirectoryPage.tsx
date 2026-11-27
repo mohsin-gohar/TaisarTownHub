@@ -184,7 +184,7 @@ export const AgenciesDirectoryPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
-        ) : agencies.length === 0 ? (
+        ) : error ? null : agencies.length === 0 ? (
           <div className="rounded-2xl border border-slate-800 bg-[#0B1220] p-10 text-center space-y-3">
             <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
             <h3 className="text-white font-semibold text-lg">No agencies match your filters</h3>

@@ -258,6 +258,7 @@ const VIEW_MAP: Record<string, string> = {
   '/guide': 'guide',
   '/scheme45-guide': 'guide',
   '/gallery': 'gallery',
+  '/video-walkthroughs': 'gallery',
   '/media-gallery': 'gallery',
   '/maps': 'maps',
   '/taiser-maps': 'maps',

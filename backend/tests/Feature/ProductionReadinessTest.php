@@ -39,4 +39,22 @@ class ProductionReadinessTest extends EnterpriseTestCase
             ->assertHeader('X-Frame-Options', 'DENY')
             ->assertHeader('Cross-Origin-Resource-Policy', 'same-origin');
     }
+    public function test_production_env_template_has_no_local_or_wildcard_cors_origins(): void
+    {
+        $template = file_get_contents(base_path('.env.example'));
+
+        $this->assertIsString($template);
+        preg_match('/^CORS_ALLOWED_ORIGINS=(.*)$/m', $template, $matches);
+        $this->assertArrayHasKey(1, $matches, 'The production template must define CORS_ALLOWED_ORIGINS.');
+
+        $origins = array_filter(array_map('trim', explode(',', $matches[1])));
+        $this->assertNotEmpty($origins);
+        foreach ($origins as $origin) {
+            $this->assertNotSame('*', $origin, 'Wildcard CORS is forbidden in the production template.');
+            $this->assertStringNotContainsString('localhost', strtolower($origin));
+            $this->assertStringNotContainsString('127.0.0.1', $origin);
+            $this->assertStringStartsWith('https://', $origin);
+        }
+    }
+
 }

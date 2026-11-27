@@ -98,6 +98,30 @@ class CrmLeadsTest extends EnterpriseTestCase
             ->assertStatus(404);
     }
 
+    public function test_csv_export_respects_agent_record_scope(): void
+    {
+        [$agent, $agency] = $this->agencyUser([...$this->crmPermissions(false), 'crm.export'], 'agent');
+        [$peer] = $this->agencyUser($this->crmPermissions(false), 'agent', $agency);
+
+        $this->createInquiry($agency, [
+            'fullName' => 'Export Mine',
+            'assigned_agent_id' => $agent->id,
+        ]);
+        $this->createInquiry($agency, ['fullName' => 'Export Unassigned']);
+        $this->createInquiry($agency, [
+            'fullName' => 'Export Peer Only',
+            'assigned_agent_id' => $peer->id,
+        ]);
+
+        $response = $this->getJson('/api/agency/leads/export', $this->authHeaders($this->tokenFor($agent)))
+            ->assertStatus(200);
+        $csv = $response->getContent();
+
+        $this->assertStringContainsString('Export Mine', $csv);
+        $this->assertStringContainsString('Export Unassigned', $csv);
+        $this->assertStringNotContainsString('Export Peer Only', $csv);
+    }
+
     public function test_csv_export_neutralises_formula_injection(): void
     {
         [$manager, $agency] = $this->agencyUser([...$this->crmPermissions(true), 'crm.export'], 'manager');

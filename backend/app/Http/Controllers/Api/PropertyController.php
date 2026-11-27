@@ -150,8 +150,8 @@ class PropertyController extends Controller
             if ($isPublicScope) {
                 $page->through(fn (Property $p) => $this->publicPropertyPayload($p));
             } elseif ($request->boolean('with_meta')) {
-                $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
-                $page->through(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive));
+                $canSeeSensitive = $this->can($request, 'finance.view') || $this->can($request, 'view_sensitive_cnic');
+                $page->through(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive, $isModerator));
             }
 
             return response()->json([
@@ -171,8 +171,8 @@ class PropertyController extends Controller
         if ($isPublicScope) {
             $results->transform(fn (Property $p) => $this->publicPropertyPayload($p));
         } elseif ($request->boolean('with_meta')) {
-            $canSeeSensitive = $this->can($request, 'view_sensitive_cnic');
-            $results->transform(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive));
+            $canSeeSensitive = $this->can($request, 'finance.view') || $this->can($request, 'view_sensitive_cnic');
+            $results->transform(fn (Property $p) => $this->serializeForScope($p, $user, $agencyId, $canSeeSensitive, $isModerator));
         }
 
         return response()->json($results);
@@ -220,17 +220,29 @@ class PropertyController extends Controller
         }
 
         if ($isOwnerAgency || $isModerator) {
-            // Owner/moderator may see confidential deal fields. No server-side
-            // storage path exists on a Property (and none is ever serialized),
-            // so only the confidential business columns are un-hidden here.
-            $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes', 'pending_changes']);
-        } elseif ($user && $this->can($request, 'view_sensitive_cnic')) {
-            $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
-        } else {
-            return response()->json($this->publicPropertyPayload($property));
+            // Agency membership grants access to the listing, not its private
+            // deal economics. Those fields require the explicit sensitive-data
+            // permission even for the owning agency. Staged moderation changes
+            // are visible only to users who can approve listings.
+            if ($this->can($request, 'finance.view') || $this->can($request, 'view_sensitive_cnic')) {
+                $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
+            }
+            if ($isModerator) {
+                $property->makeVisible(['pending_changes']);
+            }
+
+            return response()->json($property);
         }
 
-        return response()->json($property);
+        // An agency-scoped sensitive-data grant must never unlock another
+        // agency's confidential economics on a public listing. Only the owning
+        // agency (above) or an intentional platform user may receive them.
+        if ($user && $user->isPlatformUser() && ($this->can($request, 'finance.view') || $this->can($request, 'view_sensitive_cnic'))) {
+            $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
+            return response()->json($property);
+        }
+
+        return response()->json($this->publicPropertyPayload($property));
     }
 
     /**
@@ -912,16 +924,29 @@ class PropertyController extends Controller
         }
     }
 
-    private function serializeForScope(Property $property, $user, ?string $agencyId, bool $canSeeSensitive = false): array
-    {
+    private function serializeForScope(
+        Property $property,
+        $user,
+        ?string $agencyId,
+        bool $canSeeSensitive = false,
+        bool $canModerate = false
+    ): array {
         $payload = $property->toArray();
-        // Confidential deal fields require the explicit sensitive-data grant.
-        // Agency membership alone must not raise an agent's access level:
-        // show() applies the same rule via view_sensitive_cnic.
+
+        // Confidential deal fields require finance.view (or the legacy platform grant).
+        // Agency membership alone must not raise an agent's access level.
         if ($canSeeSensitive) {
             $property->makeVisible(['purchasePricePKR', 'sellingPricePKR', 'internalNotes']);
             $payload = $property->toArray();
         }
+
+        // Staged changes contain pre-approval edits and are reserved for the
+        // moderation queue; never expose them to ordinary agency members.
+        if ($canModerate) {
+            $property->makeVisible(['pending_changes']);
+            $payload = $property->toArray();
+        }
+
         return $payload;
     }
 

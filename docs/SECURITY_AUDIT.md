@@ -44,21 +44,31 @@ The TaisarTownHub platform demonstrates a strong security foundation with defens
 
 **Status:** Acknowledged - token-bound MFA verification is functioning correctly; the window is extremely narrow and requires concurrent token abuse.
 
-### [S-03] CSV Export Contains Unfiltered Raw Data Without Permission Checks
+### [S-03] Confidential Property Metadata and CRM Export Scope
 
 **Severity:** HIGH
 
-**Description:** The ExportCsvController or similar export endpoints may return raw database fields (including sensitive fields like CNIC, purchasePrice, sellingPrice) without proper permission checks when the with_meta flag is used.
+**Original finding:** Sensitive property fields and staged moderation changes were not consistently protected across property detail and list responses. In addition, the CRM CSV export checked `crm.export` but did not apply the same assigned-lead visibility rule as the CRM list endpoint.
 
-**Code Path:** backend/app/Http/Controllers/Api/SupportController.php and export-related code
+**Verified code paths:**
+- `backend/app/Http/Controllers/Api/PropertyController.php::show`
+- `backend/app/Http/Controllers/Api/PropertyController.php::serializeForScope`
+- `backend/app/Models/Property.php::$hidden`
+- `backend/app/Http/Controllers/Api/LeadController.php::export`
 
-**Reproduction:**
-1. User without view_sensitive_cnic permission attempts CSV export with with_meta=true
-2. Sensitive fields may be included in the export
+**Reproductions:**
+1. An agency member with `properties.view` could request their own property's detail and receive confidential deal fields because agency ownership alone called `makeVisible()`.
+2. A user with an agency-scoped `view_sensitive_cnic` grant could request a different agency's public property and receive that property's confidential deal fields.
+3. `pending_changes` was not hidden by the Property model and could appear in non-moderator responses.
+4. A member granted `crm.export` without `crm.assign_lead` could export leads assigned to another agent in the same agency.
 
-**Fix:** All export endpoints should require explicit view_sensitive_cnic permission before returning sensitive data.
+**Fix prepared on `fix/public-video-walkthrough-route-20261127`:**
+- Sensitive property economics now require `finance.view` in the owning agency (or a legacy platform sensitive-data grant) or an intentional platform scope.
+- `pending_changes` is hidden by default and exposed only to users with `properties.approve`.
+- CRM CSV export now applies the same own/unassigned record scope as the CRM list for users without `crm.assign_lead`.
+- Regression tests cover agency detail, cross-agency access, moderation visibility, and CRM export isolation.
 
-**Status:** Under review - export endpoints need permission validation.
+**Status:** Fixes committed to PR #24; awaiting CI and browser regression results. Do not treat this finding as production-verified until those checks pass.
 
 ### [S-04] Missing CSRF Protection for State-Changing API Endpoints
 

@@ -7,9 +7,7 @@ import {
   CheckCircle2,
   Facebook,
   Instagram,
-  Linkedin,
-  Youtube,
-  Twitter
+  Youtube
 } from 'lucide-react';
 import { APP_MODE } from '../../config/appMode';
 
@@ -64,12 +62,16 @@ export const Footer: React.FC = () => {
   ];
 
   const socialLinks = [
-    { Icon: Facebook, label: 'Facebook', href: cmsConfig.facebookUrl || 'https://facebook.com' },
-    { Icon: Youtube, label: 'YouTube', href: cmsConfig.youtubeUrl || 'https://youtube.com' },
-    { Icon: Linkedin, label: 'LinkedIn', href: 'https://linkedin.com' },
-    { Icon: Twitter, label: 'X', href: 'https://x.com' },
-    { Icon: Instagram, label: 'Instagram', href: cmsConfig.instagramUrl || 'https://instagram.com' },
-  ];
+    { Icon: Facebook, label: 'Facebook', href: cmsConfig.facebookUrl },
+    { Icon: Youtube, label: 'YouTube', href: cmsConfig.youtubeUrl },
+    { Icon: Instagram, label: 'Instagram', href: cmsConfig.instagramUrl },
+  ].filter(({ href }) => {
+    const value = (href || '').trim();
+    if (!value) return false;
+    // Never send visitors to a generic social-network homepage as if it were
+    // the agency's official profile. Only configured profile URLs are shown.
+    return !/^https?:\/\/(www\.)?(facebook|youtube|linkedin|x|instagram)\.com\/?$/i.test(value);
+  });
 
   const renderLinkList = (items: Array<{ label: string; view: string }>) => (
     <ul className="space-y-2 text-xs">
@@ -111,21 +113,23 @@ export const Footer: React.FC = () => {
               Verified Taiser Town Scheme 45 sale listings from approved agencies — property discovery,
               master-plan insight and direct agency contact on one secure platform.
             </p>
-            {/* Social Links */}
-            <div className="pt-1 flex items-center gap-2.5">
-              {socialLinks.map(({ Icon, label, href }) => (
-                <a
-                  key={label}
-                  href={href}
-                  target="_blank" rel="noopener noreferrer"
-                  aria-label={`${currentTheme.agencyName} on ${label}`}
-                  title={label}
-                  className="w-9 h-9 rounded-lg bg-[#0B1220] border border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#E7C878] hover:border-[#E7C878]/50 hover:shadow-[0_0_12px_rgba(231,200,120,0.35)] hover:-translate-y-0.5 transition-all cursor-pointer"
-                >
-                  <Icon className="w-4 h-4" />
-                </a>
-              ))}
-            </div>
+            {/* Only configured official social profiles are shown. */}
+            {socialLinks.length > 0 && (
+              <div className="pt-1 flex items-center gap-2.5">
+                {socialLinks.map(({ Icon, label, href }) => (
+                  <a
+                    key={label}
+                    href={href}
+                    target="_blank" rel="noopener noreferrer"
+                    aria-label={`${currentTheme.agencyName} on ${label}`}
+                    title={label}
+                    className="w-9 h-9 rounded-lg bg-[#0B1220] border border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#E7C878] hover:border-[#E7C878]/50 hover:shadow-[0_0_12px_rgba(231,200,120,0.35)] hover:-translate-y-0.5 transition-all cursor-pointer"
+                  >
+                    <Icon className="w-4 h-4" />
+                  </a>
+                ))}
+              </div>
+            )}
             {/* Quick Demo Controls — demo build only (public/production visitors never see it) */}
             {APP_MODE === 'demo' && (
               <div className="pt-2">

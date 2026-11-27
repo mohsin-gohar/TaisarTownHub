@@ -36,8 +36,13 @@ class AgencyVideoCommentIsolationTest extends EnterpriseTestCase
         ], $this->authHeaders($this->tokenFor($userB)))->assertStatus(201);
 
         $this->assertSame($userB->name, $response->json('userName'));
-        $this->assertSame((int) $userB->id, (int) $response->json('user_id'));
         $this->assertTrue((bool) $response->json('isDealer'));
+        $this->assertArrayNotHasKey('user_id', $response->json(), 'internal account IDs are not public response fields');
+        $this->assertDatabaseHas('video_comments', [
+            'id' => $response->json('id'),
+            'user_id' => $userB->id,
+            'userName' => $userB->name,
+        ]);
 
         // The video owner can comment too; server-stamps again.
         $owner = $this->postJson("/api/videos/{$video->id}/comments", [
@@ -45,5 +50,20 @@ class AgencyVideoCommentIsolationTest extends EnterpriseTestCase
         ], $this->authHeaders($this->tokenFor($userA)))->assertStatus(201);
 
         $this->assertSame($userA->name, $owner->json('userName'));
+        $this->assertArrayNotHasKey('user_id', $owner->json());
+
+        // The public video feed and detail endpoint must not leak internal
+        // commenter account IDs through the eager-loaded comments relation.
+        $listed = collect($this->getJson('/api/videos')->assertOk()->json())
+            ->firstWhere('id', $video->id);
+        $this->assertNotNull($listed);
+        foreach ($listed['comments'] as $comment) {
+            $this->assertArrayNotHasKey('user_id', $comment);
+        }
+
+        $detail = $this->getJson("/api/videos/{$video->id}")->assertOk();
+        foreach ($detail->json('comments') as $comment) {
+            $this->assertArrayNotHasKey('user_id', $comment);
+        }
     }
 }

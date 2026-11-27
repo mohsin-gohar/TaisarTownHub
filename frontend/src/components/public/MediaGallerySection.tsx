@@ -68,8 +68,11 @@ export const MediaGallerySection: React.FC = () => {
   // real on-ground tour. Real videos go in frontend/public/ (served at the
   // site root) or as absolute URLs; posters/thumbnails likewise.
   const isRealVideo = (v: AgencyVideo) => {
-    const url = (v.videoUrl || '').toLowerCase();
-    return url.startsWith('http') || (url.startsWith('/') && !url.includes('sample-video'));
+    const url = (v.videoUrl || '').trim();
+    if (!url || /(?:sample-video|video[_-]?id|placeholder|example\.(?:com|test)|your[_-]?video|replace[_-]?me)/i.test(url)) {
+      return false;
+    }
+    return /^https?:\/\//i.test(url) || url.startsWith('/');
   };
 
   const filteredVideos = agencyVideos.filter((v) => {
@@ -196,7 +199,18 @@ export const MediaGallerySection: React.FC = () => {
 
         {/* Video Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredVideos.map((video) => {
+          {filteredVideos.length === 0 ? (
+            <div
+              data-testid="video-gallery-empty"
+              className="col-span-full rounded-2xl border border-slate-800 bg-[#0B1220] px-6 py-12 text-center"
+            >
+              <Video className="w-9 h-9 text-[#E7C878] mx-auto mb-3" />
+              <p className="text-white font-semibold">No verified video tours have been published yet.</p>
+              <p className="text-slate-400 text-sm mt-2">
+                Approved on-ground walkthroughs from agency partners will appear here when they are available.
+              </p>
+            </div>
+          ) : filteredVideos.map((video) => {
             const isCommentsOpen = activeCommentsVideoId === video.id;
 
             return (

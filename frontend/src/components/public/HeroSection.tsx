@@ -234,7 +234,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onSearch }) => {
           style={isStatic ? undefined : { animationDelay: '1.45s' }}
         >
           <div className="glass-panel p-4 sm:p-6 rounded-2xl shadow-2xl border border-[#E7C878]/30 text-left">
-            <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5">
+            <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5">
               {/* Property Type */}
               <div className="relative">
                 <Home aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B98A2F]" />

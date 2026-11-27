@@ -35,9 +35,9 @@ export const initialCMSConfig: CMSConfig = {
   contactEmail: 'contact@taisartownhub.com',
   workingHours: 'Mon - Sat: 10:00 AM - 8:00 PM | Sun: Site Visits Only',
   googleMapEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d115712.57140134595!2d67.04239828230559!3d25.02987179040371!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3eb34676156e5229%3A0xe5a3637e7d6928aa!2sTaiser%20Town%2C%20Karachi%2C%20Sindh!5e0!3m2!1sen!2spk!4v1700000000000!5m2!1sen!2spk',
-  facebookUrl: 'https://facebook.com',
-  youtubeUrl: 'https://youtube.com',
-  instagramUrl: 'https://instagram.com',
+  facebookUrl: '',
+  youtubeUrl: '',
+  instagramUrl: '',
   seoTitle: 'TaisarTownHub | Taiser Town Properties for Sale',
   seoDescription: 'Browse agency-listed residential plots, homes and commercial properties for sale in Taiser Town Scheme 45, Karachi.',
   noticeBannerText: 'TaisarTownHub — Taiser Town Scheme 45 properties for sale.'
