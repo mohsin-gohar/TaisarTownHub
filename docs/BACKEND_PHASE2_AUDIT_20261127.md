@@ -534,3 +534,5 @@ The fixes and regression coverage are detailed in the follow-up findings below. 
 
 
 - The same permission resolver now filters persisted per-member extras and role grants against the agency-assignable catalog plus its explicit legacy aliases. A corrupt extra-permission array cannot inject a platform permission or unknown key into the effective agency grant set.
+
+- The pending → accrued transition also stamps `accrued_at`; the accrued → paid transition stamps `paid_at` and `paid_by`.
