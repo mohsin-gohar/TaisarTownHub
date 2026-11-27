@@ -159,7 +159,7 @@ class MapController extends Controller
         $this->requirePermission($request, 'admin.manage_platform_settings');
 
         $request->validate([
-            'images' => ['required', 'array', 'min:1'],
+            'images' => ['required', 'array', 'min:1', 'max:50'],
             'images.*' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'titles' => ['nullable', 'array', 'max:50'],
             'titles.*' => ['nullable', 'string', 'max:255'],
@@ -414,7 +414,7 @@ class MapController extends Controller
         $this->requirePermission($request, 'admin.manage_platform_settings');
 
         $request->validate([
-            'order' => 'required|array',
+            'order' => 'required|array|max:500',
             'order.*' => 'string|max:64',
         ]);
 
