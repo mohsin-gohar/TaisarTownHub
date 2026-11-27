@@ -332,3 +332,22 @@
 - Fixing any further confirmed defects discovered by the remaining audit.
 
 No production database, files, credentials, DNS, payment configuration, or hosting settings were accessed or modified. No changes were made directly to `main`.
+
+
+### P1 — Support ticket creation could persist a ticket without its opening message
+
+**Affected:** `backend/app/Http/Controllers/Api/SupportController.php`, `backend/tests/Feature/SupportTicketsTest.php`.
+
+- Ticket and first-message inserts previously ran as separate autocommit writes. A message insert failure could leave an apparently valid support ticket with no opening message.
+- Fix: create the ticket and opening message in one database transaction; any failure rolls both back.
+- Regression test injects an opening-message persistence failure and asserts neither row remains.
+
+### P2 — Concurrent support replies and status transitions could use stale ticket state
+
+**Affected:** `SupportController.php`.
+
+- Reply handling and status updates previously read and wrote the ticket without a row lock. A reply racing a close/reopen operation could make decisions against stale status or overwrite a concurrent transition.
+- Fix: both reply handling and status changes now acquire a `lockForUpdate()` on the ticket row inside a transaction; message insertion and reply-driven status/response-time updates commit atomically.
+- Status audit remains after the successful transaction commit.
+
+**Validation:** regression test added for atomic ticket + opening-message creation. CI and test execution remain paused as instructed; these latest changes are not yet runtime-verified.
