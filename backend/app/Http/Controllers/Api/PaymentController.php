@@ -462,22 +462,39 @@ class PaymentController extends Controller
             return; // idempotent
         }
 
-        // A completed Checkout Session is not proof of payment for async
-        // methods. Match the Flutterwave path: require a settled status and,
-        // when Stripe supplies it, the expected amount before activating.
+        // Signed Checkout events must still match the invoice created by this
+        // application. Never accept missing payment fields or infer a settled
+        // payment from checkout.session.completed alone (async methods can
+        // complete the checkout flow before payment settles).
+        if ((string) $agencyId !== (string) $invoice->agency_id
+            || (string) $planId !== (string) $invoice->plan_id) {
+            Log::warning('Stripe checkout: session metadata does not match invoice', [
+                'session_id' => $session->id,
+                'invoice_id' => $invoice->id,
+            ]);
+            return;
+        }
+
         $paymentStatus = $session->payment_status ?? null;
-        if ($paymentStatus !== null && !in_array($paymentStatus, ['paid', 'no_payment_required'], true)) {
+        if (!in_array($paymentStatus, ['paid', 'no_payment_required'], true)) {
             Log::warning('Stripe checkout: session not settled', [
                 'session_id' => $session->id, 'payment_status' => $paymentStatus,
             ]);
             return;
         }
+
         $amountTotal = $session->amount_total ?? null;
-        $currency = strtolower((string) ($session->currency ?? 'pkr'));
-        if ($amountTotal !== null && $currency === 'pkr'
-            && (int) $amountTotal < (int) round((float) $invoice->total_pkr * 100)) {
-            Log::warning('Stripe checkout: amount below invoice total', [
-                'session_id' => $session->id, 'amount_total' => $amountTotal,
+        $currency = strtolower(trim((string) ($session->currency ?? '')));
+        $expectedCurrency = strtolower(trim((string) $invoice->currency));
+        $expectedAmountMinor = (float) $invoice->total_pkr * 100;
+        if (!is_numeric($amountTotal) || $currency === '' || $currency !== $expectedCurrency
+            || abs((float) $amountTotal - $expectedAmountMinor) > 0.00001) {
+            Log::warning('Stripe checkout: amount or currency does not match invoice', [
+                'session_id' => $session->id,
+                'amount_total' => $amountTotal,
+                'currency' => $currency,
+                'expected_amount_minor' => $expectedAmountMinor,
+                'expected_currency' => $expectedCurrency,
             ]);
             return;
         }
