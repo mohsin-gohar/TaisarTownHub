@@ -40,7 +40,7 @@ erDiagram
 | CRM & leads | `inquiries`, `agency_leads`-family (activities), `business_records` | inquiry → agency attribution server-side; legacy `business_records` are platform-owned unless backfilled |
 | Vault | `documents`, `document_versions`, `document_shares` | private disk + quarantine disk; hashed share tokens, expiry, download caps |
 | Finance | `transactions`/`deals`, `payment entries`, `commission entries`, `expenses` | append-only ledger; paid invoices immutable; voids audited |
-| Subscriptions | `plans`, `agency_subscriptions`, `subscription_invoices` | plan quotas enforced at write time (402 `plan_limit_reached`) |
+| Subscriptions | `plans`, `agency_subscriptions`, `subscription_invoices`, `invoice_sequences` | plan quotas enforced at write time; yearly invoice numbers reserved under a transactional row lock |
 | Media | `media_files` | visibility-controlled; public file route serves only while visible |
 | Ops | `support_tickets`(+messages), `notifications`, `audit_logs`, `cms/settings` | audit trail flags cross-agency actions |
 
