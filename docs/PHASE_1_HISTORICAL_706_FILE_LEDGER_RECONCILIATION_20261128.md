@@ -65,7 +65,7 @@ No exact path exists in either tree. Related tests or other components may exist
 
 These are path-layout corrections; the current paths are present in the 566-file inventory.
 
-### Legacy page-router paths (10)
+### Legacy page-router paths (11)
 
 ```
 frontend/src/pages/_app.tsx
