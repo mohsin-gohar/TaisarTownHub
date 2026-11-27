@@ -315,6 +315,30 @@ jobs:
             -v "$PWD/docker/frontend/nginx.conf:/etc/nginx/nginx.conf:ro" \
             nginx:1.27-alpine nginx -t
 
+      - name: Verify private vault persistence and isolation
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml config --format json | python3 -c '
+          import json, sys
+          config = json.load(sys.stdin)
+          expected_target = "/var/www/html/storage/app/private"
+          for service in ("backend", "worker", "scheduler"):
+              mounts = config["services"][service].get("volumes", [])
+              assert any(
+                  mount.get("type") == "volume"
+                  and mount.get("source") == "private_vault"
+                  and mount.get("target") == expected_target
+                  for mount in mounts
+              ), f"{service} must mount private_vault at {expected_target}"
+          for service in ("frontend", "nginx"):
+              mounts = config["services"][service].get("volumes", [])
+              assert not any(
+                  mount.get("target", "").startswith("/var/www/html/storage/app/private")
+                  or mount.get("source") == "private_vault"
+                  for mount in mounts
+              ), f"{service} must not access the private vault"
+          print("private vault persistence and web-tier isolation: OK")
+          '
+      
       - name: Start full stack
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build
 
