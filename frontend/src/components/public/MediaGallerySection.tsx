@@ -68,8 +68,11 @@ export const MediaGallerySection: React.FC = () => {
   // real on-ground tour. Real videos go in frontend/public/ (served at the
   // site root) or as absolute URLs; posters/thumbnails likewise.
   const isRealVideo = (v: AgencyVideo) => {
-    const url = (v.videoUrl || '').toLowerCase();
-    return url.startsWith('http') || (url.startsWith('/') && !url.includes('sample-video'));
+    const url = (v.videoUrl || '').trim();
+    if (!url || /(?:sample-video|video[_-]?id|placeholder|example\.(?:com|test)|your[_-]?video|replace[_-]?me)/i.test(url)) {
+      return false;
+    }
+    return /^https?:\/\//i.test(url) || url.startsWith('/');
   };
 
   const filteredVideos = agencyVideos.filter((v) => {
