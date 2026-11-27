@@ -222,7 +222,7 @@ class AdminAgencyController extends Controller
         $request->validate([
             'name' => 'sometimes|string|max:100',
             'description' => 'nullable|string|max:2000',
-            'price' => 'sometimes|numeric|min:0|max:99999999',
+            'price' => 'sometimes|numeric|min:0|max:99999999|multiple_of:1',
             'interval' => 'sometimes|in:month,year',
             'limits' => 'nullable|array',
             'features' => 'nullable|array',
