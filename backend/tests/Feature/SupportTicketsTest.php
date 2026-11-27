@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Agency;
+use App\Models\SupportMessage;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Tests\Feature\EnterpriseTestCase;
@@ -203,6 +204,29 @@ class SupportTicketsTest extends EnterpriseTestCase
 
         $this->getJson('/api/support/tickets/' . $ticket->id, $this->authHeaders($this->tokenFor($user)))
             ->assertStatus(404);
+    }
+
+
+    public function test_ticket_and_opening_message_roll_back_together_when_message_persistence_fails(): void
+    {
+        [$user] = $this->memberUser();
+
+        SupportMessage::creating(function () {
+            throw new \\RuntimeException('Simulated opening-message persistence failure.');
+        });
+
+        try {
+            $this->postJson('/api/support/tickets', [
+                'subject' => 'Opening message persistence failure',
+                'body' => 'The first message must be saved with its ticket.',
+            ], $this->authHeaders($this->tokenFor($user)));
+            $this->fail('The simulated persistence failure should escape the request.');
+        } catch (\\RuntimeException $exception) {
+            $this->assertSame('Simulated opening-message persistence failure.', $exception->getMessage());
+        }
+
+        $this->assertSame(0, SupportTicket::where('user_id', $user->id)->count());
+        $this->assertSame(0, SupportMessage::where('user_id', $user->id)->count());
     }
 
     public function test_platform_side_account_gets_its_own_ticket_lane(): void
