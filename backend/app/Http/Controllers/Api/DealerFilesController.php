@@ -145,8 +145,9 @@ class DealerFilesController extends Controller
         ]);
 
         $profitCents = 0;
+        $profit = '0.00';
 
-        $soldFile = DB::transaction(function () use ($id, $dealerId, $validated, &$profitCents) {
+        $soldFile = DB::transaction(function () use ($id, $dealerId, $validated, &$profitCents, &$profit) {
             $file = DealerFile::where('id', $id)
                 ->where('dealer_id', $dealerId)
                 ->lockForUpdate()
@@ -296,9 +297,14 @@ class DealerFilesController extends Controller
     /** Convert a validated non-negative decimal PKR amount to integer paise. */
     private function toCents(string|int|float $amount): int
     {
-        $value = number_format((float) $amount, 2, '.', '');
-        [$rupees, $paise] = array_pad(explode('.', $value, 2), 2, '00');
-        return ((int) $rupees * 100) + (int) str_pad($paise, 2, '0');
+        $value = (string) $amount;
+        if (! preg_match('/^(\\d+)(?:\\.(\\d{1,2}))?$/', $value, $matches)) {
+            throw new \\InvalidArgumentException('Invalid decimal PKR amount.');
+        }
+
+        $rupees = (int) $matches[1];
+        $paise = (int) str_pad($matches[2] ?? '', 2, '0');
+        return ($rupees * 100) + $paise;
     }
 
     private function fromCents(int $amount): string
