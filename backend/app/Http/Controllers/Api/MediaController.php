@@ -340,7 +340,7 @@ class MediaController extends Controller
             $costCents = $request->filled('cost_price_pk')
                 ? $this->toCents((string) $request->input('cost_price_pk'))
                 : null;
-            $profitCents = $costCents !== null ? max(0, $sellingCents - $costCents) : 0;
+            $profitCents = $costCents !== null ? $sellingCents - $costCents : 0;
 
             $media->status = 'sold';
             $media->sold_at = $request->sold_at ? now()->parse($request->sold_at) : now();
@@ -506,7 +506,9 @@ class MediaController extends Controller
 
     private function fromCents(int $amount): string
     {
-        return intdiv($amount, 100) . '.' . str_pad((string) ($amount % 100), 2, '0', STR_PAD_LEFT);
+        $sign = $amount < 0 ? '-' : '';
+        $absolute = abs($amount);
+        return $sign . intdiv($absolute, 100) . '.' . str_pad((string) ($absolute % 100), 2, '0', STR_PAD_LEFT);
     }
 
     /**
