@@ -5,7 +5,7 @@
 
 ## Registration model
 - `routes/api.php` includes the shared definitions once at `/api`, then again under `/api/v1`.
-- The inventory below counts the **204 unique declarations** in the shared source once; runtime route registration is duplicated for legacy and versioned prefixes.
+- The inventory below counts the **203 unique declarations** in the shared source once; runtime route registration is duplicated for legacy and versioned prefixes.
 - The authenticated route group begins at source line 124; 168 declarations are inside that group and 35 are outside it (guest/public/webhook).
 - Public and webhook routes use explicit per-route throttles where declared. The authenticated group adds Sanctum auth and `EnsureMfaVerified`; API middleware also resolves agency context globally.
 
@@ -19,13 +19,9 @@
 ### HTTP declaration counts
 - GET: 82
 - POST: 77
-- get: 1
-- post: 1
-- PUT: 6
-- put: 18
-- patch: 18
+- PUT: 24
+- PATCH: 20
 - DELETE: 17
-- PATCH: 2
 
 ### Route declarations
 | Source line | Method | Path (relative to prefix) | Handler | Access group |
