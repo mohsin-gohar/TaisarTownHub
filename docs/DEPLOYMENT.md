@@ -38,7 +38,7 @@ docker compose exec api php artisan migrate --force
 docker compose exec api php artisan app:production-check --strict
 ```
 
-Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `scheduler`, `mysql` (MySQL 8.4), `redis`, `clamav`, one-shot `migrate`. Volumes: `mysql_data`, `redis_data`, `clamav_data`, `private_vault`, `public_storage`. The vault volume is mounted only on the API container — the web container can never read it. `php artisan serve` is not used in production. The root `Dockerfile.prod` is deprecated; use `backend/Dockerfile.prod` / `frontend/Dockerfile.prod` with `docker-compose.yml`.
+Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `scheduler`, `mysql` (MySQL 8.4), `redis`, `clamav`, one-shot `migrate`. Volumes: `mysql_data`, `redis_data`, `clamav_data`, `private_vault`, `public_storage`. The `private_vault` volume is mounted at `storage/app/private` in the API, queue worker, and scheduler so both `documents` and `quarantine` disks survive restarts and remain available to background jobs. It is never mounted in the frontend or nginx gateway, so public web-serving containers cannot read private files. `php artisan serve` is not used in production. The root `Dockerfile.prod` is deprecated; use `backend/Dockerfile.prod` / `frontend/Dockerfile.prod` with `docker-compose.yml`.
 
 ## 4. VPS deployment (taisartownhub.com, e.g. Hostinger Ubuntu 22.04/24.04)
 
