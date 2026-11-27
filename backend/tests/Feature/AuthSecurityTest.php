@@ -137,4 +137,26 @@ class AuthSecurityTest extends EnterpriseTestCase
         $this->assertNotEquals('Secret123!', $user->password);
         $this->assertTrue(Hash::check('Secret123!', $user->password));
     }
+
+    public function test_database_queue_defers_jobs_until_transaction_commit(): void
+    {
+        $this->assertTrue(
+            (bool) config('queue.connections.database.after_commit'),
+            'Queued notifications must not run before the transaction that created their state commits.'
+        );
+
+        $this->assertTrue(
+            is_subclass_of(
+                \\App\\Notifications\\PasswordChangedNotification::class,
+                \\Illuminate\\Contracts\\Queue\\ShouldQueue::class
+            )
+        );
+        $this->assertTrue(
+            is_subclass_of(
+                \\App\\Notifications\\SuspiciousLoginDetected::class,
+                \\Illuminate\\Contracts\\Queue\\ShouldQueue::class
+            )
+        );
+    }
+
 }
