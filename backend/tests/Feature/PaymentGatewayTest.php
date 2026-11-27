@@ -281,6 +281,37 @@ class PaymentGatewayTest extends EnterpriseTestCase
         $this->assertSame(1, AgencySubscription::where('agency_id', $agency->id)->count());
     }
 
+    public function test_flutterwave_verification_rejects_missing_amount_or_currency(): void
+    {
+        config(['services.flutterwave.secret_key' => 'FLWSECK_TEST-123']);
+
+        $plan = $this->makePlan();
+        [$owner, $agency] = $this->agencyUser(['agency.view', 'agency.subscribe']);
+        $invoice = $this->makeInvoice($agency->id, $plan, ['flutterwave_tx_ref' => 'fw-ref-missing-amount']);
+
+        Http::fake([
+            'api.flutterwave.com/*' => Http::response([
+                'status' => 'success',
+                'data' => [
+                    'id' => 4243,
+                    'status' => 'successful',
+                    'currency' => 'PKR',
+                ],
+            ], 200),
+        ]);
+
+        $this->getJson(
+            '/api/payments/flutterwave/verify/fw-ref-missing-amount',
+            $this->authHeaders($this->tokenFor($owner))
+        )->assertStatus(422);
+
+        $this->assertSame('pending', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('agency_subscriptions', [
+            'agency_id' => $agency->id,
+            'status' => 'active',
+        ]);
+    }
+
     public function test_flutterwave_verification_rejects_amount_mismatch(): void
     {
         config(['services.flutterwave.secret_key' => 'FLWSECK_TEST-123']);
