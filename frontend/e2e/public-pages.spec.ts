@@ -48,7 +48,7 @@ test.describe('Public Pages', () => {
 
   test('Legacy video walkthrough URL opens the gallery', async ({ page }) => {
     await page.goto('/video-walkthroughs');
-    await expect(page).toHaveURL(/\\/video-walkthroughs$/);
+    await expect(page).toHaveURL(/video-walkthroughs$/);
     await expect(page.locator('main')).toBeVisible();
     await expect(page.locator('text=/Video Tours|Walkthroughs/i').first()).toBeVisible();
   });
