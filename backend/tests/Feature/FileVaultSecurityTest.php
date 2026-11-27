@@ -452,6 +452,26 @@ class FileVaultSecurityTest extends EnterpriseTestCase
             'sold_price_pk' => '10000.25',
             'buyer_name' => 'Decimal Buyer',
         ]);
+
+        $lossMedia = MediaFile::create([
+            'id' => 'med_loss_' . bin2hex(random_bytes(5)),
+            'agency_id' => $agency->id,
+            'title' => 'Loss sale precision regression',
+            'type' => 'image',
+            'visibility' => 'private',
+            'status' => 'available',
+            'uploaded_by' => $user->id,
+        ]);
+        $this->postJson('/api/agency/media/' . $lossMedia->id . '/sell', [
+            'selling_price_pk' => '10000.00',
+            'cost_price_pk' => '12000.00',
+            'buyer_name' => 'Loss Buyer',
+        ], $headers)->assertOk()
+            ->assertJsonPath('media.profit_pk', -2000.00);
+        $this->assertDatabaseHas('media_files', [
+            'id' => $lossMedia->id,
+            'profit_pk' => '-2000.00',
+        ]);
     }
 
     public function test_media_sale_rejects_more_than_two_decimal_places(): void
