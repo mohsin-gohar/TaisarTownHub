@@ -44,6 +44,18 @@ class PaymentController extends Controller
 
         $plan = SubscriptionPlan::findOrFail($request->plan_id);
 
+        // Invoice amounts are integer PKR. Reject legacy/inconsistent plan rows
+        // rather than silently rounding a fractional or foreign-currency price.
+        $planPrice = (string) $plan->price;
+        if (strtoupper((string) $plan->currency) !== 'PKR'
+            || ! preg_match('/^\\d+(?:\\.00)?$/', $planPrice)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This plan has an unsupported price or currency. Contact the platform administrator.',
+            ], 422);
+        }
+        $amountPkr = (int) $planPrice;
+
         // Every agency already has a starter subscription (5 GB workspace), so
         // an existing row must never block an upgrade. Payment is optional
         // during the free launch; platform admins can also assign plans
@@ -77,7 +89,7 @@ class PaymentController extends Controller
                             'name' => $plan->name,
                             'description' => $plan->description ?? 'TaisarTownHub agency subscription',
                         ],
-                        'unit_amount' => (int) ($plan->price * 100),
+                        'unit_amount' => $amountPkr * 100,
                         'recurring' => [
                             'interval' => $plan->interval ?? 'month',
                         ],
@@ -94,7 +106,7 @@ class PaymentController extends Controller
             ]);
 
             // Create a pending invoice using the canonical schema columns.
-            $amount = (int) round((float) $plan->price);
+            $amount = $amountPkr;
             SubscriptionInvoice::create([
                 'id' => (string) Str::uuid(),
                 'invoice_number' => SubscriptionInvoice::nextNumber(),
