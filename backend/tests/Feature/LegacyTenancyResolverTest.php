@@ -77,6 +77,26 @@ class LegacyTenancyResolverTest extends TestCase
         $this->assertCount(2, $resolver->candidates($conflicting));
     }
 
+    public function test_backfill_does_not_auto_resolve_a_row_with_a_bogus_owner_claim(): void
+    {
+        $row = BusinessRecord::put('videos', 'vid-bogus-owner', [
+            'agencyId' => 'not-a-real-agency',
+            'dealerId' => 'deal-1',
+        ]);
+
+        $resolver = new LegacyTenancyResolver();
+        $this->assertNull($resolver->claimedOwner($row));
+        $this->assertSame('not-a-real-agency', $resolver->bogusClaim($row));
+        $this->assertSame(['agency-a'], array_keys($resolver->candidates($row)));
+
+        $this->artisan('platform:legacy-backfill')
+            ->expectsOutputToContain('invalid ownership claim')
+            ->assertExitCode(0);
+
+        $this->assertNull(BusinessRecord::where('collection', 'videos')
+            ->where('record_id', 'vid-bogus-owner')->value('agency_id'));
+    }
+
     public function test_backfill_dry_run_writes_nothing_and_apply_requires_a_backup(): void
     {
         BusinessRecord::put('commissions', 'cm-1', ['dealerId' => 'deal-1']);
