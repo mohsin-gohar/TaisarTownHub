@@ -82,7 +82,7 @@ public function index(Request $request)
         }
 
         // No tenant context is not an implicit platform-wide finance grant.
-        // Resolve legacy single-agency/dealer ownership explicitly or fail closed.
+        // Resolve legacy single-agency ownership explicitly or fail closed.
         if ($agencyId === null && !$user->hasPermission('admin.view_reports')) {
             if ($user->agency_id !== null) {
                 $query->where('agency_id', $user->agency_id);
