@@ -38,7 +38,14 @@ class LegacyOwnershipReportCommand extends Command
     public function handle(): int
     {
         $rows = BusinessRecord::query()
-            ->whereNull('agency_id')
+            ->where(function ($query) {
+                $query->whereNull('agency_id')
+                    ->orWhereNotExists(function ($subquery) {
+                        $subquery->selectRaw('1')
+                            ->from('agencies')
+                            ->whereColumn('agencies.id', 'business_records.agency_id');
+                    });
+            })
             ->when($this->option('collection'), fn ($q) => $q->where('collection', $this->option('collection')))
             ->orderBy('collection')
             ->orderBy('record_id')
@@ -55,14 +62,16 @@ class LegacyOwnershipReportCommand extends Command
             $resolvedOwner = null;
             $reason = null;
 
-            if (count($candidates) === 1) {
+            if ($bogusClaim !== null) {
+                $reason = $row->agency_id !== null
+                    ? "canonical agency_id '{$bogusClaim}' does not reference an existing agency"
+                    : "payload claims a non-existent agency '{$bogusClaim}'";
+            } elseif (count($candidates) === 1) {
                 $status = 'confirmed';
                 $resolvedOwner = array_key_first($candidates);
             } elseif (count($candidates) > 1) {
                 $status = 'ambiguous';
                 $reason = 'evidence points at multiple agencies: ' . implode(', ', array_keys($candidates));
-            } elseif ($bogusClaim !== null) {
-                $reason = "payload claims a non-existent agency '{$bogusClaim}'";
             } else {
                 $reason = 'no owner evidence found (no stamped typed twin, stamped reference, or exact agency name)';
             }
