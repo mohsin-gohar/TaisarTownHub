@@ -43,6 +43,9 @@ class DocumentController extends Controller
         $this->requirePermission($request, 'documents.view');
 
         $folders = DocumentFolder::where('agency_id', $agencyId)
+            ->withCount([
+                'documents as active_documents_count' => fn ($query) => $query->where('status', 'active'),
+            ])
             ->orderBy('path')
             ->get()
             ->map(fn (DocumentFolder $f) => [
@@ -51,7 +54,7 @@ class DocumentController extends Controller
                 'path' => $f->path,
                 'parent_id' => $f->parent_id,
                 'property_id' => $f->property_id,
-                'document_count' => $f->documents()->where('status', 'active')->count(),
+                'document_count' => (int) $f->active_documents_count,
                 'created_at' => $f->created_at,
             ]);
 

@@ -317,36 +317,46 @@ class LeadController extends Controller
             });
         }
 
-        $leads = $query
-            ->orderByDesc('created_at')
-            ->limit(10000)
-            ->get();
+        $exportCount = (clone $query)->count();
 
-        $handle = fopen('php://temp', 'r+');
-        fputcsv($handle, [
-            'id', 'name', 'email', 'phone', 'lead_status', 'source',
-            'property', 'budget', 'follow_up', 'created_at', 'notes',
-        ]);
-        foreach ($leads as $lead) {
-            fputcsv($handle, array_map(fn ($cell) => $this->csvSafeCell($cell), [
-                $lead->id, $lead->fullName, $lead->email, $lead->phone,
-                $lead->lead_status, $lead->source, $lead->preferredPropertyOrProject,
-                $lead->budgetRange, $lead->follow_up_at, $lead->created_at,
-                $lead->adminNotes,
-            ]));
-        }
-        rewind($handle);
-        $csv = stream_get_contents($handle);
-        fclose($handle);
-
-        $this->writeAudit($request, 'lead.export', 'agency:' . $agencyId, 'CRM export (' . $leads->count() . ' leads)', [
+        $this->writeAudit($request, 'lead.export', 'agency:' . $agencyId, 'CRM export (' . $exportCount . ' leads)', [
             'agency_id' => $agencyId,
-            'metadata' => ['count' => $leads->count()],
+            'metadata' => ['count' => min($exportCount, 10000)],
         ]);
 
-        return response($csv, 200, [
+        // Stream rows from the database cursor instead of materializing up to
+        // 10,000 Eloquent models and a second full CSV string in PHP memory.
+        return response()->streamDownload(function () use ($query): void {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, [
+                'id', 'name', 'email', 'phone', 'lead_status', 'source',
+                'property', 'budget', 'follow_up', 'created_at', 'notes',
+            ]);
+
+            $rows = (clone $query)
+                ->select([
+                    'id', 'fullName', 'email', 'phone', 'lead_status', 'source',
+                    'preferredPropertyOrProject', 'budgetRange', 'follow_up_at',
+                    'created_at', 'adminNotes',
+                ])
+                ->orderByDesc('created_at')
+                ->orderBy('id')
+                ->limit(10000)
+                ->cursor();
+
+            foreach ($rows as $lead) {
+                fputcsv($handle, array_map(fn ($cell) => $this->csvSafeCell($cell), [
+                    $lead->id, $lead->fullName, $lead->email, $lead->phone,
+                    $lead->lead_status, $lead->source, $lead->preferredPropertyOrProject,
+                    $lead->budgetRange, $lead->follow_up_at, $lead->created_at,
+                    $lead->adminNotes,
+                ]));
+            }
+
+            fclose($handle);
+        }, 'leads-' . now()->format('Ymd-His') . '.csv', [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="leads-' . now()->format('Ymd-His') . '.csv"',
         ]);
     }
 

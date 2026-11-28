@@ -64,9 +64,11 @@ return new class extends Migration
                     'slug' => $slug,
                     'email' => null,
                     'city' => 'Karachi',
-                    'status' => 'active',
-                    'verification_status' => 'verified',
-                    'verified_at' => $now,
+                    // A dealer-entered affiliation is ownership evidence,
+                    // not proof that the agency itself passed platform review.
+                    'status' => 'pending',
+                    'verification_status' => 'pending',
+                    'verified_at' => null,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
@@ -224,7 +226,15 @@ return new class extends Migration
                 $agencyId = DB::table('dealers')->where('id', $dealerId)->value('agency_id');
             }
             if (!$agencyId && !empty($p['agencyName'])) {
-                $agencyId = DB::table('agencies')->where('name', $p['agencyName'])->value('id');
+                // Names are labels, not unique identifiers. Never choose an
+                // arbitrary agency when duplicate names exist.
+                $agencyMatches = DB::table('agencies')
+                    ->where('name', $p['agencyName'])
+                    ->limit(2)
+                    ->pluck('id');
+                if ($agencyMatches->count() === 1) {
+                    $agencyId = (string) $agencyMatches->first();
+                }
             }
 
             $slugBase = $this->slugify($p['title']);
@@ -319,10 +329,33 @@ return new class extends Migration
             if (empty($t['id']) || empty($t['dealNumber'])) {
                 continue;
             }
-            $agencyId = null;
+            $existingTransaction = DB::table('transactions')->where('id', $t['id'])->first();
+
+            // Only infer transaction ownership when all available,
+            // independently stamped evidence agrees. A dealer/property
+            // mismatch is ambiguous and must remain unowned for review.
+            $ownershipCandidates = [];
+            $addAgencyEvidence = static function ($candidate) use (&$ownershipCandidates): void {
+                if ($candidate !== null && $candidate !== ''
+                    && DB::table('agencies')->where('id', $candidate)->exists()) {
+                    $ownershipCandidates[(string) $candidate] = true;
+                }
+            };
+            $addAgencyEvidence($record->agency_id ?? null);
+            $addAgencyEvidence($existingTransaction->agency_id ?? null);
+            $addAgencyEvidence($t['agencyId'] ?? $t['agency_id'] ?? null);
+
             if (!empty($t['dealerId'])) {
-                $agencyId = DB::table('dealers')->where('id', $t['dealerId'])->value('agency_id');
+                $addAgencyEvidence(DB::table('dealers')->where('id', $t['dealerId'])->value('agency_id'));
             }
+            $legacyPropertyId = $t['propertyId'] ?? $t['property_id'] ?? null;
+            if ($legacyPropertyId) {
+                $addAgencyEvidence(DB::table('properties')->where('id', $legacyPropertyId)->value('agency_id'));
+            }
+
+            $agencyId = count($ownershipCandidates) === 1
+                ? array_key_first($ownershipCandidates)
+                : null;
             $row = [
                 'propertyId' => $t['propertyId'] ?? null,
                 'propertyTitle' => $t['propertyTitle'] ?? 'Unknown property',
@@ -342,7 +375,7 @@ return new class extends Migration
                 'agency_id' => $agencyId,
                 'updated_at' => $now,
             ];
-            if ($existing = DB::table('transactions')->where('id', $t['id'])->first()) {
+            if ($existing = $existingTransaction) {
                 // Gap-fill only. Stale business_records JSON must never
                 // overwrite newer finance edits (status, tenant, amounts).
                 $patch = [];
@@ -441,9 +474,21 @@ return new class extends Migration
             if (DB::table('inquiries')->where('id', $i['id'])->exists()) {
                 continue;
             }
+            // Prefer an explicit legacy property ID. A title is not a
+            // unique identifier: only link it when exactly one property has
+            // that exact title, otherwise preserve the inquiry as unowned.
             $propertyId = null;
-            if (!empty($i['preferredPropertyOrProject'])) {
-                $propertyId = DB::table('properties')->where('title', $i['preferredPropertyOrProject'])->value('id');
+            $legacyPropertyId = $i['propertyId'] ?? $i['property_id'] ?? null;
+            if ($legacyPropertyId && DB::table('properties')->where('id', $legacyPropertyId)->exists()) {
+                $propertyId = (string) $legacyPropertyId;
+            } elseif (!empty($i['preferredPropertyOrProject'])) {
+                $propertyMatches = DB::table('properties')
+                    ->where('title', $i['preferredPropertyOrProject'])
+                    ->limit(2)
+                    ->pluck('id');
+                if ($propertyMatches->count() === 1) {
+                    $propertyId = (string) $propertyMatches->first();
+                }
             }
             DB::table('inquiries')->insert([
                 'id' => $i['id'],

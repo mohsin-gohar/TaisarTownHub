@@ -31,9 +31,9 @@ class MediaFile extends Model
         return [
             'tags' => 'array',
             'size_bytes' => 'integer',
-            'sold_price_pk' => 'float',
-            'cost_price_pk' => 'float',
-            'profit_pk' => 'float',
+            'sold_price_pk' => 'decimal:2',
+            'cost_price_pk' => 'decimal:2',
+            'profit_pk' => 'decimal:2',
             'sold_at' => 'datetime',
             'scan_completed_at' => 'datetime',
         ];

@@ -105,7 +105,7 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment (php artisan key:generate)}
       FRONTEND_URL: ${FRONTEND_URL:-https://taisartownhub.vercel.app}
       DB_CONNECTION: mysql
       DB_HOST: mysql
@@ -141,7 +141,7 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment (php artisan key:generate)}
       APP_URL: https://api.taisartownhub.com
       FRONTEND_URL: ${FRONTEND_URL:-https://taisartownhub.vercel.app}
       DB_CONNECTION: mysql
@@ -294,7 +294,7 @@ services:
     restart: unless-stopped
     environment:
       APP_ENV: production
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment (php artisan key:generate)}
       APP_URL: https://api.taisartownhub.com
       FRONTEND_URL: ${FRONTEND_URL:-https://taisartownhub.vercel.app}
       DB_CONNECTION: mysql
@@ -360,7 +360,7 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?Set APP_KEY in the deployment environment (php artisan key:generate)}
       APP_URL: https://api.taisartownhub.com
       FRONTEND_URL: ${FRONTEND_URL:-https://taisartownhub.vercel.app}
       DB_CONNECTION: mysql

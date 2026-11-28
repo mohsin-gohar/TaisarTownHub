@@ -5,9 +5,14 @@ namespace Tests\Feature;
 use App\Models\BusinessRecord;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
+use Database\Seeders\AgencyFilesSyncSeeder;
+use Database\Seeders\EnterpriseDemoSeeder;
+use Database\Seeders\EnterpriseSeeder;
+use Database\Seeders\DemoStaffSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use RuntimeException;
 use Tests\TestCase;
 
 /**
@@ -59,4 +64,42 @@ class DatabaseSeederProductionSafetyTest extends TestCase
         $this->assertGreaterThan(0, DB::table('permissions')->count());
         $this->assertGreaterThan(0, DB::table('roles')->count());
     }
+    
+    public function test_direct_demo_seeders_fail_closed_in_production(): void
+    {
+        $this->app->instance('env', 'production');
+
+        foreach ([DemoStaffSeeder::class, EnterpriseDemoSeeder::class, AgencyFilesSyncSeeder::class] as $seeder) {
+            try {
+                app($seeder)->run();
+                $this->fail($seeder . ' should reject production execution.');
+            } catch (RuntimeException $exception) {
+                $this->assertStringContainsString('production', strtolower($exception->getMessage()));
+            }
+        }
+
+        $this->assertSame(0, DB::table('agencies')->count());
+        $this->assertSame(0, DB::table('business_records')->count());
+    }
+
+    public function test_enterprise_catalog_reseed_preserves_operator_managed_values(): void
+    {
+        app(EnterpriseSeeder::class)->run();
+
+        DB::table('subscription_plans')->where('key', 'basic')->update(['price' => 7777, 'is_active' => 0]);
+        DB::table('promotion_packages')->where('key', 'featured-7')->update(['price' => 1234, 'is_active' => 0]);
+        DB::table('system_settings')->where('key', 'maintenance.mode')->update(['value' => 'true']);
+        DB::table('property_categories')->where('key', 'house')->update(['name' => 'Admin House Label', 'is_active' => 0]);
+
+        app(EnterpriseSeeder::class)->run();
+
+        $this->assertSame(7777, (int) DB::table('subscription_plans')->where('key', 'basic')->value('price'));
+        $this->assertSame(0, (int) DB::table('subscription_plans')->where('key', 'basic')->value('is_active'));
+        $this->assertSame(1234, (int) DB::table('promotion_packages')->where('key', 'featured-7')->value('price'));
+        $this->assertSame(0, (int) DB::table('promotion_packages')->where('key', 'featured-7')->value('is_active'));
+        $this->assertSame('true', DB::table('system_settings')->where('key', 'maintenance.mode')->value('value'));
+        $this->assertSame('Admin House Label', DB::table('property_categories')->where('key', 'house')->value('name'));
+        $this->assertSame(0, (int) DB::table('property_categories')->where('key', 'house')->value('is_active'));
+    }
+
 }

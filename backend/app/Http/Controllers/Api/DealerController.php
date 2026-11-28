@@ -192,7 +192,11 @@ class DealerController extends Controller
         }
 
         $dealer->delete();
-        $this->writeAudit($request, 'dealer_deleted', $dealer->id, "Dealer {$dealer->fullName} soft-deleted");
+        $this->writeAudit($request, 'dealer_deleted', $dealer->id, "Dealer {$dealer->fullName} soft-deleted", [
+            'agency_id' => $dealer->agency_id,
+            'entity_type' => 'dealer',
+            'entity_id' => $dealer->id,
+        ]);
 
         return response()->json(['message' => 'Dealer deleted successfully']);
     }

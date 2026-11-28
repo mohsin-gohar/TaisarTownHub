@@ -7,8 +7,7 @@
 # MySQL 8 / MariaDB is the only supported database engine.
 
 param(
-    [string]$Destination = "$env:LOCALAPPDATA\Temp\opencode\tth-backups",
-    [switch]$IncludeVault
+    [string]$Destination = "$env:LOCALAPPDATA\Temp\opencode\tth-backups"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,12 +25,12 @@ function Read-DotEnvValue([string]$key, [string]$fallback = '') {
 }
 
 function Compress-ToGzip([string]$source, [string]$target) {
-    $bytes = [System.IO.File]::ReadAllBytes($source)
+    $sourceStream = [System.IO.File]::OpenRead($source)
     $out = [System.IO.File]::Create($target)
-    $gz = New-Object System.IO.Compression.GZipStream($out, [System.IO.Compression.CompressionMode]::Compress)
-    $gz.Write($bytes, 0, $bytes.Length)
-    $gz.Close()
-    $out.Close()
+    try {
+        $gz = New-Object System.IO.Compression.GZipStream($out, [System.IO.Compression.CompressionMode]::Compress)
+        try { $sourceStream.CopyTo($gz) } finally { $gz.Dispose() }
+    } finally { $sourceStream.Dispose(); $out.Dispose() }
 }
 
 $driver = Read-DotEnvValue 'DB_CONNECTION' 'mysql'
@@ -41,6 +40,7 @@ if ($driver -ne 'mysql') {
 
 $name = Read-DotEnvValue 'DB_DATABASE'
 $user = Read-DotEnvValue 'DB_USERNAME'
+if (-not $name -or -not $user) { throw 'DB_DATABASE and DB_USERNAME are required.' }
 $hostName = Read-DotEnvValue 'DB_HOST' '127.0.0.1'
 $port = Read-DotEnvValue 'DB_PORT' '3306'
 $password = Read-DotEnvValue 'DB_PASSWORD'
@@ -53,11 +53,14 @@ if (-not $env:MYSQLDUMP -and -not (Get-Command mysqldump -ErrorAction SilentlyCo
 
 Write-Host "[backup] MySQL dump of database '$name' from $hostName`:$port"
 $sql = Join-Path $Destination "tth_db_$stamp.sql"
-& $dumpTool --single-transaction --routines --triggers -h $hostName -P $port -u $user "-p$password" $name | Out-File -FilePath $sql -Encoding utf8
-if ($LASTEXITCODE -ne 0) { throw "[backup] FATAL: mysqldump failed with exit code $LASTEXITCODE" }
+$env:MYSQL_PWD = $password
+& $dumpTool "--result-file=$sql" --single-transaction --routines --triggers --events --hex-blob -h $hostName -P $port -u $user $name
+$dumpExit = $LASTEXITCODE
+Remove-Item Env:MYSQL_PWD -ErrorAction SilentlyContinue
+if ($dumpExit -ne 0) { throw "[backup] FATAL: mysqldump failed with exit code $dumpExit" }
 
 $tableCount = (Select-String -Path $sql -Pattern 'CREATE TABLE' -AllMatches).Count
-if ($tableCount -le 0) {
+if ($tableCount -le 0 -or -not (Select-String -Path $sql -Pattern 'Dump completed' -Quiet)) {
     throw "[backup] FATAL: dump contains no tables - aborting"
 }
 Write-Host "[backup] verification: dump contains $tableCount tables"
@@ -67,13 +70,14 @@ Compress-ToGzip $sql $dbArtefact
 Remove-Item $sql -Force
 
 $vaultArtefact = $null
-if ($IncludeVault) {
-    $vault = Join-Path $backend 'storage\app\private\documents'
-    if (Test-Path $vault) {
-        $vaultArtefact = Join-Path $Destination "tth_vault_$stamp.tar.gz"
-        tar -czf $vaultArtefact -C (Split-Path -Parent $vault) (Split-Path -Leaf $vault)
-        Write-Host "[backup] vault archived: $vaultArtefact"
-    }
+$vault = Join-Path $backend 'storage\app\private\documents'
+if (-not (Test-Path -LiteralPath $vault -PathType Container)) { throw "Private vault is missing: $vault; database-only backup is forbidden." }
+$vaultArtefact = Join-Path $Destination "tth_vault_$stamp.tar.gz"
+    tar -czf $vaultArtefact -C (Split-Path -Parent $vault) (Split-Path -Leaf $vault)
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $vaultArtefact) -or (Get-Item -LiteralPath $vaultArtefact).Length -eq 0) { throw "Private vault archive creation failed." }
+    $vaultEntries = @(tar -tzf $vaultArtefact)
+    if ($LASTEXITCODE -ne 0 -or $vaultEntries.Count -eq 0) { throw "Private vault archive integrity check failed." }
+    Write-Host "[backup] vault archived: $vaultArtefact"
 }
 
 $manifest = Join-Path $Destination "manifest-$stamp.sha256"

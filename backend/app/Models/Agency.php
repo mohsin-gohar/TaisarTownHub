@@ -100,6 +100,71 @@ class Agency extends Model
             ->orderBy('position');
     }
 
+    public function documentFolders(): HasMany
+    {
+        return $this->hasMany(DocumentFolder::class, 'agency_id');
+    }
+
+    public function documentShares(): HasMany
+    {
+        return $this->hasMany(DocumentShare::class, 'agency_id');
+    }
+
+    public function documentAccessLogs(): HasMany
+    {
+        return $this->hasMany(DocumentAccessLog::class, 'agency_id');
+    }
+
+    public function quarantinedDocuments(): HasMany
+    {
+        return $this->hasMany(DocumentQuarantine::class, 'agency_id');
+    }
+
+    public function leadActivities(): HasMany
+    {
+        return $this->hasMany(LeadActivity::class, 'agency_id');
+    }
+
+    public function transactionPayments(): HasMany
+    {
+        return $this->hasMany(TransactionPayment::class, 'agency_id');
+    }
+
+    public function paymentSchedules(): HasMany
+    {
+        return $this->hasMany(PaymentSchedule::class, 'agency_id');
+    }
+
+    public function commissions(): HasMany
+    {
+        return $this->hasMany(Commission::class, 'agency_id');
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class, 'agency_id');
+    }
+
+    public function subscriptionInvoices(): HasMany
+    {
+        return $this->hasMany(SubscriptionInvoice::class, 'agency_id');
+    }
+
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class, 'agency_id');
+    }
+
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(AuditLog::class, 'agency_id');
+    }
+
+    public function propertyStatusHistory(): HasMany
+    {
+        return $this->hasMany(PropertyStatusHistory::class, 'agency_id');
+    }
+
     public function invitations(): HasMany
     {
         return $this->hasMany(AgencyInvitation::class, 'agency_id');

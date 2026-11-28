@@ -508,10 +508,11 @@ class WorkspaceController extends Controller
      *
      * OWNERSHIP (enforced on every row):
      *  - member (agencyId set): may CREATE rows (stamped with their agency)
-     *    and UPDATE rows owned by their agency. Rows owned by ANOTHER agency
-     *    are never touched. Legacy platform rows (agency_id NULL) remain
-     *    shared/read-write for members but are never re-stamped (no hijack).
-     *  - platform user (agencyId null): full access, column left as-is.
+     *    and UPDATE rows already owned by their agency. Rows owned by ANOTHER
+     *    agency and unresolved legacy rows (agency_id NULL) are both blocked;
+     *    an agency member cannot claim or mutate unowned legacy data.
+     *  - platform user (agencyId null): platform-level access; ownership column
+     *    is preserved unless an approved legacy backfill explicitly stamps it.
      *
      * Returns ['changed' => ids actually modified, 'removed' => count].
      * Unchanged rows are skipped so the debounced frontend autosave does not

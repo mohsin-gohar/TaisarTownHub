@@ -198,6 +198,7 @@ try {
 
     $vault = Get-ChildItem -LiteralPath $BackupDir -Filter 'tth_vault_*.tar.gz' -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like "*$stamp*" } | Select-Object -First 1
+    if (-not $vault) { throw "private vault archive is missing for backup stamp '$stamp'; database-only restore is forbidden" }
 
     Write-Host "[drill] backup  : $($dbBackup.FullName)"
     Write-Host "[drill] manifest: $($manifest.FullName)"
@@ -332,6 +333,29 @@ try {
     }
     Write-Host "[drill] all $($expect.ForeignKeys.Count) foreign-key relationships are free of orphaned rows"
 
+    # Every non-null tenant key must reference a restored agency, including
+    # legacy tables that do not have a physical agency_id foreign key.
+    if ($expect.Tables.ContainsKey('agencies')) {
+        $agencyTables = @(Invoke-Sql $temporaryDatabase "SELECT TABLE_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$temporaryDatabase' AND COLUMN_NAME='agency_id' ORDER BY TABLE_NAME")
+        foreach ($tableName in $agencyTables) {
+            $tableName = "$tableName".Trim()
+            if (-not $tableName) { continue }
+            $q = 'SELECT COUNT(*) FROM `{0}` r LEFT JOIN agencies a ON a.id = r.agency_id WHERE r.agency_id IS NOT NULL AND a.id IS NULL' -f (Quote-Identifier $tableName)
+            $orphans = [int](Invoke-SqlScalar $temporaryDatabase $q)
+            if ($orphans -ne 0) { throw "tenant ownership integrity violation: $tableName has $orphans row(s) referencing a missing agency" }
+        }
+        Write-Host "[drill] all non-null agency_id values reference restored agency rows"
+    }
+
+    # Financial child rows must carry the same tenant as their parent deal.
+    foreach ($childTable in @('transaction_payments', 'payment_schedules', 'commissions')) {
+        if (-not $expect.Tables.ContainsKey($childTable) -or -not $expect.Tables.ContainsKey('transactions')) { continue }
+        $q = 'SELECT COUNT(*) FROM `{0}` c INNER JOIN transactions t ON t.id = c.transaction_id WHERE NOT (c.agency_id <=> t.agency_id)' -f (Quote-Identifier $childTable)
+        $mismatches = [int](Invoke-SqlScalar $temporaryDatabase $q)
+        if ($mismatches -ne 0) { throw "cross-tenant finance integrity violation: $childTable has $mismatches mismatched row(s)" }
+    }
+    Write-Host '[drill] finance child/parent agency ownership matches for payments, schedules and commissions'
+
     # Meaningful application query against the restored copy.
     if ($expect.Tables.ContainsKey('properties')) {
         $saleListings = Invoke-SqlScalar $temporaryDatabase "SELECT COUNT(*) FROM properties WHERE listing_purpose='sale'"
@@ -382,8 +406,6 @@ try {
         $restoredFiles = @($allExtracted | Where-Object { -not $_.PSIsContainer })
         $restoredBytes = [long](($restoredFiles | Measure-Object -Property Length -Sum).Sum)
         Write-Host "[drill] vault extracted into scratch storage: $($restoredFiles.Count) file(s), $restoredBytes byte(s)"
-    } else {
-        Write-Host '[drill] no vault archive for this backup stamp (database-only drill)'
     }
 } catch {
     Write-Host "RESTORE DRILL: FAIL - $($_.Exception.Message)"

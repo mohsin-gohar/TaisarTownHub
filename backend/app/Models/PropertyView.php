@@ -21,4 +21,9 @@ class PropertyView extends Model
     {
         return $this->belongsTo(Property::class, 'property_id');
     }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }

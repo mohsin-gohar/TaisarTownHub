@@ -70,6 +70,11 @@ class Property extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function updater(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
     public function sectorRelation(): BelongsTo
     {
         return $this->belongsTo(Sector::class, 'sector_id');

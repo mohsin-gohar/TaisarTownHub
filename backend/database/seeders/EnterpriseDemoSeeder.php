@@ -5,14 +5,11 @@ namespace Database\Seeders;
 use App\Models\Agency;
 use App\Models\AgencyMember;
 use App\Models\AgencySubscription;
-use App\Models\Dealer;
 use App\Models\Inquiry;
-use App\Models\Property;
 use App\Models\SubscriptionPlan;
-use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * Local/demo multi-tenant fixture.
@@ -29,6 +26,10 @@ class EnterpriseDemoSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            throw new RuntimeException('EnterpriseDemoSeeder must never run in production.');
+        }
+
         $admin = User::where('email', 'admin@taisartownhub.com')->first();
         if (!$admin) {
             return;
@@ -86,17 +87,9 @@ class EnterpriseDemoSeeder extends Seeder
             );
         }
 
-        // Backfill tenancy on legacy rows so agency-scoped stats are non-zero.
-        Dealer::whereNotNull('id')->update(['agency_id' => $agency->id]);
-        Property::query()->update([
-            'agency_id' => $agency->id,
-            'approval_status' => 'approved',
-            'visibility' => 'public',
-            'published_at' => now(),
-            'created_by' => $admin->id,
-        ]);
-        Transaction::query()->update(['agency_id' => $agency->id]);
-
+        // Never bulk-claim legacy or user-owned records for a demo tenant.
+        // Ownership must come from verified migration evidence or an explicit,
+        // reviewed assignment—not from a demo seeder.
         // A few CRM leads so the pipeline desk is not empty.
         $leadSeeds = [
             [
@@ -146,32 +139,7 @@ class EnterpriseDemoSeeder extends Seeder
             );
         }
 
-        // One sample deal so the finance ledger renders.
-        Transaction::updateOrCreate(
-            ['id' => 'txn-demo-1'],
-            [
-                'dealNumber' => 'TTH-2026-0001',
-                'propertyId' => 'prop-r66',
-                'propertyTitle' => 'Plot R-66 (120 Sq. Yds) — 100ft Road Facing, Sector 63',
-                'plotNumber' => 'R-66',
-                'sector' => 'Sector 63',
-                'sellerName' => 'Muhammad Aslam',
-                'buyerName' => 'Hamza Khan',
-                'dealerId' => 'deal-1',
-                'dealerName' => 'Saleem Siddiqui',
-                'transactionType' => 'Sale',
-                'agreementAmountPKR' => 3500000,
-                'advancePaymentPKR' => 500000,
-                'remainingBalancePKR' => 3000000,
-                'commissionAmountPKR' => 20000,
-                'commissionStatus' => 'Pending',
-                'dealStatus' => 'Token Paid',
-                'paymentStatus' => 'Partially Paid',
-                'paymentMethod' => 'Bank Transfer',
-                'transactionDate' => now()->toDateString(),
-                'agency_id' => $agency->id,
-                'created_by' => $admin->id,
-            ]
-        );
+        // Do not fabricate a finance transaction against a legacy property/dealer.
+        // A dedicated demo-owned property and dealer must exist before a deal is seeded.
     }
 }

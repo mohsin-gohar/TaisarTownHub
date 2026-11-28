@@ -18,9 +18,9 @@ class DealerFile extends Model
 
     protected $casts = [
         'file_size_kb' => 'float',
-        'selling_price_kbr' => 'float',
-        'cost_price_kbr' => 'float',
-        'profit_kbr' => 'float',
+        'selling_price_kbr' => 'decimal:2',
+        'cost_price_kbr' => 'decimal:2',
+        'profit_kbr' => 'decimal:2',
     ];
 
     public function dealer()

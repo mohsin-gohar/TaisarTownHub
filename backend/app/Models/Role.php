@@ -40,6 +40,11 @@ class Role extends Model
         return $this->belongsTo(Agency::class, 'agency_id');
     }
 
+    public function creator(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function isPlatform(): bool
     {
         return $this->scope === 'platform';

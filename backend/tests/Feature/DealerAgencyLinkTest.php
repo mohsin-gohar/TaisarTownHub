@@ -67,23 +67,52 @@ class DealerAgencyLinkTest extends EnterpriseTestCase
 
     public function test_agency_scoped_publisher_cannot_delete_another_agencys_dealer(): void
     {
-        [$user, $agency] = $this->agencyUser(['manage_dealers'], 'agency_owner');
-        [, $foreign] = $this->agencyUser([], 'agent');
+        [$user] = $this->agencyUser(['manage_dealers'], 'agency_owner');
+        [, $foreignAgency] = $this->agencyUser([], 'agent');
 
-        // A dealer owned by the foreign agency, created by a platform admin.
-        $foreignDealer = $this->postJson('/api/dealers', [
+        $foreignDealerId = $this->postJson('/api/dealers', [
             'id' => 'deal-' . Str::random(8),
-            'fullName' => 'Foreign Delete Target',
-            'phone' => '03001112222',
-            'agencyId' => $foreign->id,
+            'fullName' => 'Foreign Dealer',
+            'phone' => '03007654321',
+            'agencyId' => $foreignAgency->id,
         ], $this->authHeaders($this->tokenFor($this->makeUser('super_admin'))))
             ->assertCreated()
             ->json('id');
 
-        // Cross-tenant delete must be rejected and must not remove the row.
-        $this->deleteJson("/api/dealers/{$foreignDealer}", [], $this->authHeaders($this->tokenFor($user)))
-            ->assertStatus(404);
+        $this->deleteJson(
+            "/api/dealers/{$foreignDealerId}",
+            [],
+            $this->authHeaders($this->tokenFor($user))
+        )->assertStatus(404);
 
-        $this->assertDatabaseHas('dealers', ['id' => $foreignDealer]);
+        $this->assertDatabaseHas('dealers', [
+            'id' => $foreignDealerId,
+            'agency_id' => $foreignAgency->id,
+            'deleted_at' => null,
+        ]);
+    }
+
+    public function test_agency_scoped_publisher_can_delete_its_own_dealer(): void
+    {
+        [$user, $agency] = $this->agencyUser(['manage_dealers'], 'agency_owner');
+
+        $dealerId = $this->postJson('/api/dealers', [
+            'id' => 'deal-' . Str::random(8),
+            'fullName' => 'Own Dealer',
+            'phone' => '03001234567',
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertCreated()
+            ->json('id');
+
+        $this->deleteJson(
+            "/api/dealers/{$dealerId}",
+            [],
+            $this->authHeaders($this->tokenFor($user))
+        )->assertOk();
+
+        $this->assertSoftDeleted('dealers', [
+            'id' => $dealerId,
+            'agency_id' => $agency->id,
+        ]);
     }
 }

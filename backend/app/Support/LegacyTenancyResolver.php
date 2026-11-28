@@ -45,7 +45,7 @@ final class LegacyTenancyResolver
     /** @var array<string,true>|null */
     private ?array $agencyIds = null;
 
-    /** @var array<string,string>|null */
+    /** @var array<string,array<int,string>>|null */
     private ?array $agencyByName = null;
 
     /** @var array<string,string>|null */
@@ -66,8 +66,12 @@ final class LegacyTenancyResolver
      */
     public function claimedOwner(BusinessRecord $row): ?string
     {
-        if ($row->agency_id && $this->isAgency($row->agency_id)) {
-            return $row->agency_id;
+        // A populated canonical column is authoritative. If it points to
+        // a missing agency, do not silently fall back to a payload claim.
+        if ($row->agency_id !== null && $row->agency_id !== '') {
+            return $this->isAgency((string) $row->agency_id)
+                ? (string) $row->agency_id
+                : null;
         }
 
         $payload = is_array($row->payload) ? $row->payload : [];
@@ -82,6 +86,13 @@ final class LegacyTenancyResolver
         if ($this->claimedOwner($row) !== null) {
             return null;
         }
+
+        // A non-null canonical column that points at no agency is an orphaned
+        // owner reference, not an unowned row that can be auto-stamped.
+        if ($row->agency_id !== null && $row->agency_id !== '') {
+            return (string) $row->agency_id;
+        }
+
         $payload = is_array($row->payload) ? $row->payload : [];
         $claimed = $payload['agencyId'] ?? $payload['agency_id'] ?? null;
 
@@ -152,9 +163,12 @@ final class LegacyTenancyResolver
 
         // 5) Exact agency name (videos carry a human-readable agencyName).
         $name = $payload['agencyName'] ?? $payload['agency_name'] ?? null;
-        if ($name && isset($this->agencyByName()[(string) $name])) {
-            $agency = $this->agencyByName()[(string) $name];
-            $add($agency, "payload.agencyName = {$name} -> agencies.id = {$agency}");
+        if ($name) {
+            // Agency names are not guaranteed unique. Preserve every exact
+            // match so duplicate names become an explicit ambiguous result.
+            foreach ($this->agencyByName()[(string) $name] ?? [] as $agency) {
+                $add($agency, "payload.agencyName = {$name} -> agencies.id = {$agency}");
+            }
         }
 
         return $found;
@@ -179,10 +193,17 @@ final class LegacyTenancyResolver
         return $this->agencyIds ??= array_fill_keys(DB::table('agencies')->pluck('id')->all(), true);
     }
 
-    /** @return array<string,string> */
+    /** @return array<string,array<int,string>> */
     private function agencyByName(): array
     {
-        return $this->agencyByName ??= DB::table('agencies')->pluck('id', 'name')->all();
+        if ($this->agencyByName === null) {
+            $this->agencyByName = [];
+            foreach (DB::table('agencies')->get(['id', 'name']) as $agency) {
+                $this->agencyByName[(string) $agency->name][] = (string) $agency->id;
+            }
+        }
+
+        return $this->agencyByName;
     }
 
     /** @return array<string,string> */

@@ -15,8 +15,8 @@ class Commission extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'float',
-            'rate' => 'float',
+            'amount' => 'decimal:2',
+            'rate' => 'decimal:2',
             'accrued_at' => 'datetime',
             'paid_at' => 'datetime',
         ];
@@ -30,6 +30,16 @@ class Commission extends Model
     public function dealer(): BelongsTo
     {
         return $this->belongsTo(Dealer::class, 'dealer_id');
+    }
+
+    public function beneficiary(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function paidBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'paid_by');
     }
 
     public function agency(): BelongsTo
