@@ -8,6 +8,7 @@ use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\AgencyFilesSyncSeeder;
 use Database\Seeders\EnterpriseDemoSeeder;
 use Database\Seeders\EnterpriseSeeder;
+use Database\Seeders\DemoStaffSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -63,6 +64,7 @@ class DatabaseSeederProductionSafetyTest extends TestCase
         $this->assertGreaterThan(0, DB::table('permissions')->count());
         $this->assertGreaterThan(0, DB::table('roles')->count());
     }
+    
     public function test_direct_demo_seeders_fail_closed_in_production(): void
     {
         $this->app->instance('env', 'production');
