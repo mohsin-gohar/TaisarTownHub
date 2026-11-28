@@ -350,7 +350,7 @@ try {
     # Financial child rows must carry the same tenant as their parent deal.
     foreach ($childTable in @('transaction_payments', 'payment_schedules', 'commissions')) {
         if (-not $expect.Tables.ContainsKey($childTable) -or -not $expect.Tables.ContainsKey('transactions')) { continue }
-        $q = 'SELECT COUNT(*) FROM `{0}` c INNER JOIN transactions t ON t.id = c.transaction_id WHERE c.agency_id <> t.agency_id' -f (Quote-Identifier $childTable)
+        $q = 'SELECT COUNT(*) FROM `{0}` c INNER JOIN transactions t ON t.id = c.transaction_id WHERE NOT (c.agency_id <=> t.agency_id)' -f (Quote-Identifier $childTable)
         $mismatches = [int](Invoke-SqlScalar $temporaryDatabase $q)
         if ($mismatches -ne 0) { throw "cross-tenant finance integrity violation: $childTable has $mismatches mismatched row(s)" }
     }
