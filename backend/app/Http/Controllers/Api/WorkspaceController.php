@@ -676,11 +676,24 @@ class WorkspaceController extends Controller
      */
     private function auditNewMediaSales(Request $request, array $rows): void
     {
-        foreach ($rows as $row) {
-            if (empty($row['id']) || empty($row['soldAt'])) {
-                continue;
-            }
-            $existing = BusinessRecord::where('collection', 'media')->where('record_id', (string) $row['id'])->first();
+        // Resolve previous sale state in one query rather than one SELECT for
+        // every uploaded/synced media row.
+        $soldRows = array_values(array_filter($rows, fn (array $row) => !empty($row['id']) && !empty($row['soldAt'])));
+        if ($soldRows === []) {
+            return;
+        }
+
+        $existingById = BusinessRecord::query()
+            ->where('collection', 'media')
+            ->whereIn('record_id', array_values(array_unique(array_map(
+                fn (array $row) => (string) $row['id'],
+                $soldRows
+            ))))
+            ->get()
+            ->keyBy('record_id');
+
+        foreach ($soldRows as $row) {
+            $existing = $existingById->get((string) $row['id']);
             $previous = $existing?->payload ?? [];
             if (! empty($previous['soldAt'])) {
                 continue; // already audited on its original sale
@@ -706,7 +719,8 @@ class WorkspaceController extends Controller
     /** Append-only audit entry for changed financial rows only. */
     private function auditFinancialSync(Request $request, string $collection, array $rows, array $changedIds, ?string $agencyId): void
     {
-        $changed = array_filter($rows, fn ($row) => in_array((string) $row['id'], $changedIds, true));
+        $changedLookup = array_fill_keys(array_map('strval', $changedIds), true);
+        $changed = array_filter($rows, fn ($row) => isset($changedLookup[(string) $row['id']]));
         if (! $changed) {
             return;
         }

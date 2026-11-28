@@ -219,6 +219,22 @@ class WorkspaceApprovalTest extends EnterpriseTestCase
         $this->assertDatabaseCount('personal_access_tokens', 1);
     }
 
+
+    public function test_agency_profile_does_not_disclose_internal_platform_verification_notes(): void
+    {
+        [$owner, $agency] = $this->agencyUser($this->ownerPermissions());
+        $agency->update([
+            'verification_notes' => 'Internal risk review: pending manual compliance follow-up.',
+        ]);
+
+        $response = $this->getJson('/api/agency/profile', $this->authHeaders($this->tokenFor($owner)))
+            ->assertOk()
+            ->assertJsonPath('agency.id', $agency->id);
+
+        $this->assertArrayNotHasKey('verification_notes', $response->json('agency'));
+        $this->assertStringNotContainsString('Internal risk review', $response->getContent());
+    }
+
     public function test_platform_admin_approval_unlocks_the_original_registration_token_and_uploads(): void
     {
         $registration = $this->postJson('/api/agency/register', $this->registrationData())->assertCreated();
@@ -382,6 +398,31 @@ class WorkspaceApprovalTest extends EnterpriseTestCase
         $this->asGuest();
         $this->postJson('/api/v1/auth/logout', [], $headers)->assertOk();
         $this->assertSame(0, $user->tokens()->count());
+    }
+
+
+    public function test_suspended_or_unverified_agency_listings_are_hidden_from_public_marketplace(): void
+    {
+        [, $agency] = $this->agencyUser($this->ownerPermissions());
+        $property = $this->makePublicProperty($agency, [
+            'title' => 'Listing From Suspended Agency',
+        ]);
+
+        $agency->update(['status' => 'suspended']);
+
+        $this->app['auth']->forgetGuards();
+        $this->getJson('/api/properties')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $property->id]);
+        $this->getJson("/api/properties/{$property->id}")
+            ->assertNotFound();
+
+        $agency->update(['status' => 'active', 'verification_status' => 'unverified']);
+        $this->getJson('/api/properties')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $property->id]);
+        $this->getJson("/api/properties/{$property->id}")
+            ->assertNotFound();
     }
 
     public function test_denied_user_sees_only_public_listings_not_the_privileged_agency_view(): void

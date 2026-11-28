@@ -7,6 +7,8 @@ use App\Models\Document;
 use App\Models\SubscriptionPlan;
 use App\Services\AgencyOnboarding;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\Feature\EnterpriseTestCase;
 
@@ -210,4 +212,34 @@ class AgencyStorageOversightTest extends EnterpriseTestCase
         $this->getJson("/api/admin/agencies-oversight/{$agency->id}", $headers)->assertStatus(403);
         $this->assertSame(0, $agency->fresh()->limits()['storage_mb']);
     }
+
+    public function test_oversight_storage_aggregation_query_count_does_not_grow_per_agency(): void
+    {
+        [, $headers] = $this->platformAdmin();
+
+        foreach (['Storage Batch A', 'Storage Batch B', 'Storage Batch C'] as $name) {
+            $agency = $this->makeAgency($name);
+            $this->activeDocument($agency->id, 2048);
+        }
+
+        $aggregateQueries = [];
+        DB::listen(function (QueryExecuted $query) use (&$aggregateQueries): void {
+            $sql = strtolower(ltrim($query->sql));
+            if (str_contains($sql, 'sum(')
+                && (str_contains($sql, 'from "documents"')
+                    || str_contains($sql, 'from "document_versions"')
+                    || str_contains($sql, 'from "media_files"'))) {
+                $aggregateQueries[] = $sql;
+            }
+        });
+
+        $response = $this->getJson('/api/admin/agencies-oversight', $headers)->assertOk();
+        $this->assertCount(3, $response->json('agencies'));
+        $this->assertSame(3, count($aggregateQueries), 'storage totals must use three grouped aggregate queries for the page, not three per agency');
+
+        foreach ($response->json('agencies') as $row) {
+            $this->assertSame(2048, $row['storage_used_bytes']);
+        }
+    }
+
 }

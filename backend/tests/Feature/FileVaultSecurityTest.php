@@ -570,6 +570,108 @@ class FileVaultSecurityTest extends EnterpriseTestCase
         $this->get("/api/agency/documents/{$liveId}/download", $headers)->assertStatus(200);
     }
 
+    public function test_quarantine_metadata_is_retained_when_byte_deletion_fails(): void
+    {
+        [, $agency] = $this->uploader();
+        $id = 'qtn_' . bin2hex(random_bytes(8));
+        $path = 'expired/' . $id . '.pdf';
+        DocumentQuarantine::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'disk_path' => $path,
+            'reason' => 'infected',
+            'created_at' => now()->subDays(45),
+        ]);
+
+        $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($path)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($path)->andReturn(false);
+        Storage::shouldReceive('disk')->twice()->with('quarantine')->andReturn($disk);
+
+        $exitCode = Artisan::call('vault:purge-quarantine');
+
+        $this->assertSame(1, $exitCode, 'A failed physical delete must make the purge command fail.');
+        $this->assertDatabaseHas('document_quarantines', ['id' => $id]);
+    }
+
+    public function test_quarantined_document_metadata_is_retained_when_document_delete_fails(): void
+    {
+        [, $agency] = $this->uploader();
+        $id = 'doc_' . bin2hex(random_bytes(8));
+        $documentPath = 'expired/' . $id . '.pdf';
+        $document = Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Expired Hold',
+            'original_name' => 'expired-hold.pdf',
+            'stored_name' => $id . '.pdf',
+            'disk_path' => $documentPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 20,
+            'status' => 'quarantined',
+        ]);
+        $document->created_at = now()->subDays(45);
+        $document->save();
+
+        $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(false);
+        Storage::shouldReceive('disk')->twice()->with('documents')->andReturn($disk);
+
+        $exitCode = Artisan::call('vault:purge-quarantine');
+
+        $this->assertSame(1, $exitCode);
+        $this->assertDatabaseHas('documents', ['id' => $id]);
+    }
+
+    public function test_quarantined_document_metadata_is_retained_when_version_delete_fails(): void
+    {
+        [, $agency] = $this->uploader();
+        $id = 'doc_' . bin2hex(random_bytes(8));
+        $documentPath = 'expired/' . $id . '.pdf';
+        $versionPath = 'expired/' . $id . '-v1.pdf';
+        $document = Document::create([
+            'id' => $id,
+            'agency_id' => $agency->id,
+            'category' => 'other',
+            'title' => 'Expired Hold With Version',
+            'original_name' => 'expired-hold-version.pdf',
+            'stored_name' => $id . '.pdf',
+            'disk_path' => $documentPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 20,
+            'status' => 'quarantined',
+        ]);
+        $document->created_at = now()->subDays(45);
+        $document->save();
+        DocumentVersion::create([
+            'document_id' => $id,
+            'version' => 1,
+            'stored_name' => $id . '-v1.pdf',
+            'disk_path' => $versionPath,
+            'storage_disk' => 'documents',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 10,
+            'created_at' => now()->subDays(45),
+        ]);
+
+        $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $disk->shouldReceive('exists')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($documentPath)->andReturn(true);
+        $disk->shouldReceive('exists')->once()->with($versionPath)->andReturn(true);
+        $disk->shouldReceive('delete')->once()->with($versionPath)->andReturn(false);
+        Storage::shouldReceive('disk')->times(4)->with('documents')->andReturn($disk);
+
+        $exitCode = Artisan::call('vault:purge-quarantine');
+
+        $this->assertSame(1, $exitCode);
+        $this->assertDatabaseHas('documents', ['id' => $id]);
+        $this->assertDatabaseHas('document_versions', ['document_id' => $id, 'version' => 1]);
+    }
+
     /* ============ Configuration guardrails ============ */
 
     public function test_vault_disks_stay_configured_outside_the_web_root(): void

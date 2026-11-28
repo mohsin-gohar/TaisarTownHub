@@ -138,7 +138,9 @@ class AdminDashboardController extends Controller
 
         /* -------- money (real ledger) -------- */
         $canSeeFinance = $user->hasPermission('finance.view', $agencyId) || $user->hasPermission('view_reports', $agencyId) || $user->hasPermission('admin.view_reports', null);
-        $paymentScope = DB::table('transaction_payments');
+        // Match the ledger model's SoftDeletes scope and the dashboard
+        // time-series query: voided/deleted receipts are not collections.
+        $paymentScope = DB::table('transaction_payments')->whereNull('deleted_at');
         $commissionScope = DB::table('commissions');
         if ($agencyId !== null) {
             $paymentScope->where('agency_id', $agencyId);

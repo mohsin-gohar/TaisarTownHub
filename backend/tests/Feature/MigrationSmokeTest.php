@@ -20,6 +20,7 @@ class MigrationSmokeTest extends TestCase
             'users', 'agencies', 'agency_members', 'roles', 'permissions',
             'properties', 'transactions', 'transaction_payments', 'commissions',
             'system_settings', 'maps', 'documents', 'login_histories',
+            'property_categories', 'video_likes', 'video_comments',
         ] as $table) {
             $this->assertTrue(Schema::hasTable($table), "missing table: {$table}");
         }
@@ -29,5 +30,22 @@ class MigrationSmokeTest extends TestCase
         $this->assertTrue(Schema::hasColumn('properties', 'contactWhatsApp'));
         $this->assertTrue(Schema::hasColumn('agencies', 'whatsapp'));
         $this->assertDatabaseCount('users', 0);
+
+        // The relational property backfill runs during migrate, before
+        // DatabaseSeeder. Core categories must therefore exist on a fresh
+        // install without requiring a separate seed command.
+        $this->assertDatabaseHas('property_categories', ['key' => 'residential_plot']);
+        $this->assertDatabaseHas('property_categories', ['key' => 'commercial_plot']);
+        $this->assertDatabaseHas('property_categories', ['key' => 'office']);
+
+        $commentForeignKeys = collect(Schema::getForeignKeys('video_comments'))
+            ->pluck('columns')->flatten()->all();
+        $likeForeignKeys = collect(Schema::getForeignKeys('video_likes'))
+            ->pluck('columns')->flatten()->all();
+
+        $this->assertContains('agency_video_id', $commentForeignKeys);
+        $this->assertContains('user_id', $commentForeignKeys);
+        $this->assertContains('agency_video_id', $likeForeignKeys);
+        $this->assertContains('user_id', $likeForeignKeys);
     }
 }

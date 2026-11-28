@@ -16,6 +16,11 @@ class SuspiciousLoginDetected extends Notification implements ShouldQueue
 {
     use Queueable;
 
+    /** Retry transient mail/database transport failures without blocking requests. */
+    public int $tries = 3;
+    public int $timeout = 60;
+    public array $backoff = [30, 120, 300];
+
     public function __construct(
         public readonly string $reason,
         public readonly ?string $ipAddress = null,

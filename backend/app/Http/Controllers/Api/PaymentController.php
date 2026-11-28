@@ -119,9 +119,10 @@ class PaymentController extends Controller
                 'session_id' => $session->id,
             ]);
         } catch (\Throwable $e) {
+            report($e);
             Log::error('Stripe checkout failed', [
                 'agency_id' => $agencyId,
-                'error' => $e->getMessage(),
+                'exception' => get_class($e),
             ]);
 
             return response()->json([
@@ -148,7 +149,7 @@ class PaymentController extends Controller
         try {
             $event = \Stripe\Webhook::constructEvent($payload, $sigHeader, $webhookSecret);
         } catch (\Throwable $e) {
-            Log::warning('Stripe webhook signature verification failed', ['error' => $e->getMessage()]);
+            Log::warning('Stripe webhook signature verification failed', ['exception' => get_class($e)]);
             return response()->json(['success' => false, 'message' => 'Invalid signature.'], 400);
         }
 
@@ -183,9 +184,10 @@ class PaymentController extends Controller
 
             return response()->json(['success' => true]);
         } catch (\Throwable $e) {
+            report($e);
             Log::error('Stripe webhook handling failed', [
                 'event' => $eventType,
-                'error' => $e->getMessage(),
+                'exception' => get_class($e),
             ]);
             return response()->json(['success' => false, 'message' => 'Webhook handling failed.'], 500);
         }
@@ -244,8 +246,20 @@ class PaymentController extends Controller
                 }
 
                 $amount = $payload['amount'] ?? null;
-                $currency = strtoupper((string) ($payload['currency'] ?? ''));
-                if ($amount !== null && (int) round((float) $amount) !== (int) $invoice->total_pkr) {
+                $currency = strtoupper(trim((string) ($payload['currency'] ?? '')));
+                // A valid shared-secret header authenticates the sender, but
+                // a payment event without the invoice amount/currency cannot
+                // prove that the expected amount was settled. Never treat
+                // missing financial fields as an implicit match.
+                if ($amount === null || !is_numeric($amount)) {
+                    Log::error('Flutterwave webhook amount missing or invalid', ['tx_ref' => $txRef]);
+                    return 'amount_mismatch';
+                }
+                if ($currency === '') {
+                    Log::error('Flutterwave webhook currency missing', ['tx_ref' => $txRef]);
+                    return 'currency_mismatch';
+                }
+                if (abs((float) $amount - (float) $invoice->total_pkr) > 0.00001) {
                     Log::error('Flutterwave webhook amount mismatch', [
                         'tx_ref' => $txRef,
                         'expected' => (int) $invoice->total_pkr,
@@ -350,11 +364,13 @@ class PaymentController extends Controller
                 ], 422);
             }
 
-            $remoteAmount = (int) round((float) ($remote['amount'] ?? 0));
-            $remoteCurrency = strtoupper((string) ($remote['currency'] ?? ''));
+            $remoteAmountValue = $remote['amount'] ?? null;
+            $remoteAmount = is_numeric($remoteAmountValue) ? (float) $remoteAmountValue : null;
+            $remoteCurrency = strtoupper(trim((string) ($remote['currency'] ?? '')));
 
-            if ($remoteCurrency !== strtoupper((string) $invoice->currency)
-                || $remoteAmount !== (int) $invoice->total_pkr) {
+            if ($remoteAmount === null || $remoteCurrency === ''
+                || $remoteCurrency !== strtoupper((string) $invoice->currency)
+                || abs($remoteAmount - (float) $invoice->total_pkr) > 0.00001) {
                 Log::warning('Flutterwave verification amount/currency mismatch', [
                     'agency_id' => $agencyId,
                     'tx_ref' => $txRef,
@@ -370,20 +386,49 @@ class PaymentController extends Controller
                 ], 422);
             }
 
-            $activated = false;
-            if ($invoice->status === 'pending') {
-                DB::transaction(function () use ($invoice, $remote, $txRef): void {
-                    $invoice->update([
-                        'status' => 'paid',
-                        'payment_method' => 'flutterwave',
-                        'payment_reference' => $txRef,
-                        'flutterwave_tx_id' => isset($remote['id']) ? (string) $remote['id'] : null,
-                        'paid_at' => now(),
-                    ]);
-                    $this->activateSubscriptionFromInvoice($invoice);
-                });
-                $activated = true;
+            // The provider call happens outside the DB transaction, so the
+            // invoice may have been voided/failed while verification was in
+            // flight. Re-lock and re-check the current state before settlement.
+            $outcome = DB::transaction(function () use ($invoice, $remote, $txRef): string {
+                $lockedInvoice = SubscriptionInvoice::whereKey($invoice->getKey())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $lockedInvoice || (string) $lockedInvoice->agency_id !== (string) $invoice->agency_id) {
+                    return 'not_found';
+                }
+                if ($lockedInvoice->status === 'paid') {
+                    return 'already_paid';
+                }
+                if ($lockedInvoice->status !== 'pending') {
+                    return 'not_pending';
+                }
+
+                $lockedInvoice->update([
+                    'status' => 'paid',
+                    'payment_method' => 'flutterwave',
+                    'payment_reference' => $txRef,
+                    'flutterwave_tx_id' => isset($remote['id']) ? (string) $remote['id'] : null,
+                    'paid_at' => now(),
+                ]);
+                $this->activateSubscriptionFromInvoice($lockedInvoice);
+
+                return 'activated';
+            });
+
+            if ($outcome === 'not_found') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment reference not found.',
+                ], 404);
             }
+            if ($outcome === 'not_pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This invoice is no longer payable.',
+                ], 422);
+            }
+            $activated = $outcome === 'activated';
 
             if ($activated) {
                 $this->writeAudit(
@@ -414,7 +459,8 @@ class PaymentController extends Controller
                 ],
             ]);
         } catch (\Throwable $e) {
-            Log::error('Flutterwave verification failed', ['tx_ref' => $txRef, 'error' => $e->getMessage()]);
+            report($e);
+            Log::error('Flutterwave verification failed', ['tx_ref' => $txRef, 'exception' => get_class($e)]);
 
             return response()->json([
                 'success' => false,
@@ -448,34 +494,65 @@ class PaymentController extends Controller
             return; // idempotent
         }
 
-        // A completed Checkout Session is not proof of payment for async
-        // methods. Match the Flutterwave path: require a settled status and,
-        // when Stripe supplies it, the expected amount before activating.
+        // Signed Checkout events must still match the invoice created by this
+        // application. Never accept missing payment fields or infer a settled
+        // payment from checkout.session.completed alone (async methods can
+        // complete the checkout flow before payment settles).
+        if ((string) $agencyId !== (string) $invoice->agency_id
+            || (string) $planId !== (string) $invoice->plan_id) {
+            Log::warning('Stripe checkout: session metadata does not match invoice', [
+                'session_id' => $session->id,
+                'invoice_id' => $invoice->id,
+            ]);
+            return;
+        }
+
         $paymentStatus = $session->payment_status ?? null;
-        if ($paymentStatus !== null && !in_array($paymentStatus, ['paid', 'no_payment_required'], true)) {
+        if (!in_array($paymentStatus, ['paid', 'no_payment_required'], true)) {
             Log::warning('Stripe checkout: session not settled', [
                 'session_id' => $session->id, 'payment_status' => $paymentStatus,
             ]);
             return;
         }
+
         $amountTotal = $session->amount_total ?? null;
-        $currency = strtolower((string) ($session->currency ?? 'pkr'));
-        if ($amountTotal !== null && $currency === 'pkr'
-            && (int) $amountTotal < (int) round((float) $invoice->total_pkr * 100)) {
-            Log::warning('Stripe checkout: amount below invoice total', [
-                'session_id' => $session->id, 'amount_total' => $amountTotal,
+        $currency = strtolower(trim((string) ($session->currency ?? '')));
+        $expectedCurrency = strtolower(trim((string) $invoice->currency));
+        $expectedAmountMinor = (float) $invoice->total_pkr * 100;
+        if (!is_numeric($amountTotal) || $currency === '' || $currency !== $expectedCurrency
+            || abs((float) $amountTotal - $expectedAmountMinor) > 0.00001) {
+            Log::warning('Stripe checkout: amount or currency does not match invoice', [
+                'session_id' => $session->id,
+                'amount_total' => $amountTotal,
+                'currency' => $currency,
+                'expected_amount_minor' => $expectedAmountMinor,
+                'expected_currency' => $expectedCurrency,
             ]);
             return;
         }
 
-        $invoice->update([
-            'status' => 'paid',
-            'stripe_payment_intent_id' => $session->payment_intent ?? null,
-            'stripe_subscription_id' => $stripeSubId,
-            'paid_at' => now(),
-        ]);
+        // Invoice settlement and subscription activation are one atomic
+        // state transition. Stripe may retry/deliver the same event in
+        // parallel; lock and re-check the invoice inside the transaction so
+        // a paid invoice can never be committed without its subscription.
+        DB::transaction(function () use ($invoice, $session, $stripeSubId): void {
+            $lockedInvoice = SubscriptionInvoice::whereKey($invoice->getKey())
+                ->lockForUpdate()
+                ->first();
 
-        $this->activateSubscriptionFromInvoice($invoice);
+            if (!$lockedInvoice || $lockedInvoice->status === 'paid') {
+                return;
+            }
+
+            $lockedInvoice->update([
+                'status' => 'paid',
+                'stripe_payment_intent_id' => $session->payment_intent ?? null,
+                'stripe_subscription_id' => $stripeSubId,
+                'paid_at' => now(),
+            ]);
+
+            $this->activateSubscriptionFromInvoice($lockedInvoice);
+        });
     }
 
     private function handleStripeInvoicePaid($invoice): void

@@ -21,4 +21,4 @@ Schedule::command('saved-searches:send-alerts')->hourly()->withoutOverlapping();
 
 // Vault hygiene: rejected/quarantined uploads leave the isolated quarantine
 // disk once their retention window (vault.quarantine.retention_days) passes.
-Schedule::command('vault:purge-quarantine')->daily();
+Schedule::command('vault:purge-quarantine')->daily()->withoutOverlapping();

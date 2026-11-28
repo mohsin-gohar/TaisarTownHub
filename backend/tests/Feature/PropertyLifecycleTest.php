@@ -80,6 +80,39 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'property.approve', 'entity_id' => $id]);
     }
 
+
+    public function test_moderation_transition_cannot_be_replayed_after_listing_is_approved(): void
+    {
+        [$agent, $agency] = $this->agencyUser($this->agentPermissions());
+        [$moderator] = $this->agencyUser($this->moderatorPermissions(), 'moderator', $agency);
+
+        $id = $this->postJson('/api/properties', $this->basePayload([
+            'title' => 'Single Transition Listing',
+            'submit' => true,
+        ]), $this->authHeaders($this->tokenFor($agent)))
+            ->assertCreated()
+            ->json('id');
+
+        $headers = $this->authHeaders($this->tokenFor($moderator));
+        $this->postJson("/api/properties/{$id}/approve", [], $headers)
+            ->assertOk()
+            ->assertJsonPath('property.approval_status', 'approved');
+
+        $this->postJson("/api/properties/{$id}/approve", [], $headers)
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
+
+        $this->postJson("/api/properties/{$id}/reject", ['reason' => 'Late rejection'], $headers)
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
+
+        $this->assertDatabaseHas('properties', [
+            'id' => $id,
+            'approval_status' => 'approved',
+            'visibility' => 'public',
+        ]);
+    }
+
     public function test_public_marketplace_rejects_rent_and_hides_rental_records(): void
     {
         [$agent, $agency] = $this->agencyUser($this->agentPermissions());

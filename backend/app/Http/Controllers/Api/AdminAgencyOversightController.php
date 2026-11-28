@@ -8,8 +8,8 @@ use App\Models\AgencySubscription;
 use App\Models\Document;
 use App\Models\DocumentVersion;
 use App\Models\MediaFile;
-use App\Support\PlanLimits;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Platform oversight of agency storage — read-only monitoring.
@@ -46,9 +46,48 @@ class AdminAgencyOversightController extends Controller
 
         $page = $query->orderBy('name')->paginate(min((int) $request->get('per_page', 25), 100));
         $storageOnPage = 0;
+        $agencyIds = collect($page->items())->pluck('id')->all();
 
-        $agencies = collect($page->items())->map(function (Agency $agency) use (&$storageOnPage) {
-            $row = $this->storageRow($agency);
+        // Batch storage accounting for the current page. Calling
+        // PlanLimits::usage() inside the map ran three SUM queries per agency
+        // (documents, versions, media), turning a 100-row page into 300
+        // additional queries.
+        $documentBytesByAgency = collect();
+        $versionBytesByAgency = collect();
+        $mediaBytesByAgency = collect();
+
+        if ($agencyIds !== []) {
+            $documentBytesByAgency = Document::withTrashed()
+                ->whereIn('agency_id', $agencyIds)
+                ->selectRaw('agency_id, COALESCE(SUM(size_bytes), 0) as total_bytes')
+                ->groupBy('agency_id')
+                ->pluck('total_bytes', 'agency_id');
+
+            $versionBytesByAgency = DB::table('document_versions')
+                ->join('documents', 'documents.id', '=', 'document_versions.document_id')
+                ->whereIn('documents.agency_id', $agencyIds)
+                ->selectRaw('documents.agency_id as agency_id, COALESCE(SUM(document_versions.size_bytes), 0) as total_bytes')
+                ->groupBy('documents.agency_id')
+                ->pluck('total_bytes', 'agency_id');
+
+            $mediaBytesByAgency = MediaFile::withTrashed()
+                ->whereIn('agency_id', $agencyIds)
+                ->selectRaw('agency_id, COALESCE(SUM(size_bytes), 0) as total_bytes')
+                ->groupBy('agency_id')
+                ->pluck('total_bytes', 'agency_id');
+        }
+
+        $agencies = collect($page->items())->map(function (Agency $agency) use (
+            &$storageOnPage,
+            $documentBytesByAgency,
+            $versionBytesByAgency,
+            $mediaBytesByAgency
+        ) {
+            $row = [
+                'storage_used_bytes' => (int) ($documentBytesByAgency[$agency->id] ?? 0)
+                    + (int) ($versionBytesByAgency[$agency->id] ?? 0)
+                    + (int) ($mediaBytesByAgency[$agency->id] ?? 0),
+            ];
             $storageOnPage += (int) $row['storage_used_bytes'];
 
             return array_merge([
@@ -110,35 +149,27 @@ class AdminAgencyOversightController extends Controller
             ->get(['id', 'title', 'type', 'folder', 'mime_type', 'size_bytes', 'visibility', 'status', 'created_at', 'deleted_at']);
 
         $documentBytes = (int) Document::withTrashed()->where('agency_id', $agency->id)->sum('size_bytes');
-        $versionBytes = (int) DocumentVersion::query()
+        $versionTotals = DocumentVersion::query()
             ->whereIn('document_id', Document::withTrashed()->where('agency_id', $agency->id)->select('id'))
-            ->sum('size_bytes');
+            ->selectRaw('COALESCE(SUM(size_bytes), 0) as total_bytes, COUNT(*) as version_count')
+            ->first();
+        $versionBytes = (int) ($versionTotals->total_bytes ?? 0);
         $mediaBytes = (int) MediaFile::withTrashed()->where('agency_id', $agency->id)->sum('size_bytes');
 
         return response()->json([
             'success' => true,
             'agency' => $agency,
-            'storage' => array_merge($this->storageRow($agency), [
+            'storage' => [
+                'storage_used_bytes' => $documentBytes + $versionBytes + $mediaBytes,
                 'document_bytes' => $documentBytes,
                 'version_bytes' => $versionBytes,
                 'media_bytes' => $mediaBytes,
-                'version_count' => DocumentVersion::query()
-                    ->whereIn('document_id', Document::withTrashed()->where('agency_id', $agency->id)->select('id'))
-                    ->count(),
-            ]),
+                'version_count' => (int) ($versionTotals->version_count ?? 0),
+            ],
             'documents' => $documents,
             'media' => $media,
             'storage_mode' => 'monitor_only',
         ]);
     }
 
-    /** Shared read-only storage shape for list + detail. */
-    private function storageRow(Agency $agency): array
-    {
-        $usage = PlanLimits::usage($agency);
-
-        return [
-            'storage_used_bytes' => (int) $usage['storage_bytes'],
-        ];
-    }
 }

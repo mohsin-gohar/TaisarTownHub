@@ -16,13 +16,14 @@ class NotificationController extends Controller
             abort(401, 'Authentication required.');
         }
 
-        $query = $user->notifications();
+        $query = $user->notifications()->latest();
 
         if ($request->boolean('unreadOnly')) {
             $query->whereNull('read_at');
         }
 
-        $page = $query->paginate(min((int) $request->get('per_page', 20), 100));
+        $perPage = max(1, min((int) $request->get('per_page', 20), 100));
+        $page = $query->paginate($perPage);
 
         return response()->json([
             'success' => true,
@@ -75,12 +76,13 @@ class NotificationController extends Controller
             abort(401, 'Authentication required.');
         }
 
-        $user->unreadNotifications->each->markAsRead();
+        $user->unreadNotifications()->update(['read_at' => now()]);
+        $unreadCount = $user->unreadNotifications()->count();
 
         return response()->json([
             'success' => true,
             'message' => 'All notifications marked as read.',
-            'unread_count' => 0,
+            'unread_count' => $unreadCount,
         ]);
     }
 }

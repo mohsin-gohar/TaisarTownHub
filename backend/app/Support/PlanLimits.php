@@ -125,8 +125,15 @@ class PlanLimits
     /** Staff counter for the invite flow: active members + pending invitations. */
     public static function staffUsed(string $agencyId): int
     {
-        return AgencyMember::where('agency_id', $agencyId)->count()
-            + AgencyInvitation::where('agency_id', $agencyId)->where('status', 'pending')->count();
+        return AgencyMember::where('agency_id', $agencyId)
+            ->where('status', 'active')
+            ->count()
+            + AgencyInvitation::where('agency_id', $agencyId)
+                ->where('status', 'pending')
+                ->where(function ($query) {
+                    $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+                })
+                ->count();
     }
 }
 

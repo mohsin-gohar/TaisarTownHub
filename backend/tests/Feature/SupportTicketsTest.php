@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Agency;
+use App\Models\SupportMessage;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Tests\Feature\EnterpriseTestCase;
@@ -149,6 +150,14 @@ class SupportTicketsTest extends EnterpriseTestCase
         ], $this->authHeaders($this->tokenFor($user)))
             ->assertStatus(403);
 
+        // The assignment endpoint must enforce the same platform-staff
+        // restriction as the assignable-staff directory.
+        [$agencyMember] = $this->agencyUser(['agency.view'], 'agent', $agency);
+        $this->postJson('/api/admin/support-tickets/' . $ticket . '/assign', [
+            'assigned_to' => $agencyMember->id,
+        ], $this->authHeaders($this->tokenFor($staff)))
+            ->assertStatus(422);
+
         // A same-agency colleague may see + comment but not change status.
         [$colleague] = $this->agencyUser(['agency.view'], 'agent', $agency);
         $this->postJson('/api/support/tickets/' . $ticket . '/messages', [
@@ -174,6 +183,52 @@ class SupportTicketsTest extends EnterpriseTestCase
         ], $this->authHeaders($this->tokenFor($staff)))
             ->assertOk()
             ->assertJsonPath('ticket.status', 'open');
+    }
+
+    public function test_creator_cannot_use_ownership_to_bypass_another_agency_tenant(): void
+    {
+        [$user, $agency] = $this->memberUser();
+        $otherAgency = $this->makeAgency('Different Agency');
+
+        // Models a ticket that remains attached to a previous/other tenant
+        // after the creator's active agency context has changed.
+        $ticket = SupportTicket::create([
+            'id' => 'tkt_' . bin2hex(random_bytes(8)),
+            'agency_id' => $otherAgency->id,
+            'user_id' => $user->id,
+            'subject' => 'Historical agency ticket',
+            'category' => 'general',
+            'priority' => 'normal',
+            'status' => 'open',
+        ]);
+
+        $this->getJson('/api/support/tickets/' . $ticket->id, $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(404);
+    }
+
+
+    public function test_ticket_and_opening_message_roll_back_together_when_message_persistence_fails(): void
+    {
+        [$user] = $this->memberUser();
+
+        $this->withoutExceptionHandling();
+
+        SupportMessage::creating(function () {
+            throw new \\RuntimeException('Simulated opening-message persistence failure.');
+        });
+
+        try {
+            $this->postJson('/api/support/tickets', [
+                'subject' => 'Opening message persistence failure',
+                'body' => 'The first message must be saved with its ticket.',
+            ], $this->authHeaders($this->tokenFor($user)));
+            $this->fail('The simulated persistence failure should escape the request.');
+        } catch (\\RuntimeException $exception) {
+            $this->assertSame('Simulated opening-message persistence failure.', $exception->getMessage());
+        }
+
+        $this->assertSame(0, SupportTicket::where('user_id', $user->id)->count());
+        $this->assertSame(0, SupportMessage::where('user_id', $user->id)->count());
     }
 
     public function test_platform_side_account_gets_its_own_ticket_lane(): void

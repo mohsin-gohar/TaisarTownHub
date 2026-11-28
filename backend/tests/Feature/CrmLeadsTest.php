@@ -245,4 +245,21 @@ class CrmLeadsTest extends EnterpriseTestCase
             ->assertJsonPath('lead.agency_id', $agency->id)
             ->assertJsonPath('lead.lead_status', 'new');
     }
+
+    public function test_legacy_inquiry_index_is_bounded_and_validates_query_inputs(): void
+    {
+        [$manager, $agency] = $this->agencyUser($this->crmPermissions(true), 'manager');
+        foreach (['Inquiry A', 'Inquiry B', 'Inquiry C'] as $name) {
+            $this->createInquiry($agency, ['fullName' => $name]);
+        }
+
+        $headers = $this->authHeaders($this->tokenFor($manager));
+        $this->getJson('/api/inquiries?limit=2', $headers)
+            ->assertOk()
+            ->assertJsonCount(2);
+
+        $this->getJson('/api/inquiries?limit=0', $headers)->assertStatus(422);
+        $this->getJson('/api/inquiries?status[]=invalid', $headers)->assertStatus(422);
+    }
+
 }

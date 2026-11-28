@@ -265,5 +265,33 @@ class FinanceLifecycleTest extends EnterpriseTestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors('amount');
     }
+
+    public function test_refund_cannot_exceed_amount_previously_collected(): void
+    {
+        [$user] = $this->agencyUser($this->financePermissions());
+        $deal = $this->createDeal($user, [
+            'agreementAmountPKR' => 10000000,
+            'advancePaymentPKR' => 0,
+        ]);
+        $headers = $this->authHeaders($this->tokenFor($user));
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 1000,
+            'type' => 'advance',
+            'method' => 'cash',
+        ], $headers)->assertStatus(201);
+
+        $this->postJson("/api/agency/transactions/{$deal['id']}/payments", [
+            'amount' => 1500,
+            'type' => 'refund',
+            'method' => 'cash',
+        ], $headers)
+            ->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Refund exceeds the amount previously collected.']);
+
+        $this->assertDatabaseCount('transaction_payments', 1);
+        $this->assertSame(1000, (int) Transaction::findOrFail($deal['id'])->advancePaymentPKR);
+    }
+
 }
 

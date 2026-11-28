@@ -128,4 +128,29 @@ class FavoritesNotificationsTest extends EnterpriseTestCase
         $this->assertNotContains($read->id, $ids);
         $this->assertCount(1, $notifications);
     }
+
+    public function test_notification_pagination_is_clamped_to_safe_bounds(): void
+    {
+        [$user] = $this->agencyUser(['view_properties']);
+        $token = $this->authHeaders($this->tokenFor($user));
+
+        $first = $this->notify($user, ['title' => 'First']);
+        $first->forceFill(['created_at' => now()->subMinute()])->save();
+        $second = $this->notify($user, ['title' => 'Second']);
+
+        $this->getJson('/api/notifications?per_page=0', $token)
+            ->assertOk()
+            ->assertJsonPath('pagination.per_page', 1)
+            ->assertJsonCount(1, 'notifications');
+
+        $this->getJson('/api/notifications?per_page=500', $token)
+            ->assertOk()
+            ->assertJsonPath('pagination.per_page', 100)
+            ->assertJsonCount(2, 'notifications');
+
+        $this->getJson('/api/notifications?per_page=100', $token)
+            ->assertOk()
+            ->assertJsonPath('notifications.0.id', $second->id);
+    }
+
 }

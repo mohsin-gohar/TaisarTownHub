@@ -17,6 +17,11 @@ use Illuminate\Notifications\Notification;
 class VerifyEmailLink extends Notification implements ShouldQueue
 {
     use Queueable;
+
+    /** Retry transient mail/database transport failures without blocking requests. */
+    public int $tries = 3;
+    public int $timeout = 60;
+    public array $backoff = [30, 120, 300];
     public string $plainToken;
 
     public function __construct(?string $plainToken = null)

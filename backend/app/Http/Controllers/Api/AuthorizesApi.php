@@ -124,7 +124,7 @@ trait AuthorizesApi
         try {
             AuditLog::create($row);
         } catch (\Throwable $e) {
-            Log::warning('Audit table write failed', ['error' => $e->getMessage()]);
+            Log::warning('Audit table write failed', ['exception' => get_class($e)]);
         }
     }
 }

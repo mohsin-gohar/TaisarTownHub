@@ -2,14 +2,20 @@
 
 **Version:** 2.0.0 · **Last updated:** 2026-11-08
 
-## 1. Global Exception Handler
+## 1. Global Exception Rendering
 
-Laravel's `Handler` (in `app/Exceptions/`) renders:
-- `404` → JSON `{ message: "Not found." }` for API; custom Blade/React fallback for web.
-- `403` → `{ message: "Permission denied." }`.
-- `422` → `{ message, errors }`.
-- `500` → `{ message: "Server error." }` (no stack trace in production; `APP_DEBUG=false`).
-- `429` → `{ message: "Too many requests." }` + `Retry-After`.
+Laravel 11 exception rendering is configured in `backend/bootstrap/app.php` via `withExceptions()` (there is no legacy `app/Exceptions/Handler.php` in this application).
+
+API responses preserve expected status codes:
+- `401` → generic authentication-required JSON.
+- `403` → `Permission denied.`.
+- `404` → `Resource not found.`, including Eloquent model-not-found exceptions.
+- `422` → `Validation failed.` plus field errors.
+- `429` → `Too many requests.`.
+- Other 4xx → generic request-failed message.
+- `5xx` → `Server error.`; internal exception details are not returned to clients.
+
+Uncaught exceptions are reported through Laravel's exception reporting pipeline. Operational failures caught and converted into API responses should call `report($e)` where a stack trace is required.
 
 ## 2. Frontend Error Boundary
 
@@ -27,10 +33,12 @@ Laravel's `Handler` (in `app/Exceptions/`) renders:
 
 ## 4. Structured Logging
 
-- Laravel `Log::info('AUDIT', $row)` for audit events (actor, role, action, target, detail, ip, timestamp).
+- Laravel `Log::info('AUDIT', $row)` for audit events (actor, role, action, target, detail, ip, timestamp); each request log carries the validated `X-Request-Id` context.
 - `Log::warning('Audit table write failed', …)` on audit DB failure (best-effort).
-- `Log::error` for unhandled exceptions (with stack trace in dev).
-- Frontend: `console.error` in dev only; production builds strip debug.
+- Production uses `LOG_LEVEL=warning` and daily log rotation (14 days) by default; configure writable log storage and central retention on the host.
+- Never log passwords, bearer/reset/verification tokens, raw uploaded filenames, file contents or raw provider exception messages.
+- `SENTRY_DSN` is only a configuration placeholder at present; no Laravel Sentry SDK integration is installed. Do not treat external error tracking as active until the SDK and capture tests are added.
+- Frontend ErrorBoundary logs details to the console only in development and shows a generic error message in production. No frontend error-tracking SDK is currently wired.
 
 ## 5. Reload Protection
 

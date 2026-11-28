@@ -45,7 +45,7 @@ class ClamAVScanner implements MalwareScanner
 
         if (!is_file($filePath) || !is_readable($filePath)) {
             Log::warning('Malware scan skipped: file is not readable', [
-                'file' => $filePath,
+                'extension' => strtolower(pathinfo($filePath, PATHINFO_EXTENSION)),
                 'scanner' => $scanner,
             ]);
 
@@ -64,7 +64,7 @@ class ClamAVScanner implements MalwareScanner
 
         $reason = 'clamav_not_available';
         Log::warning('Malware scan skipped: no ClamAV scanner reachable', [
-            'file' => $filePath,
+            'extension' => strtolower(pathinfo($filePath, PATHINFO_EXTENSION)),
             'scanner' => $scanner,
         ]);
 

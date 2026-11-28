@@ -268,7 +268,7 @@ class AgencyPromotionService
      */
     public function expireDue(): int
     {
-        $due = AgencyPromotion::query()->expiredDue()->get();
+        $due = AgencyPromotion::query()->expiredDue()->with('agency')->get();
         if ($due->isEmpty()) {
             return 0;
         }

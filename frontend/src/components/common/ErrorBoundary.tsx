@@ -14,12 +14,17 @@ export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, message: '' };
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, message: error?.message || 'Unexpected error' };
+    return {
+      hasError: true,
+      message: import.meta.env.DEV ? (error?.message || 'Unexpected error') : 'Unexpected application error',
+    };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // eslint-disable-next-line no-console
-    console.error('ErrorBoundary caught an error:', error, info);
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.error('ErrorBoundary caught an error:', error, info);
+    }
   }
 
   handleReset = () => {

@@ -296,4 +296,25 @@ class MapManagementTest extends EnterpriseTestCase
         ], $this->authHeadersFor($admin))
             ->assertStatus(422);
     }
+
+    public function test_bulk_map_upload_and_reorder_have_hard_request_size_limits(): void
+    {
+        Storage::fake('public');
+        $admin = $this->superAdmin();
+        $headers = $this->authHeadersFor($admin);
+
+        $images = [];
+        for ($i = 0; $i < 51; $i++) {
+            $images[] = UploadedFile::fake()->image('map-' . $i . '.jpg', 32, 32);
+        }
+
+        $this->post('/api/admin/maps/bulk', ['images' => $images], $headers)
+            ->assertStatus(422);
+        $this->assertSame(0, Map::count(), 'oversized bulk uploads must be rejected before any map is stored');
+
+        $this->putJson('/api/admin/maps/reorder', [
+            'order' => array_fill(0, 501, 'map_not_created'),
+        ], $headers)->assertStatus(422);
+    }
+
 }

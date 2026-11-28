@@ -19,7 +19,10 @@ class LocationController extends Controller
 
     public function index(Request $request)
     {
+        // Count public listings with correlated subqueries instead of
+        // issuing one COUNT query for every sector while mapping the result.
         $sectors = Sector::where('is_active', true)
+            ->withCount(['properties as public_listing_count' => fn ($q) => $q->publiclyVisible()])
             ->with(['blocks' => fn ($q) => $q->where('is_active', true)])
             ->orderBy('sort_order')
             ->orderBy('name')
@@ -33,10 +36,13 @@ class LocationController extends Controller
                 'blocks' => $s->blocks->map(fn (Block $b) => [
                     'id' => $b->id, 'name' => $b->name, 'slug' => $b->slug,
                 ])->values(),
-                'listing_count' => $s->properties()->publiclyVisible()->count(),
+                'listing_count' => (int) $s->public_listing_count,
             ]);
 
+        // Same aggregate strategy for categories; this keeps query count
+        // constant as the number of categories grows.
         $categories = PropertyCategory::where('is_active', true)
+            ->withCount(['properties as public_listing_count' => fn ($q) => $q->publiclyVisible()])
             ->orderBy('sort_order')
             ->get()
             ->map(fn (PropertyCategory $c) => [
@@ -45,7 +51,7 @@ class LocationController extends Controller
                 'name' => $c->name,
                 'group' => $c->group,
                 'icon' => $c->icon,
-                'listing_count' => $c->properties()->publiclyVisible()->count(),
+                'listing_count' => (int) $c->public_listing_count,
             ]);
 
         return response()->json([
