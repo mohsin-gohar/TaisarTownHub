@@ -36,6 +36,11 @@ class AgencySubscription extends Model
         return $this->belongsTo(SubscriptionPlan::class, 'plan_id');
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function isExpired(): bool
     {
         return $this->ends_at !== null && $this->ends_at->isPast();
