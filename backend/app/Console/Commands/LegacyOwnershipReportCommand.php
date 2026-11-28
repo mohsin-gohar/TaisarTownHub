@@ -23,8 +23,8 @@ use Illuminate\Support\Facades\Schema;
  *   - `unresolved` with the reason (no evidence / ambiguous / bogus owner).
  *
  * Ownership is NEVER assigned automatically. Rows that remain unresolved stay
- * hidden from agency workspaces (see WorkspaceController::allRows()) until a
- * human-approved mapping is applied with `platform:legacy-backfill --apply`.
+ * hidden from agency workspaces (see WorkspaceController::allRows()) until an
+ * explicitly approved backfill apply stamps unique evidence or a reviewed mapping.
  */
 class LegacyOwnershipReportCommand extends Command
 {
@@ -152,7 +152,7 @@ class LegacyOwnershipReportCommand extends Command
             'typed_table_ownership' => $typedOwnership,
             'finance_parent_tenant_mismatches' => $financeParentMismatches,
             'mode' => 'read-only',
-            'note' => 'Ownership is never assigned by this command. Unowned rows stay hidden from agency workspaces until an approved mapping is applied via platform:legacy-backfill --apply.',
+            'note' => 'Ownership is never assigned by this command. Unowned rows stay hidden from agency workspaces until an explicit, backup-gated backfill applies unique evidence or a reviewed mapping.',
             'unowned_total' => count($records),
             'summary' => $summary,
             'by_collection' => $byCollection,
@@ -185,7 +185,7 @@ class LegacyOwnershipReportCommand extends Command
             $this->line(sprintf('  %-14s %d', $collection, $count));
         }
         $this->line('');
-        $this->line('Confirmed rows still require an approved mapping file before any stamp is written.');
+        $this->line('Unique evidence appears in the dry-run plan; every write still requires explicit --apply and a verified backup. Ambiguous/bogus claims require a reviewed mapping.');
         $this->line('Command used: platform:legacy-backfill --apply --backup=<dump> --mapping=<mapping.json>');
         $this->line('typed ownership (rows / unowned / invalid agency refs):');
         foreach ($typedOwnership as $table => $counts) {
