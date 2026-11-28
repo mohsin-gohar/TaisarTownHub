@@ -144,6 +144,13 @@ class DatabaseSchemaContractTest extends TestCase
             ['transaction_payments', ['transaction_id', 'received_at'], false],
             ['payment_schedules', ['transaction_id', 'installment_no'], true],
             ['saved_searches', ['user_id', 'created_at'], false],
+            ['inquiries', ['agency_id', 'created_at'], false],
+            ['inquiries', ['agency_id', 'lead_status', 'created_at'], false],
+            ['inquiries', ['agency_id', 'assigned_agent_id', 'created_at'], false],
+            ['inquiries', ['agency_id', 'follow_up_at'], false],
+            ['documents', ['folder_id', 'status'], false],
+            ['agency_videos', ['phase', 'created_at', 'id'], false],
+            ['lead_activities', ['inquiry_id', 'created_at'], false],
         ];
 
         foreach ($expected as [$table, $columns, $unique]) {
