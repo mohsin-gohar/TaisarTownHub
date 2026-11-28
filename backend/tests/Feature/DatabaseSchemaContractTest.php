@@ -4,7 +4,8 @@ namespace Tests\Feature;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Schema;\nuse Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class DatabaseSchemaContractTest extends TestCase
