@@ -1,9 +1,9 @@
 <?php
 
-namespace Tests\\Feature;
+namespace Tests\Feature;
 
-use App\\Models\\Document;
-use Illuminate\\Support\\Facades\\Storage;
+use App\Models\Document;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Phase 3.10 — cross-tenant document vault access.

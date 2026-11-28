@@ -1,8 +1,8 @@
 <?php
 
-namespace Tests\\Feature;
+namespace Tests\Feature;
 
-use App\\Models\\BusinessRecord;
+use App\Models\BusinessRecord;
 
 /**
  * Phase 3.8 — adversarial two-tenant isolation tests.

@@ -1,8 +1,8 @@
 <?php
 
-namespace Tests\\Feature;
+namespace Tests\Feature;
 
-use App\\Models\\AgencyMember;
+use App\Models\AgencyMember;
 
 /**
  * Phase 3.9 — agency member and role authorization boundaries.
