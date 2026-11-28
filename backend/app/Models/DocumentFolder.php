@@ -35,6 +35,11 @@ class DocumentFolder extends Model
         return $this->hasMany(self::class, 'parent_id')->orderBy('name');
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class, 'folder_id');
