@@ -153,6 +153,9 @@ class DatabaseSchemaContractTest extends TestCase
             ['documents', ['folder_id', 'status'], false],
             ['agency_videos', ['phase', 'created_at', 'id'], false],
             ['lead_activities', ['inquiry_id', 'created_at'], false],
+            ['document_folders', ['agency_id', 'path'], true],
+            ['document_versions', ['document_id', 'version'], true],
+            ['video_likes', ['agency_video_id', 'user_id'], true],
         ];
 
         foreach ($expected as [$table, $columns, $unique]) {
@@ -167,6 +170,39 @@ class DatabaseSchemaContractTest extends TestCase
                 $exists,
                 "Missing " . ($unique ? 'unique ' : '') . "index on {$table}(" . implode(', ', $columns) . ")"
             );
+        }
+    }
+
+
+    public function test_mysql_numeric_check_constraints_are_enforced(): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            $this->markTestSkipped('Named CHECK constraints are verified on the supported MySQL database.');
+        }
+
+        $expected = [
+            ['transaction_payments', 'transaction_payments_amount_nonnegative_chk'],
+            ['payment_schedules', 'payment_schedules_amount_nonnegative_chk'],
+            ['payment_schedules', 'payment_schedules_installment_positive_chk'],
+            ['commissions', 'commissions_amount_nonnegative_chk'],
+            ['commissions', 'commissions_rate_range_chk'],
+            ['documents', 'documents_size_nonnegative_chk'],
+            ['documents', 'documents_version_positive_chk'],
+            ['document_versions', 'document_versions_size_nonnegative_chk'],
+            ['document_versions', 'document_versions_version_positive_chk'],
+            ['media_files', 'media_files_size_nonnegative_chk'],
+            ['subscription_plans', 'subscription_plans_price_nonnegative_chk'],
+        ];
+
+        foreach ($expected as [$table, $constraint]) {
+            $exists = DB::table('information_schema.TABLE_CONSTRAINTS')
+                ->where('CONSTRAINT_SCHEMA', DB::raw('DATABASE()'))
+                ->where('TABLE_NAME', $table)
+                ->where('CONSTRAINT_NAME', $constraint)
+                ->where('CONSTRAINT_TYPE', 'CHECK')
+                ->exists();
+
+            $this->assertTrue($exists, "Missing enforced CHECK constraint {$table}.{$constraint}");
         }
     }
 
