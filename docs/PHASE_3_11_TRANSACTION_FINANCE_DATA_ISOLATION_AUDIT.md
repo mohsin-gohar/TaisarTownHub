@@ -27,7 +27,7 @@ Added `backend/tests/Feature/TransactionFinanceDataIsolationTest.php` with three
 
 - `Transaction::payments()`, `Transaction::schedules()`, and `Transaction::commissions()` now verify the child row's `agency_id` matches the referenced transaction's `agency_id` through a correlated ownership check. This protects lazy and eager-loaded ledger relationships, including platform lists spanning multiple agencies.
 - `FinanceController::destroyPayment()` now fails closed when no agency context exists for a non-platform user, and verifies the payment's parent transaction belongs to the same agency before deleting the payment or recalculating any deal balance.
-- Finance transaction listing no longer falls through to an unscoped query when agency context is missing. It resolves the user's legacy agency/dealer scope or fails closed; only a user with `admin.view_reports` receives platform-wide visibility.
+- Finance and legacy transaction listings no longer fall through to unscoped queries when agency context is missing. They resolve an explicit agency context or fail closed; only a user with `admin.view_reports` receives platform-wide visibility.
 - Commission listing and commission status updates require explicit platform finance authority when no agency context is present.
 - Finance reports require `admin.view_reports` when no agency context exists, preventing a tenant-level report permission from becoming a platform-wide aggregate query.
 
