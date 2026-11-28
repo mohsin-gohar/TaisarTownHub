@@ -66,8 +66,12 @@ final class LegacyTenancyResolver
      */
     public function claimedOwner(BusinessRecord $row): ?string
     {
-        if ($row->agency_id && $this->isAgency($row->agency_id)) {
-            return $row->agency_id;
+        // A populated canonical column is authoritative. If it points to
+        // a missing agency, do not silently fall back to a payload claim.
+        if ($row->agency_id !== null && $row->agency_id !== '') {
+            return $this->isAgency((string) $row->agency_id)
+                ? (string) $row->agency_id
+                : null;
         }
 
         $payload = is_array($row->payload) ? $row->payload : [];
