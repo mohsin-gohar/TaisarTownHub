@@ -115,7 +115,9 @@ class CrmLeadsTest extends EnterpriseTestCase
 
         $response = $this->getJson('/api/agency/leads/export', $this->authHeaders($this->tokenFor($agent)))
             ->assertStatus(200);
-        $csv = $response->getContent();
+        // CSV export is a StreamedResponse: getContent() returns false in
+        // Laravel tests; streamedContent() captures the actual stream body.
+        $csv = $response->streamedContent();
 
         $this->assertStringContainsString('Export Mine', $csv);
         $this->assertStringContainsString('Export Unassigned', $csv);
@@ -133,7 +135,7 @@ class CrmLeadsTest extends EnterpriseTestCase
 
         $response = $this->getJson('/api/agency/leads/export', $this->authHeaders($this->tokenFor($manager)))
             ->assertStatus(200);
-        $csv = $response->getContent();
+        $csv = $response->streamedContent();
 
         $this->assertStringContainsString('"\'=HYPERLINK', $csv);
         $this->assertStringContainsString("'+SUM(1+1)", $csv);

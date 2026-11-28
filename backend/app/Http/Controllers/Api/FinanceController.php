@@ -698,7 +698,13 @@ public function update(Request $request, string $id)
             'type' => 'nullable|in:token,advance,installment,refund',
             'method' => 'nullable|in:cash,bank_transfer,cheque,online,other',
             'reference' => 'nullable|string|max:120',
-            'receipt_no' => 'nullable|string|max:60',
+            // DB has a UNIQUE index on receipt_no (including soft-deleted
+            // rows). Validate here so duplicate reconciliation attempts get
+            // a clean 422 instead of an uncaught unique-constraint 500.
+            'receipt_no' => [
+                'nullable', 'string', 'max:60',
+                Rule::unique('transaction_payments', 'receipt_no'),
+            ],
             'received_at' => 'nullable|date',
             'notes' => 'nullable|string|max:1000',
         ]);

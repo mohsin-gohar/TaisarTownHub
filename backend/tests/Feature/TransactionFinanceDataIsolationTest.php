@@ -82,11 +82,14 @@ class TransactionFinanceDataIsolationTest extends EnterpriseTestCase
         $expenseA = $this->createExpense($userA, 7000);
         $expenseB = $this->createExpense($userB, 88000);
 
-        $headersA = $this->authHeaders($this->tokenFor($userA));
-        $headersB = $this->authHeaders($this->tokenFor($userB));
-
-        $listA = $this->getJson('/api/agency/transactions', $headersA)->assertOk()->json('transactions');
-        $listB = $this->getJson('/api/agency/transactions', $headersB)->assertOk()->json('transactions');
+        // Sanctum's RequestGuard caches the resolved user per request instance.
+        // In long in-process feature tests a guard created for user A would be
+        // reused for user B's request. tokenFor() resets guards, so create the
+        // token immediately before each request rather than pre-creating both.
+        $listA = $this->getJson('/api/agency/transactions',
+            $this->authHeaders($this->tokenFor($userA)))->assertOk()->json('transactions');
+        $listB = $this->getJson('/api/agency/transactions',
+            $this->authHeaders($this->tokenFor($userB)))->assertOk()->json('transactions');
         $this->assertContains($dealA['id'], array_column($listA, 'id'));
         $this->assertNotContains($dealB['id'], array_column($listA, 'id'));
         $this->assertContains($dealB['id'], array_column($listB, 'id'));
@@ -94,27 +97,35 @@ class TransactionFinanceDataIsolationTest extends EnterpriseTestCase
 
         // The legacy /api/transactions alias must preserve the same tenant
         // boundary as the canonical /api/agency/transactions endpoint.
-        $legacyA = $this->getJson('/api/transactions', $headersA)->assertOk()->json();
-        $legacyB = $this->getJson('/api/transactions', $headersB)->assertOk()->json();
+        $legacyA = $this->getJson('/api/transactions',
+            $this->authHeaders($this->tokenFor($userA)))->assertOk()->json();
+        $legacyB = $this->getJson('/api/transactions',
+            $this->authHeaders($this->tokenFor($userB)))->assertOk()->json();
         $this->assertContains($dealA['id'], array_column($legacyA, 'id'));
         $this->assertNotContains($dealB['id'], array_column($legacyA, 'id'));
         $this->assertContains($dealB['id'], array_column($legacyB, 'id'));
         $this->assertNotContains($dealA['id'], array_column($legacyB, 'id'));
 
-        $commissionsA = $this->getJson('/api/agency/commissions', $headersA)->assertOk()->json('commissions');
-        $commissionsB = $this->getJson('/api/agency/commissions', $headersB)->assertOk()->json('commissions');
+        $commissionsA = $this->getJson('/api/agency/commissions',
+            $this->authHeaders($this->tokenFor($userA)))->assertOk()->json('commissions');
+        $commissionsB = $this->getJson('/api/agency/commissions',
+            $this->authHeaders($this->tokenFor($userB)))->assertOk()->json('commissions');
         $this->assertContains($commissionA['id'], array_column($commissionsA, 'id'));
         $this->assertNotContains($commissionB['id'], array_column($commissionsA, 'id'));
         $this->assertContains($commissionB['id'], array_column($commissionsB, 'id'));
         $this->assertNotContains($commissionA['id'], array_column($commissionsB, 'id'));
 
-        $expensesA = $this->getJson('/api/agency/expenses', $headersA)->assertOk()->json('expenses');
-        $expensesB = $this->getJson('/api/agency/expenses', $headersB)->assertOk()->json('expenses');
+        $expensesA = $this->getJson('/api/agency/expenses',
+            $this->authHeaders($this->tokenFor($userA)))->assertOk()->json('expenses');
+        $expensesB = $this->getJson('/api/agency/expenses',
+            $this->authHeaders($this->tokenFor($userB)))->assertOk()->json('expenses');
         $this->assertSame([$expenseA], array_column($expensesA, 'id'));
         $this->assertSame([$expenseB], array_column($expensesB, 'id'));
 
-        $reportA = $this->getJson('/api/agency/reports', $headersA)->assertOk()->json();
-        $reportB = $this->getJson('/api/agency/reports', $headersB)->assertOk()->json();
+        $reportA = $this->getJson('/api/agency/reports',
+            $this->authHeaders($this->tokenFor($userA)))->assertOk()->json();
+        $reportB = $this->getJson('/api/agency/reports',
+            $this->authHeaders($this->tokenFor($userB)))->assertOk()->json();
         $this->assertSame(1000000.0, (float) $reportA['deals']['agreed_pkr']);
         $this->assertSame(120000.0, (float) $reportA['collected_pkr']);
         $this->assertSame(7000, (int) $reportA['expenses']['total_pkr']);
