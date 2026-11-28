@@ -92,6 +92,15 @@ class TransactionFinanceDataIsolationTest extends EnterpriseTestCase
         $this->assertContains($dealB['id'], array_column($listB, 'id'));
         $this->assertNotContains($dealA['id'], array_column($listB, 'id'));
 
+        // The legacy /api/transactions alias must preserve the same tenant
+        // boundary as the canonical /api/agency/transactions endpoint.
+        $legacyA = $this->getJson('/api/transactions', $headersA)->assertOk()->json();
+        $legacyB = $this->getJson('/api/transactions', $headersB)->assertOk()->json();
+        $this->assertContains($dealA['id'], array_column($legacyA, 'id'));
+        $this->assertNotContains($dealB['id'], array_column($legacyA, 'id'));
+        $this->assertContains($dealB['id'], array_column($legacyB, 'id'));
+        $this->assertNotContains($dealA['id'], array_column($legacyB, 'id'));
+
         $commissionsA = $this->getJson('/api/agency/commissions', $headersA)->assertOk()->json('commissions');
         $commissionsB = $this->getJson('/api/agency/commissions', $headersB)->assertOk()->json('commissions');
         $this->assertContains($commissionA['id'], array_column($commissionsA, 'id'));
