@@ -41,10 +41,14 @@ class InquiryController extends Controller
             // Legacy dealer: keep the assigned-property lookup as a SQL
             // subquery so a large property portfolio is not materialized in PHP.
             $dealerId = $request->user()->dealer_id;
-            $query->where(function ($q) use ($dealerId) {
-                $q->whereIn('property_id', Property::where('assignedDealerId', $dealerId)->select('id'))
-                    ->orWhereNull('agency_id');
-            });
+            // A dealer's legacy fallback is limited to leads attached to
+            // properties explicitly assigned to that dealer. NULL agency_id
+            // alone is not ownership evidence and must never expose every
+            // unresolved/unowned inquiry to an individual dealer.
+            $query->whereIn(
+                'property_id',
+                Property::where('assignedDealerId', $dealerId)->select('id')
+            );
         }
 
         if (!empty($filters['status']) && $filters['status'] !== 'All') {
