@@ -7,7 +7,7 @@
 # MySQL 8 / MariaDB is the only supported database engine.
 
 param(
-    [string]$Destination = "$env:LOCALAPPDATA\Temp\opencode\tth-backups",
+    [string]$Destination = "$env:LOCALAPPDATA\Temp\opencode\tth-backups"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,6 +40,7 @@ if ($driver -ne 'mysql') {
 
 $name = Read-DotEnvValue 'DB_DATABASE'
 $user = Read-DotEnvValue 'DB_USERNAME'
+if (-not $name -or -not $user) { throw 'DB_DATABASE and DB_USERNAME are required.' }
 $hostName = Read-DotEnvValue 'DB_HOST' '127.0.0.1'
 $port = Read-DotEnvValue 'DB_PORT' '3306'
 $password = Read-DotEnvValue 'DB_PASSWORD'
