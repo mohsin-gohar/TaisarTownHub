@@ -16,7 +16,7 @@ class PaymentSchedule extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'float',
+            'amount' => 'decimal:2',
             'due_date' => 'date',
             'paid_at' => 'datetime',
         ];
