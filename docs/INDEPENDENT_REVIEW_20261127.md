@@ -11,9 +11,9 @@
 
 ## Scope and audit limitations
 
-- Current main tree: **565 tracked file blobs**.
+- Current main tree: **566 tracked file blobs**.
 - The historical `COMPLETE_FILE_AUDIT_LEDGER.md` references 706 files and still marks the audit in progress.
-- A complete line-by-line review of all 565 files has not been completed.
+- A complete line-by-line review of all 566 files has not been completed.
 - This report records specific reviewed code, automated evidence, and read-only live observations. It does not claim every page, button, role, integration, or file has been exhaustively verified.
 
 ## Merged code fixes

@@ -47,7 +47,7 @@ These are repository/CI and local test-environment results, not production-host 
 
 ## Repository audit coverage
 
-The current main Git tree contains **565 tracked file blobs**. The historical audit ledger refers to 706 files and remains incomplete. A complete line-by-line review of all 565 files, all routes, every control, and every role has **not** been completed. No report should claim otherwise.
+The current main Git tree contains **566 tracked file blobs**. The historical audit ledger refers to 706 files and remains incomplete. A complete line-by-line review of all 565 files, all routes, every control, and every role has **not** been completed. No report should claim otherwise.
 
 ## Remaining production gates
 
