@@ -233,6 +233,21 @@ jobs:
             -BackupDir "/tmp/tth backup dir with spaces" \
             -Scratch "/tmp/tth restore drill with spaces" 2>&1 | tee "$log"
 
+      - name: Reject database-only restore sets
+        run: |
+          set -euo pipefail
+          mkdir -p "/tmp/tth backup missing vault"
+          db=$(find "/tmp/tth backup dir with spaces" -maxdepth 1 -name 'tth_db_*.sql.gz' -print -quit)
+          manifest=$(find "/tmp/tth backup dir with spaces" -maxdepth 1 -name 'manifest-*.sha256' -print -quit)
+          cp "$db" "$manifest" "/tmp/tth backup missing vault/"
+          if pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/restore-drill.ps1 \
+              -BackupDir "/tmp/tth backup missing vault" \
+              -Scratch "/tmp/tth restore missing vault"; then
+            echo "restore drill accepted a database-only recovery set" >&2
+            exit 1
+          fi
+          test ! -e "/tmp/tth restore missing vault"
+
       - name: Verify MySQL 8 engine and scratch cleanup
         run: |
           export MYSQL_PWD=test-root-password
