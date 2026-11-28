@@ -631,7 +631,7 @@ class PropertyController extends Controller
                 $property->published_at = now();
             }
             $days = (int) ($request->expiry_days
-                ?? \App\\Models\\SystemSetting::get('listing.default_expiry_days', 90));
+                ?? \App\Models\SystemSetting::get('listing.default_expiry_days', 90));
             $property->expires_at = now()->addDays($days);
             $property->save();
 

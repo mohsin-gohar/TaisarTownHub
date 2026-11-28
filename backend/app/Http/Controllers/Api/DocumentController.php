@@ -573,12 +573,12 @@ class DocumentController extends Controller
 
                 return $locked->fresh();
             }, 3);
-        } catch (\\Throwable $e) {
+        } catch (\Throwable $e) {
             // The new bytes are not referenced by committed metadata. Remove
             // them so a failed DB transaction cannot leak orphaned vault files.
             try {
                 Storage::disk('documents')->delete($relativePath);
-            } catch (\\Throwable $cleanupError) {
+            } catch (\Throwable $cleanupError) {
                 Log::critical('Failed to clean up uncommitted document version bytes', [
                     'document_id' => $id,
                     'disk_path' => $relativePath,

@@ -290,7 +290,7 @@ public function update(Request $request, string $id)
 
         if (!empty($data['dealerId']) && $agencyId !== null
             && !$this->dealerBelongsToAgency($data['dealerId'], $agencyId)) {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'dealerId' => ['Dealer does not belong to the acting agency.'],
             ]);
         }

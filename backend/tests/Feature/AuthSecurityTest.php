@@ -147,14 +147,14 @@ class AuthSecurityTest extends EnterpriseTestCase
 
         $this->assertTrue(
             is_subclass_of(
-                \\App\\Notifications\\PasswordChangedNotification::class,
-                \\Illuminate\\Contracts\\Queue\\ShouldQueue::class
+                \App\Notifications\PasswordChangedNotification::class,
+                \Illuminate\Contracts\Queue\ShouldQueue::class
             )
         );
         $this->assertTrue(
             is_subclass_of(
-                \\App\\Notifications\\SuspiciousLoginDetected::class,
-                \\Illuminate\\Contracts\\Queue\\ShouldQueue::class
+                \App\Notifications\SuspiciousLoginDetected::class,
+                \Illuminate\Contracts\Queue\ShouldQueue::class
             )
         );
     }

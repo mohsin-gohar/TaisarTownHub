@@ -214,7 +214,7 @@ class SupportTicketsTest extends EnterpriseTestCase
         $this->withoutExceptionHandling();
 
         SupportMessage::creating(function () {
-            throw new \\RuntimeException('Simulated opening-message persistence failure.');
+            throw new \RuntimeException('Simulated opening-message persistence failure.');
         });
 
         try {
@@ -223,7 +223,7 @@ class SupportTicketsTest extends EnterpriseTestCase
                 'body' => 'The first message must be saved with its ticket.',
             ], $this->authHeaders($this->tokenFor($user)));
             $this->fail('The simulated persistence failure should escape the request.');
-        } catch (\\RuntimeException $exception) {
+        } catch (\RuntimeException $exception) {
             $this->assertSame('Simulated opening-message persistence failure.', $exception->getMessage());
         }
 
