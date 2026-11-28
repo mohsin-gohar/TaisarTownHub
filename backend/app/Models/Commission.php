@@ -32,6 +32,16 @@ class Commission extends Model
         return $this->belongsTo(Dealer::class, 'dealer_id');
     }
 
+    public function beneficiary(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function paidBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'paid_by');
+    }
+
     public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class, 'agency_id');
