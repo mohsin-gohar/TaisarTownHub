@@ -86,8 +86,6 @@ public function index(Request $request)
         if ($agencyId === null && !$user->hasPermission('admin.view_reports')) {
             if ($user->agency_id !== null) {
                 $query->where('agency_id', $user->agency_id);
-            } elseif ($user->dealer_id !== null) {
-                $query->where('dealerId', $user->dealer_id);
             } else {
                 abort(404, 'Finance workspace not found.');
             }
@@ -939,8 +937,8 @@ public function update(Request $request, string $id)
 
         $user = $request->user();
         $canSeeAll = $this->can($request, 'finance.view') || $this->can($request, 'view_commissions');
-        if ($agencyId === null && $canSeeAll && !$user->hasPermission('admin.view_reports')) {
-            abort(403, 'A platform finance permission is required without an agency context.');
+        if ($agencyId === null && !$user->hasPermission('admin.view_reports')) {
+            abort(403, 'An agency context or platform finance permission is required.');
         }
         if (!$canSeeAll) {
             if ($user->dealer_id === null) {
