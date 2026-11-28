@@ -116,10 +116,15 @@ class LegacyBackfillCommand extends Command
             // Never auto-stamp a row with conflicting evidence: ambiguity is a
             // manual-review item, not a coin flip.
             if (!$target && $current === null) {
-                $candidates = $resolver->candidates($row);
-                if (count($candidates) === 1) {
-                    $target = array_key_first($candidates);
-                    $source = 'derived evidence';
+                $bogusClaim = $resolver->bogusClaim($row);
+                if ($bogusClaim !== null) {
+                    $this->warn("row {$row->collection}::{$row->record_id} has an invalid ownership claim '{$bogusClaim}' — derived evidence requires manual review");
+                } else {
+                    $candidates = $resolver->candidates($row);
+                    if (count($candidates) === 1) {
+                        $target = array_key_first($candidates);
+                        $source = 'derived evidence';
+                    }
                 }
             }
 
