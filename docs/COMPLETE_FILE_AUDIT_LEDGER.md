@@ -1,12 +1,14 @@
 # TaisarTownHub - Complete File Audit Ledger
 
-> **PARTIAL INVENTORY — NOT A COMPLETED FILE AUDIT.** This ledger is historical to commit `6c92d52`, explicitly marked `Audit Coverage: In progress`, and contains unchecked `READ` entries. Its 706-file count is not reconciled with the current baseline tree (564 tracked file blobs). It does not prove every repository file was read. See [the independent verification update](INDEPENDENT_REVIEW_20261127.md).
+> **HISTORICAL CHECKLIST — NOT A COMPLETED FILE AUDIT.** Reconciled on 2026-11-28 in [Phase 1.10 reconciliation](PHASE_1_HISTORICAL_706_FILE_LEDGER_RECONCILIATION_20261128.md). The stated **706 tracked files** is verified for the parent baseline commit `ed401f504dd70180ad40fda37ed2e9250a5a335a`. This ledger was added in commit `6c92d524ce598279948533a8f5b4154b04017797`, whose tree had 713 blobs after seven additional files were added. Current main snapshot `ae306f81a08d781be3ef9c1f1a490b24b3010b78` has 566 tracked blobs. This document contains 209 unchecked checklist entries: 197 explicit file-path entries, 10 aggregate/directory entries, and 2 general task/cross-reference entries. All remain unverified. It does not prove that every historical or current repository file was read.
+
 
 ## Audit Metadata
 - **Audit Date:** 2026-11-23
 - **Auditor:** Independent Enterprise Software Audit Team
 - **Repository:** https://github.com/mohsin-gohar/TaisarTownHub
-- **Commit:** 6c92d52audit: add enterprise audit reports and file ledger
+- **Ledger Commit:** 6c92d524ce598279948533a8f5b4154b04017797
+- **File-count Baseline Commit:** ed401f504dd70180ad40fda37ed2e9250a5a335a
 - **Total Tracked Files:** 706
 - **Audit Coverage:** In progress
 
@@ -294,3 +296,9 @@
 
 ## Section 14: Binary Assets Inventory
 - [ ] Verify all referenced assets exist and are used correctly
+
+
+> **Phase 2 tracking:** Current Laravel backend review status is maintained in [Phase 2 Backend Audit Ledger](PHASE_2_BACKEND_AUDIT_LEDGER_20261128.md). Phase 2.1 statically reviewed 26 architecture/config/bootstrap paths; Phase 2.2 reviewed all 33 controller-directory files; Phase 2.3 reviewed all 47 model files and cross-checked relevant migrations/relationships; Phase 2.4 reviewed all 7 service files; Phase 2.5 reviewed all 5 middleware files; Phase 2.6 reviewed the authorization components, permission catalogs, role seeding, staff/role management and eight relevant authorization/security tests; Phase 2.7–2.9 reviewed 203 API route declarations (registered under both prefixes), all 31 API endpoint controllers for validation/response patterns, API bootstrap/exception rendering and the versioning/MFA tests. The API review supersedes the earlier note that EnsureMfaVerified was unattached: current source attaches it to the authenticated API group. See [Phase 2 Backend Audit Ledger](PHASE_2_BACKEND_AUDIT_LEDGER_20261128.md) and [Phase 2.6 Authorization Review](PHASE_2_6_LARAVEL_AUTHORIZATION_REVIEW_20261128.md). These task-scoped reviews do not mark the historical checklist complete or imply the entire backend has been reviewed.
+
+
+> **Phase 2.7–2.9 tracking:** See [API Routes, Validation and Response Review](PHASE_2_7_2_9_API_ROUTES_VALIDATION_RESPONSE_REVIEW_20261128.md). This is a static source review; no runtime tests or CI were run.

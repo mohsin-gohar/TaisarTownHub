@@ -23,7 +23,7 @@ Consolidates the former root `DEPLOYMENT.md`, `DEPLOYMENT_GUIDE.md`, `HOSTINGER_
 ## 2. Local pre-deploy verification
 
 ```bash
-cd backend && php artisan test                # full backend suite (SQLite default; MySQL 8 in CI)
+cd backend && php artisan test                # MySQL test DB (configure DB_* in backend/.env; MySQL 8 in CI)
 cd backend && php artisan app:production-check --strict   # env/keys/DB/storage/queue/Sanctum/bcrypt audit
 cd frontend && npm run verify                 # tsc + unit tests + build + prerender + bundle check
 ```
@@ -31,8 +31,9 @@ cd frontend && npm run verify                 # tsc + unit tests + build + prere
 ## 3. Docker (recommended)
 
 ```bash
-cp backend/.env.example backend/.env          # then edit secrets — see §6
-cp frontend/.env.example frontend/.env        # VITE_API_URL=https://api.taisartownhub.com/api (or same-origin /api)
+cp .env.example .env                           # Compose interpolation: set APP_KEY, DB_ROOT_PASSWORD, DB_PASSWORD, REDIS_PASSWORD
+# backend/.env.example is for running Laravel directly outside Docker; Compose injects runtime env.
+# frontend/.env.example is for running Vite directly; Docker build args are set in docker-compose.yml.
 docker compose up -d --build
 # The one-shot migrate service runs automatically during docker compose up.
 docker compose exec backend php artisan app:production-check --strict
@@ -74,7 +75,7 @@ A successful Vercel frontend build is not proof that the Laravel API is availabl
 | `SENTRY / LOGROCKET / GA` | optional monitoring ids |
 | Backup credentials | off-site storage; `APP_KEY` stored separately from data backups |
 
-See `backend/.env.example` for the full commented list. **Never commit real values.**
+See the root `.env.example` for Docker Compose interpolation variables and `backend/.env.example` for direct, non-Docker Laravel configuration. `frontend/.env.example` is for direct Vite development/builds. **Never commit real values.**
 
 ## 7. ClamAV (fail-closed)
 
