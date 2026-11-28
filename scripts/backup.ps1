@@ -54,10 +54,10 @@ if (-not $env:MYSQLDUMP -and -not (Get-Command mysqldump -ErrorAction SilentlyCo
 Write-Host "[backup] MySQL dump of database '$name' from $hostName`:$port"
 $sql = Join-Path $Destination "tth_db_$stamp.sql"
 $env:MYSQL_PWD = $password
-& $dumpTool --single-transaction --routines --triggers --events --hex-blob -h $hostName -P $port -u $user $name | Out-File -FilePath $sql -Encoding utf8
+& $dumpTool "--result-file=$sql" --single-transaction --routines --triggers --events --hex-blob -h $hostName -P $port -u $user $name
 $dumpExit = $LASTEXITCODE
 Remove-Item Env:MYSQL_PWD -ErrorAction SilentlyContinue
-if ($dumpExit -ne 0) { throw "[backup] FATAL: mysqldump failed with exit code $LASTEXITCODE" }
+if ($dumpExit -ne 0) { throw "[backup] FATAL: mysqldump failed with exit code $dumpExit" }
 
 $tableCount = (Select-String -Path $sql -Pattern 'CREATE TABLE' -AllMatches).Count
 if ($tableCount -le 0 -or -not (Select-String -Path $sql -Pattern 'Dump completed' -Quiet)) {
