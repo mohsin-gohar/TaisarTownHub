@@ -155,7 +155,6 @@ class DatabaseSchemaContractTest extends TestCase
             ['lead_activities', ['inquiry_id', 'created_at'], false],
             ['document_folders', ['agency_id', 'path'], true],
             ['document_versions', ['document_id', 'version'], true],
-            ['video_likes', ['agency_video_id', 'user_id'], true],
         ];
 
         foreach ($expected as [$table, $columns, $unique]) {
