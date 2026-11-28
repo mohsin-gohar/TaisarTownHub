@@ -64,9 +64,11 @@ return new class extends Migration
                     'slug' => $slug,
                     'email' => null,
                     'city' => 'Karachi',
-                    'status' => 'active',
-                    'verification_status' => 'verified',
-                    'verified_at' => $now,
+                    // A dealer-entered affiliation is ownership evidence,
+                    // not proof that the agency itself passed platform review.
+                    'status' => 'pending',
+                    'verification_status' => 'pending',
+                    'verified_at' => null,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
