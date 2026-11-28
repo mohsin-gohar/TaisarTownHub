@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\BusinessRecord;
 use App\Models\Dealer;
+use App\Models\Property;
 use RuntimeException;
 
 class AgencyFilesSyncSeeder extends Seeder
