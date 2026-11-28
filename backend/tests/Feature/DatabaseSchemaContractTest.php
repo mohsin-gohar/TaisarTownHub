@@ -98,6 +98,11 @@ class DatabaseSchemaContractTest extends TestCase
                 );
             }
 
+            if ($model->usesTimestamps()) {
+                $this->assertTrue(Schema::hasColumn($table, 'created_at'), "{$class} expects {$table}.created_at");
+                $this->assertTrue(Schema::hasColumn($table, 'updated_at'), "{$class} expects {$table}.updated_at");
+            }
+
             $columns = array_unique(array_merge(
                 $model->getFillable(),
                 array_keys($model->getCasts())
