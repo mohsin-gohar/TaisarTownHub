@@ -132,10 +132,13 @@ return new class extends Migration
             $table->dropForeign('users_dealer_fk');
         });
 
-        Schema::table('properties', function (Blueprint $table): void {
-            if (Schema::hasIndex('properties', ['assignedDealerId'])) {
+        $createdIndexExists = collect(Schema::getIndexes('properties'))
+            ->contains(fn (array $index): bool => ($index['name'] ?? null) === 'properties_assigned_dealer_idx');
+
+        if ($createdIndexExists) {
+            Schema::table('properties', function (Blueprint $table): void {
                 $table->dropIndex('properties_assigned_dealer_idx');
-            }
-        });
+            });
+        }
     }
 };
