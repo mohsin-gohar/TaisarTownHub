@@ -10,6 +10,7 @@ use App\Models\AgencySubscription;
 use App\Models\AgencyVideo;
 use App\Models\AuditLog;
 use App\Models\Block;
+use App\Models\BusinessRecord;
 use App\Models\Commission;
 use App\Models\Dealer;
 use App\Models\DealerFile;
@@ -41,6 +42,7 @@ use App\Models\SubscriptionInvoice;
 use App\Models\SubscriptionPlan;
 use App\Models\SupportMessage;
 use App\Models\SupportTicket;
+use App\Models\SystemSetting;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
 use App\Models\User;
@@ -110,6 +112,7 @@ class ModelRelationshipContractTest extends TestCase
             [Property::class, 'assignedDealer', BelongsTo::class, Dealer::class],
             [Property::class, 'agency', BelongsTo::class, Agency::class],
             [Property::class, 'creator', BelongsTo::class, User::class],
+            [Property::class, 'updater', BelongsTo::class, User::class],
             [Property::class, 'sectorRelation', BelongsTo::class, Sector::class],
             [Property::class, 'blockRelation', BelongsTo::class, Block::class],
             [Property::class, 'category', BelongsTo::class, PropertyCategory::class],
@@ -136,6 +139,7 @@ class ModelRelationshipContractTest extends TestCase
             [Document::class, 'folder', BelongsTo::class, DocumentFolder::class],
             [Document::class, 'property', BelongsTo::class, Property::class],
             [Document::class, 'uploader', BelongsTo::class, User::class],
+            [Document::class, 'deleter', BelongsTo::class, User::class],
             [Document::class, 'versions', HasMany::class, DocumentVersion::class],
             [Document::class, 'accessLogs', HasMany::class, DocumentAccessLog::class],
             [DocumentFolder::class, 'agency', BelongsTo::class, Agency::class],
@@ -182,6 +186,8 @@ class ModelRelationshipContractTest extends TestCase
             [Commission::class, 'paidBy', BelongsTo::class, User::class],
 
             [SavedSearch::class, 'user', BelongsTo::class, User::class],
+            [BusinessRecord::class, 'agency', BelongsTo::class, Agency::class],
+            [SystemSetting::class, 'updater', BelongsTo::class, User::class],
             [SubscriptionPlan::class, 'subscriptions', HasMany::class, AgencySubscription::class],
             [SubscriptionInvoice::class, 'agency', BelongsTo::class, Agency::class],
             [SubscriptionInvoice::class, 'plan', BelongsTo::class, SubscriptionPlan::class],
