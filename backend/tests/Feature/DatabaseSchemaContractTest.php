@@ -62,6 +62,13 @@ class DatabaseSchemaContractTest extends TestCase
             $table = $model->getTable();
             $this->assertTrue(Schema::hasTable($table), "{$class} points to missing table {$table}");
 
+            if (in_array(SoftDeletes::class, class_uses_recursive($class), true)) {
+                $this->assertTrue(
+                    Schema::hasColumn($table, 'deleted_at'),
+                    "{$class} uses SoftDeletes but {$table}.deleted_at is missing"
+                );
+            }
+
             $columns = array_unique(array_merge(
                 $model->getFillable(),
                 array_keys($model->getCasts())
