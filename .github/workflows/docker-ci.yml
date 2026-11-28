@@ -315,6 +315,46 @@ jobs:
             -v "$PWD/docker/frontend/nginx.conf:/etc/nginx/nginx.conf:ro" \
             nginx:1.27-alpine nginx -t
 
+      - name: Verify private vault persistence and isolation
+        run: |
+          docker compose -f docker-compose.yml config --format json | python3 -c '
+          import json, sys
+          config = json.load(sys.stdin)
+          expected_target = "/var/www/html/storage/app/private"
+          for service in ("backend", "worker", "scheduler"):
+              mounts = config["services"][service].get("volumes", [])
+              assert any(
+                  mount.get("type") == "volume"
+                  and mount.get("source", "").endswith("private_vault")
+                  and mount.get("target") == expected_target
+                  for mount in mounts
+              ), f"{service} must mount private_vault at {expected_target}"
+          for service in ("frontend", "nginx"):
+              mounts = config["services"][service].get("volumes", [])
+              assert not any(
+                  mount.get("target", "").startswith("/var/www/html/storage/app/private")
+                  or mount.get("source", "").endswith("private_vault")
+                  for mount in mounts
+              ), f"{service} must not access the private vault"
+          for service in ("backend", "worker", "scheduler"):
+              env = config["services"][service].get("environment", {})
+              assert env.get("FRONTEND_URL") == "https://taisartownhub.vercel.app", f"{service} must use the configured SPA origin"
+          backend_env = config["services"]["backend"].get("environment", {})
+          for key in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI"):
+              assert key in backend_env, f"backend must receive {key}"
+          assert backend_env["GOOGLE_REDIRECT_URI"] == "https://api.taisartownhub.com/api/auth/google/callback"
+          assert "https://taisartownhub.vercel.app" in backend_env["CORS_ALLOWED_ORIGINS"]
+          worker_env = config["services"]["worker"].get("environment", {})
+          for key in ("MAIL_MAILER", "MAIL_HOST", "MAIL_PORT", "MAIL_USERNAME", "MAIL_FROM_ADDRESS", "FRONTEND_URL"):
+              assert key in worker_env, f"worker must receive {key}"
+          assert worker_env["MAIL_MAILER"] == "smtp", "worker must use SMTP by default"
+          assert worker_env["MAIL_SCHEME"] == "tls", "worker must use the configured TLS mail scheme"
+          for service in ("backend", "worker", "scheduler"):
+              env = config["services"][service].get("environment", {})
+              assert env.get("MAIL_SCHEME") == "tls", f"{service} must receive the configured TLS mail scheme"
+          print("private vault persistence, web-tier isolation, and auth origins: OK")
+          '
+      
       - name: Start full stack
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build
 

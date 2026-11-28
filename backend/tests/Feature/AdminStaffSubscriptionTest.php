@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\AgencyInvitation;
 use App\Models\AgencySubscription;
 use App\Models\Role;
+use App\Models\Transaction;
+use App\Models\TransactionPayment;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +43,36 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             'is_default' => false,
             'sort_order' => 1,
         ], $attrs));
+    }
+
+    public function test_subscription_plan_creation_rejects_currency_and_precision_invoice_cannot_represent(): void
+    {
+        $this->seedPlatformRole('super_admin');
+        $admin = $this->makeUser('super_admin');
+        $headers = $this->authHeaders($this->tokenFor($admin));
+
+        $base = [
+            'key' => 'billing-plan-' . substr(md5(uniqid('', true)), 0, 8),
+            'name' => 'Billing Plan',
+            'price' => 5000,
+            'currency' => 'PKR',
+            'interval' => 'month',
+        ];
+
+        $this->postJson('/api/admin/plans', array_merge($base, [
+            'key' => 'billing-usd-' . substr(md5(uniqid('', true)), 0, 8),
+            'currency' => 'USD',
+        ]), $headers)->assertStatus(422)->assertJsonValidationErrors('currency');
+
+        $this->postJson('/api/admin/plans', array_merge($base, [
+            'key' => 'billing-fractional-' . substr(md5(uniqid('', true)), 0, 8),
+            'price' => 5000.50,
+        ]), $headers)->assertStatus(422)->assertJsonValidationErrors('price');
+
+        $this->postJson('/api/admin/plans', $base, $headers)
+            ->assertStatus(201)
+            ->assertJsonPath('plan.currency', 'PKR')
+            ->assertJsonPath('plan.price', 5000);
     }
 
     public function test_platform_admin_can_manage_users_with_self_protection(): void
@@ -98,6 +131,12 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->getJson('/api/admin/agencies', $this->authHeaders($this->tokenFor($agent)))->assertStatus(403);
         $this->getJson('/api/admin/plans', $this->authHeaders($this->tokenFor($agent)))->assertStatus(403);
         $this->getJson('/api/admin/audit-logs', $this->authHeaders($this->tokenFor($agent)))->assertStatus(403);
+
+        // Legacy platform roles with broad report access must not inherit
+        // platform-wide audit visibility without the dedicated permission.
+        $operator = $this->makeUser('operator');
+        $this->getJson('/api/admin/audit-logs', $this->authHeaders($this->tokenFor($operator)))
+            ->assertStatus(403);
 
         $this->assertDatabaseMissing('users', ['email' => 'sneaky@example.test']);
     }
@@ -323,6 +362,149 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             ->count());
     }
 
+
+    public function test_stale_invitation_does_not_create_an_uninvited_user_account(): void
+    {
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $role = $this->makeRole('agency', 'stale_invite', ['properties.view']);
+
+        $invite = $this->postJson('/api/agency/members/invite', [
+            'email' => 'stale-invite@example.test',
+            'role_id' => $role->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(201)
+            ->json('invitation');
+
+        // Simulate another request revoking the invite after the initial
+        // lookup but before the acceptance transaction claims it.
+        $firstRead = true;
+        AgencyInvitation::retrieved(function (AgencyInvitation $model) use (&$firstRead): void {
+            if ($firstRead) {
+                $firstRead = false;
+                DB::table('agency_invitations')
+                    ->where('id', $model->id)
+                    ->update(['status' => 'revoked']);
+            }
+        });
+
+        $this->asGuest();
+        $this->postJson('/api/agency/invitations/accept', [
+            'token' => $invite['invite_token'],
+            'name' => 'Stale Invite',
+            'password' => 'StalePass123!',
+        ])->assertStatus(422)->assertJsonPath('success', false);
+
+        $this->assertDatabaseMissing('users', ['email' => 'stale-invite@example.test']);
+        $this->assertDatabaseHas('agency_invitations', [
+            'email' => 'stale-invite@example.test',
+            'status' => 'revoked',
+        ]);
+    }
+
+
+    public function test_last_active_agency_owner_cannot_be_demoted_or_deactivated(): void
+    {
+        [$owner, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $ownerRole = $this->makeRole('agency', 'agency_owner', $this->staffPermissions());
+        $ownerRole->forceFill(['id' => 'role_agency_owner'])->save();
+        $member = $owner->memberships()->where('agency_id', $agency->id)->firstOrFail();
+        $member->update(['role_id' => $ownerRole->id]);
+
+        $agentRole = $this->makeRole('agency', 'field_agent', ['properties.view']);
+        $headers = $this->authHeaders($this->tokenFor($owner));
+
+        $this->patchJson("/api/agency/members/{$member->id}", [
+            'role_id' => $agentRole->id,
+        ], $headers)->assertStatus(422);
+
+        $this->patchJson("/api/agency/members/{$member->id}", [
+            'status' => 'deactivated',
+        ], $headers)->assertStatus(422);
+
+        $this->deleteJson("/api/agency/members/{$member->id}", [], $headers)->assertStatus(422);
+
+        $this->assertDatabaseHas('agency_members', [
+            'id' => $member->id,
+            'role_id' => 'role_agency_owner',
+            'status' => 'active',
+        ]);
+    }
+
+
+    public function test_deactivated_members_do_not_consume_staff_invitation_quota(): void
+    {
+        [$manager, $agency, $role] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $plan = $this->makePlan(['limits' => ['staff' => 2, 'listings' => 10]]);
+        AgencySubscription::create([
+            'agency_id' => $agency->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+        ]);
+
+        $inactiveUser = $this->makeUser('dealer', ['email' => 'inactive-staff@example.test']);
+        $this->makeMember($inactiveUser, $agency, $role, 'deactivated');
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'replacement-staff@example.test',
+            'role_id' => $role->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(201)
+            ->assertJsonPath('success', true);
+
+        $this->assertSame(2, \App\Support\PlanLimits::staffUsed($agency->id));
+    }
+
+
+    public function test_agency_cannot_create_duplicate_pending_invitations_for_same_email(): void
+    {
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $role = $this->makeRole('agency', 'invite_once', ['properties.view']);
+        $headers = $this->authHeaders($this->tokenFor($manager));
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'duplicate-invite@example.test',
+            'role_id' => $role->id,
+        ], $headers)->assertStatus(201);
+
+        $this->postJson('/api/agency/members/invite', [
+            'email' => 'DUPLICATE-INVITE@example.test',
+            'role_id' => $role->id,
+        ], $headers)->assertStatus(422);
+
+        $this->assertSame(1, DB::table('agency_invitations')
+            ->whereRaw('LOWER(email) = ?', ['duplicate-invite@example.test'])
+            ->where('status', 'pending')
+            ->count());
+    }
+
+    public function test_accepted_invitation_cannot_be_revoked_after_membership_was_created(): void
+    {
+        [$manager] = $this->agencyUser($this->staffPermissions(), 'manager');
+        $role = $this->makeRole('agency', 'accepted_invite', ['properties.view']);
+        $headers = $this->authHeaders($this->tokenFor($manager));
+
+        $invite = $this->postJson('/api/agency/members/invite', [
+            'email' => 'accepted-invite@example.test',
+            'role_id' => $role->id,
+        ], $headers)->assertStatus(201)->json('invitation');
+
+        $this->asGuest();
+        $this->postJson('/api/agency/invitations/accept', [
+            'token' => $invite['invite_token'],
+            'name' => 'Accepted Invite',
+            'password' => 'AcceptedPass123!',
+        ])->assertStatus(200);
+
+        $this->deleteJson('/api/agency/invitations/' . $invite['id'], [], $headers)
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('agency_invitations', [
+            'id' => $invite['id'],
+            'status' => 'accepted',
+        ]);
+    }
+
     public function test_invitations_respect_the_subscription_staff_limit(): void
     {
         [$manager, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
@@ -391,10 +573,34 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
         $this->makePublicProperty($agencyA, ['title' => 'Agency A Listing']);
         $this->makePublicProperty($agencyB, ['title' => 'Agency B Draft', 'approval_status' => 'draft', 'visibility' => 'private']);
 
+        $deal = Transaction::create([
+            'id' => 'txn_' . \Illuminate\Support\Str::random(10),
+            'dealNumber' => 'DEAL-' . \Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(6)),
+            'propertyId' => 'prop_' . \Illuminate\Support\Str::random(8),
+            'propertyTitle' => 'Dashboard report plot',
+            'sellerName' => 'Seller',
+            'buyerName' => 'Buyer',
+            'agency_id' => $agencyA->id,
+            'transactionType' => 'sale',
+            'agreementAmountPKR' => 500000,
+            'dealStatus' => 'Active',
+        ]);
+        $deletedPayment = TransactionPayment::create([
+            'agency_id' => $agencyA->id,
+            'transaction_id' => $deal->id,
+            'amount' => 12345,
+            'type' => 'advance',
+            'method' => 'cash',
+            'received_at' => now(),
+        ]);
+        $deletedPayment->delete();
+
         $platform = $this->getJson('/api/admin/dashboard', $this->authHeaders($this->tokenFor($admin)))
             ->assertStatus(200)
             ->assertJsonPath('scope', 'platform')
             ->assertJsonPath('listings.total', 2)
+            ->assertJsonPath('finance.collected_total', 0)
+            ->assertJsonPath('finance.collected_' . 30 . 'd', 0)
             ->json();
         $this->assertArrayHasKey('platform', $platform);
         $this->assertArrayHasKey('users', $platform['platform']);

@@ -125,6 +125,16 @@ class Property extends Model
             ->whereNull('deleted_at')
             ->where(function ($q) {
                 $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->where(function ($q) {
+                // Legacy/platform-owned listings without an agency remain
+                // eligible, but agency-owned listings are public only while
+                // their agency is active AND verified.
+                $q->whereNull('agency_id')
+                    ->orWhereHas('agency', function ($agency) {
+                        $agency->where('status', 'active')
+                            ->where('verification_status', 'verified');
+                    });
             });
     }
 
@@ -146,7 +156,13 @@ class Property extends Model
 
     public function isPubliclyVisible(): bool
     {
-        return $this->approval_status === 'approved'
+        $agencyIsPublic = $this->agency_id === null
+            || ($this->agency !== null
+                && $this->agency->status === 'active'
+                && $this->agency->verification_status === 'verified');
+
+        return $agencyIsPublic
+            && $this->approval_status === 'approved'
             && $this->visibility === 'public'
             && !$this->trashed()
             && ($this->expires_at === null || $this->expires_at->isFuture());

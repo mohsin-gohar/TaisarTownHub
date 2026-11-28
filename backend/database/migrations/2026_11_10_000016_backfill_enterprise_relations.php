@@ -42,19 +42,24 @@ return new class extends Migration
         $slugUsed = DB::table('agencies')->pluck('slug')->flip();
         $nameToId = [];
         foreach ($agencyNames as $name) {
-            $base = $this->slugify($name);
-            $slug = $base;
-            $i = 2;
-            while (isset($slugUsed[$slug])) {
-                $slug = $base . '-' . $i++;
-            }
-            $slugUsed[$slug] = true;
             $id = 'agy_' . substr(sha1($name), 0, 16);
-            $nameToId[$name] = $id;
+            $existingAgency = DB::table('agencies')->where('id', $id)->first();
 
-            DB::table('agencies')->updateOrInsert(
-                ['id' => $id],
-                [
+            if ($existingAgency) {
+                // A retry must preserve an existing slug, status, verification
+                // decision and timestamps. Do not silently re-verify an agency.
+                $slug = $existingAgency->slug;
+            } else {
+                $base = $this->slugify($name);
+                $slug = $base;
+                $i = 2;
+                while (isset($slugUsed[$slug])) {
+                    $slug = $base . '-' . $i++;
+                }
+                $slugUsed[$slug] = true;
+
+                DB::table('agencies')->insert([
+                    'id' => $id,
                     'name' => $name,
                     'slug' => $slug,
                     'email' => null,
@@ -64,13 +69,19 @@ return new class extends Migration
                     'verified_at' => $now,
                     'created_at' => $now,
                     'updated_at' => $now,
-                ]
-            );
+                ]);
+            }
+
+            $nameToId[$name] = $id;
         }
 
-        // dealers.agency_id
+        // Only fill an empty legacy ownership link; never overwrite a later
+        // explicit reassignment if this backfill is retried after interruption.
         foreach ($nameToId as $name => $agencyId) {
-            DB::table('dealers')->where('agencyAffiliation', $name)->update(['agency_id' => $agencyId]);
+            DB::table('dealers')
+                ->where('agencyAffiliation', $name)
+                ->whereNull('agency_id')
+                ->update(['agency_id' => $agencyId]);
         }
 
         // users with a dealer link become agency members (system role: agent)
@@ -107,10 +118,16 @@ return new class extends Migration
             $slug = $this->slugify($name);
             $id = 'sec_' . substr(sha1($slug), 0, 16);
             $sectorIdByName[$name] = $id;
-            DB::table('sectors')->updateOrInsert(
-                ['id' => $id],
-                ['name' => $name, 'slug' => $slug, 'phase' => null, 'sort_order' => 0, 'is_active' => 1, 'created_at' => $now, 'updated_at' => $now]
-            );
+            DB::table('sectors')->insertOrIgnore([
+                'id' => $id,
+                'name' => $name,
+                'slug' => $slug,
+                'phase' => null,
+                'sort_order' => 0,
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
         }
 
         $blockPairs = collect()
@@ -129,18 +146,16 @@ return new class extends Migration
             }
             $slug = $this->slugify($r->block);
             $id = 'blk_' . substr(sha1($sectorIdByName[$r->sector] . '|' . $slug), 0, 16);
-            DB::table('blocks')->updateOrInsert(
-                ['id' => $id],
-                [
-                    'sector_id' => $sectorIdByName[$r->sector],
-                    'name' => $r->block,
-                    'slug' => $slug,
-                    'sort_order' => 0,
-                    'is_active' => 1,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]
-            );
+            DB::table('blocks')->insertOrIgnore([
+                'id' => $id,
+                'sector_id' => $sectorIdByName[$r->sector],
+                'name' => $r->block,
+                'slug' => $slug,
+                'sort_order' => 0,
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
         }
 
         /* ---------- 3. Link existing properties table rows ---------- */
@@ -164,6 +179,29 @@ return new class extends Migration
         }
 
         /* ---------- 4. Mirror business_records properties → properties table ---------- */
+        // Migrations run before DatabaseSeeder. Seed the category keys here
+        // so a fresh migrate does not silently leave every backfilled listing
+        // uncategorized merely because db:seed has not run yet.
+        $categorySeeds = [
+            ['residential_plot', 'Residential Plot', 'residential', 1],
+            ['commercial_plot', 'Commercial Plot', 'commercial', 2],
+            ['house', 'House', 'residential', 3],
+            ['apartment', 'Apartment', 'residential', 4],
+            ['shop', 'Shop', 'commercial', 5],
+            ['office', 'Office', 'commercial', 6],
+        ];
+        foreach ($categorySeeds as [$key, $label, $group, $sort]) {
+            DB::table('property_categories')->insertOrIgnore([
+                'key' => $key,
+                'name' => $label,
+                'group' => $group,
+                'sort_order' => $sort,
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
         $categoryByType = [
             'Residential Plot' => 'residential_plot',
             'Commercial Plot' => 'commercial_plot',
@@ -256,8 +294,13 @@ return new class extends Migration
                 // Do not clobber rows already living in the relational table;
                 // only fill gaps (never overwrite a non-null value with null).
                 // Never rewrite an existing public slug: it is a stable URL.
-                $patch = array_intersect_key($row, array_flip(['agency_id', 'sector_id', 'published_at', 'approval_status', 'visibility']));
-                $patch = array_filter($patch, fn ($v) => $v !== null);
+                $existingProperty = DB::table('properties')->where('id', $p['id'])->first();
+                $patch = [];
+                foreach (['agency_id', 'sector_id', 'published_at'] as $column) {
+                    if (empty($existingProperty->{$column}) && ($row[$column] ?? null) !== null) {
+                        $patch[$column] = $row[$column];
+                    }
+                }
                 if ($patch) {
                     DB::table('properties')->where('id', $p['id'])->update($patch);
                 }
@@ -282,11 +325,11 @@ return new class extends Migration
             }
             $row = [
                 'propertyId' => $t['propertyId'] ?? null,
-                'propertyTitle' => $t['propertyTitle'] ?? null,
+                'propertyTitle' => $t['propertyTitle'] ?? 'Unknown property',
                 'plotNumber' => $t['plotNumber'] ?? null,
                 'sector' => $t['sector'] ?? null,
-                'sellerName' => $t['sellerName'] ?? null,
-                'buyerName' => $t['buyerName'] ?? null,
+                'sellerName' => $t['sellerName'] ?? 'Unknown',
+                'buyerName' => $t['buyerName'] ?? 'Unknown',
                 'dealerId' => $t['dealerId'] ?? null,
                 'dealerName' => $t['dealerName'] ?? null,
                 'transactionType' => $t['transactionType'] ?? 'Sale',

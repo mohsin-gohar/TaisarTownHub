@@ -19,19 +19,26 @@ class MapController extends Controller
     /** GET /api/maps — public active maps, ordered. */
     public function publicIndex(Request $request)
     {
+        $filters = $request->validate([
+            'category' => 'nullable|string|in:' . implode(',', array_keys(Map::CATEGORIES)),
+            'sector' => 'nullable|string|max:120',
+            'phase' => 'nullable|string|max:60',
+            'search' => 'nullable|string|max:120',
+        ]);
+
         $query = Map::active()->ordered();
 
-        if ($request->filled('category')) {
-            $query->where('category', $request->category);
+        if (!empty($filters['category'])) {
+            $query->where('category', $filters['category']);
         }
-        if ($request->filled('sector')) {
-            $query->where('sector', $request->sector);
+        if (!empty($filters['sector'])) {
+            $query->where('sector', $filters['sector']);
         }
-        if ($request->filled('phase')) {
-            $query->where('phase', $request->phase);
+        if (!empty($filters['phase'])) {
+            $query->where('phase', $filters['phase']);
         }
-        if ($request->filled('search')) {
-            $s = addcslashes((string) $request->search, '%_\\');
+        if (!empty($filters['search'])) {
+            $s = addcslashes($filters['search'], '%_\\');
             $query->where(function ($q) use ($s) {
                 $q->where('title', 'like', "%{$s}%")
                   ->orWhere('sector', 'like', "%{$s}%")
@@ -159,7 +166,7 @@ class MapController extends Controller
         $this->requirePermission($request, 'admin.manage_platform_settings');
 
         $request->validate([
-            'images' => ['required', 'array', 'min:1'],
+            'images' => ['required', 'array', 'min:1', 'max:50'],
             'images.*' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'titles' => ['nullable', 'array', 'max:50'],
             'titles.*' => ['nullable', 'string', 'max:255'],
@@ -414,7 +421,7 @@ class MapController extends Controller
         $this->requirePermission($request, 'admin.manage_platform_settings');
 
         $request->validate([
-            'order' => 'required|array',
+            'order' => 'required|array|max:500',
             'order.*' => 'string|max:64',
         ]);
 

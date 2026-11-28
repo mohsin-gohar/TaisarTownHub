@@ -16,7 +16,7 @@ Consolidates the former root `DEPLOYMENT.md`, `DEPLOYMENT_GUIDE.md`, `HOSTINGER_
         ┌────────────────────┼────────────────────┐
         ▼                    ▼                    ▼
    MySQL 8 (data)      queue worker         private disk
-   Redis (cache/queue) scheduler             (vault documents)
+   Redis (cache/queue) scheduler             (vault documents + quarantine)
                         ClamAV sidecar (fail-closed scans)
 ```
 
@@ -34,11 +34,11 @@ cd frontend && npm run verify                 # tsc + unit tests + build + prere
 cp backend/.env.example backend/.env          # then edit secrets — see §6
 cp frontend/.env.example frontend/.env        # VITE_API_URL=https://api.taisartownhub.com/api (or same-origin /api)
 docker compose up -d --build
-docker compose exec api php artisan migrate --force
-docker compose exec api php artisan app:production-check --strict
+# The one-shot migrate service runs automatically during docker compose up.
+docker compose exec backend php artisan app:production-check --strict
 ```
 
-Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `scheduler`, `mysql` (MySQL 8.4), `redis`, `clamav`, one-shot `migrate`. Volumes: `mysql_data`, `redis_data`, `clamav_data`, `private_vault`, `public_storage`. The vault volume is mounted only on the API container — the web container can never read it. `php artisan serve` is not used in production. The root `Dockerfile.prod` is deprecated; use `backend/Dockerfile.prod` / `frontend/Dockerfile.prod` with `docker-compose.yml`.
+Services: `nginx` (TLS gateway), `frontend`, `backend` (PHP-FPM), `worker`, `scheduler`, `mysql` (MySQL 8.4), `redis`, `clamav`, one-shot `migrate`. Volumes: `mysql_data`, `redis_data`, `clamav_data`, `private_vault`, `public_storage`. The `private_vault` volume is mounted at `storage/app/private` in the API, queue worker, and scheduler so both `documents` and `quarantine` disks survive restarts and remain available to background jobs. It is never mounted in the frontend or nginx gateway, so public web-serving containers cannot read private files. `php artisan serve` is not used in production. The root `Dockerfile.prod` is deprecated; use `backend/Dockerfile.prod` / `frontend/Dockerfile.prod` with `docker-compose.yml`.
 
 ## 4. VPS deployment (taisartownhub.com, e.g. Hostinger Ubuntu 22.04/24.04)
 
@@ -64,12 +64,13 @@ A successful Vercel frontend build is not proof that the Laravel API is availabl
 | `DB_ROOT_PASSWORD` (compose) | initial bootstrap only |
 | `REDIS_HOST/PORT/PASSWORD` | cache, sessions, queues, rate limits |
 | `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`, `SESSION_DRIVER=redis` | |
-| `MAIL_MAILER/MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_FROM_ADDRESS` | real SMTP; verify delivery of verification/reset mail |
-| `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` | exact production origin(s) — never `*` |
+| `MAIL_MAILER/MAIL_SCHEME/MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD/MAIL_FROM_ADDRESS` | real SMTP; verify delivery of verification/reset mail |
+| `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` | exact SPA origin(s), including `taisartownhub.vercel.app` until custom-domain DNS is live — never `*` |
 | `TRUSTED_PROXIES` | real load-balancer/nginx IPs (X-Forwarded-For spoofing prevention) |
-| `CLAMAV_HOST/PORT`, scan enabled | fail-closed upload scanning |
+| `MALWARE_SCAN_ENABLED=true`, `MALWARE_SCAN_FAIL_CLOSED=true`, `CLAMD_SOCKET`, `CLAMD_TIMEOUT` | reachable ClamAV daemon with current signatures; uploads fail closed when scanning is unavailable |
 | `STRIPE_*`, `FLUTTERWAVE_*` | live keys + webhook secrets, or explicitly disable payments |
-| `GOOGLE_OAUTH_*` | client id/secret + production redirect URI |
+| `FRONTEND_URL` | SPA origin used by OAuth callbacks, password reset, and verification emails; set to the registered custom domain after DNS is live |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Google OAuth credentials + API callback URI, or leave unset to disable Google Sign-In |
 | `SENTRY / LOGROCKET / GA` | optional monitoring ids |
 | Backup credentials | off-site storage; `APP_KEY` stored separately from data backups |
 

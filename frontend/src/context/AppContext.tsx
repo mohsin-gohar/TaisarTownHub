@@ -2034,8 +2034,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // CMS Updates
   const updateCMSConfig = (updates: Partial<CMSConfig>) => {
     if (!requirePermission('edit_cms')) return;
-    setCmsConfig((prev) => ({ ...prev, ...updates }));
-    showToast('info', 'CMS settings updated locally — changes persist only in this session until a backend CMS endpoint is implemented.');
+    const next = { ...cmsConfig, ...updates };
+    setCmsConfig(next);
+
+    if (IS_DEMO) {
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}cms`, JSON.stringify(next));
+      showToast('success', 'Demo CMS settings saved in this browser.');
+      return;
+    }
+
+    if (staffPersistRef.current && getAuthToken()) {
+      // The workspace autosave effect persists the CMS collection through
+      // PUT /api/workspace. Do not tell administrators the feature is local-only.
+      showToast('info', 'CMS settings updated. Saving to MySQL…');
+      return;
+    }
+
+    showToast('error', 'CMS settings changed locally but were not saved because the backend workspace is not ready.');
   };
 
   const resetToDefaultData = async () => {

@@ -110,7 +110,7 @@ class AgencyController extends Controller
             try {
                 $user->notify(VerifyEmailLink::issueFor($user->email));
             } catch (\Throwable $e) {
-                Log::warning('Verification mail could not be queued', ['error' => $e->getMessage()]);
+                Log::warning('Verification mail could not be queued', ['exception' => get_class($e)]);
             }
 
             $this->writeAudit($request, 'agency.register', 'agency:' . $agency->id, 'Agency self-registered: ' . $agency->name, [
@@ -130,7 +130,8 @@ class AgencyController extends Controller
                 'user' => app(AuthController::class)->userPayload($user, $agency->id),
             ], 201);
         } catch (\Throwable $e) {
-            Log::error('Agency registration failed', ['error' => $e->getMessage()]);
+            report($e);
+            Log::error('Agency registration failed', ['exception' => get_class($e)]);
             return response()->json([
                 'success' => false,
                 'message' => 'Agency registration could not be completed.',
@@ -143,12 +144,29 @@ class AgencyController extends Controller
      */
     public function index(Request $request)
     {
+        $filters = $request->validate([
+            'search' => 'nullable|string|max:120',
+            'city' => 'nullable|string|max:60',
+            'has_listings' => 'sometimes|boolean',
+            'sort' => 'nullable|in:name,newest,listings',
+            'per_page' => 'nullable|integer|min:1|max:1000',
+        ]);
+
+        // Aggregate the card counts in the directory query. Calling
+        // activeMembers()->count() and properties()->count() while mapping
+        // every result caused three extra queries per agency (N+1).
         $query = Agency::query()
+            ->withCount([
+                'activeMembers as active_member_count',
+                'properties as public_sale_listing_count' => fn ($q) => $q
+                    ->publiclyVisible()
+                    ->where('listing_purpose', 'sale'),
+            ])
             ->where('status', 'active')
             ->where('verification_status', 'verified');
 
-        if ($request->filled('search')) {
-            $s = $this->escapeLike((string) $request->search);
+        if (!empty($filters['search'])) {
+            $s = $this->escapeLike($filters['search']);
             $query->where(function ($q) use ($s) {
                 $q->where('name', 'like', "%{$s}%")
                     ->orWhere('city', 'like', "%{$s}%")
@@ -156,8 +174,8 @@ class AgencyController extends Controller
             });
         }
 
-        if ($request->filled('city')) {
-            $city = $this->escapeLike((string) $request->city);
+        if (!empty($filters['city'])) {
+            $city = $this->escapeLike($filters['city']);
             $query->where('city', 'like', "%{$city}%");
         }
 
@@ -168,18 +186,16 @@ class AgencyController extends Controller
             });
         }
 
-        $sort = (string) $request->get('sort', 'name');
+        $sort = (string) ($filters['sort'] ?? 'name');
         if ($sort === 'newest') {
             $query->orderByDesc('created_at');
         } elseif ($sort === 'listings') {
-            $query->withCount(['properties as public_listings_count' => function ($q) {
-                $q->publiclyVisible();
-            }])->orderByDesc('public_listings_count')->orderBy('name');
+            $query->orderByDesc('public_sale_listing_count')->orderBy('name');
         } else {
             $query->orderBy('name');
         }
 
-        $perPage = min(max((int) $request->get('per_page', 12), 1), 50);
+        $perPage = min((int) ($filters['per_page'] ?? 12), 50);
         $agencies = $query->paginate($perPage);
 
         $agencies->getCollection()->transform(function (Agency $agency) {
@@ -197,7 +213,18 @@ class AgencyController extends Controller
      */
     public function show(Request $request, string $id)
     {
+        $filters = $request->validate([
+            'type' => 'nullable|string|max:50',
+            'per_page' => 'nullable|integer|min:1|max:1000',
+        ]);
+
         $agency = Agency::query()
+            ->withCount([
+                'activeMembers as active_member_count',
+                'properties as public_sale_listing_count' => fn ($q) => $q
+                    ->publiclyVisible()
+                    ->where('listing_purpose', 'sale'),
+            ])
             ->where('status', 'active')
             ->where('verification_status', 'verified')
             ->where(function ($q) use ($id) {
@@ -212,24 +239,23 @@ class AgencyController extends Controller
         $listingsQuery = $agency->properties()->publiclyVisible()
             ->where('listing_purpose', 'sale');
 
-        if ($request->filled('type')) {
-            $listingsQuery->where('type', $request->type);
+        if (!empty($filters['type'])) {
+            $listingsQuery->where('type', $filters['type']);
         }
 
-        $saleListings = $agency->properties()->publiclyVisible()->where('listing_purpose', 'sale');
-
+        $saleListingCount = (int) $agency->public_sale_listing_count;
         $payload['stats'] = [
-            'public_listings' => (clone $saleListings)->count(),
-            'sale_listings' => (clone $saleListings)->count(),
+            'public_listings' => $saleListingCount,
+            'sale_listings' => $saleListingCount,
             'rent_listings' => 0,
-            'team_members' => $agency->activeMembers()->count(),
+            'team_members' => (int) $agency->active_member_count,
         ];
 
         $payload['listings'] = $listingsQuery
             ->orderByDesc('isFeatured')
             ->orderByDesc('published_at')
             ->orderBy('id')
-            ->paginate(min(max((int) $request->get('per_page', 12), 1), 50))
+            ->paginate(min((int) ($filters['per_page'] ?? 12), 50))
             ->through(fn ($p) => $this->publicListingPayload($p));
 
         return response()->json([
@@ -272,8 +298,7 @@ class AgencyController extends Controller
         $payload = $agency->only([
             'id', 'name', 'slug', 'logo_url', 'cover_url', 'description', 'email',
             'phone', 'whatsapp', 'office_address', 'city', 'registration_number',
-            'website', 'status', 'verification_status', 'verification_notes',
-            'owner_user_id', 'verified_at', 'created_at',
+            'website', 'status', 'verification_status', 'verified_at', 'created_at',
         ]);
 
         $payload['stats'] = [
@@ -351,9 +376,6 @@ class AgencyController extends Controller
 
     private function publicAgencyPayload(Agency $agency): array
     {
-        $publicListings = $agency->properties()->publiclyVisible()
-            ->where('listing_purpose', 'sale');
-
         return [
             'id' => $agency->id,
             'name' => $agency->name,
@@ -369,9 +391,9 @@ class AgencyController extends Controller
             'website' => $agency->website,
             'verification_status' => $agency->verification_status,
             'status' => $agency->status,
-            'member_count' => $agency->activeMembers()->count(),
-            'listing_count' => (clone $publicListings)->count(),
-            'sale_listing_count' => (clone $publicListings)->count(),
+            'member_count' => (int) ($agency->active_member_count ?? 0),
+            'listing_count' => (int) ($agency->public_sale_listing_count ?? 0),
+            'sale_listing_count' => (int) ($agency->public_sale_listing_count ?? 0),
             'rent_listing_count' => 0,
             'since' => optional($agency->created_at)->format('Y'),
             'created_at' => optional($agency->created_at)?->toIso8601String(),

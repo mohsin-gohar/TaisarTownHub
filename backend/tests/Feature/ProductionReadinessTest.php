@@ -24,9 +24,25 @@ class ProductionReadinessTest extends EnterpriseTestCase
         $this->assertSame(0, $report['summary']['fail']);
 
         $keys = array_column($report['checks'], 'key');
-        foreach (['app_debug', 'app_key', 'database', 'migrations', 'storage', 'cors', 'queue', 'cache', 'session'] as $key) {
+        foreach (['app_debug', 'app_key', 'database', 'migrations', 'storage', 'cors', 'queue', 'cache', 'session', 'malware_scan_enabled', 'malware_fail_closed'] as $key) {
             $this->assertContains($key, $keys, "Missing production check: {$key}");
         }
+    }
+
+    public function test_production_check_fails_when_malware_scanning_is_disabled_or_fail_open(): void
+    {
+        $this->app['env'] = 'production';
+        config([
+            'malware.enabled' => false,
+            'malware.fail_closed' => false,
+        ]);
+
+        Artisan::call('app:production-check', ['--json' => true]);
+        $report = json_decode(Artisan::output(), true);
+        $checks = collect($report['checks'])->keyBy('key');
+
+        $this->assertSame('FAIL', $checks['malware_scan_enabled']['status']);
+        $this->assertSame('FAIL', $checks['malware_fail_closed']['status']);
     }
 
     public function test_health_endpoint_probes_the_database_and_returns_security_headers(): void

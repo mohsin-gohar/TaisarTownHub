@@ -11,6 +11,7 @@ use App\Support\InquiryCaptcha;
 use App\Support\PlanLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class InquiryController extends Controller
 {
@@ -24,30 +25,42 @@ class InquiryController extends Controller
     {
         $this->requireAny($request, ['view_inquiries', 'crm.view']);
 
+        $filters = $request->validate([
+            'status' => 'nullable|string|max:50',
+            'source' => 'nullable|string|max:50',
+            'mine' => 'sometimes|boolean',
+            'limit' => 'nullable|integer|min:1|max:5000',
+        ]);
+
         $query = Inquiry::query();
 
         $agencyId = $this->agencyId($request);
         if ($agencyId !== null) {
             $query->where('agency_id', $agencyId);
         } elseif ($request->boolean('mine') && $request->user()->dealer_id) {
-            // Legacy dealer: only leads on their own assigned properties
-            $myPropertyIds = Property::where('assignedDealerId', $request->user()->dealer_id)->pluck('id');
-            $query->where(function ($q) use ($myPropertyIds) {
-                $q->whereIn('property_id', $myPropertyIds)
-                    ->orWhere('agency_id', null);
+            // Legacy dealer: keep the assigned-property lookup as a SQL
+            // subquery so a large property portfolio is not materialized in PHP.
+            $dealerId = $request->user()->dealer_id;
+            $query->where(function ($q) use ($dealerId) {
+                $q->whereIn('property_id', Property::where('assignedDealerId', $dealerId)->select('id'))
+                    ->orWhereNull('agency_id');
             });
         }
 
-        if ($request->filled('status') && $request->status !== 'All') {
-            $query->where('status', $request->status);
+        if (!empty($filters['status']) && $filters['status'] !== 'All') {
+            $query->where('status', $filters['status']);
         }
 
-        if ($request->filled('source')) {
-            $query->where('source', $request->source);
+        if (!empty($filters['source'])) {
+            $query->where('source', $filters['source']);
         }
+
+        // Keep the legacy plain-array response shape while bounding work and
+        // response size for tenants with long inquiry histories.
+        $limit = min((int) ($filters['limit'] ?? 1000), 1000);
 
         // Mask CNIC in responses
-        $inquiries = $query->orderByDesc('created_at')->orderBy('id')->get();
+        $inquiries = $query->orderByDesc('created_at')->orderBy('id')->limit($limit)->get();
         foreach ($inquiries as $inquiry) {
             // Ensure CNIC is masked if present
             if ($inquiry->cnic) {
@@ -137,20 +150,6 @@ class InquiryController extends Controller
             }
         }
 
-        // G-8: plan limit — an agency whose lead quota is exhausted stops
-        // receiving public leads. The public message stays generic (no
-        // internal quota details leak to visitors).
-        if ($property && $property->agency_id) {
-            $leadAgency = Agency::find($property->agency_id);
-            if ($leadAgency && ($block = PlanLimits::block($leadAgency, 'leads'))) {
-                return response()->json([
-                    'success' => false,
-                    'code' => 'plan_limit_reached',
-                    'message' => 'This agency is not accepting new inquiries right now. Please contact them directly.',
-                ], 402);
-            }
-        }
-
         $record = [
             'id' => 'inq-' . Str::uuid(),
             'fullName' => $data['fullName'],
@@ -166,29 +165,53 @@ class InquiryController extends Controller
             'source' => $data['source'] ?? 'React Web Portal',
             'submittedAt' => now()->format('Y-m-d H:i'),
         ];
-        BusinessRecord::put('inquiries', $record['id'], $record);
 
-        Inquiry::updateOrCreate(['id' => $record['id']], [
-            'fullName' => $record['fullName'],
-            'email' => $record['email'],
-            'phone' => $record['phone'],
-            'subject' => $record['subject'],
-            'message' => $record['message'],
-            'preferredPropertyOrProject' => $record['preferredPropertyOrProject'],
-            'budgetRange' => $record['budgetRange'],
-            'status' => 'Pending',
-            'adminNotes' => $record['adminNotes'],
-            'source' => $record['source'],
-            'agency_id' => $property?->agency_id,
-            'property_id' => $property?->id,
-            'lead_status' => 'new',
-        ]);
+        // Serialize lead-quota checks per agency and keep the relational
+        // inquiry + legacy mirror in one transaction. Otherwise parallel
+        // public submissions can exceed the lead cap, or a failed relational
+        // insert can leave an orphan BusinessRecord row.
+        $result = DB::transaction(function () use ($property, $record): array {
+            if ($property?->agency_id) {
+                $agency = Agency::whereKey($property->agency_id)->lockForUpdate()->first();
+                if ($agency && ($block = PlanLimits::block($agency, 'leads'))) {
+                    return ['blocked' => $block];
+                }
+            }
 
-        // Keep the legacy mirror row agency-tagged too
-        if ($property?->agency_id) {
-            BusinessRecord::where('collection', 'inquiries')
-                ->where('record_id', $record['id'])
-                ->update(['agency_id' => $property->agency_id]);
+            BusinessRecord::put('inquiries', $record['id'], $record);
+
+            Inquiry::updateOrCreate(['id' => $record['id']], [
+                'fullName' => $record['fullName'],
+                'email' => $record['email'],
+                'phone' => $record['phone'],
+                'subject' => $record['subject'],
+                'message' => $record['message'],
+                'preferredPropertyOrProject' => $record['preferredPropertyOrProject'],
+                'budgetRange' => $record['budgetRange'],
+                'status' => 'Pending',
+                'adminNotes' => $record['adminNotes'],
+                'source' => $record['source'],
+                'agency_id' => $property?->agency_id,
+                'property_id' => $property?->id,
+                'lead_status' => 'new',
+            ]);
+
+            // Keep the legacy mirror row agency-tagged too.
+            if ($property?->agency_id) {
+                BusinessRecord::where('collection', 'inquiries')
+                    ->where('record_id', $record['id'])
+                    ->update(['agency_id' => $property->agency_id]);
+            }
+
+            return ['stored' => true];
+        });
+
+        if (isset($result['blocked'])) {
+            return response()->json([
+                'success' => false,
+                'code' => 'plan_limit_reached',
+                'message' => 'This agency is not accepting new inquiries right now. Please contact them directly.',
+            ], 402);
         }
 
         return response()->json($record, 201);

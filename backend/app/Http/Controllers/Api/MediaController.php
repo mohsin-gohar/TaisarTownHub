@@ -172,7 +172,7 @@ class MediaController extends Controller
             if ($scannerUnavailable && config('malware.fail_closed', false)) {
                 $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'scan_unavailable', $scan->threats);
                 Log::warning('Media upload rejected: malware scanner unavailable (fail-closed)', [
-                    'file' => $file->getClientOriginalName(),
+                    'extension' => strtolower($file->getClientOriginalExtension()),
                     'agency_id' => $agencyId,
                 ]);
 
@@ -185,7 +185,7 @@ class MediaController extends Controller
             if (!$scannerUnavailable && !$scan->isClean && !$scan->skipped) {
                 $this->quarantineRejected($request, $agencyId, $file, $check['ext'], 'infected', $scan->threats);
                 Log::warning('Media upload rejected: malware detected', [
-                    'file' => $file->getClientOriginalName(),
+                    'extension' => strtolower($file->getClientOriginalExtension()),
                     'agency_id' => $agencyId,
                     'threats' => $scan->threats,
                 ]);
@@ -394,7 +394,7 @@ class MediaController extends Controller
             try {
                 Storage::disk('documents')->delete($media->disk_path);
             } catch (\Throwable $e) {
-                Log::warning('Media file delete failed', ['error' => $e->getMessage()]);
+                Log::warning('Media file delete failed', ['exception' => get_class($e)]);
             }
         }
 
@@ -486,6 +486,9 @@ class MediaController extends Controller
         string $reason,
         array $threats
     ): void {
+        $qId = null;
+        $qPath = null;
+
         try {
             $qId = 'qtn_' . bin2hex(random_bytes(8));
             $qPath = $agencyId . '/' . now()->format('Y/m') . '/' . $qId . '.' . $ext;
@@ -516,7 +519,41 @@ class MediaController extends Controller
                     'metadata' => ['reason' => $reason, 'threats' => $threats],
                 ]);
         } catch (\Throwable $e) {
-            Log::warning('Media quarantine write failed', ['error' => $e->getMessage()]);
+            // Keep quarantine bytes discoverable by the retention purge: if
+            // metadata was not committed, remove the just-written bytes. If
+            // DB state is unknown, preserve them and log for reconciliation.
+            $metadataExists = false;
+            $metadataCheckFailed = false;
+            try {
+                $metadataExists = $qId !== null && \App\Models\DocumentQuarantine::whereKey($qId)->exists();
+            } catch (\Throwable $metadataError) {
+                $metadataCheckFailed = true;
+            }
+
+            if ($qPath !== null && !$metadataExists && !$metadataCheckFailed) {
+                try {
+                    $disk = Storage::disk('quarantine');
+                    if ($disk->exists($qPath) && !$disk->delete($qPath)) {
+                        Log::critical('Media quarantine bytes orphaned after metadata failure', [
+                            'quarantine_id' => $qId,
+                            'disk_path' => $qPath,
+                        ]);
+                    }
+                } catch (\Throwable $cleanupError) {
+                    Log::critical('Media quarantine cleanup failed after metadata failure', [
+                        'quarantine_id' => $qId,
+                        'disk_path' => $qPath,
+                        'cleanup_exception' => get_class($cleanupError),
+                    ]);
+                }
+            } elseif ($metadataCheckFailed) {
+                Log::critical('Media quarantine metadata state unknown; bytes retained for reconciliation', [
+                    'quarantine_id' => $qId,
+                    'disk_path' => $qPath,
+                ]);
+            }
+
+            Log::warning('Media quarantine write failed', ['exception' => get_class($e)]);
         }
     }
 }

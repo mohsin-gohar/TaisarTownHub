@@ -14,17 +14,21 @@ class AdminSystemController extends Controller
 
     public function auditLogs(Request $request)
     {
-        $this->requireAny($request, ['admin.view_audit_logs', 'view_reports', 'admin.view_reports']);
-
         $query = AuditLog::query();
 
-        // Agency users only ever see their own agency's trail
+        // Agency reporting permission grants access only to the active
+        // agency's audit trail. Platform-wide access is a separate,
+        // explicitly privileged capability; broad report viewers must not
+        // inherit the entire platform's audit log by having no tenant scope.
         $agencyId = $this->agencyId($request);
         if ($agencyId !== null) {
+            $this->requireAny($request, ['admin.view_audit_logs', 'view_reports', 'admin.view_reports']);
             $query->where('agency_id', $agencyId);
-        } elseif ($request->filled('agency_id')) {
+        } else {
             $this->requirePermission($request, 'admin.view_audit_logs');
-            $query->where('agency_id', $request->agency_id);
+            if ($request->filled('agency_id')) {
+                $query->where('agency_id', $request->agency_id);
+            }
         }
 
         if ($request->filled('action')) {

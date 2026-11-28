@@ -15,6 +15,11 @@ use Illuminate\Notifications\Messages\MailMessage;
 class ResetPasswordLink extends ResetPasswordNotification implements ShouldQueue
 {
     use Queueable;
+
+    /** Retry transient mail/database transport failures without blocking requests. */
+    public int $tries = 3;
+    public int $timeout = 60;
+    public array $backoff = [30, 120, 300];
     public function toMail($notifiable): MailMessage
     {
         $frontend = rtrim((string) config('app.frontend_url'), '/');
