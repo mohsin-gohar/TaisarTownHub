@@ -22,6 +22,14 @@ return new class extends Migration
 
     public function up(): void
     {
+        // Finance list: agency, optional deal status, and sargable created_at
+        // range/order predicates used by the paginated transaction endpoint.
+        $this->addIndex('transactions', ['agency_id', 'dealStatus', 'created_at'], 'transactions_agency_status_created_idx');
+
+        // Public promoted-property ranking uses a correlated agency/status/
+        // date-window lookup and MIN(position).
+        $this->addIndex('agency_promotions', ['agency_id', 'status', 'starts_at', 'ends_at', 'position'], 'agency_promotions_live_rank_idx');
+
         // Lead list: tenant scope + newest-first; optional pipeline status and
         // assignment filters; follow-up due queues.
         $this->addIndex('inquiries', ['agency_id', 'created_at'], 'inquiries_agency_created_idx');
@@ -42,6 +50,8 @@ return new class extends Migration
     public function down(): void
     {
         $indexes = [
+            ['transactions', 'transactions_agency_status_created_idx'],
+            ['agency_promotions', 'agency_promotions_live_rank_idx'],
             ['inquiries', 'inquiries_agency_created_idx'],
             ['inquiries', 'inquiries_agency_status_created_idx'],
             ['inquiries', 'inquiries_agency_agent_created_idx'],
