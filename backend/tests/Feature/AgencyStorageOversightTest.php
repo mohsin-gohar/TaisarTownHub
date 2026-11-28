@@ -226,9 +226,9 @@ class AgencyStorageOversightTest extends EnterpriseTestCase
         DB::listen(function (QueryExecuted $query) use (&$aggregateQueries): void {
             $sql = strtolower(ltrim($query->sql));
             if (str_contains($sql, 'sum(')
-                && (str_contains($sql, 'from "documents"')
-                    || str_contains($sql, 'from "document_versions"')
-                    || str_contains($sql, 'from "media_files"'))) {
+                && (str_contains($sql, 'from `documents`')
+                    || str_contains($sql, 'from `document_versions`')
+                    || str_contains($sql, 'from `media_files`'))) {
                 $aggregateQueries[] = $sql;
             }
         });
