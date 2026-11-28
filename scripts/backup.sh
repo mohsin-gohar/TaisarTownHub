@@ -13,6 +13,7 @@
 #
 # Nothing is ever deleted from the live system — only from the backup folder.
 set -euo pipefail
+umask 077
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND="$ROOT/backend"
@@ -47,7 +48,7 @@ DB_ARTEFACT="$WORK/db.sql.gz"
 [ -s "$DB_ARTEFACT" ] || { echo "[backup] FATAL: database dump is empty" >&2; exit 1; }
 gzip -t "$DB_ARTEFACT" || { echo "[backup] FATAL: database gzip stream is corrupt" >&2; exit 1; }
 TABLE_COUNT="$(zcat "$DB_ARTEFACT" | grep -c 'CREATE TABLE' || true)"
-zcat "$DB_ARTEFACT" | grep -q 'Dump completed' || { echo "[backup] FATAL: dump completion marker missing" >&2; exit 1; }
+zcat "$DB_ARTEFACT" | grep 'Dump completed' >/dev/null || { echo "[backup] FATAL: dump completion marker missing" >&2; exit 1; }
 
 # ---------------------------------------------------------------- vault
 VAULT_DIR="$BACKEND/storage/app/private/documents"
