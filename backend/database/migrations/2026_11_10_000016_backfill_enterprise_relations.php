@@ -319,10 +319,30 @@ return new class extends Migration
             if (empty($t['id']) || empty($t['dealNumber'])) {
                 continue;
             }
-            $agencyId = null;
+            // Only infer transaction ownership when all available,
+            // independently stamped evidence agrees. A dealer/property
+            // mismatch is ambiguous and must remain unowned for review.
+            $ownershipCandidates = [];
+            $addAgencyEvidence = static function ($candidate) use (&$ownershipCandidates): void {
+                if ($candidate !== null && $candidate !== ''
+                    && DB::table('agencies')->where('id', $candidate)->exists()) {
+                    $ownershipCandidates[(string) $candidate] = true;
+                }
+            };
+            $addAgencyEvidence($record->agency_id ?? null);
+            $addAgencyEvidence($t['agencyId'] ?? $t['agency_id'] ?? null);
+
             if (!empty($t['dealerId'])) {
-                $agencyId = DB::table('dealers')->where('id', $t['dealerId'])->value('agency_id');
+                $addAgencyEvidence(DB::table('dealers')->where('id', $t['dealerId'])->value('agency_id'));
             }
+            $legacyPropertyId = $t['propertyId'] ?? $t['property_id'] ?? null;
+            if ($legacyPropertyId) {
+                $addAgencyEvidence(DB::table('properties')->where('id', $legacyPropertyId)->value('agency_id'));
+            }
+
+            $agencyId = count($ownershipCandidates) === 1
+                ? array_key_first($ownershipCandidates)
+                : null;
             $row = [
                 'propertyId' => $t['propertyId'] ?? null,
                 'propertyTitle' => $t['propertyTitle'] ?? 'Unknown property',
@@ -441,9 +461,21 @@ return new class extends Migration
             if (DB::table('inquiries')->where('id', $i['id'])->exists()) {
                 continue;
             }
+            // Prefer an explicit legacy property ID. A title is not a
+            // unique identifier: only link it when exactly one property has
+            // that exact title, otherwise preserve the inquiry as unowned.
             $propertyId = null;
-            if (!empty($i['preferredPropertyOrProject'])) {
-                $propertyId = DB::table('properties')->where('title', $i['preferredPropertyOrProject'])->value('id');
+            $legacyPropertyId = $i['propertyId'] ?? $i['property_id'] ?? null;
+            if ($legacyPropertyId && DB::table('properties')->where('id', $legacyPropertyId)->exists()) {
+                $propertyId = (string) $legacyPropertyId;
+            } elseif (!empty($i['preferredPropertyOrProject'])) {
+                $propertyMatches = DB::table('properties')
+                    ->where('title', $i['preferredPropertyOrProject'])
+                    ->limit(2)
+                    ->pluck('id');
+                if ($propertyMatches->count() === 1) {
+                    $propertyId = (string) $propertyMatches->first();
+                }
             }
             DB::table('inquiries')->insert([
                 'id' => $i['id'],
