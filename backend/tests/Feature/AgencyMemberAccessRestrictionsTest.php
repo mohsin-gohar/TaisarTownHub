@@ -14,7 +14,10 @@ class AgencyMemberAccessRestrictionsTest extends EnterpriseTestCase
         $agencyA = $this->makeAgency('Staff Agency A');
         $agencyB = $this->makeAgency('Staff Agency B');
         [$viewerA] = $this->agencyUser(['agency.view'], 'agent', $agencyA);
-        [$memberB, , $roleB] = $this->agencyUser(['agency.view'], 'agent', $agencyB);
+        $roleB = $this->makeRole('agency', 'agency_b_private_role', ['agency.view']);
+        $roleB->update(['agency_id' => $agencyB->id]);
+        $memberB = $this->makeUser('agent');
+        $this->makeMember($memberB, $agencyB, $roleB);
 
         $members = $this->getJson('/api/agency/members', $this->authHeaders($this->tokenFor($viewerA)))
             ->assertOk()->json('members');
