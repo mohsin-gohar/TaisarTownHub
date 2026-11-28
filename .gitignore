@@ -47,3 +47,8 @@ Thumbs.db
 
 # TLS certificates are mounted at runtime and must never be committed
 nginx/ssl/
+
+# IDE
+.idea/
+# Backup archives
+backend.zip
