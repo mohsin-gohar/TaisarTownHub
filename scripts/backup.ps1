@@ -54,7 +54,9 @@ Write-Host "[backup] MySQL dump of database '$name' from $hostName`:$port"
 $sql = Join-Path $Destination "tth_db_$stamp.sql"
 $env:MYSQL_PWD = $password
 & $dumpTool --single-transaction --routines --triggers --events --hex-blob -h $hostName -P $port -u $user $name | Out-File -FilePath $sql -Encoding utf8
-if ($LASTEXITCODE -ne 0) { throw "[backup] FATAL: mysqldump failed with exit code $LASTEXITCODE" }
+$dumpExit = $LASTEXITCODE
+Remove-Item Env:MYSQL_PWD -ErrorAction SilentlyContinue
+if ($dumpExit -ne 0) { throw "[backup] FATAL: mysqldump failed with exit code $LASTEXITCODE" }
 
 $tableCount = (Select-String -Path $sql -Pattern 'CREATE TABLE' -AllMatches).Count
 if ($tableCount -le 0 -or -not (Select-String -Path $sql -Pattern 'Dump completed' -Quiet)) {
@@ -67,8 +69,7 @@ Compress-ToGzip $sql $dbArtefact
 Remove-Item $sql -Force
 
 $vaultArtefact = $null
-{
-    $vault = Join-Path $backend 'storage\app\private\documents'
+$vault = Join-Path $backend 'storage\app\private\documents'
     if (-not (Test-Path -LiteralPath $vault -PathType Container)) { throw "Private vault is missing: $vault; database-only backup is forbidden." }
     if (Test-Path $vault) {
         $vaultArtefact = Join-Path $Destination "tth_vault_$stamp.tar.gz"
@@ -77,8 +78,7 @@ $vaultArtefact = $null
         $vaultEntries = @(tar -tzf $vaultArtefact)
         if ($LASTEXITCODE -ne 0 -or $vaultEntries.Count -eq 0) { throw "Private vault archive integrity check failed." }
         Write-Host "[backup] vault archived: $vaultArtefact"
-    } else { throw "Private vault archive creation failed." }
-}
+} else { throw "Private vault archive creation failed." }
 
 $manifest = Join-Path $Destination "manifest-$stamp.sha256"
 $lines = @()
