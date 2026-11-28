@@ -216,11 +216,19 @@ class PropertyLifecycleTest extends EnterpriseTestCase
         $this->patchJson("/api/properties/{$id}", ['title' => 'Staged New Title'], $this->authHeaders($this->tokenFor($agent)))
             ->assertStatus(200)
             ->assertJsonPath('approval_status', 'pending')
-            ->assertJsonPath('pending_changes.title', 'Staged New Title');
+            // Staged pre-approval edits are reserved for the moderation queue and
+            // must never be echoed back to the ordinary member who authored them.
+            ->assertJsonMissingPath('pending_changes.title');
 
         $property = Property::find($id);
         $this->assertEquals('Original Title', $property->title, 'live copy must stay unchanged while re-approval is pending');
         $this->assertEquals('Staged New Title', $property->pending_changes['title']);
+
+        // A moderator (properties.approve) is the only role that may read the
+        // staged payload ahead of approval.
+        $this->getJson("/api/properties/{$id}", $this->authHeaders($this->tokenFor($moderator)))
+            ->assertOk()
+            ->assertJsonPath('pending_changes.title', 'Staged New Title');
     }
 
     public function test_rejecting_a_reapproval_edit_keeps_the_live_listing_approved(): void
@@ -345,7 +353,10 @@ class PropertyLifecycleTest extends EnterpriseTestCase
 
     public function test_public_listing_detail_hides_private_internal_fields(): void
     {
-        [$agent] = $this->agencyUser($this->agentPermissions());
+        // Financial fields are confidential: creating a listing that carries
+        // them requires an explicit finance grant. The grant lets the agent
+        // store the values; the public detail must still never serialize them.
+        [$agent] = $this->agencyUser(array_merge($this->agentPermissions(), ['finance.view']));
 
         $id = $this->postJson('/api/properties', $this->basePayload([
             'title' => 'Detail Visibility Plot',
