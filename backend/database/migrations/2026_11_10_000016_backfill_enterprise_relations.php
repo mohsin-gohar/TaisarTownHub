@@ -319,6 +319,8 @@ return new class extends Migration
             if (empty($t['id']) || empty($t['dealNumber'])) {
                 continue;
             }
+            $existingTransaction = DB::table('transactions')->where('id', $t['id'])->first();
+
             // Only infer transaction ownership when all available,
             // independently stamped evidence agrees. A dealer/property
             // mismatch is ambiguous and must remain unowned for review.
@@ -330,6 +332,7 @@ return new class extends Migration
                 }
             };
             $addAgencyEvidence($record->agency_id ?? null);
+            $addAgencyEvidence($existingTransaction->agency_id ?? null);
             $addAgencyEvidence($t['agencyId'] ?? $t['agency_id'] ?? null);
 
             if (!empty($t['dealerId'])) {
@@ -362,7 +365,7 @@ return new class extends Migration
                 'agency_id' => $agencyId,
                 'updated_at' => $now,
             ];
-            if ($existing = DB::table('transactions')->where('id', $t['id'])->first()) {
+            if ($existing = $existingTransaction) {
                 // Gap-fill only. Stale business_records JSON must never
                 // overwrite newer finance edits (status, tenant, amounts).
                 $patch = [];
