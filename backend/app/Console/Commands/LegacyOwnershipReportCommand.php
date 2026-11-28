@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Models\BusinessRecord;
 use App\Support\LegacyTenancyResolver;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Per-record ownership reconciliation report for the legacy `business_records`
@@ -92,8 +94,54 @@ class LegacyOwnershipReportCommand extends Command
         }
         ksort($byCollection);
 
+        // Typed relational tables also retain legacy/unowned rows. Report
+        // counts without emitting customer payloads or attempting any repair.
+        $typedTenantTables = [
+            'dealers', 'properties', 'inquiries', 'transactions',
+            'transaction_payments', 'payment_schedules', 'commissions',
+            'expenses', 'documents', 'document_folders', 'media_files',
+            'support_tickets', 'business_records',
+        ];
+        $typedOwnership = [];
+        foreach ($typedTenantTables as $table) {
+            if (!Schema::hasTable($table) || !Schema::hasColumn($table, 'agency_id')) {
+                continue;
+            }
+
+            $typedOwnership[$table] = [
+                'rows' => DB::table($table)->count(),
+                'unowned' => DB::table($table)->whereNull('agency_id')->count(),
+                'invalid_agency_reference' => DB::table($table)
+                    ->leftJoin('agencies as owner_agencies', "{$table}.agency_id", '=', 'owner_agencies.id')
+                    ->whereNotNull("{$table}.agency_id")
+                    ->whereNull('owner_agencies.id')
+                    ->count(),
+            ];
+        }
+
+        $financeParentMismatches = [];
+        foreach (['transaction_payments', 'payment_schedules', 'commissions'] as $table) {
+            if (!Schema::hasTable($table)
+                || !Schema::hasColumn($table, 'agency_id')
+                || !Schema::hasColumn($table, 'transaction_id')
+                || !Schema::hasTable('transactions')) {
+                continue;
+            }
+
+            $financeParentMismatches[$table] = DB::table("{$table} as child")
+                ->join('transactions as parent_transaction', 'child.transaction_id', '=', 'parent_transaction.id')
+                ->where(function ($query) {
+                    $query->whereColumn('child.agency_id', '!=', 'parent_transaction.agency_id')
+                        ->orWhere(fn ($q) => $q->whereNull('child.agency_id')->whereNotNull('parent_transaction.agency_id'))
+                        ->orWhere(fn ($q) => $q->whereNotNull('child.agency_id')->whereNull('parent_transaction.agency_id'));
+                })
+                ->count();
+        }
+
         $report = [
             'generated_at' => now()->toIso8601String(),
+            'typed_table_ownership' => $typedOwnership,
+            'finance_parent_tenant_mismatches' => $financeParentMismatches,
             'mode' => 'read-only',
             'note' => 'Ownership is never assigned by this command. Unowned rows stay hidden from agency workspaces until an approved mapping is applied via platform:legacy-backfill --apply.',
             'unowned_total' => count($records),
@@ -130,6 +178,17 @@ class LegacyOwnershipReportCommand extends Command
         $this->line('');
         $this->line('Confirmed rows still require an approved mapping file before any stamp is written.');
         $this->line('Command used: platform:legacy-backfill --apply --backup=<dump> --mapping=<mapping.json>');
+        $this->line('typed ownership (rows / unowned / invalid agency refs):');
+        foreach ($typedOwnership as $table => $counts) {
+            $this->line(sprintf(
+                '  %-24s %8d / %8d / %8d',
+                $table,
+                $counts['rows'],
+                $counts['unowned'],
+                $counts['invalid_agency_reference']
+            ));
+        }
+        $this->line('finance parent tenant mismatches: ' . json_encode($financeParentMismatches));
 
         return 0;
     }
