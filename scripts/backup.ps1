@@ -71,14 +71,14 @@ Remove-Item $sql -Force
 
 $vaultArtefact = $null
 $vault = Join-Path $backend 'storage\app\private\documents'
-    if (-not (Test-Path -LiteralPath $vault -PathType Container)) { throw "Private vault is missing: $vault; database-only backup is forbidden." }
-    if (Test-Path $vault) {
-        $vaultArtefact = Join-Path $Destination "tth_vault_$stamp.tar.gz"
-        tar -czf $vaultArtefact -C (Split-Path -Parent $vault) (Split-Path -Leaf $vault)
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $vaultArtefact) -or (Get-Item -LiteralPath $vaultArtefact).Length -eq 0) { throw "Private vault archive creation failed." }
-        $vaultEntries = @(tar -tzf $vaultArtefact)
-        if ($LASTEXITCODE -ne 0 -or $vaultEntries.Count -eq 0) { throw "Private vault archive integrity check failed." }
-        Write-Host "[backup] vault archived: $vaultArtefact"
+if (-not (Test-Path -LiteralPath $vault -PathType Container)) { throw "Private vault is missing: $vault; database-only backup is forbidden." }
+if (Test-Path $vault) {
+    $vaultArtefact = Join-Path $Destination "tth_vault_$stamp.tar.gz"
+    tar -czf $vaultArtefact -C (Split-Path -Parent $vault) (Split-Path -Leaf $vault)
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $vaultArtefact) -or (Get-Item -LiteralPath $vaultArtefact).Length -eq 0) { throw "Private vault archive creation failed." }
+    $vaultEntries = @(tar -tzf $vaultArtefact)
+    if ($LASTEXITCODE -ne 0 -or $vaultEntries.Count -eq 0) { throw "Private vault archive integrity check failed." }
+    Write-Host "[backup] vault archived: $vaultArtefact"
 } else { throw "Private vault archive creation failed." }
 
 $manifest = Join-Path $Destination "manifest-$stamp.sha256"
