@@ -81,10 +81,15 @@ public function index(Request $request)
             $query->where('agency_id', $agencyId);
         }
 
-        // Legacy support: if no agency context and user is agent (dealer_id null), scope to their agency
-        if ($agencyId === null && $user->hasPermission('finance.view') && !$user->hasPermission('admin.view_reports')) {
-            if ($user->dealer_id === null && $user->agency_id !== null) {
+        // No tenant context is not an implicit platform-wide finance grant.
+        // Resolve legacy single-agency/dealer ownership explicitly or fail closed.
+        if ($agencyId === null && !$user->hasPermission('admin.view_reports')) {
+            if ($user->agency_id !== null) {
                 $query->where('agency_id', $user->agency_id);
+            } elseif ($user->dealer_id !== null) {
+                $query->where('dealerId', $user->dealer_id);
+            } else {
+                abort(404, 'Finance workspace not found.');
             }
         }
 
@@ -802,13 +807,25 @@ public function update(Request $request, string $id)
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments']);
 
+        if ($agencyId === null && !$request->user()->hasPermission('admin.view_reports')) {
+            abort(404, 'Payment not found.');
+        }
+
         $payment = TransactionPayment::where('id', $id);
         if ($agencyId !== null) {
             $payment->where('agency_id', $agencyId);
         }
         $payment = $payment->firstOrFail();
 
-        $transaction = Transaction::where('id', $payment->transaction_id)->first();
+        // Never let a child row stamped for one tenant mutate a different
+        // tenant's parent transaction during status recalculation.
+        $transaction = Transaction::where('id', $payment->transaction_id)
+            ->where('agency_id', $payment->agency_id)
+            ->first();
+
+        if ($transaction === null) {
+            abort(404, 'Payment not found.');
+        }
 
         $request->validate(['reason' => 'required|string|min:3|max:500']);
 
@@ -922,6 +939,9 @@ public function update(Request $request, string $id)
 
         $user = $request->user();
         $canSeeAll = $this->can($request, 'finance.view') || $this->can($request, 'view_commissions');
+        if ($agencyId === null && $canSeeAll && !$user->hasPermission('admin.view_reports')) {
+            abort(403, 'A platform finance permission is required without an agency context.');
+        }
         if (!$canSeeAll) {
             if ($user->dealer_id === null) {
                 return response()->json([
@@ -1034,10 +1054,12 @@ public function update(Request $request, string $id)
         $agencyId = $this->agencyId($request);
         $this->requireAny($request, ['finance.manage_payments', 'manage_payments', 'pay_commissions']);
 
-        // Agency users are confined to their own ledger. A platform user (no
-        // agency context) may act on any commission: `commissions()` already
-        // lists platform-wide rows for them, and filtering by `agency_id IS
-        // NULL` here made every platform payout a 404.
+        // A missing agency context is reserved for explicit platform finance
+        // administrators; agency-level payment permissions are not global.
+        if ($agencyId === null && !$request->user()->hasPermission('admin.view_reports')) {
+            abort(404, 'Commission not found.');
+        }
+
         $commission = Commission::where('id', $id)
             ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
             ->firstOrFail();
@@ -1108,6 +1130,9 @@ public function update(Request $request, string $id)
         $this->requireAny($request, ['finance.view_reports', 'admin.view_reports']);
 
         $agencyId = $this->agencyId($request);
+        if ($agencyId === null && !$request->user()->hasPermission('admin.view_reports')) {
+            abort(403, 'A platform finance permission is required without an agency context.');
+        }
 
         $data = $request->validate([
             'from' => 'nullable|date',
