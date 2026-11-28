@@ -179,6 +179,29 @@ return new class extends Migration
         }
 
         /* ---------- 4. Mirror business_records properties → properties table ---------- */
+        // Migrations run before DatabaseSeeder. Seed the category keys here
+        // so a fresh migrate does not silently leave every backfilled listing
+        // uncategorized merely because db:seed has not run yet.
+        $categorySeeds = [
+            ['residential_plot', 'Residential Plot', 'residential', 1],
+            ['commercial_plot', 'Commercial Plot', 'commercial', 2],
+            ['house', 'House', 'residential', 3],
+            ['apartment', 'Apartment', 'residential', 4],
+            ['shop', 'Shop', 'commercial', 5],
+            ['office', 'Office', 'commercial', 6],
+        ];
+        foreach ($categorySeeds as [$key, $label, $group, $sort]) {
+            DB::table('property_categories')->insertOrIgnore([
+                'key' => $key,
+                'name' => $label,
+                'group' => $group,
+                'sort_order' => $sort,
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
         $categoryByType = [
             'Residential Plot' => 'residential_plot',
             'Commercial Plot' => 'commercial_plot',
