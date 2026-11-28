@@ -9,7 +9,7 @@
 #   2. tar archive of the private document vault
 #   3. sha256 manifest for every artefact
 #   4. verification (dump readable, table count > 0, vault listable)
-#   5. retention pruning (keep daily 7 / weekly 4 / monthly 6)
+#   5. 180-day local staging ceiling (off-site lifecycle is configured separately)
 #
 # Nothing is ever deleted from the live system — only from the backup folder.
 set -euo pipefail
