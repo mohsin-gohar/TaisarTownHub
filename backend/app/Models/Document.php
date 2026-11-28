@@ -64,6 +64,11 @@ class Document extends Model
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
+    public function deleter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
+    }
+
     public function versions(): HasMany
     {
         return $this->hasMany(DocumentVersion::class, 'document_id')->orderByDesc('version');
