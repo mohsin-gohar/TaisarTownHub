@@ -92,11 +92,14 @@ public function index(Request $request)
             $query->where('dealStatus', $request->status);
         }
 
+        // Use sargable timestamp bounds so MySQL can use the agency/date
+        // composite index; whereDate() wraps created_at in DATE() and can
+        // force a scan instead of a range lookup.
         if ($request->filled('from')) {
-            $query->whereDate('created_at', '>=', $request->from);
+            $query->where('created_at', '>=', now()->parse($request->from)->startOfDay());
         }
         if ($request->filled('to')) {
-            $query->whereDate('created_at', '<=', $request->to);
+            $query->where('created_at', '<=', now()->parse($request->to)->endOfDay());
         }
 
         if ($request->filled('search')) {
