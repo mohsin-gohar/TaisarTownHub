@@ -45,7 +45,7 @@ final class LegacyTenancyResolver
     /** @var array<string,true>|null */
     private ?array $agencyIds = null;
 
-    /** @var array<string,string>|null */
+    /** @var array<string,array<int,string>>|null */
     private ?array $agencyByName = null;
 
     /** @var array<string,string>|null */
