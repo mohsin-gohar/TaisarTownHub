@@ -122,7 +122,12 @@ class PublicIndexBoundsTest extends EnterpriseTestCase
 
         $response = $this->getJson('/api/locations')->assertOk();
         $this->assertCount(3, $response->json('sectors'));
-        $this->assertCount(3, $response->json('categories'));
+        // The backfill migration seeds a baseline category catalog, so assert the
+        // three probe categories are present (not that the catalog holds only 3).
+        $categoryKeys = array_column($response->json('categories'), 'key');
+        foreach ([0, 1, 2] as $index) {
+            $this->assertContains('perf-category-' . $index, $categoryKeys);
+        }
         $this->assertSame(0, count($countQueries), 'location listing counts must be aggregate subqueries, not one query per item');
     }
 
