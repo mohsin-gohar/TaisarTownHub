@@ -50,6 +50,34 @@ class DatabaseSchemaContractTest extends TestCase
      * Both mass-assignable attributes and cast attributes must resolve to
      * real columns; this catches drift after migrations/model refactors.
      */
+    public function test_decimal_money_casts_preserve_exact_two_decimal_values(): void
+    {
+        $cases = [
+            [\\App\\Models\\TransactionPayment::class, 'amount'],
+            [\\App\\Models\\PaymentSchedule::class, 'amount'],
+            [\\App\\Models\\Commission::class, 'amount'],
+            [\\App\\Models\\Commission::class, 'rate'],
+            [\\App\\Models\\DealerFile::class, 'selling_price_kbr'],
+            [\\App\\Models\\DealerFile::class, 'cost_price_kbr'],
+            [\\App\\Models\\DealerFile::class, 'profit_kbr'],
+            [\\App\\Models\\MediaFile::class, 'sold_price_pk'],
+            [\\App\\Models\\MediaFile::class, 'cost_price_pk'],
+            [\\App\\Models\\MediaFile::class, 'profit_pk'],
+            [\\App\\Models\\SubscriptionPlan::class, 'price'],
+        ];
+
+        foreach ($cases as [$class, $column]) {
+            $model = new $class();
+            $model->setRawAttributes([$column => '123456789.12'], true);
+
+            $this->assertSame(
+                '123456789.12',
+                $model->getAttribute($column),
+                "{$class}.{$column} must preserve DECIMAL precision without float conversion"
+            );
+        }
+    }
+
     public function test_all_model_fillable_and_cast_attributes_exist_as_columns(): void
     {
         $modelFiles = glob(app_path('Models/*.php')) ?: [];
