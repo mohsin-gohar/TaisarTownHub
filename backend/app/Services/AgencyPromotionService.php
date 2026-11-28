@@ -123,15 +123,18 @@ class AgencyPromotionService
     {
         $this->assertEligible($agency);
 
-        if (AgencyPromotion::query()->current()->where('agency_id', $agency->id)->exists()) {
-            throw new \DomainException('This agency already has a current featured placement. Edit or cancel it first.');
-        }
-
         $package = !empty($data['package_id'])
             ? PromotionPackage::where('is_active', true)->findOrFail($data['package_id'])
             : null;
 
         return DB::transaction(function () use ($agency, $data, $actor, $package) {
+            // Serialize competing promotions for the same agency and slot
+            // capacity. The duplicate-agency check and slot check must run
+            // inside the transaction under a lock.
+            if (AgencyPromotion::query()->current()->where('agency_id', $agency->id)->lockForUpdate()->exists()) {
+                throw new \DomainException('This agency already has a current featured placement. Edit or cancel it first.');
+            }
+
             $this->assertSlotAvailable();
 
             $startsAt = !empty($data['starts_at'])
@@ -300,7 +303,7 @@ class AgencyPromotionService
 
     private function assertSlotAvailable(?int $ignorePromotionId = null): void
     {
-        $query = AgencyPromotion::query()->current();
+        $query = AgencyPromotion::query()->current()->lockForUpdate();
         if ($ignorePromotionId !== null) {
             $query->where('id', '!=', $ignorePromotionId);
         }

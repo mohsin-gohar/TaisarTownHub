@@ -323,28 +323,38 @@ class MediaController extends Controller
             'sold_at' => 'nullable|date',
         ]);
 
-        $media = MediaFile::where('agency_id', $agencyId)->findOrFail($id);
+        $selling = (float) $request->selling_price_pk;
+        $cost = $request->filled('cost_price_pk') ? (float) $request->cost_price_pk : null;
 
-        if ($media->status === 'sold') {
+        $result = DB::transaction(function () use ($id, $agencyId, $request, $selling, $cost) {
+            $media = MediaFile::where('agency_id', $agencyId)->lockForUpdate()->findOrFail($id);
+
+            if ($media->status === 'sold') {
+                return ['already_sold' => true];
+            }
+
+            $media->status = 'sold';
+            $media->sold_at = $request->sold_at ? now()->parse($request->sold_at) : now();
+            $media->sold_price_pk = $selling;
+            $media->cost_price_pk = $cost;
+            $media->profit_pk = $cost !== null ? max(0, $selling - $cost) : 0;
+            $media->buyer_name = $request->buyer_name;
+            $media->buyer_phone = $request->buyer_phone;
+            $media->buyer_national_id_masked = $request->buyer_national_id_masked;
+            $media->sold_by = $request->user()->name;
+            $media->save();
+
+            return ['media' => $media];
+        });
+
+        if (isset($result['already_sold'])) {
             return response()->json([
                 'success' => false,
                 'message' => 'This item is already marked as sold.',
             ], 422);
         }
 
-        $selling = (float) $request->selling_price_pk;
-        $cost = $request->filled('cost_price_pk') ? (float) $request->cost_price_pk : null;
-
-        $media->status = 'sold';
-        $media->sold_at = $request->sold_at ? now()->parse($request->sold_at) : now();
-        $media->sold_price_pk = $selling;
-        $media->cost_price_pk = $cost;
-        $media->profit_pk = $cost !== null ? max(0, $selling - $cost) : 0;
-        $media->buyer_name = $request->buyer_name;
-        $media->buyer_phone = $request->buyer_phone;
-        $media->buyer_national_id_masked = $request->buyer_national_id_masked;
-        $media->sold_by = $request->user()->name;
-        $media->save();
+        $media = $result['media'];
 
         $this->writeAudit($request, 'media.sell', $media->id, "Marked sold: {$media->title}", [
             'agency_id' => $agencyId,

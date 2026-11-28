@@ -31,9 +31,15 @@ class SecureFileStore
     public static function storeUpload(string $disk, string $path, UploadedFile $file): int
     {
         $plain = (string) file_get_contents($file->getRealPath());
+        if ($plain === '' && filesize($file->getRealPath()) > 0) {
+            throw new \RuntimeException('Failed to read uploaded file.');
+        }
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
 
-        Storage::disk($disk)->put($path, $blob);
+        $written = Storage::disk($disk)->put($path, $blob);
+        if ($written === false || !Storage::disk($disk)->exists($path)) {
+            throw new \RuntimeException('Failed to write uploaded file to vault.');
+        }
 
         return strlen($plain);
     }
@@ -42,7 +48,10 @@ class SecureFileStore
     public static function putBytes(string $disk, string $path, string $plain): int
     {
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
-        Storage::disk($disk)->put($path, $blob);
+        $written = Storage::disk($disk)->put($path, $blob);
+        if ($written === false || !Storage::disk($disk)->exists($path)) {
+            throw new \RuntimeException('Failed to write bytes to vault.');
+        }
 
         return strlen($plain);
     }
@@ -50,9 +59,19 @@ class SecureFileStore
     /** Move bytes between disks (re-encrypting) — used by quarantine promotion. */
     public static function move(string $fromDisk, string $fromPath, string $toDisk, string $toPath): void
     {
+        if (!Storage::disk($fromDisk)->exists($fromPath)) {
+            throw new \RuntimeException('Source file missing for move.');
+        }
+
         $plain = FileVaultCrypto::decrypt((string) Storage::disk($fromDisk)->get($fromPath));
+
         $blob = FileVaultCrypto::enabled() ? FileVaultCrypto::encrypt($plain) : $plain;
-        Storage::disk($toDisk)->put($toPath, $blob);
+        $written = Storage::disk($toDisk)->put($toPath, $blob);
+        if ($written === false || !Storage::disk($toDisk)->exists($toPath)) {
+            throw new \RuntimeException('Failed to write destination during move; source preserved.');
+        }
+
+        // Only delete the source after the destination is verified.
         Storage::disk($fromDisk)->delete($fromPath);
     }
 
@@ -83,7 +102,12 @@ class SecureFileStore
             return \App\Support\MalwareScanResult::skipped('clamav', 'temp_file_unavailable');
         }
 
-        file_put_contents($temp, self::get($disk, $path));
+        $written = file_put_contents($temp, self::get($disk, $path));
+        if ($written === false) {
+            @unlink($temp);
+
+            return \App\Support\MalwareScanResult::skipped('clamav', 'temp_write_failed');
+        }
 
         try {
             return $scanner->scan($temp);

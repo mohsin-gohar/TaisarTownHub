@@ -150,7 +150,9 @@ class ClamAVScanner implements MalwareScanner
             while (!feof($handle)) {
                 $chunk = fread($handle, self::CHUNK_SIZE);
                 if ($chunk === false) {
-                    break;
+                    fclose($handle);
+
+                    return null;
                 }
                 if ($chunk === '') {
                     if (feof($handle)) {
@@ -175,7 +177,10 @@ class ClamAVScanner implements MalwareScanner
             $response = '';
             while (!feof($socket)) {
                 $read = fread($socket, 4096);
-                if ($read === false || $read === '') {
+                if ($read === false) {
+                    return null;
+                }
+                if ($read === '') {
                     break;
                 }
                 $response .= $read;

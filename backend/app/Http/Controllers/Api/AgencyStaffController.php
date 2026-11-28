@@ -432,11 +432,31 @@ class AgencyStaffController extends Controller
             }
 
             if ($request->has('permissions')) {
-                $invalid = array_diff($request->permissions, Permissions::agencyAssignable());
-                if ($invalid) {
+                $invalidPlatform = array_diff($request->permissions, Permissions::agencyAssignable());
+                if ($invalidPlatform) {
                     return [
                         'error' => 422,
-                        'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
+                        'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalidPlatform),
+                    ];
+                }
+                $requesterPerms = $request->user()->permissionsFor($agencyId);
+                $expanded = $requesterPerms;
+                foreach (Permissions::LEGACY_ALIASES as $canonical => $aliases) {
+                    if (in_array($canonical, $requesterPerms, true)) {
+                        $expanded = array_merge($expanded, $aliases);
+                    }
+                    foreach ($aliases as $alias) {
+                        if (in_array($alias, $requesterPerms, true)) {
+                            $expanded[] = $canonical;
+                        }
+                    }
+                }
+                $delegatable = array_intersect(Permissions::agencyAssignable(), array_values(array_unique($expanded)));
+                $invalidDelegation = array_diff($request->permissions, $delegatable);
+                if ($invalidDelegation) {
+                    return [
+                        'error' => 422,
+                        'message' => 'Permissions cannot be granted unless the requester possesses them: ' . implode(', ', $invalidDelegation),
                     ];
                 }
                 $payload['permissions'] = array_values($request->permissions);
@@ -550,11 +570,11 @@ class AgencyStaffController extends Controller
             'permissions.*' => 'string|max:100',
         ]);
 
-        $invalid = array_diff($request->permissions, Permissions::agencyAssignable());
-        if ($invalid) {
+        $invalidPlatform = array_diff($request->permissions, Permissions::agencyAssignable());
+        if ($invalidPlatform) {
             return response()->json([
                 'success' => false,
-                'message' => 'Platform-level permissions cannot be granted to agency roles: ' . implode(', ', $invalid),
+                'message' => 'Platform-level permissions cannot be granted to agency roles: ' . implode(', ', $invalidPlatform),
             ], 422);
         }
 
@@ -611,11 +631,11 @@ class AgencyStaffController extends Controller
         ]);
 
         if ($request->has('permissions')) {
-            $invalid = array_diff($request->permissions, Permissions::agencyAssignable());
-            if ($invalid) {
+            $invalidPlatform = array_diff($request->permissions, Permissions::agencyAssignable());
+            if ($invalidPlatform) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalid),
+                    'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalidPlatform),
                 ], 422);
             }
             $role->permissions = array_values($request->permissions);

@@ -853,28 +853,40 @@ public function update(Request $request, string $id)
             'schedules.*.notes' => 'nullable|string|max:500',
         ]);
 
-        $schedules = [];
-        foreach ($data['schedules'] as $row) {
-            $schedules[] = PaymentSchedule::updateOrCreate(
-                [
-                    'transaction_id' => $transaction->id,
-                    'installment_no' => $row['installment_no'],
-                ],
-                [
-                    'agency_id' => $transaction->agency_id,
-                    'due_date' => $row['due_date'],
-                    'amount' => $row['amount'],
-                    'notes' => $row['notes'] ?? null,
-                ]
-            );
-        }
+        $result = DB::transaction(function () use ($transaction, $agencyId, $data, $request) {
+            $locked = Transaction::where('id', $transaction->id)
+                ->when($agencyId !== null, fn ($q) => $q->where('agency_id', $agencyId))
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        // Mark overdue installments (same agency scope).
-        PaymentSchedule::where('agency_id', $transaction->agency_id)
-            ->where('transaction_id', $transaction->id)
-            ->where('status', 'pending')
-            ->where('due_date', '<', now()->toDateString())
-            ->update(['status' => 'overdue']);
+            $schedules = [];
+            foreach ($data['schedules'] as $row) {
+                $schedules[] = PaymentSchedule::updateOrCreate(
+                    [
+                        'transaction_id' => $locked->id,
+                        'installment_no' => $row['installment_no'],
+                    ],
+                    [
+                        'agency_id' => $locked->agency_id,
+                        'due_date' => $row['due_date'],
+                        'amount' => $row['amount'],
+                        'notes' => $row['notes'] ?? null,
+                    ]
+                );
+            }
+
+            // Mark overdue installments (same agency scope).
+            PaymentSchedule::where('agency_id', $locked->agency_id)
+                ->where('transaction_id', $locked->id)
+                ->where('status', 'pending')
+                ->where('due_date', '<', now()->toDateString())
+                ->update(['status' => 'overdue']);
+
+            return ['schedules' => $schedules, 'transaction' => $locked];
+        }, 3);
+
+        $transaction = $result['transaction'];
+        $schedules = $result['schedules'];
 
         $this->writeAudit($request, 'schedule.save', $transaction->id, "Installment schedule saved for {$transaction->dealNumber}", [
             'agency_id' => $transaction->agency_id,

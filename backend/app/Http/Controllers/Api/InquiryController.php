@@ -45,6 +45,10 @@ class InquiryController extends Controller
                 $q->whereIn('property_id', Property::where('assignedDealerId', $dealerId)->select('id'))
                     ->orWhereNull('agency_id');
             });
+        } elseif (!$this->isCrossAgency($request) && $agencyId === null) {
+            // Non-platform users without an agency context must never see
+            // unscoped inquiries.
+            abort(403, 'No agency context for this action.');
         }
 
         if (!empty($filters['status']) && $filters['status'] !== 'All') {
@@ -324,6 +328,10 @@ class InquiryController extends Controller
         $query = Inquiry::query();
         if ($agencyId !== null) {
             $query->where('agency_id', $agencyId);
+        } elseif (!$this->isCrossAgency($request)) {
+            // Non-platform users without an agency context must never see
+            // unscoped inquiries.
+            abort(403, 'No agency context for this action.');
         }
         $inquiry = $query->findOrFail($id);
 

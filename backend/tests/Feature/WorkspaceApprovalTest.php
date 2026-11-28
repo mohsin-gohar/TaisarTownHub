@@ -118,7 +118,7 @@ class WorkspaceApprovalTest extends EnterpriseTestCase
     #[DataProvider('registrationRoutes')]
     public function test_registration_rolls_back_if_membership_cannot_be_created(string $route, bool $legacy): void
     {
-        Role::whereKey('role_agency_owner')->delete();
+        Role::whereKey('role_agency_owner')->forceDelete();
         $this->postJson($route, $this->registrationData($legacy))->assertStatus(500);
 
         foreach (['users', 'agencies', 'agency_members', 'personal_access_tokens', 'dealers', 'business_records'] as $table) {
