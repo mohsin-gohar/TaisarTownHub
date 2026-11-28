@@ -70,10 +70,12 @@ class EnterpriseSeeder extends Seeder
             ['office', 'Office', 'commercial', 6],
         ];
         foreach ($categories as [$key, $name, $group, $sort]) {
-            DB::table('property_categories')->updateOrInsert(
-                ['key' => $key],
-                ['name' => $name, 'group' => $group, 'sort_order' => $sort, 'is_active' => 1, 'updated_at' => $now, 'created_at' => $now]
-            );
+            // Seed defaults only; preserve admin-edited category metadata.
+            DB::table('property_categories')->insertOrIgnore([
+                'key' => $key, 'name' => $name, 'group' => $group,
+                'sort_order' => $sort, 'is_active' => 1,
+                'created_at' => $now, 'updated_at' => $now,
+            ]);
         }
 
         /* ---------- 4. Subscription plans (prices/limits configurable, not hardcoded in code) ---------- */
@@ -93,16 +95,15 @@ class EnterpriseSeeder extends Seeder
                 ['Everything in Professional', 'Dedicated account manager', 'Custom limits', 'API access']],
         ];
         foreach ($plans as [$key, $name, $price, $interval, $isDefault, $sort, $limits, $features]) {
-            DB::table('subscription_plans')->updateOrInsert(
-                ['key' => $key],
-                [
-                    'name' => $name, 'description' => $name . ' plan for Taisar Town agencies',
-                    'price' => $price, 'currency' => 'PKR', 'interval' => $interval,
-                    'limits' => json_encode($limits), 'features' => json_encode($features),
-                    'is_active' => 1, 'is_default' => $isDefault, 'sort_order' => $sort,
-                    'updated_at' => $now, 'created_at' => $now,
-                ]
-            );
+            // Insert missing defaults without resetting live prices, limits or activation.
+            DB::table('subscription_plans')->insertOrIgnore([
+                'key' => $key,
+                'name' => $name, 'description' => $name . ' plan for Taisar Town agencies',
+                'price' => $price, 'currency' => 'PKR', 'interval' => $interval,
+                'limits' => json_encode($limits), 'features' => json_encode($features),
+                'is_active' => 1, 'is_default' => $isDefault, 'sort_order' => $sort,
+                'created_at' => $now, 'updated_at' => $now,
+            ]);
         }
 
         /* ---------- 4b. Featured placement packages (free launch) ---------- */
@@ -112,15 +113,14 @@ class EnterpriseSeeder extends Seeder
             ['featured-90', '90-Day Spotlight', 'Ninety days in the homepage featured roster.', 0, 90, 3],
         ];
         foreach ($promotionPackages as [$key, $name, $description, $price, $days, $sort]) {
-            DB::table('promotion_packages')->updateOrInsert(
-                ['key' => $key],
-                [
-                    'name' => $name, 'description' => $description,
-                    'price' => $price, 'currency' => 'PKR', 'duration_days' => $days,
-                    'is_active' => 1, 'sort_order' => $sort,
-                    'updated_at' => $now, 'created_at' => $now,
-                ]
-            );
+            // Preserve platform-admin pricing and activation on subsequent seed runs.
+            DB::table('promotion_packages')->insertOrIgnore([
+                'key' => $key,
+                'name' => $name, 'description' => $description,
+                'price' => $price, 'currency' => 'PKR', 'duration_days' => $days,
+                'is_active' => 1, 'sort_order' => $sort,
+                'created_at' => $now, 'updated_at' => $now,
+            ]);
         }
 
         /* ---------- 5. Platform system settings ---------- */
@@ -142,13 +142,12 @@ class EnterpriseSeeder extends Seeder
             ['notifications.whatsapp_enabled', false, 'integrations', 'WhatsApp notifications (requires provider credentials)'],
         ];
         foreach ($settings as [$key, $value, $group, $description]) {
-            DB::table('system_settings')->updateOrInsert(
-                ['key' => $key],
-                [
-                    'value' => json_encode($value), 'group' => $group, 'description' => $description,
-                    'updated_at' => $now, 'created_at' => $now,
-                ]
-            );
+            // Settings are operator-managed after creation; do not reset them on deploy.
+            DB::table('system_settings')->insertOrIgnore([
+                'key' => $key,
+                'value' => json_encode($value), 'group' => $group, 'description' => $description,
+                'created_at' => $now, 'updated_at' => $now,
+            ]);
         }
 
         /* ---------- 6. Demo platform staff ---------- */
