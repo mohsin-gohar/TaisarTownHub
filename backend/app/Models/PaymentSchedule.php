@@ -26,4 +26,9 @@ class PaymentSchedule extends Model
     {
         return $this->belongsTo(Transaction::class, 'transaction_id');
     }
+
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class, 'agency_id');
+    }
 }
