@@ -72,6 +72,11 @@ class Transaction extends Model
         return $this->belongsTo(User::class, 'voided_by');
     }
 
+    public function updater(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
