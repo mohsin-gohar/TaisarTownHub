@@ -15,7 +15,7 @@ class SubscriptionPlan extends Model
     protected function casts(): array
     {
         return [
-            'price' => 'float',
+            'price' => 'decimal:2',
             'limits' => 'array',
             'features' => 'array',
             'is_active' => 'boolean',
