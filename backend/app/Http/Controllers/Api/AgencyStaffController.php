@@ -417,6 +417,24 @@ class AgencyStaffController extends Controller
                     && $this->activeOwnerCount($agencyId) <= 1) {
                     return ['error' => 422, 'message' => 'An agency must keep at least one active owner.'];
                 }
+
+                // A role must not exceed the requester's delegation authority.
+                // Owners may assign any agency role; everyone else is limited
+                // to roles whose effective grants they themselves possess.
+                if (!$requesterIsOwner && $role->id !== 'role_agency_owner') {
+                    $delegatable = $this->delegatablePermissions($request, $agencyId);
+                    $rolePerms = $role->is_system
+                        ? Permissions::agencyRoleGrants($role->key)
+                        : ($role->permissions ?? []);
+                    $excess = array_diff($rolePerms, $delegatable);
+                    if ($excess) {
+                        return [
+                            'error' => 422,
+                            'message' => 'Role permissions exceed delegation authority: ' . implode(', ', $excess),
+                        ];
+                    }
+                }
+
                 $payload['role_id'] = $role->id;
             }
 
@@ -578,6 +596,15 @@ class AgencyStaffController extends Controller
             ], 422);
         }
 
+        $delegatable = $this->delegatablePermissions($request, $agencyId);
+        $invalidDelegation = array_diff($request->permissions, $delegatable);
+        if ($invalidDelegation) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Permissions cannot be granted unless the requester possesses them: ' . implode(', ', $invalidDelegation),
+            ], 422);
+        }
+
         if (Role::where('scope', 'agency')->where('key', $request->key)
             ->where(function ($q) use ($agencyId) {
                 $q->whereNull('agency_id')->orWhere('agency_id', $agencyId);
@@ -638,6 +665,14 @@ class AgencyStaffController extends Controller
                     'message' => 'Platform-level permissions cannot be granted: ' . implode(', ', $invalidPlatform),
                 ], 422);
             }
+            $delegatable = $this->delegatablePermissions($request, $agencyId);
+            $invalidDelegation = array_diff($request->permissions, $delegatable);
+            if ($invalidDelegation) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Permissions cannot be granted unless the requester possesses them: ' . implode(', ', $invalidDelegation),
+                ], 422);
+            }
             $role->permissions = array_values($request->permissions);
         }
         if ($request->has('name')) {
@@ -688,6 +723,32 @@ class AgencyStaffController extends Controller
     }
 
     /* ================= helpers ================= */
+
+    /**
+     * Compute the set of agency-assignable permissions the requester can
+     * delegate, expanding legacy aliases so canonical/legacy forms are
+     * interchangeable.
+     */
+    private function delegatablePermissions(Request $request, string $agencyId): array
+    {
+        $requesterPerms = $request->user()->permissionsFor($agencyId);
+        $expanded = $requesterPerms;
+        foreach (Permissions::LEGACY_ALIASES as $canonical => $aliases) {
+            if (in_array($canonical, $requesterPerms, true)) {
+                $expanded = array_merge($expanded, $aliases);
+            }
+            foreach ($aliases as $alias) {
+                if (in_array($alias, $requesterPerms, true)) {
+                    $expanded[] = $canonical;
+                }
+            }
+        }
+
+        return array_intersect(
+            Permissions::agencyAssignable(),
+            array_values(array_unique($expanded))
+        );
+    }
 
     /** Resolve a role id belonging to this agency's system roles or its own custom roles. */
     private function resolveAgencyRole(string $agencyId, string $roleId): Role

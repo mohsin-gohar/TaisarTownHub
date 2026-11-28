@@ -186,11 +186,23 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
 
         $this->assertDatabaseMissing('roles', ['key' => 'escalated_role']);
 
-        // A legitimate agency permission is accepted.
+        // Manager cannot grant permissions they do not personally possess.
+        $this->postJson('/api/agency/roles', [
+            'name' => 'Over-Privileged',
+            'key' => 'over_privileged',
+            'permissions' => ['properties.view', 'crm.view'],
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonFragment(['message' => 'Permissions cannot be granted unless the requester possesses them: crm.view']);
+
+        $this->assertDatabaseMissing('roles', ['key' => 'over_privileged']);
+
+        // A permission the manager actually holds (via legacy alias) is accepted.
         $this->postJson('/api/agency/roles', [
             'name' => 'Senior Agent',
             'key' => 'senior_agent',
-            'permissions' => ['properties.view', 'crm.view'],
+            'permissions' => ['properties.view'],
         ], $this->authHeaders($this->tokenFor($manager)))
             ->assertStatus(201)
             ->assertJsonPath('success', true);
@@ -611,5 +623,76 @@ class AdminStaffSubscriptionTest extends EnterpriseTestCase
             ->assertJsonPath('listings.total', 1)
             ->json();
         $this->assertSame([], $scoped['platform']);
+    }
+
+    public function test_manager_cannot_assign_role_with_permissions_beyond_delegation_authority(): void
+    {
+        [$manager, $agency] = $this->agencyUser($this->staffPermissions(), 'manager');
+        [$target, , $targetRole] = $this->agencyUser(['properties.view'], 'agent', $agency);
+
+        // A high-privilege role containing finance.manage_payments.
+        $highRole = $this->makeRole('agency', 'super_agent', [
+            'properties.view', 'finance.manage_payments', 'crm.delete_lead',
+        ]);
+
+        $targetMembershipId = \App\Models\AgencyMember::where('agency_id', $agency->id)
+            ->where('user_id', $target->id)
+            ->value('id');
+
+        $this->patchJson('/api/agency/members/' . $targetMembershipId, [
+            'role_id' => $highRole->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
+
+        $this->assertDatabaseHas('agency_members', [
+            'agency_id' => $agency->id,
+            'user_id' => $target->id,
+            'role_id' => $targetRole->id,
+        ]);
+    }
+
+    public function test_manager_cannot_elevate_self_via_role_assignment(): void
+    {
+        [$manager, $agency, $managerRole] = $this->agencyUser($this->staffPermissions(), 'manager');
+
+        $highRole = $this->makeRole('agency', 'self_elevate', [
+            'agency.view', 'agency.manage_staff', 'finance.manage_payments',
+        ]);
+
+        // Find the manager's own membership ID.
+        $membershipId = \App\Models\AgencyMember::where('agency_id', $agency->id)
+            ->where('user_id', $manager->id)
+            ->value('id');
+
+        $this->patchJson('/api/agency/members/' . $membershipId, [
+            'role_id' => $highRole->id,
+        ], $this->authHeaders($this->tokenFor($manager)))
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
+
+        $this->assertDatabaseHas('agency_members', [
+            'id' => $membershipId,
+            'role_id' => $managerRole->id,
+        ]);
+    }
+
+    public function test_owner_can_assign_any_role(): void
+    {
+        [$owner, $agency] = $this->agencyUser(
+            \App\Support\Permissions::agencyRoleGrants('agency_owner'),
+            'agency_owner'
+        );
+        [$target] = $this->agencyUser(['properties.view'], 'agent', $agency);
+
+        $highRole = $this->makeRole('agency', 'owner_appointed', [
+            'finance.manage_payments', 'crm.delete_lead',
+        ]);
+
+        $this->patchJson('/api/agency/members/' . \App\Models\AgencyMember::where('user_id', $target->id)->value('id'), [
+            'role_id' => $highRole->id,
+        ], $this->authHeaders($this->tokenFor($owner)))
+            ->assertStatus(200)
+            ->assertJsonPath('success', true);
     }
 }
