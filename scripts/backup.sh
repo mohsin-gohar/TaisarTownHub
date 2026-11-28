@@ -23,7 +23,7 @@ WORK=""
 
 mkdir -p "$DEST"
 WORK="$(mktemp -d "$DEST/.work-$STAMP-XXXXXX")"
-trap '[ -n "$WORK" ] && [ -d "$WORK" ] && rm -rf -- "$WORK"' EXIT INT TERM
+cleanup() { if [ -n "$WORK" ] && [ -d "$WORK" ]; then rm -rf -- "$WORK"; fi; }\ntrap cleanup EXIT INT TERM
 echo "[backup] destination: $DEST"
 
 DB_DRIVER="$(grep -E '^DB_CONNECTION=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r' || echo mysql)"
@@ -38,7 +38,7 @@ DB_USER="$(grep -E '^DB_USERNAME=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r')"
 DB_HOST="$(grep -E '^DB_HOST=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r')"
 DB_PORT="$(grep -E '^DB_PORT=' "$BACKEND/.env" | cut -d= -f2 | tr -d '\r' || echo 3306)"
 # DB_PASSWORD may legitimately be empty; read it from .env without echoing it.
-DB_PASSWORD="$(grep -E '^DB_PASSWORD=' "$BACKEND/.env" | cut -d= -f2- | tr -d '\r')"
+DB_PASSWORD="$(grep -E '^DB_PASSWORD=' "$BACKEND/.env" | cut -d= -f2- | tr -d '\r')"\n[ -n "$DB_NAME" ] || { echo "[backup] FATAL: DB_DATABASE is empty" >&2; exit 1; }\n[ -n "$DB_USER" ] || { echo "[backup] FATAL: DB_USERNAME is empty" >&2; exit 1; }
 echo "[backup] mysql/mariadb driver → dumping $DB_NAME"
 export MYSQL_PWD="$DB_PASSWORD"
 mysqldump --single-transaction --routines --triggers --events --hex-blob \
