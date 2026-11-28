@@ -175,11 +175,22 @@ class TransactionFinanceDataIsolationTest extends EnterpriseTestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        DB::table('payment_schedules')->insert([
+            'agency_id' => $agencyB->id,
+            'transaction_id' => $dealA['id'],
+            'installment_no' => 1,
+            'due_date' => now()->addMonth()->toDateString(),
+            'amount' => 3000,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         $headersA = $this->authHeaders($this->tokenFor($userA));
         $detail = $this->getJson("/api/agency/transactions/{$dealA['id']}", $headersA)->assertOk();
         $this->assertNotContains($foreignPaymentId, array_column($detail->json('transaction.payments'), 'id'));
         $this->assertNotContains($foreignCommissionId, array_column($detail->json('transaction.commissions'), 'id'));
+        $this->assertCount(0, Transaction::find($dealA['id'])->schedules()->get());
 
         $payments = $this->getJson("/api/agency/transactions/{$dealA['id']}/payments", $headersA)->assertOk();
         $this->assertNotContains($foreignPaymentId, array_column($payments->json('payments'), 'id'));
