@@ -37,5 +37,15 @@ class MigrationSmokeTest extends TestCase
         $this->assertDatabaseHas('property_categories', ['key' => 'residential_plot']);
         $this->assertDatabaseHas('property_categories', ['key' => 'commercial_plot']);
         $this->assertDatabaseHas('property_categories', ['key' => 'office']);
+
+        $commentForeignKeys = collect(Schema::getForeignKeys('video_comments'))
+            ->pluck('columns')->flatten()->all();
+        $likeForeignKeys = collect(Schema::getForeignKeys('video_likes'))
+            ->pluck('columns')->flatten()->all();
+
+        $this->assertContains('agency_video_id', $commentForeignKeys);
+        $this->assertContains('user_id', $commentForeignKeys);
+        $this->assertContains('agency_video_id', $likeForeignKeys);
+        $this->assertContains('user_id', $likeForeignKeys);
     }
 }
