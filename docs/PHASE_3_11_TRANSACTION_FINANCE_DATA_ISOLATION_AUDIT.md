@@ -11,7 +11,7 @@ Added `backend/tests/Feature/TransactionFinanceDataIsolationTest.php` with three
 
 1. **Two-agency finance separation**
    - Creates separate deals, payments, commissions, and expenses for Agency A and Agency B.
-   - Verifies each agency's transaction list, commission list, and expense list contains only its own records.
+   - Verifies both canonical (`/api/agency/transactions`) and legacy (`/api/transactions`) deal lists, commission lists, and expense lists contain only the acting agency's records.
    - Verifies report totals (deal value, collected payments, pending commissions, and expenses) are independently scoped to each agency.
 
 2. **Client-supplied tenant IDs**
