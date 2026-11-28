@@ -40,6 +40,13 @@ Date: 2026-11-28
 
 - Kilocode's active worktree (`kilo/gap-worktree`) runs tests against `taisartownhub_test` concurrently. No file overlap with this branch's changes (AgencyStaffController, AdminStaffSubscriptionTest, docs). Isolation achieved via separate DB. No changes overwritten.
 
+## PR creation (manual action required)
+
+- `gh` CLI is not installed and no `GITHUB_TOKEN`/`GH_TOKEN` is available in this environment (git pushes use the Windows Credential Manager). Branch is pushed and ready; PR must be opened from the GitHub web UI:
+  - Base: `main` (do not merge — review only)
+  - Head: `audit/opencode-phase-7-agency-erp-workflows`
+  - Title: `Phase 7 — Agency ERP & Staff Workflows (OpenCode)`
+
 ## Verdict
 
 No unresolved Phase 7 P0/P1 defects. All safely achievable code-level work complete.
