@@ -181,6 +181,16 @@ class DealerController extends Controller
         $this->requireAny($request, ['manage_dealers']);
 
         $dealer = Dealer::findOrFail($id);
+
+        // Tenancy: only a platform user may delete across agencies. An agency
+        // member is confined to dealers in their own resolved agency; if no
+        // agency context resolves, the cross-agency delete is denied (the
+        // dealer id alone must never be sufficient authority).
+        $actingAgencyId = $this->agencyId($request);
+        if (!$request->user()->isPlatformUser() && $dealer->agency_id !== $actingAgencyId) {
+            abort(404);
+        }
+
         $dealer->delete();
         $this->writeAudit($request, 'dealer_deleted', $dealer->id, "Dealer {$dealer->fullName} soft-deleted");
 

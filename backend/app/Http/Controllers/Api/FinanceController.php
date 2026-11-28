@@ -965,7 +965,7 @@ public function update(Request $request, string $id)
         $transaction = $this->findScoped($agencyId, $transactionId, $request->user());
 
         $data = $request->validate([
-            'amount' => 'required|numeric|max:999999999999',
+            'amount' => 'required|numeric|min:0|max:999999999999',
             'rate' => 'nullable|numeric|min:0|max:100',
             'dealer_id' => 'nullable|string|max:64',
             'user_id' => 'nullable|integer',

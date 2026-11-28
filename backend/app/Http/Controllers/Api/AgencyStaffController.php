@@ -83,10 +83,9 @@ class AgencyStaffController extends Controller
             // same remaining-seat count and exceed the subscription limit.
             $agency = Agency::whereKey($agencyId)->lockForUpdate()->firstOrFail();
 
-            if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId))) {
-                return ['blocked' => $block];
-            }
-
+            // Duplicate guards run BEFORE the seat limit: a duplicate member or
+            // pending invite is a validation error (422) regardless of how many
+            // seats remain, so the limit must never mask it with a 402.
             $alreadyMember = AgencyMember::where('agency_id', $agencyId)
                 ->whereHas('user', fn ($query) => $query->whereRaw('LOWER(email) = ?', [$request->email]))
                 ->exists();
@@ -103,6 +102,10 @@ class AgencyStaffController extends Controller
                 ->exists();
             if ($pendingInvite) {
                 return ['error' => 422, 'message' => 'A pending invitation already exists for this email address.'];
+            }
+
+            if ($block = PlanLimits::block($agency, 'staff', fn () => PlanLimits::staffUsed($agencyId))) {
+                return ['blocked' => $block];
             }
 
             $invitation = AgencyInvitation::create([

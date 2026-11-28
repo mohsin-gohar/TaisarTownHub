@@ -64,4 +64,26 @@ class DealerAgencyLinkTest extends EnterpriseTestCase
             $this->authHeaders($this->tokenFor($user))
         )->assertStatus(404);
     }
+
+    public function test_agency_scoped_publisher_cannot_delete_another_agencys_dealer(): void
+    {
+        [$user, $agency] = $this->agencyUser(['manage_dealers'], 'agency_owner');
+        [, $foreign] = $this->agencyUser([], 'agent');
+
+        // A dealer owned by the foreign agency, created by a platform admin.
+        $foreignDealer = $this->postJson('/api/dealers', [
+            'id' => 'deal-' . Str::random(8),
+            'fullName' => 'Foreign Delete Target',
+            'phone' => '03001112222',
+            'agencyId' => $foreign->id,
+        ], $this->authHeaders($this->tokenFor($this->makeUser('super_admin'))))
+            ->assertCreated()
+            ->json('id');
+
+        // Cross-tenant delete must be rejected and must not remove the row.
+        $this->deleteJson("/api/dealers/{$foreignDealer}", [], $this->authHeaders($this->tokenFor($user)))
+            ->assertStatus(404);
+
+        $this->assertDatabaseHas('dealers', ['id' => $foreignDealer]);
+    }
 }
