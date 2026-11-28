@@ -78,6 +78,89 @@ class DatabaseSchemaContractTest extends TestCase
         }
     }
 
+    public function test_core_foreign_key_relationships_are_enforced(): void
+    {
+        $expected = [
+            'users' => ['dealer_id' => 'dealers'],
+            'dealers' => ['agency_id' => 'agencies'],
+            'agency_members' => [
+                'agency_id' => 'agencies', 'user_id' => 'users', 'role_id' => 'roles',
+            ],
+            'agency_invitations' => ['agency_id' => 'agencies', 'role_id' => 'roles'],
+            'properties' => ['agency_id' => 'agencies', 'assignedDealerId' => 'dealers'],
+            'transactions' => [
+                'agency_id' => 'agencies', 'propertyId' => 'properties', 'dealerId' => 'dealers',
+            ],
+            'business_records' => ['agency_id' => 'agencies'],
+            'property_status_history' => [
+                'property_id' => 'properties', 'agency_id' => 'agencies',
+            ],
+            'login_histories' => ['user_id' => 'users'],
+            'inquiries' => [
+                'agency_id' => 'agencies', 'property_id' => 'properties', 'assigned_agent_id' => 'users',
+            ],
+            'lead_activities' => ['agency_id' => 'agencies', 'inquiry_id' => 'inquiries'],
+            'media_files' => ['agency_id' => 'agencies', 'property_id' => 'properties'],
+            'documents' => [
+                'agency_id' => 'agencies', 'folder_id' => 'document_folders', 'property_id' => 'properties',
+            ],
+            'role_permissions' => ['role_id' => 'roles', 'permission_id' => 'permissions'],
+            'video_comments' => [
+                'agency_video_id' => 'agency_videos', 'user_id' => 'users',
+            ],
+            'video_likes' => [
+                'agency_video_id' => 'agency_videos', 'user_id' => 'users',
+            ],
+        ];
+
+        foreach ($expected as $table => $relationships) {
+            $foreignKeys = Schema::getForeignKeys($table);
+
+            foreach ($relationships as $column => $parentTable) {
+                $exists = collect($foreignKeys)->contains(
+                    fn (array $foreignKey) =>
+                        ($foreignKey['columns'] ?? []) === [$column]
+                        && ($foreignKey['foreign_table'] ?? null) === $parentTable
+                );
+
+                $this->assertTrue(
+                    $exists,
+                    "Missing foreign key: {$table}.{$column} -> {$parentTable}.id"
+                );
+            }
+        }
+    }
+
+    public function test_critical_query_indexes_and_uniques_exist(): void
+    {
+        $expected = [
+            ['transactions', ['agency_id', 'created_at'], false],
+            ['properties', ['approval_status', 'visibility', 'listing_purpose', 'agency_id'], false],
+            ['properties', ['assignedDealerId'], false],
+            ['agency_videos', ['created_at'], false],
+            ['business_records', ['collection', 'record_id'], true],
+            ['agency_members', ['agency_id', 'user_id'], true],
+            ['role_permissions', ['role_id', 'permission_id'], true],
+            ['transaction_payments', ['transaction_id', 'received_at'], false],
+            ['payment_schedules', ['transaction_id', 'installment_no'], true],
+            ['saved_searches', ['user_id', 'created_at'], false],
+        ];
+
+        foreach ($expected as [$table, $columns, $unique]) {
+            $indexes = Schema::getIndexes($table);
+            $exists = collect($indexes)->contains(
+                fn (array $index) =>
+                    ($index['columns'] ?? []) === $columns
+                    && (bool) ($index['unique'] ?? false) === $unique
+            );
+
+            $this->assertTrue(
+                $exists,
+                "Missing " . ($unique ? 'unique ' : '') . "index on {$table}(" . implode(', ', $columns) . ")"
+            );
+        }
+    }
+
     public function test_all_model_fillable_and_cast_attributes_exist_as_columns(): void
     {
         $modelFiles = glob(app_path('Models/*.php')) ?: [];
