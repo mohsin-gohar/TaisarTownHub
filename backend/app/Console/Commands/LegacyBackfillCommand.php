@@ -83,6 +83,16 @@ class LegacyBackfillCommand extends Command
 
         foreach ($rows as $row) {
             $current = $resolver->claimedOwner($row);
+
+            // A non-null but invalid canonical agency_id is an orphaned
+            // reference. Never treat it as NULL or overwrite it from weaker
+            // payload evidence; reconcile it explicitly after investigation.
+            if ($row->agency_id !== null && $row->agency_id !== '' && $current === null) {
+                $this->warn("row {$row->collection}::{$row->record_id} has orphaned agency_id '{$row->agency_id}' — skipped for manual reconciliation");
+
+                continue;
+            }
+
             $key = $this->compositeKey($row->collection, (string) $row->record_id);
             $mapped = $composite[$key] ?? null;
             $source = 'mapping file';
@@ -106,10 +116,15 @@ class LegacyBackfillCommand extends Command
             // Never auto-stamp a row with conflicting evidence: ambiguity is a
             // manual-review item, not a coin flip.
             if (!$target && $current === null) {
-                $candidates = $resolver->candidates($row);
-                if (count($candidates) === 1) {
-                    $target = array_key_first($candidates);
-                    $source = 'derived evidence';
+                $bogusClaim = $resolver->bogusClaim($row);
+                if ($bogusClaim !== null) {
+                    $this->warn("row {$row->collection}::{$row->record_id} has an invalid ownership claim '{$bogusClaim}' — derived evidence requires manual review");
+                } else {
+                    $candidates = $resolver->candidates($row);
+                    if (count($candidates) === 1) {
+                        $target = array_key_first($candidates);
+                        $source = 'derived evidence';
+                    }
                 }
             }
 

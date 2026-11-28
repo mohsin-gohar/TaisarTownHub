@@ -19,7 +19,7 @@ class TransactionPayment extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'float',
+            'amount' => 'decimal:2',
             'received_at' => 'datetime',
         ];
     }

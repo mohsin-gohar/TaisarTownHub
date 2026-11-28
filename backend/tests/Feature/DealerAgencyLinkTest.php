@@ -64,4 +64,56 @@ class DealerAgencyLinkTest extends EnterpriseTestCase
             $this->authHeaders($this->tokenFor($user))
         )->assertStatus(404);
     }
+
+    public function test_agency_scoped_publisher_cannot_delete_another_agencys_dealer(): void
+    {
+        [$user] = $this->agencyUser(['manage_dealers'], 'agency_owner');
+        [, $foreignAgency] = $this->agencyUser([], 'agent');
+
+        $foreignDealerId = $this->postJson('/api/dealers', [
+            'id' => 'deal-' . Str::random(8),
+            'fullName' => 'Foreign Dealer',
+            'phone' => '03007654321',
+            'agencyId' => $foreignAgency->id,
+        ], $this->authHeaders($this->tokenFor($this->makeUser('super_admin'))))
+            ->assertCreated()
+            ->json('id');
+
+        $this->deleteJson(
+            "/api/dealers/{$foreignDealerId}",
+            [],
+            $this->authHeaders($this->tokenFor($user))
+        )->assertStatus(404);
+
+        $this->assertDatabaseHas('dealers', [
+            'id' => $foreignDealerId,
+            'agency_id' => $foreignAgency->id,
+            'deleted_at' => null,
+        ]);
+    }
+
+    public function test_agency_scoped_publisher_can_delete_its_own_dealer(): void
+    {
+        [$user, $agency] = $this->agencyUser(['manage_dealers'], 'agency_owner');
+
+        $dealerId = $this->postJson('/api/dealers', [
+            'id' => 'deal-' . Str::random(8),
+            'fullName' => 'Own Dealer',
+            'phone' => '03001234567',
+        ], $this->authHeaders($this->tokenFor($user)))
+            ->assertCreated()
+            ->json('id');
+
+        $this->deleteJson(
+            "/api/dealers/{$dealerId}",
+            [],
+            $this->authHeaders($this->tokenFor($user))
+        )->assertOk();
+
+        $this->assertSoftDeleted('dealers', [
+            'id' => $dealerId,
+            'agency_id' => $agency->id,
+        ]);
+    }
+
 }

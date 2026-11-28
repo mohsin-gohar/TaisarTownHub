@@ -1,100 +1,61 @@
 # TaisarTownHub — Backup & Restore
 
-(Consolidated from the former root `BACKUP_GUIDE.md`; content preserved. Helper scripts: `scripts/backup.sh`, `scripts/restore-drill.ps1`.)
+A valid recovery point is the **database plus the private document vault** from the same timestamp. A database-only or vault-only set is incomplete and must never be treated as restorable.
 
-Backup = **database** + **private document vault** + **queue/session state**. Restoring only the database leaves the vault empty; restoring only the vault leaves the DB referencing missing files. Always take and restore both.
+## Recovery assets
 
-## 1. What must be backed up
-
-| Asset | Path | Why |
+| Asset | Source | Requirement |
 |---|---|---|
-| Database | MySQL data dir (or logical dump) | All tenants, RBAC, finance, audit |
-| Document vault | `backend/storage/app/private/documents` | Agency documents, versions, shares |
-| Media assets | `backend/storage/app/public/media` (if used) | Public media served by the API |
-| Environment | `backend/.env` (stored separately, encrypted) | Keys/credentials — never in the same bucket as the data |
-| Laravel secrets | `APP_KEY` | Without it the encrypted columns (CNIC, MFA secrets) are unreadable |
+| MySQL | Logical mysqldump | Schema, rows, indexes, foreign keys, routines, triggers and events |
+| Private vault | `backend/storage/app/private/documents` | Required archive; document bytes must accompany metadata |
+| Public media | `backend/storage/app/public/media` (if used) | Back up separately when user uploads are stored there |
+| APP_KEY and environment | Secret manager / separately encrypted store | Required for encrypted CNIC, MFA and vault files; never store beside backup |
+| Redis | Redis persistence / managed backup when Redis-only queues or sessions are enabled | Not included in the MySQL dump |
 
-## 2. Creating a backup
+Backups contain all agencies' private data. Treat them as platform-wide sensitive data: encrypted storage, separate credentials, operator-only access, and never expose the backup directory through the web server.
 
-```bash
-cd /var/www/taisartownhub/backend
-mkdir -p storage/app/backups
-STAMP=$(date +%Y%m%d_%H%M%S)
-mysqldump --single-transaction --routines --triggers \
-  -u "$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE" \
-  | gzip > "storage/app/backups/tth_db_${STAMP}.sql.gz"
-sha256sum "storage/app/backups/tth_db_${STAMP}.sql.gz" > "storage/app/backups/tth_db_${STAMP}.sql.gz.sha256"
+## Create a backup
 
-tar -czf "storage/app/backups/tth_vault_${STAMP}.tar.gz" -C storage/app/private documents
-sha256sum "storage/app/backups/tth_vault_${STAMP}.tar.gz" > "storage/app/backups/tth_vault_${STAMP}.tar.gz.sha256"
+Linux: `./scripts/backup.sh [destination-dir]`
+
+Windows: `powershell -ExecutionPolicy Bypass -File scripts/backup.ps1 -Destination <directory>`
+
+Both scripts fail closed if the MySQL dump or private vault is missing, empty or corrupt. They publish a SHA-256 manifest only after both archives pass integrity checks. Database credentials are passed via `MYSQL_PWD`, not a visible `-pPASSWORD` process argument. SHA-256 detects corruption; it does not encrypt data.
+
+## Isolated restore drill (non-production)
+
+Run using PowerShell 7 and a disposable local MySQL 8 / MariaDB instance:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/restore-drill.ps1 -BackupDir <backup-directory> -Scratch <scratch-directory>
 ```
 
-`--single-transaction` keeps the dump consistent without locking InnoDB tables.
+The drill requires a matching database dump, private vault archive and checksum manifest; rejects truncated SQL dumps; imports into a unique scratch database; compares exact table sets, per-table row counts, indexes, foreign keys, CHECK TABLE health and FK orphans; checks all non-null agency IDs reference a restored agency; verifies payments, schedules and commissions match their parent transaction agency; extracts and verifies every private-vault archive entry in scratch storage; and drops only resources created by that run.
 
-## 3. Verification (mandatory — a backup that was never restored is not a backup)
+It refuses non-loopback DB hosts unless `-AllowRemoteHost` is explicit. It never imports into or drops the application database. This validates restoration and structural tenant ownership, not live authorization; verify two separate agency accounts against a separately restored staging environment before signing off disaster recovery.
 
-```bash
-zcat storage/app/backups/tth_db_${STAMP}.sql.gz | head -n 5              # header readable
-zcat storage/app/backups/tth_db_${STAMP}.sql.gz | grep -c "CREATE TABLE" # table count > 0
-tar -tzf storage/app/backups/tth_vault_${STAMP}.tar.gz | head            # vault listing readable
-```
+## Controlled production restore
 
-Record dump size and table count in the change log. A 0-byte dump or 0 table count means the backup failed — do **not** proceed to a migration.
+1. Confirm target host, backup timestamp, manifest, matching vault archive, `APP_KEY`, encrypted storage and approved maintenance window.
+2. Stop API writers, queue workers, scheduler and every process writing to the vault.
+3. Restore DB and matching vault archive. Never mix timestamps.
+4. Restore exact `APP_KEY` and environment/secrets from the secret manager.
+5. Restore public media separately if used.
+6. Run `php artisan migrate:status`, `php artisan app:production-check --strict` and tenant/finance integrity checks. Do not auto-run migrations as part of restore.
+7. Reconcile document metadata against vault files; test private access with two agency accounts.
+8. Record operator, timestamp and backup checksum in the audit trail. Restart writers only after checks pass.
 
-## 4. Restoring
+If any integrity or ownership check fails, keep the application offline and use a known-good recovery point.
 
-```bash
-# 0. stop writers so nothing lands mid-restore
-sudo supervisorctl stop tth-worker
-sudo systemctl stop nginx || true
+## Encryption and access
 
-# 1. restore the database
-gunzip -c storage/app/backups/tth_db_<STAMP>.sql.gz | \
-  mysql -u "$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE"
+- Encrypt backup storage (encrypted volume or encrypted object-storage bucket); SHA-256 is not encryption.
+- Store `APP_KEY`, DB and backup-storage credentials separately.
+- Restrict backup files to designated platform backup operators. Agency users must never receive direct backup-file access.
+- Laravel field encryption is not full disk encryption. Production requires encrypted database/storage volumes and encrypted backup storage.
 
-# 2. restore the vault
-tar -xzf storage/app/backups/tth_vault_<STAMP>.tar.gz -C storage/app/private
+## Retention and monitoring
 
-# 3. permissions
-chown -R www-data:www-data storage/app/private/documents
-chmod -R 750 storage/app/private/documents
+The Linux helper applies a 180-day local staging ceiling. Off-site storage should implement a lifecycle such as 7 daily, 4 weekly and 6 monthly recovery points. Do not independently delete DB, vault or manifest files.
 
-# 4. verify + restart
-php artisan migrate:status           # expect: nothing pending
-php artisan app:production-check --strict
-php artisan queue:retry all
-sudo supervisorctl start tth-worker
-sudo systemctl start nginx
-```
-
-### Restore drill checklist
-
-- [ ] `GET /api/health` → `200 healthy`
-- [ ] `GET /api/catalog` → 200 with listings
-- [ ] A signed-in user can open **Security & Roles** (RBAC rows intact)
-- [ ] The document vault lists its folders (files present, not just rows)
-- [ ] `personal_access_tokens` still valid → force re-login if the `APP_KEY` changed
-- [ ] Audit trail shows the restore window
-
-## 5. Encryption-at-rest policy
-
-| Layer | Control | Notes |
-|---|---|---|
-| Application fields | Laravel `encrypted` casts (CNIC, MFA secret, recovery codes) | Protects the column, not the file or the dump |
-| Database at rest | Encrypted volume (LUKS / cloud disk encryption) + restricted DB credentials | The dump still contains the ciphertext — safe only with the right `APP_KEY` |
-| Backups | Encrypted container/bucket, separate credentials, retention policy | Never store a dump and the `APP_KEY` in the same place |
-| Document vault | Private disk outside the web root, non-servable, 750 perms, encrypted volume | Files stream through authenticated endpoints only |
-| Log files | Never log tokens, CNICs, MFA codes or document bodies | `CorrelationId` + audit rows carry identifiers, not secrets |
-
-> **Explicitly stated limitation:** Laravel field encryption alone is *not* full disk encryption. Production MUST use encrypted volumes (or an encrypted managed database) plus encrypted backup storage. This is a deployment obligation, not something the application can enforce.
-
-## 6. Retention & monitoring
-
-| Asset | Retention | Automation |
-|---|---|---|
-| DB dumps | daily 7 / weekly 4 / monthly 6 | cron + `sha256sum` manifest |
-| Vault archives | daily 7 / weekly 4 | cron |
-| `failed_jobs` | 7 days (auto-pruned by the scheduler) | `queue:prune-failed --hours=168` |
-| Sanctum tokens | 24 h expiry (auto-pruned) | `sanctum:prune-expired --hours=48` |
-
-Alert on: missing dump for > 26 h, dump size deviating > 50 % from the 7-day median, failed restore drill, `failed_jobs` > 0 for more than 15 minutes.
+Alert on missing backup (>26h), checksum mismatch, incomplete DB/vault pair, unexpected size drift, failed restore drill/cleanup, and non-zero tenant or finance integrity violations.

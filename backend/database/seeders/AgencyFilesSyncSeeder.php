@@ -6,11 +6,16 @@ use Illuminate\Database\Seeder;
 use App\Models\BusinessRecord;
 use App\Models\Dealer;
 use App\Models\Property;
+use RuntimeException;
 
 class AgencyFilesSyncSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            throw new RuntimeException('AgencyFilesSyncSeeder is a local/demo data repair utility and must never run in production.');
+        }
+
         $dealerAvatars = [
             'deal-1' => 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
             'deal-2' => 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',

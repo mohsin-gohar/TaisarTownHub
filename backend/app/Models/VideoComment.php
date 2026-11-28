@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class VideoComment extends Model
@@ -24,8 +25,13 @@ class VideoComment extends Model
         'isDealer' => 'boolean',
     ];
 
-    public function video()
+    public function video(): BelongsTo
     {
         return $this->belongsTo(AgencyVideo::class, 'agency_video_id', 'id');
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

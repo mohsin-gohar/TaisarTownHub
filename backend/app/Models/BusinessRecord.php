@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BusinessRecord extends Model
 {
@@ -17,6 +18,11 @@ class BusinessRecord extends Model
         'payload' => 'array',
         'deleted_at' => 'datetime',
     ];
+
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class, 'agency_id');
+    }
 
     public static function put(string $collection, string $recordId, array $payload, ?string $agencyId = null): self
     {

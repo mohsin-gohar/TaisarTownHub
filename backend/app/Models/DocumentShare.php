@@ -6,15 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
-/**
- * A public, expiring download link for one vault document. Only the SHA-256
- * hash of the access token is persisted — the plain token is returned ONCE
- * at creation and lives solely in the generated link.
- */
 class DocumentShare extends Model
 {
     protected $table = 'document_shares';
-
     public $incrementing = false;
     protected $keyType = 'string';
 
@@ -42,12 +36,16 @@ class DocumentShare extends Model
         return $this->belongsTo(Document::class, 'document_id');
     }
 
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class, 'agency_id');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    /** Generate a fresh share row (plain token returned to the caller once). */
     public static function issue(Document $document, string $agencyId, ?int $userId, array $attrs): array
     {
         $plain = Str::random(48);
@@ -65,6 +63,7 @@ class DocumentShare extends Model
     public function isActive(): bool
     {
         return $this->revoked_at === null
+            && $this->expires_at !== null
             && $this->expires_at->isFuture()
             && ($this->max_downloads === null || $this->download_count < $this->max_downloads);
     }

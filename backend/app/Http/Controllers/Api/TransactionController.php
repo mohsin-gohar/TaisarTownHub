@@ -30,19 +30,24 @@ class TransactionController extends Controller
         $this->requireAny($request, ['view_transactions', 'view_my_deals']);
 
         $agencyId = $this->agencyId($request);
-        $platformView = $this->can($request, 'view_transactions');
+        $user = $request->user();
+        $hasPlatformFinanceAccess = $user->hasPermission('admin.view_reports');
+        $platformView = $this->can($request, 'view_transactions') || $hasPlatformFinanceAccess;
+
+        // A tenant-level view_transactions grant is never a substitute for
+        // an actual tenant context. Without one, only platform finance staff
+        // may use the unscoped listing.
+        if (($agencyId === null || $agencyId === '') && !$hasPlatformFinanceAccess) {
+            abort(404, 'Transaction workspace not found.');
+        }
 
         $query = Transaction::query();
         if ($agencyId !== null && $agencyId !== '') {
-            // Explicit agency context: only that agency's rows.
             $query->where('agency_id', $agencyId);
-        } elseif (!$platformView) {
-            // No agency and no explicit platform grant: fail closed.
-            $query->whereNull('agency_id');
         }
 
         if (!$platformView) {
-            $query->where('dealerId', $request->user()->dealer_id);
+            $query->where('dealerId', $user->dealer_id);
         }
 
         // A client-supplied dealer filter is only honoured for a platform-wide

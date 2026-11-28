@@ -26,4 +26,9 @@ class DocumentAccessLog extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class, 'agency_id');
+    }
+
 }

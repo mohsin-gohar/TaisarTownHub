@@ -37,9 +37,7 @@ class Transaction extends Model
 
     /**
      * Legacy mirrored record in the generic business_records table.
-     * FinanceController eager-loads this on list/detail; the relation was
-     * referenced but never defined, so any agency with at least one deal got
-     * a 500 (empty-list tests could not catch it).
+     * FinanceController eager-loads this on list/detail.
      */
     public function businessRecord(): HasOne
     {
@@ -72,24 +70,49 @@ class Transaction extends Model
         return $this->belongsTo(User::class, 'voided_by');
     }
 
+    public function updater(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
 
+    /**
+     * Child ledger rows must agree with the parent transaction's tenant.
+     *
+     * The individual foreign keys only prove that both IDs exist; they do
+     * not prove that the payment belongs to the same agency as this deal.
+     * The correlated ownership check protects normal and eager-loaded
+     * relationships, including platform-wide lists spanning many agencies.
+     */
     public function payments(): HasMany
     {
-        return $this->hasMany(TransactionPayment::class, 'transaction_id')->orderBy('received_at');
+        return $this->hasMany(TransactionPayment::class, 'transaction_id')
+            ->whereHas('transaction', fn ($query) => $query->whereColumn(
+                'transactions.agency_id',
+                'transaction_payments.agency_id'
+            ));
     }
 
     public function schedules(): HasMany
     {
-        return $this->hasMany(PaymentSchedule::class, 'transaction_id')->orderBy('installment_no');
+        return $this->hasMany(PaymentSchedule::class, 'transaction_id')
+            ->whereHas('transaction', fn ($query) => $query->whereColumn(
+                'transactions.agency_id',
+                'payment_schedules.agency_id'
+            ));
     }
 
     public function commissions(): HasMany
     {
-        return $this->hasMany(Commission::class, 'transaction_id');
+        return $this->hasMany(Commission::class, 'transaction_id')
+            ->whereHas('transaction', fn ($query) => $query->whereColumn(
+                'transactions.agency_id',
+                'commissions.agency_id'
+            ));
     }
 
     /* ---------------- Scopes ---------------- */
@@ -137,13 +160,9 @@ class Transaction extends Model
         $totalPaid = $this->totalPaid();
         $agreementAmount = (float) $this->agreementAmountPKR;
 
-        // Update advancePaymentPKR to reflect total collected
         $this->advancePaymentPKR = $totalPaid;
-
-        // Calculate remaining balance
         $this->remainingBalancePKR = max(0, $agreementAmount - $totalPaid);
 
-        // Determine payment status
         if ($totalPaid <= 0) {
             $this->paymentStatus = 'Pending';
         } elseif ($totalPaid >= $agreementAmount && $agreementAmount > 0) {

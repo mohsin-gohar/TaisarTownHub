@@ -5,12 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * A rejected upload kept in the isolated quarantine disk for administrator
- * visibility (infected or scanned-while-unavailable). The bytes are never
- * web-served and never downloadable; `vault:purge-quarantine` erases them
- * after the retention window.
- */
 class DocumentQuarantine extends Model
 {
     public $incrementing = false;
@@ -38,6 +32,11 @@ class DocumentQuarantine extends Model
     public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class, 'agency_id');
+    }
+
+    public function document(): BelongsTo
+    {
+        return $this->belongsTo(Document::class, 'document_id');
     }
 
     public function uploader(): BelongsTo

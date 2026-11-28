@@ -16,7 +16,7 @@ class PaymentSchedule extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'float',
+            'amount' => 'decimal:2',
             'due_date' => 'date',
             'paid_at' => 'datetime',
         ];
@@ -25,5 +25,10 @@ class PaymentSchedule extends Model
     public function transaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class, 'transaction_id');
+    }
+
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class, 'agency_id');
     }
 }
