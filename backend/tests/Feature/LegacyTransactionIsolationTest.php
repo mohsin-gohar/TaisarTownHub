@@ -82,9 +82,17 @@ class LegacyTransactionIsolationTest extends EnterpriseTestCase
         $propB = $this->makePublicProperty($agencyB);
         $dealB = $this->makeLegacyDeal($agencyB->id, $propB->id, 'TXN-2026-0003');
 
-        $dealB->update(['dealerId' => 'dlr_foreign']);
+        $dealerB = Dealer::create([
+            'id' => 'dlr_' . Str::random(8),
+            'fullName' => 'Agency B Dealer',
+            'phone' => '0300-0000000',
+        ]);
+        $dealerUserB = $this->makeUser('agent', ['dealer_id' => $dealerB->id]);
+        $this->makeMember($dealerUserB, $agencyB, $this->makeRole('agency', 'agent_b', []));
 
-        $list = $this->getJson('/api/transactions?dealerId=dlr_foreign', $this->authHeaders($this->tokenFor($userA)))
+        $dealB->update(['dealerId' => $dealerB->id]);
+
+        $list = $this->getJson('/api/transactions?dealerId=' . $dealerB->id, $this->authHeaders($this->tokenFor($userA)))
             ->assertOk()->json();
         $this->assertNotContains($dealB->id, array_column($list, 'id'));
     }

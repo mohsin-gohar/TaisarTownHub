@@ -133,7 +133,7 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $transaction = Transaction::create([
             'id' => 'txn_' . Str::random(10),
             'dealNumber' => 'DEAL-' . Str::upper(Str::random(6)),
-            'propertyId' => 'prop_' . Str::random(8),
+            'propertyId' => null,
             'propertyTitle' => 'Concurrency Plot ' . Str::random(4),
             'sellerName' => 'Seller ' . Str::random(4),
             'buyerName' => 'Buyer ' . Str::random(4),
@@ -170,7 +170,7 @@ class BookingConcurrencyTest extends EnterpriseTestCase
         $transaction = Transaction::create([
             'id' => 'txn_' . Str::random(10),
             'dealNumber' => 'DEAL-' . Str::upper(Str::random(6)),
-            'propertyId' => 'prop_' . Str::random(8),
+            'propertyId' => null,
             'propertyTitle' => 'Ledger Plot ' . Str::random(4),
             'sellerName' => 'Seller ' . Str::random(4),
             'buyerName' => 'Buyer ' . Str::random(4),

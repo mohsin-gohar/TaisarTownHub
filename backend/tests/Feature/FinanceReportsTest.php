@@ -22,7 +22,7 @@ class FinanceReportsTest extends EnterpriseTestCase
         return Transaction::create(array_merge([
             'id' => 'txn_' . \Illuminate\Support\Str::random(10),
             'dealNumber' => 'DEAL-' . \Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(6)),
-            'propertyId' => 'prop_' . \Illuminate\Support\Str::random(8),
+            'propertyId' => null,
             'propertyTitle' => 'Report Plot ' . \Illuminate\Support\Str::random(4),
             'sellerName' => 'Seller ' . \Illuminate\Support\Str::random(4),
             'buyerName' => 'Buyer ' . \Illuminate\Support\Str::random(4),
