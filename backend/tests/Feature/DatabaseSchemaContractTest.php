@@ -144,6 +144,8 @@ class DatabaseSchemaContractTest extends TestCase
             ['transaction_payments', ['transaction_id', 'received_at'], false],
             ['payment_schedules', ['transaction_id', 'installment_no'], true],
             ['saved_searches', ['user_id', 'created_at'], false],
+            ['transactions', ['agency_id', 'dealStatus', 'created_at'], false],
+            ['agency_promotions', ['agency_id', 'status', 'starts_at', 'ends_at', 'position'], false],
             ['inquiries', ['agency_id', 'created_at'], false],
             ['inquiries', ['agency_id', 'lead_status', 'created_at'], false],
             ['inquiries', ['agency_id', 'assigned_agent_id', 'created_at'], false],
