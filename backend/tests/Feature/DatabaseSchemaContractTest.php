@@ -53,17 +53,17 @@ class DatabaseSchemaContractTest extends TestCase
     public function test_decimal_money_casts_preserve_exact_two_decimal_values(): void
     {
         $cases = [
-            [\\App\\Models\\TransactionPayment::class, 'amount'],
-            [\\App\\Models\\PaymentSchedule::class, 'amount'],
-            [\\App\\Models\\Commission::class, 'amount'],
-            [\\App\\Models\\Commission::class, 'rate'],
-            [\\App\\Models\\DealerFile::class, 'selling_price_kbr'],
-            [\\App\\Models\\DealerFile::class, 'cost_price_kbr'],
-            [\\App\\Models\\DealerFile::class, 'profit_kbr'],
-            [\\App\\Models\\MediaFile::class, 'sold_price_pk'],
-            [\\App\\Models\\MediaFile::class, 'cost_price_pk'],
-            [\\App\\Models\\MediaFile::class, 'profit_pk'],
-            [\\App\\Models\\SubscriptionPlan::class, 'price'],
+            [\App\Models\TransactionPayment::class, 'amount'],
+            [\App\Models\PaymentSchedule::class, 'amount'],
+            [\App\Models\Commission::class, 'amount'],
+            [\App\Models\Commission::class, 'rate'],
+            [\App\Models\DealerFile::class, 'selling_price_kbr'],
+            [\App\Models\DealerFile::class, 'cost_price_kbr'],
+            [\App\Models\DealerFile::class, 'profit_kbr'],
+            [\App\Models\MediaFile::class, 'sold_price_pk'],
+            [\App\Models\MediaFile::class, 'cost_price_pk'],
+            [\App\Models\MediaFile::class, 'profit_pk'],
+            [\App\Models\SubscriptionPlan::class, 'price'],
         ];
 
         foreach ($cases as [$class, $column]) {
