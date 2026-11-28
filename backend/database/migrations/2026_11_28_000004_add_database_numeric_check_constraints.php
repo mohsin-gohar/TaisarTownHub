@@ -1,8 +1,8 @@
 <?php
 
-use Illuminate\\Database\\Migrations\\Migration;
-use Illuminate\\Support\\Facades\\DB;
-use Illuminate\\Support\\Facades\\Schema;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 /**
@@ -61,7 +61,7 @@ return new class extends Migration
             }
 
             foreach ($constraints as $name => $expression) {
-                $column = preg_match('/^([a-z_]+)\\s/', $expression, $matches) ? $matches[1] : null;
+                $column = preg_match('/^([a-z_]+)\s/', $expression, $matches) ? $matches[1] : null;
                 if ($column !== null && !Schema::hasColumn($table, $column)) {
                     throw new RuntimeException("Cannot add database check {$name}: {$table}.{$column} is missing.");
                 }
