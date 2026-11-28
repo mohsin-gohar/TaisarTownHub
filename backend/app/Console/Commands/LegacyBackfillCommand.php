@@ -83,6 +83,16 @@ class LegacyBackfillCommand extends Command
 
         foreach ($rows as $row) {
             $current = $resolver->claimedOwner($row);
+
+            // A non-null but invalid canonical agency_id is an orphaned
+            // reference. Never treat it as NULL or overwrite it from weaker
+            // payload evidence; reconcile it explicitly after investigation.
+            if ($row->agency_id !== null && $row->agency_id !== '' && $current === null) {
+                $this->warn("row {$row->collection}::{$row->record_id} has orphaned agency_id '{$row->agency_id}' — skipped for manual reconciliation");
+
+                continue;
+            }
+
             $key = $this->compositeKey($row->collection, (string) $row->record_id);
             $mapped = $composite[$key] ?? null;
             $source = 'mapping file';
