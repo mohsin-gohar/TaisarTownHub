@@ -224,7 +224,15 @@ return new class extends Migration
                 $agencyId = DB::table('dealers')->where('id', $dealerId)->value('agency_id');
             }
             if (!$agencyId && !empty($p['agencyName'])) {
-                $agencyId = DB::table('agencies')->where('name', $p['agencyName'])->value('id');
+                // Names are labels, not unique identifiers. Never choose an
+                // arbitrary agency when duplicate names exist.
+                $agencyMatches = DB::table('agencies')
+                    ->where('name', $p['agencyName'])
+                    ->limit(2)
+                    ->pluck('id');
+                if ($agencyMatches->count() === 1) {
+                    $agencyId = (string) $agencyMatches->first();
+                }
             }
 
             $slugBase = $this->slugify($p['title']);
